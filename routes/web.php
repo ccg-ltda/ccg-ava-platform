@@ -8,12 +8,7 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 Route::get('/', function () {
-    return Inertia::render('Welcome', [
-        'canLogin' => Route::has('login'),
-        'canRegister' => Route::has('register'),
-        'laravelVersion' => Application::VERSION,
-        'phpVersion' => PHP_VERSION,
-    ]);
+    return view('auth.login');
 });
 
 Route::get('/dashboard', [DashboardController::class, 'index'])
@@ -25,13 +20,13 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
     Route::get('/users', [UserController::class, 'index'])
-        ->middleware('permission:view-users|manage-users')->name('users.index');
+        ->middleware('role:admin')->name('users.index');
     Route::post('/users', [UserController::class, 'store'])
-        ->middleware('permission:manage-users')->name('users.store');
+        ->middleware('role:admin')->name('users.store');
     Route::put('/users/{user}', [UserController::class, 'update'])
-        ->middleware('permission:manage-users')->name('users.update');
+        ->middleware('role:admin')->name('users.update');
     Route::delete('/users/{user}', [UserController::class, 'destroy'])
-        ->middleware('permission:manage-users')->name('users.destroy');
+        ->middleware('role:admin')->name('users.destroy');
 });
 
 require __DIR__.'/auth.php';
