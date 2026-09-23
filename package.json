@@ -23,7 +23,8 @@
     "dependencies": {
         "@inertiajs/core": "^3.7.0",
         "@inertiajs/vite": "^3.7.0",
-        "@tailwindcss/postcss": "^4.3.3"
+        "@tailwindcss/postcss": "^4.3.3",
+        "axios": "^1.20.0"
     },
     "optionalDependencies": {
         "@laravel/multiplex": "^0.4.1"

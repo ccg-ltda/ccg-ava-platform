@@ -77,14 +77,15 @@ export default function AuthenticatedLayout({ children }) {
                                     {userRoles[0].toUpperCase()}
                                 </span>
                             )}
-                            <Link
-                                href="/logout"
-                                method="post"
-                                as="button"
-                                className="rounded-xl bg-red-600/20 border border-red-500/40 px-3.5 py-1.5 text-xs font-orbitron tracking-wider text-red-400 transition-all hover:bg-red-600 hover:text-white hover:shadow-[0_0_15px_rgba(239,68,68,0.6)]"
-                            >
-                                CERRAR SESIÓN
-                            </Link>
+                            <form method="POST" action="/logout" className="inline">
+                                <input type="hidden" name="_token" value={document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')} />
+                                <button 
+                                    type="submit" 
+                                    className="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded text-sm cursor-pointer"
+                                >
+                                    Cerrar Sesión
+                                </button>
+                            </form>
                         </div>
                     </div>
                 </header>
