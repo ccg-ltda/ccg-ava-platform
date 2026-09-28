@@ -102,19 +102,27 @@
                     <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                     Terminal Activa
                 </div>
-                <div class="flex items-center gap-4">
-                    @auth
-                        <span class="font-orbitron text-xs tracking-wider text-cyan-300/80">
-                            {{ auth()->user()->email }}
-                        </span>
-                        <form method="POST" action="{{ route('logout') }}">
-                            @csrf
-                            <button type="submit" class="rounded-xl bg-red-600/20 border border-red-500/40 px-3.5 py-1.5 text-xs font-orbitron tracking-wider text-red-400 transition-all hover:bg-red-600 hover:text-white hover:shadow-[0_0_15px_rgba(239,68,68,0.6)] cursor-pointer">
-                                CERRAR SESIÓN
-                            </button>
-                        </form>
-                    @endauth
-                </div>
+                 <div class="flex items-center gap-4">
+                     @auth
+                         <span class="font-orbitron text-xs tracking-wider text-cyan-300/80">
+                             {{ auth()->user()->email }}
+                         </span>
+                        <!-- Botón Switch Modo Claro/Oscuro -->
+<button 
+                            onclick="toggleTheme()" 
+                            class="p-2.5 rounded-full border border-cyan-500/30 bg-slate-800/80 text-cyan-400 dark:bg-slate-100 dark:text-slate-800 shadow-md backdrop-blur-md hover:scale-105 transition-all duration-300 flex items-center justify-center"
+                            title="Cambiar Modo Claro/Oscuro"
+                        >
+                            <i id="theme-icon-dashboard" class="fa-solid fa-moon text-base"></i>
+</button>
+                         <form method="POST" action="{{ route('logout') }}">
+                             @csrf
+                             <button type="submit" class="rounded-xl bg-red-600/20 border border-red-500/40 px-3.5 py-1.5 text-xs font-orbitron tracking-wider text-red-400 transition-all hover:bg-red-600 hover:text-white hover:shadow-[0_0_15px_rgba(239,68,68,0.6)] cursor-pointer">
+                                 CERRAR SESIÓN
+                             </button>
+                         </form>
+                     @endauth
+                 </div>
             </div>
         </header>
 
@@ -123,6 +131,35 @@
             @yield('content')
         </main>
     </div>
+
+<script>
+    function toggleTheme() {
+        const html = document.documentElement;
+        const icon = document.getElementById('theme-icon-dashboard');
+
+        if (html.classList.contains('dark')) {
+            html.classList.remove('dark');
+            localStorage.setItem('theme', 'light');
+            if (icon) icon.className = 'fa-solid fa-sun text-base';
+        } else {
+            html.classList.add('dark');
+            localStorage.setItem('theme', 'dark');
+            if (icon) icon.className = 'fa-solid fa-moon text-base';
+        }
+    }
+
+    (function checkTheme() {
+        const savedTheme = localStorage.getItem('theme');
+        const icon = document.getElementById('theme-icon-dashboard');
+        if (savedTheme === 'light') {
+            document.documentElement.classList.remove('dark');
+            if (icon) icon.className = 'fa-solid fa-sun text-base';
+        } else if (savedTheme === 'dark') {
+            document.documentElement.classList.add('dark');
+            if (icon) icon.className = 'fa-solid fa-moon text-base';
+        }
+    })();
+</script>
 
 </body>
 </html>
