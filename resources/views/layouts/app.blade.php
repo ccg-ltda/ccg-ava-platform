@@ -11,6 +11,33 @@
     <!-- Google Fonts: Orbitron & Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Orbitron:wght@500;700;800;900&display=swap" rel="stylesheet">
 
+    <script>
+        (function() {
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'light') {
+                document.documentElement.classList.remove('dark');
+            } else if (savedTheme === 'dark') {
+                document.documentElement.classList.add('dark');
+            } else {
+                if (window.matchMedia('(prefers-color-scheme: light)').matches) {
+                    document.documentElement.classList.remove('dark');
+                } else {
+                    document.documentElement.classList.add('dark');
+                }
+            }
+        })();
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            const isDark = html.classList.toggle('dark');
+            const newTheme = isDark ? 'dark' : 'light';
+            localStorage.setItem('theme', newTheme);
+            document.querySelectorAll('.theme-toggle-icon').forEach(icon => {
+                icon.className = isDark ? 'fa-solid fa-moon theme-toggle-icon' : 'fa-solid fa-sun theme-toggle-icon';
+            });
+        }
+    </script>
+
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -18,6 +45,7 @@
             color: #e2e8f0;
             margin: 0;
             padding: 0;
+            transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
         }
 
         .font-orbitron {
@@ -41,6 +69,7 @@
             -webkit-backdrop-filter: blur(20px);
             border: 1px solid rgba(0, 240, 255, 0.25);
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.7), 0 0 25px rgba(0, 240, 255, 0.1);
+            transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
         }
 
         /* Glowing Cyber Button */
@@ -54,6 +83,10 @@
             box-shadow: 0 0 35px rgba(0, 240, 255, 0.8);
             transform: translateY(-2px);
         }
+        .btn-cyber:focus {
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.5), 0 0 20px rgba(0, 240, 255, 0.4);
+        }
 
         /* Sci-Fi Inputs */
         .sci-input {
@@ -66,6 +99,7 @@
             outline: none;
             border-color: #00f0ff;
             box-shadow: 0 0 20px rgba(0, 240, 255, 0.4), inset 0 0 10px rgba(0, 240, 255, 0.2);
+            ring: 2px solid rgba(34, 211, 238, 0.5);
         }
     </style>
 </head>
@@ -113,7 +147,7 @@
                             class="p-2.5 rounded-full border border-cyan-500/30 bg-slate-800/80 text-cyan-400 dark:bg-slate-100 dark:text-slate-800 shadow-md backdrop-blur-md hover:scale-105 transition-all duration-300 flex items-center justify-center"
                             title="Cambiar Modo Claro/Oscuro"
                         >
-                            <i id="theme-icon-dashboard" class="fa-solid fa-moon text-base"></i>
+                            <i id="theme-icon-dashboard" class="fa-solid fa-moon text-base theme-toggle-icon"></i>
 </button>
                          <form method="POST" action="{{ route('logout') }}">
                              @csrf
@@ -131,35 +165,6 @@
             @yield('content')
         </main>
     </div>
-
-<script>
-    function toggleTheme() {
-        const html = document.documentElement;
-        const icon = document.getElementById('theme-icon-dashboard');
-
-        if (html.classList.contains('dark')) {
-            html.classList.remove('dark');
-            localStorage.setItem('theme', 'light');
-            if (icon) icon.className = 'fa-solid fa-sun text-base';
-        } else {
-            html.classList.add('dark');
-            localStorage.setItem('theme', 'dark');
-            if (icon) icon.className = 'fa-solid fa-moon text-base';
-        }
-    }
-
-    (function checkTheme() {
-        const savedTheme = localStorage.getItem('theme');
-        const icon = document.getElementById('theme-icon-dashboard');
-        if (savedTheme === 'light') {
-            document.documentElement.classList.remove('dark');
-            if (icon) icon.className = 'fa-solid fa-sun text-base';
-        } else if (savedTheme === 'dark') {
-            document.documentElement.classList.add('dark');
-            if (icon) icon.className = 'fa-solid fa-moon text-base';
-        }
-    })();
-</script>
 
 </body>
 </html>

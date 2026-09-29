@@ -79,7 +79,7 @@
         html.dark .cyber-card {
             background: linear-gradient(135deg, rgba(8, 25, 48, 0.9) 0%, rgba(4, 15, 30, 0.95) 100%);
             border: 1px solid var(--accent-primary);
-            box-shadow: 0 0 35px var(--accent-glow);
+            box-shadow: 0 0 40px rgba(0, 240, 255, 0.18), inset 0 0 15px rgba(0, 240, 255, 0.05);
         }
         html.dark .cyber-card::before, html.dark .cyber-card::after {
             border-color: var(--accent-primary);
@@ -91,10 +91,19 @@
         html.dark .cyber-input input {
             color: #cffaff !important;
         }
+        html.dark .cyber-input input:focus {
+            outline: none;
+            border-color: #00f0ff;
+            box-shadow: 0 0 20px rgba(0, 240, 255, 0.4), inset 0 0 10px rgba(0, 240, 255, 0.2);
+        }
         html.dark .btn-secondary {
             background: rgba(0, 240, 255, 0.05);
             border: 1px solid rgba(0, 240, 255, 0.4);
             color: #67e8f9;
+        }
+        html.dark .btn-secondary:focus {
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.5);
         }
         /* MODO CLARO */
         html:not(.dark) body {
@@ -111,9 +120,9 @@
             display: none;
         }
         html:not(.dark) .cyber-card {
-            background: rgba(255, 255, 255, 0.95);
-            border: 1px solid var(--accent-primary);
-            box-shadow: 0 20px 40px rgba(14, 116, 144, 0.2);
+            background: rgba(255, 255, 255, 0.92);
+            border: 1px solid rgba(14, 116, 144, 0.3);
+            box-shadow: 0 20px 40px -15px rgba(14, 116, 144, 0.15);
         }
         html:not(.dark) .cyber-card::before, html:not(.dark) .cyber-card::after {
             border-color: var(--accent-primary);
@@ -125,6 +134,11 @@
         html:not(.dark) .cyber-input input {
             color: #0f172a !important;
         }
+        html:not(.dark) .cyber-input input:focus {
+            outline: none;
+            border-color: #0284c7;
+            box-shadow: 0 0 20px rgba(2, 132, 199, 0.3), inset 0 0 10px rgba(2, 132, 199, 0.1);
+        }
         html:not(.dark) .glow-text {
             text-shadow: none;
             color: var(--accent-secondary) !important;
@@ -134,11 +148,15 @@
             border: 1px solid rgba(2, 132, 199, 0.5);
             color: #0369a1;
         }
+        html:not(.dark) .btn-secondary:focus {
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(14, 116, 144, 0.5);
+        }
         .cyber-card {
             backdrop-filter: blur(16px);
             position: relative;
             transform-style: preserve-3d;
-            transition: transform 0.1s ease-out;
+            transition: transform 0.1s ease-out, background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
         }
         .cyber-card::before {
             content: '';
@@ -240,7 +258,7 @@
 
         <!-- Switch Tema -->
         <button onclick="toggleTheme()" class="p-3 rounded-full border border-cyan-400/50 bg-slate-900/80 text-cyan-300 dark:bg-slate-100/90 dark:text-slate-800 shadow-lg backdrop-blur-md hover:scale-110 transition-all flex items-center justify-center" title="Cambiar Modo Claro/Oscuro">
-            <i id="theme-icon" class="fa-solid fa-sun text-lg"></i>
+            <i id="theme-icon" class="fa-solid fa-sun text-lg theme-toggle-icon"></i>
         </button>
     </div>
 
@@ -381,15 +399,13 @@
         // --- 2. THEME & ACCENT & LANG ---
         function toggleTheme() {
             const html = document.documentElement;
-            const icon = document.getElementById('theme-icon');
+            const isDark = html.classList.toggle('dark');
+            const newTheme = isDark ? 'dark' : 'light';
+            localStorage.setItem('theme', newTheme);
+            document.querySelectorAll('.theme-toggle-icon').forEach(icon => {
+                icon.className = isDark ? 'fa-solid fa-moon theme-toggle-icon' : 'fa-solid fa-sun theme-toggle-icon';
+            });
             playSFX('click');
-            if (html.classList.contains('dark')) {
-                html.classList.remove('dark');
-                icon.className = 'fa-solid fa-moon text-lg';
-            } else {
-                html.classList.add('dark');
-                icon.className = 'fa-solid fa-sun text-lg';
-            }
         }
 
         function setAccent(color) {
