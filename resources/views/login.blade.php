@@ -360,17 +360,25 @@
         .error-message.show { display: block; animation: fadeIn 0.3s ease; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-        .floating-label {
+        .floating-label,
+        .field-label {
             position: absolute; top: 50%; left: 65px; transform: translateY(-50%);
             font-size: 14px; color: #6b9aaa; pointer-events: none; transition: 0.2s ease;
-            font-family: "Orbitron", sans-serif; letter-spacing: 1px;
+            font-family: "Orbitron", sans-serif; letter-spacing: 1px; white-space: nowrap;
         }
-        html.light .floating-label { color: #94a3b8; }
-        input:focus ~ .floating-label, input:not(:placeholder-shown) ~ .floating-label {
+        html.light .floating-label,
+        html.light .field-label { color: #94a3b8; }
+        input:focus ~ .floating-label,
+        input:focus ~ .field-label,
+        input:not(:placeholder-shown) ~ .floating-label,
+        input:not(:placeholder-shown) ~ .field-label {
             top: -8px; left: 12px; font-size: 10px; color: var(--cyan); background: rgba(3, 19, 36, 0.9);
             padding: 0 6px; border-radius: 4px;
         }
-        html.light input:focus ~ .floating-label, html.light input:not(:placeholder-shown) ~ .floating-label {
+        html.light input:focus ~ .floating-label,
+        html.light input:focus ~ .field-label,
+        html.light input:not(:placeholder-shown) ~ .floating-label,
+        html.light input:not(:placeholder-shown) ~ .field-label {
             color: var(--blue); background: rgba(255,255,255,0.9);
         }
 
@@ -625,12 +633,12 @@
                     body: formData
                 });
 
-                const data = await response.json();
-
-                if (response.ok && data.success !== false) {
-                    window.location.href = "{{ route('dashboard') }}";
+                if (response.redirected) {
+                    window.location.href = response.url;
                     return;
                 }
+
+                const data = await response.json();
 
                 if (data.errors) {
                     const firstError = Object.values(data.errors)[0][0];
