@@ -15,6 +15,7 @@
 /auth.json
 /graphify-out
 /node_modules
+/.serena
 /public/build
 /public/fonts-manifest.dev.json
 /public/hot
