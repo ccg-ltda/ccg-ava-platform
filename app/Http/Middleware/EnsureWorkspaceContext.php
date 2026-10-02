@@ -29,7 +29,12 @@ class EnsureWorkspaceContext
             ? $user->roleInWorkspace($workspace)
             : null;
 
-        if (! $role || ! Role::where('name', $role)->where('guard_name', 'web')->exists()) {
+        // The role must exist in the Spatie catalog; its permissions are what authorizes the user here.
+        $catalogRole = $role
+            ? Role::with('permissions:id,name')->where('name', $role)->where('guard_name', 'web')->first()
+            : null;
+
+        if (! $catalogRole) {
             Auth::guard('web')->logout();
             $request->session()->invalidate();
             $request->session()->regenerateToken();
@@ -40,6 +45,7 @@ class EnsureWorkspaceContext
 
         $request->attributes->set('workspace', $workspace);
         $request->attributes->set('workspace_role', $role);
+        $request->attributes->set('workspace_permissions', $catalogRole->permissions->pluck('name')->all());
 
         return $next($request);
     }

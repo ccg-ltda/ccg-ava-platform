@@ -2,39 +2,35 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
+/**
+ * There is no public self-registration: a Workspace is not an authorization by itself, so an account
+ * can only be created by a Workspace admin (UserController), always inside that Workspace and with a role
+ * the admin is allowed to assign.
+ */
 class RegistrationTest extends TestCase
 {
     use RefreshDatabase;
 
-    protected function setUp(): void
+    public function test_registration_screen_does_not_exist(): void
     {
-        parent::setUp();
-
-        // The registration flow assigns a role; roles normally come from RolesAndPermissionsSeeder.
-        Role::findOrCreate('cliente', 'web');
+        $this->get('/register')->assertNotFound();
     }
 
-    public function test_registration_screen_can_be_rendered(): void
+    public function test_registration_endpoint_does_not_create_users_or_choose_roles(): void
     {
-        $response = $this->get('/register');
-
-        $response->assertStatus(200);
-    }
-
-    public function test_new_users_can_register(): void
-    {
-        $response = $this->post('/register', [
-            'name' => 'Test User',
-            'email' => 'test@example.com',
+        $this->post('/register', [
+            'name' => 'Intruder',
+            'email' => 'intruder@example.com',
             'password' => 'password',
             'password_confirmation' => 'password',
-        ]);
+            'role' => 'admin',
+        ])->assertNotFound();
 
-        $this->assertAuthenticated();
-        $response->assertRedirect(route('dashboard', absolute: false));
+        $this->assertSame(0, User::count());
+        $this->assertGuest();
     }
 }

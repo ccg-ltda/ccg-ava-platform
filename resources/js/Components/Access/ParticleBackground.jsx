@@ -60,7 +60,8 @@ export default function ParticleBackground() {
                 const positions = new Float32Array(PARTICLE_COUNT * 3);
                 const colors = new Float32Array(PARTICLE_COUNT * 3);
                 const speeds = new Float32Array(PARTICLE_COUNT);
-                const palette = [new THREE.Color(0x00f0ff), new THREE.Color(0xb44dff), new THREE.Color(0xff2d95)];
+                // Colors follow the application palette (blues, violet as the occasional accent); motion is unchanged.
+                const palette = [new THREE.Color(0x3b82f6), new THREE.Color(0x7c3aed), new THREE.Color(0x60a5fa)];
 
                 for (let i = 0; i < PARTICLE_COUNT; i++) {
                     const theta = Math.random() * Math.PI * 2;
@@ -99,12 +100,12 @@ export default function ParticleBackground() {
                 group.add(particles);
 
                 const innerGeo = new THREE.IcosahedronGeometry(1.5, 1);
-                const innerMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff, wireframe: true, transparent: true, opacity: 0.15 });
+                const innerMat = new THREE.MeshBasicMaterial({ color: 0x3b82f6, wireframe: true, transparent: true, opacity: 0.15 });
                 const innerSphere = new THREE.Mesh(innerGeo, innerMat);
                 group.add(innerSphere);
 
                 const outerGeo = new THREE.IcosahedronGeometry(2.2, 0);
-                const outerMat = new THREE.MeshBasicMaterial({ color: 0xff2d95, wireframe: true, transparent: true, opacity: 0.08 });
+                const outerMat = new THREE.MeshBasicMaterial({ color: 0x7c3aed, wireframe: true, transparent: true, opacity: 0.08 });
                 const outerSphere = new THREE.Mesh(outerGeo, outerMat);
                 group.add(outerSphere);
 

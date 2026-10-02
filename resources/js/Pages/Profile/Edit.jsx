@@ -1,43 +1,31 @@
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import BackButton from '@/Components/BackButton';
 import { Head } from '@inertiajs/react';
+import Card from '@/Components/Card';
+import PageHeader from '@/Components/PageHeader';
+import AppLayout from '@/Layouts/AppLayout';
 import DeleteUserForm from './Partials/DeleteUserForm';
 import UpdatePasswordForm from './Partials/UpdatePasswordForm';
 import UpdateProfileInformationForm from './Partials/UpdateProfileInformationForm';
 
 export default function Edit({ mustVerifyEmail, status }) {
     return (
-        <AuthenticatedLayout
-            header={
-                <h2 className="text-xl font-semibold leading-tight text-gray-800">
-                    Profile
-                </h2>
-            }
-        >
-            <Head title="Profile" />
+        <>
+            <Head title="Mi perfil" />
 
-            <div className="py-12">
-                <div className="mx-auto max-w-7xl space-y-6 sm:px-6 lg:px-8">
-                    <div className="flex justify-start">
-                        <BackButton href="/dashboard" />
-                    </div>
-                    <div className="bg-white p-4 shadow sm:rounded-lg sm:p-8">
-                        <UpdateProfileInformationForm
-                            mustVerifyEmail={mustVerifyEmail}
-                            status={status}
-                            className="max-w-xl"
-                        />
-                    </div>
+            <PageHeader title="Mi perfil" description="Datos de tu cuenta y seguridad." />
 
-                    <div className="bg-white p-4 shadow sm:rounded-lg sm:p-8">
-                        <UpdatePasswordForm className="max-w-xl" />
-                    </div>
+            <Card className="p-4 sm:p-8">
+                <UpdateProfileInformationForm mustVerifyEmail={mustVerifyEmail} status={status} className="max-w-xl" />
+            </Card>
 
-                    <div className="bg-white p-4 shadow sm:rounded-lg sm:p-8">
-                        <DeleteUserForm className="max-w-xl" />
-                    </div>
-                </div>
-            </div>
-        </AuthenticatedLayout>
+            <Card delay={80} className="p-4 sm:p-8">
+                <UpdatePasswordForm className="max-w-xl" />
+            </Card>
+
+            <Card delay={160} className="p-4 sm:p-8">
+                <DeleteUserForm className="max-w-xl" />
+            </Card>
+        </>
     );
 }
+
+Edit.layout = (page) => <AppLayout>{page}</AppLayout>;

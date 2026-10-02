@@ -1,11 +1,177 @@
 @import 'tailwindcss';
 @import './ava.css';
-@import './ava-app.css';
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 
+/*
+ * Design tokens of the application shell (top bar, sidebar, pages).
+ * Components use the generated utilities (bg-canvas, text-ink, border-line, bg-primary, rounded-card,
+ * shadow-card, animate-fade-up...) and never raw color values.
+ * Palette rules: blue = navigation, primary actions and selection; violet = occasional secondary accent;
+ * green = confirmations; amber = real warnings only; red = errors and destructive actions; the rest is neutral.
+ * The access screens (login) keep their own tokens in ava.css.
+ */
 @theme {
-    --font-sans: 'Figtree', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+    --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
+
+    /* Brand blues */
+    --color-primary: #1d4ed8;
+    --color-primary-strong: #1e40af;
+    --color-primary-soft: #dbeafe;
+    --color-navy: #0f2a5c;
+
+    /*
+     * Brand surface shared by the top bar and the sidebar (one visual family, light -> deep blue).
+     * The top bar starts at `surface-light` and the sidebar starts at the same tone right below it,
+     * so both read as a single surface.
+     */
+    --color-surface-light: #2b62c8;
+    --color-surface-mid: #1f4ba6;
+    --color-surface-deep: #163a85;
+    --color-surface-deepest: #112f6e;
+
+    /* Surfaces */
+    --color-canvas: #f4f7fc;
+    --color-card: #ffffff;
+    --color-line: #e2e8f0;
+
+    /* Text */
+    --color-ink: #0f172a;
+    --color-ink-muted: #64748b;
+
+    /* Accents (kept sparse) */
+    --color-accent-blue: #1d4ed8;
+    --color-accent-violet: #6d28d9;
+    --color-accent-green: #059669;
+    --color-accent-amber: #b45309;
+    --color-danger: #dc2626;
+
+    /* Shape and elevation */
+    --radius-card: 12px;
+    --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 2px 10px rgb(15 23 42 / 0.05);
+    --shadow-card-hover: 0 2px 4px rgb(15 23 42 / 0.06), 0 8px 20px rgb(15 23 42 / 0.09);
+
+    /* Motion (short and discreet) */
+    --animate-fade-up: fade-up 280ms ease-out both;
+    --animate-fade-in: fade-in 200ms ease-out both;
+
+    @keyframes fade-up {
+        from {
+            opacity: 0;
+            transform: translateY(8px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @keyframes fade-in {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+}
+
+@keyframes drift {
+    from {
+        transform: translate3d(-6%, -3%, 0) scale(1);
+    }
+    to {
+        transform: translate3d(6%, 3%, 0) scale(1.08);
+    }
+}
+
+@layer components {
+    /*
+     * Brand surface (top bar + sidebar): isolated stacking context with very fine diagonal lines.
+     * Decoration lives in pseudo-elements behind the content and stays secondary to it.
+     */
+    .brand-surface {
+        position: relative;
+        isolation: isolate;
+    }
+
+    .brand-surface::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        background-image: repeating-linear-gradient(
+            125deg,
+            rgb(255 255 255 / 0.04) 0,
+            rgb(255 255 255 / 0.04) 1px,
+            transparent 1px,
+            transparent 24px
+        );
+        pointer-events: none;
+    }
+
+    /* Sidebar: uniform blue, light at the top (continues the top bar) to deep at the bottom. No white. */
+    .sidebar-surface {
+        overflow: hidden; /* clips the blurred glow; the top bar must not clip its user menu */
+        background: linear-gradient(
+            180deg,
+            var(--color-surface-light) 0%,
+            var(--color-surface-mid) 38%,
+            var(--color-surface-deep) 78%,
+            var(--color-surface-deepest) 100%
+        );
+    }
+
+    /* A slow, blurred glow drifts behind the lines; barely perceptible. */
+    .sidebar-surface::after {
+        content: '';
+        position: absolute;
+        inset: -20%;
+        z-index: -2;
+        background: radial-gradient(38% 26% at 30% 22%, rgb(120 170 255 / 0.18), transparent 70%);
+        filter: blur(30px);
+        pointer-events: none;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        .sidebar-surface::after {
+            animation: drift 40s ease-in-out infinite alternate;
+            will-change: transform;
+        }
+    }
+
+    /* Top bar: same family, starts at the sidebar's top tone and deepens to the right. */
+    .topbar-surface {
+        background: linear-gradient(100deg, var(--color-surface-light) 0%, var(--color-surface-mid) 45%, var(--color-surface-deep) 100%);
+    }
+
+    .topbar-surface::after {
+        content: '';
+        position: absolute;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        width: min(46%, 560px);
+        z-index: -1;
+        opacity: 0.4;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='560' height='64' viewBox='0 0 560 64' fill='none' stroke='white' stroke-opacity='0.14' stroke-width='1'%3E%3Cpath d='M0 64L64 0M48 64L112 0M96 64L160 0M144 64L208 0'/%3E%3Ccircle cx='430' cy='32' r='54'/%3E%3Ccircle cx='430' cy='32' r='34'/%3E%3Cpath d='M300 32H376M484 32H560'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right center;
+        background-size: cover;
+        pointer-events: none;
+    }
+}
+
+/* Users who ask for less motion get none inside the application shell. */
+@media (prefers-reduced-motion: reduce) {
+    .app-root *,
+    .app-root *::before,
+    .app-root *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
 }

@@ -21,9 +21,7 @@ class WorkspaceAccessTest extends TestCase
     {
         parent::setUp();
 
-        foreach (['admin', 'supervisor', 'cliente'] as $role) {
-            Role::findOrCreate($role, 'web');
-        }
+        $this->seedRoleCatalog();
 
         $org = Organization::create(['name' => 'CCG']);
         $this->dev = Workspace::create(['organization_id' => $org->id, 'code' => 'DESARROLLO_DEV', 'name' => 'Desarrollo']);

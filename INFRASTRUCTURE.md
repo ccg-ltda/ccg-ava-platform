@@ -56,6 +56,17 @@ docker compose exec -e APP_ENV=testing -e DB_CONNECTION=sqlite -e DB_DATABASE=:m
   -e SESSION_DRIVER=array -e QUEUE_CONNECTION=sync -e BROADCAST_CONNECTION=null app php artisan test
 ```
 
+Red de seguridad: `tests/TestCase.php` aborta cualquier test si la conexión no es SQLite en memoria o una base cuyo nombre acaba en `_test`/`_testing` (`tests/Support/TestDatabaseGuard.php`). Un `php artisan test` a pelo dentro del contenedor falla con "Refusing to run tests..." antes de tocar la base de desarrollo.
+
+**Validaciones en navegador (Playwright) contra la base de desarrollo:** no uses ni modifiques cuentas, membresías ni roles reales. Crea datos aislados y bórralos siempre al terminar, también si la validación falla:
+
+```bash
+make e2e-setup      # php artisan e2e:setup --users=3 --json  -> Workspace E2E_WS y usuarios *@e2e.ccg.test (contraseñas aleatorias en la salida)
+make e2e-cleanup    # php artisan e2e:cleanup                 -> borra SOLO lo etiquetado; `--dry-run` para ver qué borraría
+```
+
+Convención: usuarios `*@e2e.ccg.test`, Workspace `E2E_*` (organización `E2E Org`) y roles `e2e_*`. Los comandos se niegan a ejecutarse en producción, muestran la base de datos usada y no tocan datos reales (un rol `e2e_*` asignado a un usuario real no se elimina).
+
 ## Variables importantes
 
 Todo sale de `.env` (ver `.env.example`). El cableado de arquitectura (pgsql, drivers Redis, disco `s3`, hosts de servicio) está fijo en el compose.

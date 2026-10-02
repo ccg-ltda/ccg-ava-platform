@@ -6,16 +6,45 @@ use App\Models\Organization;
 use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
+use Tests\Support\TestDatabaseGuard;
 
 abstract class TestCase extends BaseTestCase
 {
+    /**
+     * Runs before RefreshDatabase touches the schema: abort if the app points to a non-test database.
+     */
+    protected function refreshApplication(): void
+    {
+        parent::refreshApplication();
+
+        $connection = config('database.default');
+
+        TestDatabaseGuard::assertSafe($connection, config("database.connections.{$connection}.database"));
+    }
+
+    /**
+     * The same role/permission catalog the seeders create:
+     * admin = every permission, supervisor = view-dashboard + view-users, cliente = view-dashboard.
+     */
+    protected function seedRoleCatalog(): void
+    {
+        $permissions = collect(['manage-users', 'manage-settings', 'view-dashboard', 'view-users'])
+            ->each(fn (string $name) => Permission::findOrCreate($name, 'web'));
+
+        Role::findOrCreate('admin', 'web')->syncPermissions($permissions->all());
+        Role::findOrCreate('supervisor', 'web')->syncPermissions(['view-dashboard', 'view-users']);
+        Role::findOrCreate('cliente', 'web')->syncPermissions(['view-dashboard']);
+    }
+
     /**
      * Act as a user who is a member of a Workspace and has it selected in the session,
      * i.e. the state the app expects after a successful login.
      */
     protected function actingAsWorkspaceMember(User $user, string $role = 'cliente'): static
     {
+        $this->seedRoleCatalog();
         Role::findOrCreate($role, 'web');
 
         $workspace = Workspace::first() ?? Workspace::create([

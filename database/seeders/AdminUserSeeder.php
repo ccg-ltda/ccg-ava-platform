@@ -59,6 +59,5 @@ class AdminUserSeeder extends Seeder
         );
 
         $admin->forceFill(['is_superuser' => true])->save();
-        $admin->syncRoles([$role]);
     }
 }

@@ -2,23 +2,21 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\WorkspaceReport;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use Spatie\Permission\Models\Permission;
-use Spatie\Permission\Models\Role;
+use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function index(Request $request)
+    /**
+     * Reportes: the home page after login.
+     */
+    public function index(Request $request, WorkspaceReport $report): Response
     {
-        $workspace = $request->attributes->get('workspace');
-
-        return Inertia::render('Dashboard', [
-            'stats' => [
-                'users' => $workspace->users()->count(),
-                'roles' => Role::count(),
-                'permissions' => Permission::count(),
-            ],
-        ]);
+        return Inertia::render('Reports/Index', $report->for(
+            $request->attributes->get('workspace'),
+            $request->attributes->get('workspace_role'),
+        ));
     }
 }

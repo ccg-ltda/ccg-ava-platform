@@ -34,7 +34,6 @@ class AdminUserSeederTest extends TestCase
         $this->assertNotSame('Sample-Pass-1*', $admin->password);
         $this->assertNotNull($admin->email_verified_at);
         $this->assertTrue($admin->is_superuser);
-        $this->assertTrue($admin->hasRole('admin'));
         $this->assertSame(
             Permission::count(),
             Role::findByName('admin', 'web')->permissions()->count(),
@@ -46,7 +45,7 @@ class AdminUserSeederTest extends TestCase
     {
         $this->seed(AdminUserSeeder::class);
 
-        $this->assertTrue(User::where('email', 'admin@example.test')->firstOrFail()->hasRole('admin'));
+        $this->assertTrue(Role::where('name', 'admin')->exists());
     }
 
     public function test_running_it_twice_does_not_duplicate_anything_or_change_access(): void
@@ -63,7 +62,7 @@ class AdminUserSeederTest extends TestCase
         $this->assertSame($roles, Role::count());
         $admin = User::find($id);
         $this->assertTrue(Hash::check('Sample-Pass-1*', $admin->password));
-        $this->assertSame(['admin'], $admin->getRoleNames()->all());
+        $this->assertSame(0, $admin->roles()->count(), 'Roles are assigned per Workspace, not globally.');
     }
 
     public function test_it_is_skipped_with_a_warning_outside_production_when_variables_are_missing(): void

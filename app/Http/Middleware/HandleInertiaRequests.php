@@ -35,12 +35,11 @@ class HandleInertiaRequests extends Middleware
             // Roles/permissions are those of the user's role inside the active Workspace.
             'auth' => [
                 'user' => fn () => $request->user() ? array_merge($request->user()->toArray(), [
-                    'permissions' => ($role = $request->attributes->get('workspace_role'))
-                        ? Role::findByName($role, 'web')->permissions->pluck('name')
-                        : [],
-                    'roles' => $role ? [$role] : [],
+                    'permissions' => $request->attributes->get('workspace_permissions', []),
+                    'roles' => ($role = $request->attributes->get('workspace_role')) ? [$role] : [],
                 ]) : null,
             ],
+            'flash' => fn () => ['success' => $request->session()->get('success')],
             'workspace' => fn () => ($workspace = $request->attributes->get('workspace')) ? [
                 'code' => $workspace->code,
                 'name' => $workspace->name,

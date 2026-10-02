@@ -7,7 +7,6 @@ use App\Http\Controllers\Auth\EmailVerificationPromptController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
-use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Auth\VerifyEmailController;
 use App\Http\Controllers\Auth\WorkspaceSelectionController;
 use Illuminate\Support\Facades\Route;
@@ -22,10 +21,7 @@ Route::middleware('guest')->group(function () {
     Route::delete('pre-login', [WorkspaceSelectionController::class, 'destroy'])
         ->name('pre-login.reset');
 
-    Route::get('register', [RegisteredUserController::class, 'create'])
-        ->name('register');
-
-    Route::post('register', [RegisteredUserController::class, 'store']);
+    // No public self-registration: accounts are created by Workspace admins (see UserController).
 
     Route::get('login', [AuthenticatedSessionController::class, 'create'])
         ->name('login');

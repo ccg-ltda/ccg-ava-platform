@@ -68,7 +68,8 @@ Toda lógica se escribe una sola vez, en un lugar central, y se importa donde se
 - Toda consulta de datos de negocio debe partir del Workspace activo. El aislamiento hoy es manual: nunca hagas consultas que crucen Workspaces sin una razón explícita.
 - Para toda tabla de negocio nueva, propón y reutiliza un mecanismo central de aislamiento (trait o scope global) en lugar de repetir filtros.
 - Las reglas de contraseña salen de una sola fuente compartida, no se repiten por controlador.
-- Roles y permisos Spatie existen, pero hoy no autorizan nada. No crees una segunda fuente de verdad para los roles: antes de usarlos, decide y documenta cuál manda.
+- Fuente de verdad de roles: las tablas Spatie `roles` y `permissions` son el catálogo GLOBAL (qué permisos da cada rol); `workspace_user.role` asigna un rol a un usuario dentro de un Workspace. La autorización sale de los permisos de ese rol (`workspace.permission:<permiso>`), nunca del nombre del rol ni de roles Spatie asignados al usuario (`model_has_roles` no se usa). Solo los superusuarios cambian el catálogo (`can:manage-roles`); los admins de Workspace solo asignan roles cuyos permisos ya poseen. Lógica en `app/Services/RoleCatalog.php` y `UserIdentityGuard.php`.
+- No hay registro público (`/register` no existe): las cuentas las crea un admin del Workspace desde `/users`, siempre dentro de ese Workspace.
 - El administrador inicial se crea con `AdminUserSeeder` a partir de `ADMIN_EMAIL`, `ADMIN_PASSWORD` y `ADMIN_NAME`. Nunca escribas credenciales en el código ni en documentos.
 
 ## 8. Protección contra regresiones
@@ -85,7 +86,8 @@ Nunca arregles una cosa rompiendo otra. Una tarea no está terminada si algo que
 
 Ejecuta las que correspondan al cambio y repórtalas:
 
-- `php artisan test` (en host o con `make test`, que fuerza SQLite en memoria; nunca lo ejecutes contra la base de desarrollo).
+- `php artisan test` (en host o con `make test`, que fuerza SQLite en memoria; nunca lo ejecutes contra la base de desarrollo: `tests/TestCase.php` lo bloquea si la base no es de pruebas).
+- Validaciones en navegador: usa `make e2e-setup` y `make e2e-cleanup` (datos etiquetados `*@e2e.ccg.test`, `E2E_*`, `e2e_*`); nunca modifiques usuarios, membresías ni roles reales para probar, y ejecuta siempre la limpieza al terminar, aunque falle.
 - `npm run build`.
 - `make pint` (Pint). Hoy falla en 8 archivos antiguos: tu cambio no debe empeorar ese número, y los archivos que toques deben quedar limpios.
 - No hay ESLint, Prettier ni tests de frontend todavía. Si la tarea los necesita, regístralo en `pendientes.md`.
