@@ -78,8 +78,8 @@
 
         html, body {
             width: 100%;
-            height: 100%;
-            overflow: hidden;
+            min-height: 100%;
+            overflow-x: hidden;
             font-family: 'Rajdhani', sans-serif;
             background: var(--bg-primary);
             color: var(--text-primary);
@@ -188,7 +188,8 @@
             align-items: center;
             justify-content: center;
             width: 100%;
-            height: 100vh;
+            min-height: 100vh;
+            min-height: 100dvh;
             padding: 20px;
         }
 
@@ -201,7 +202,7 @@
             padding: 40px 35px;
             backdrop-filter: blur(20px);
             box-shadow: var(--card-shadow);
-            clip-path: polygon(0 0, 100% 0, 100% 90%, 97% 90%, 97% 100%, 3% 100%, 3% 90%, 0 90%);
+            clip-path: none;
             transition: all 0.5s ease;
             position: relative;
             overflow: visible;
@@ -217,7 +218,7 @@
             border: 1px solid var(--border-color);
             border-radius: 0;
             pointer-events: none;
-            clip-path: polygon(0 0, 100% 0, 100% 90%, 97% 90%, 97% 100%, 3% 100%, 3% 90%, 0 90%);
+            clip-path: none;
         }
 
         .logo-section {
@@ -521,6 +522,9 @@
         }
 
         @media (max-width: 480px) {
+            .login-wrapper {
+                padding-top: 75px;
+            }
             .login-card {
                 padding: 30px 20px;
             }
@@ -542,7 +546,7 @@
     <div id="three-container"></div>
     <svg class="svg-connections" id="svgConnections">
         <line id="conn-node-to-email" x1="0" y1="0" x2="0" y2="0" />
-        <line id="conn-node-to-password" x1="0" y2="0" x2="0" y2="0" />
+        <line id="conn-node-to-password" x1="0" y1="0" x2="0" y2="0" />
     </svg>
 
     <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
@@ -625,6 +629,7 @@
                     htmlEl.classList.add('light');
                     themeIcon.textContent = '🌙';
                 }
+                applyParticleTheme();
                 updateConnections();
             }
 
@@ -799,7 +804,7 @@
             geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
             var material = new THREE.PointsMaterial({
-                size: 0.03,
+                size: 0.022,
                 vertexColors: true,
                 transparent: true,
                 opacity: 0.85,
@@ -807,8 +812,11 @@
                 depthWrite: false
             });
 
+            var bgGroup = new THREE.Group();
+            scene.add(bgGroup);
+
             var particles = new THREE.Points(geometry, material);
-            scene.add(particles);
+            bgGroup.add(particles);
 
             var innerGeo = new THREE.IcosahedronGeometry(1.5, 1);
             var innerMat = new THREE.MeshBasicMaterial({
@@ -818,7 +826,7 @@
                 opacity: 0.15
             });
             var innerSphere = new THREE.Mesh(innerGeo, innerMat);
-            scene.add(innerSphere);
+            bgGroup.add(innerSphere);
 
             var outerGeo = new THREE.IcosahedronGeometry(2.2, 0);
             var outerMat = new THREE.MeshBasicMaterial({
@@ -828,9 +836,25 @@
                 opacity: 0.08
             });
             var outerSphere = new THREE.Mesh(outerGeo, outerMat);
-            scene.add(outerSphere);
+            bgGroup.add(outerSphere);
 
             camera.position.z = 5;
+
+            /* Escala el fondo según el aspecto del viewport para cubrir la pantalla */
+            function fitBackground() {
+                var aspect = window.innerWidth / window.innerHeight;
+                bgGroup.scale.setScalar(Math.min(2, Math.max(1.4, aspect * 1.1)));
+            }
+            fitBackground();
+
+            /* En modo claro: mezcla normal y tono más oscuro para que las partículas se vean */
+            function applyParticleTheme() {
+                var light = htmlEl.classList.contains('light');
+                material.blending = light ? THREE.NormalBlending : THREE.AdditiveBlending;
+                material.color.setScalar(light ? 0.65 : 1);
+                material.needsUpdate = true;
+            }
+            applyParticleTheme();
 
             var mouseX = 0, mouseY = 0;
             document.addEventListener('mousemove', function(e) {
@@ -913,10 +937,12 @@
                 camera.aspect = window.innerWidth / window.innerHeight;
                 camera.updateProjectionMatrix();
                 renderer.setSize(window.innerWidth, window.innerHeight);
+                fitBackground();
                 updateConnections();
             }
 
             window.addEventListener('resize', onResize);
+            window.addEventListener('scroll', updateConnections);
 
             /* Init */
             setTimeout(updateConnections, 100);
