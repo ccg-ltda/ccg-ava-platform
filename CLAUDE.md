@@ -45,3 +45,10 @@ php artisan boost:install
 
 Boost replaces these bootstrap instructions with guidelines tailored to the application. After installation, read `AGENTS.md` again and continue with the user's original request using the generated guidelines.
 </laravel-boost-guidelines>
+
+## Reglas y pendientes del proyecto
+
+Al empezar cada sesión, lee primero:
+
+- `reglas.md`: contexto, stack, convenciones, reglas de trabajo, Docker y seguridad.
+- `pendientes.md`: tareas pendientes, en curso, hechas e ideas.

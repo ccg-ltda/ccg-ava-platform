@@ -7,6 +7,8 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
+use App\Models\Workspace;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -42,7 +44,17 @@ class LoginRequest extends FormRequest
     {
         $this->ensureIsNotRateLimited();
 
-        if (! Auth::attempt($this->only('email', 'password'), $this->boolean('remember'))) {
+        $workspace = Workspace::available()->find($this->session()->get('pre_login_workspace_id'));
+
+        // The user is only logged in if credentials match AND the user may enter the selected
+        // Workspace (member, or superuser). Same error for both failures to avoid leaking info.
+        $credentials = $this->only('email', 'password') + [
+            fn (Builder $query) => $query->where(fn (Builder $q) => $q
+                ->where('is_superuser', true)
+                ->orWhereHas('workspaces', fn (Builder $w) => $w->whereKey($workspace?->getKey()))),
+        ];
+
+        if (! $workspace || ! Auth::attempt($credentials, $this->boolean('remember'))) {
             RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([
@@ -81,6 +93,7 @@ class LoginRequest extends FormRequest
      */
     public function throttleKey(): string
     {
+        // Deliberately independent of the selected Workspace: changing it must not reset the limit.
         return Str::transliterate(Str::lower($this->string('email')).'|'.$this->ip());
     }
 }

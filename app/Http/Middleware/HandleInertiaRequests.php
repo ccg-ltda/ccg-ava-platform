@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Illuminate\Http\Request;
 use Inertia\Middleware;
+use Spatie\Permission\Models\Role;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -31,12 +32,20 @@ class HandleInertiaRequests extends Middleware
     {
         return [
             ...parent::share($request),
+            // Roles/permissions are those of the user's role inside the active Workspace.
             'auth' => [
-                'user' => $request->user() ? array_merge($request->user()->toArray(), [
-                    'permissions' => $request->user()->getAllPermissions()->pluck('name'),
-                    'roles' => $request->user()->getRoleNames(),
+                'user' => fn () => $request->user() ? array_merge($request->user()->toArray(), [
+                    'permissions' => ($role = $request->attributes->get('workspace_role'))
+                        ? Role::findByName($role, 'web')->permissions->pluck('name')
+                        : [],
+                    'roles' => $role ? [$role] : [],
                 ]) : null,
             ],
+            'workspace' => fn () => ($workspace = $request->attributes->get('workspace')) ? [
+                'code' => $workspace->code,
+                'name' => $workspace->name,
+                'organization' => $workspace->organization->name,
+            ] : null,
         ];
     }
 }

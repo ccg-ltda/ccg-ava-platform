@@ -38,8 +38,9 @@ class UserFactory extends Factory
      */
     public function unverified(): static
     {
+        // User::booted() auto-verifies new accounts, so clear the flag after creation.
         return $this->state(fn (array $attributes) => [
             'email_verified_at' => null,
-        ]);
+        ])->afterCreating(fn (User $user) => $user->forceFill(['email_verified_at' => null])->saveQuietly());
     }
 }

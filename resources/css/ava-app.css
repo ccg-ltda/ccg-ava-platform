@@ -1,0 +1,400 @@
+/*
+ * Application shell (dashboard and future internal pages) built on the Ava design tokens from ava.css.
+ */
+@layer components {
+    .ava {
+        font-family: 'Rajdhani', sans-serif;
+        color: var(--text-primary);
+    }
+
+    /* Inline variant of the theme toggle (inside the top bar) */
+    .theme-toggle--inline {
+        position: static;
+        width: 42px;
+        height: 42px;
+        font-size: 18px;
+        flex: none;
+    }
+
+    .app-shell {
+        position: relative;
+        z-index: 10;
+        min-height: 100vh;
+        min-height: 100dvh;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .app-topbar {
+        position: sticky;
+        top: 0;
+        z-index: 40;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 12px 24px;
+        background: var(--bg-card);
+        border-bottom: 1px solid var(--border-color);
+        backdrop-filter: blur(20px);
+        transition: background 0.5s ease, border-color 0.5s ease;
+    }
+
+    .app-brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-family: 'Orbitron', monospace;
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        color: var(--neon-cyan);
+        text-shadow: 0 0 15px rgba(0, 240, 255, 0.5);
+        white-space: nowrap;
+    }
+
+    .app-brand .logo-icon {
+        width: 38px;
+        height: 38px;
+        border: 2px solid var(--neon-cyan);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+        box-shadow: 0 0 20px rgba(0, 240, 255, 0.3);
+    }
+
+    .app-brand .logo-icon svg {
+        width: 20px;
+        height: 20px;
+        fill: var(--neon-cyan);
+    }
+
+    .app-chip {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.15;
+        padding: 6px 14px;
+        background: var(--input-bg);
+        border: 1px solid var(--input-border);
+        font-size: 12px;
+        letter-spacing: 1px;
+        color: var(--text-secondary);
+        min-width: 0;
+    }
+
+    .app-chip strong {
+        font-family: 'Orbitron', monospace;
+        font-size: 12px;
+        letter-spacing: 2px;
+        color: var(--neon-cyan);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .app-spacer {
+        flex: 1;
+    }
+
+    .app-user {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        line-height: 1.15;
+        min-width: 0;
+    }
+
+    .app-user > span:first-child {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 220px;
+    }
+
+    .app-user > span:last-child {
+        font-size: 12px;
+        letter-spacing: 1px;
+        color: var(--text-secondary);
+    }
+
+    .role-badge {
+        display: inline-block;
+        padding: 1px 8px;
+        border: 1px solid var(--border-color);
+        font-family: 'Orbitron', monospace;
+        font-size: 10px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        color: var(--neon-purple);
+    }
+
+    .app-logout {
+        padding: 9px 16px;
+        background: transparent;
+        border: 1px solid var(--neon-pink);
+        color: var(--neon-pink);
+        font-family: 'Orbitron', monospace;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        white-space: nowrap;
+    }
+
+    .app-logout:hover {
+        background: rgba(255, 45, 149, 0.12);
+        box-shadow: 0 0 20px rgba(255, 45, 149, 0.3);
+    }
+
+    .app-body {
+        flex: 1;
+        display: flex;
+        min-height: 0;
+    }
+
+    .app-sidebar {
+        width: 240px;
+        flex: none;
+        padding: 24px 16px;
+        background: var(--bg-card);
+        border-right: 1px solid var(--border-color);
+        backdrop-filter: blur(20px);
+        transition: background 0.5s ease, border-color 0.5s ease;
+    }
+
+    .app-nav {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .app-nav-link {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 14px;
+        border: 1px solid transparent;
+        font-family: 'Orbitron', monospace;
+        font-size: 12px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        text-decoration: none;
+        color: var(--text-secondary);
+        transition: all 0.3s ease;
+    }
+
+    .app-nav-link svg {
+        width: 18px;
+        height: 18px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        flex: none;
+    }
+
+    .app-nav-link:hover {
+        color: var(--neon-cyan);
+        border-color: var(--border-color);
+        text-shadow: 0 0 10px rgba(0, 240, 255, 0.4);
+    }
+
+    .app-nav-link.active {
+        color: var(--neon-cyan);
+        border-color: var(--input-border);
+        background: var(--input-bg);
+        box-shadow: 0 0 15px rgba(0, 240, 255, 0.15);
+    }
+
+    .app-main {
+        flex: 1;
+        min-width: 0;
+        padding: 32px;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+    }
+
+    .app-card {
+        padding: 28px;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        backdrop-filter: blur(20px);
+        box-shadow: var(--card-shadow);
+        transition: background 0.5s ease, border-color 0.5s ease;
+    }
+
+    .app-card h1,
+    .app-card h2 {
+        font-family: 'Orbitron', monospace;
+        font-weight: 700;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        color: var(--neon-cyan);
+        text-shadow: 0 0 15px rgba(0, 240, 255, 0.5);
+    }
+
+    .app-card h1 {
+        font-size: 22px;
+        margin-bottom: 6px;
+    }
+
+    .app-card h2 {
+        font-size: 14px;
+        margin-bottom: 14px;
+    }
+
+    .app-card p {
+        font-size: 15px;
+        letter-spacing: 1px;
+        color: var(--text-secondary);
+    }
+
+    .app-grid {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .app-stat {
+        padding: 18px 20px;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        backdrop-filter: blur(20px);
+        min-width: 0;
+        transition: background 0.5s ease, border-color 0.5s ease;
+    }
+
+    .app-stat span {
+        display: block;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        color: var(--text-secondary);
+        margin-bottom: 8px;
+    }
+
+    .app-stat strong {
+        display: block;
+        font-family: 'Orbitron', monospace;
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: 1px;
+        color: var(--text-primary);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .app-placeholders {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .app-placeholder {
+        min-height: 110px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px dashed var(--input-border);
+        font-size: 12px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        color: var(--text-muted);
+    }
+
+    .app-menu-button {
+        display: none;
+        width: 42px;
+        height: 42px;
+        flex: none;
+        align-items: center;
+        justify-content: center;
+        background: var(--input-bg);
+        border: 1px solid var(--input-border);
+        color: var(--neon-cyan);
+        cursor: pointer;
+    }
+
+    .app-menu-button svg {
+        width: 20px;
+        height: 20px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+    }
+
+    @media (max-width: 1100px) {
+        .app-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @media (max-width: 900px) {
+        .app-topbar {
+            padding: 10px 16px;
+            gap: 10px;
+        }
+
+        .app-menu-button {
+            display: flex;
+        }
+
+        .app-body {
+            flex-direction: column;
+        }
+
+        .app-sidebar {
+            display: none;
+            width: auto;
+            padding: 12px 16px;
+            border-right: none;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .app-sidebar.open {
+            display: block;
+        }
+
+        .app-chip,
+        .app-user {
+            display: none;
+        }
+
+        .app-main {
+            padding: 20px 16px;
+        }
+
+        .app-placeholders {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .app-brand span {
+            display: none;
+        }
+
+        .app-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .app-card {
+            padding: 20px;
+        }
+
+        .app-logout {
+            padding: 9px 12px;
+        }
+    }
+}

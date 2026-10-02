@@ -1,100 +1,124 @@
-import Checkbox from '@/Components/Checkbox';
-import InputError from '@/Components/InputError';
-import InputLabel from '@/Components/InputLabel';
-import PrimaryButton from '@/Components/PrimaryButton';
-import TextInput from '@/Components/TextInput';
-import GuestLayout from '@/Layouts/GuestLayout';
-import { Head, Link, useForm } from '@inertiajs/react';
+import { Head, useForm } from '@inertiajs/react';
+import { useState } from 'react';
+import { useAccess } from '@/Components/Access/AccessContext';
+import { AccessInput, AccessPasswordInput } from '@/Components/Access/AccessInput';
+import WorkspaceBadge from '@/Components/Access/WorkspaceBadge';
+import AccessLayout from '@/Layouts/AccessLayout';
 
-export default function Login({ status, canResetPassword }) {
-    const { data, setData, post, processing, errors, reset } = useForm({
-        email: '',
-        password: '',
-        remember: false,
-    });
+const EMAIL_INVALID = 'Ingrese un correo electrónico válido';
+const PASSWORD_REQUIRED = 'Ingrese su contraseña';
+const isEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
+/**
+ * Step 2 of access. The Workspace comes from the server session (shown here only as a badge);
+ * credentials and Workspace membership are checked by the server on submit.
+ */
+export default function Login({ workspace }) {
+    const { showToast } = useAccess();
+    const { data, setData, post, processing, errors, clearErrors } = useForm({ email: '', password: '', remember: false });
+    const [client, setClient] = useState({ email: '', password: '' });
+    const [showPassword, setShowPassword] = useState(false);
+
+    const emailTyped = data.email.trim() !== '';
+    const emailMessage = client.email || errors.email || '';
+    const passwordMessage = client.password || errors.password || '';
+
+    const onEmail = (e) => {
+        const value = e.target.value;
+        setData('email', value);
+        clearErrors('email');
+        setClient((c) => ({ ...c, email: value.trim() !== '' && !isEmail(value.trim()) ? EMAIL_INVALID : '' }));
+    };
+
+    const onPassword = (e) => {
+        setData('password', e.target.value);
+        clearErrors('password');
+        setClient((c) => ({ ...c, password: '' }));
+    };
 
     const submit = (e) => {
         e.preventDefault();
 
-        post(route('login'), {
-            onFinish: () => reset('password'),
-        });
+        const next = {
+            email: isEmail(data.email.trim()) ? '' : EMAIL_INVALID,
+            password: data.password.length === 0 ? PASSWORD_REQUIRED : '',
+        };
+        setClient(next);
+
+        if (next.email || next.password) {
+            showToast('Por favor, corrija los errores del formulario', 'error');
+            return;
+        }
+
+        showToast('Iniciando sesión...', 'success');
+        post(route('login'), { onFinish: () => setData('password', '') });
     };
 
     return (
-        <GuestLayout>
-            <Head title="Log in" />
+        <>
+            <Head title="Login" />
+            <WorkspaceBadge code={workspace.code} />
 
-            {status && (
-                <div className="mb-4 text-sm font-medium text-green-600">
-                    {status}
-                </div>
-            )}
+            <form onSubmit={submit} noValidate>
+                <AccessInput
+                    id="email"
+                    label="Correo Electrónico"
+                    type="email"
+                    name="email"
+                    value={data.email}
+                    onChange={onEmail}
+                    message={emailMessage}
+                    valid={emailTyped && !emailMessage}
+                    placeholder="usuario@ccg.platform"
+                    autoComplete="email"
+                    connect
+                />
 
-            <form onSubmit={submit}>
-                <div>
-                    <InputLabel htmlFor="email" value="Email" />
+                <AccessPasswordInput
+                    id="password"
+                    label="Contraseña"
+                    name="password"
+                    value={data.password}
+                    onChange={onPassword}
+                    message={passwordMessage}
+                    placeholder="••••••••"
+                    autoComplete="current-password"
+                    visible={showPassword}
+                    onToggle={() => setShowPassword((v) => !v)}
+                    connect
+                />
 
-                    <TextInput
-                        id="email"
-                        type="email"
-                        name="email"
-                        value={data.email}
-                        className="mt-1 block w-full"
-                        autoComplete="username"
-                        isFocused={true}
-                        onChange={(e) => setData('email', e.target.value)}
-                    />
-
-                    <InputError message={errors.email} className="mt-2" />
-                </div>
-
-                <div className="mt-4">
-                    <InputLabel htmlFor="password" value="Password" />
-
-                    <TextInput
-                        id="password"
-                        type="password"
-                        name="password"
-                        value={data.password}
-                        className="mt-1 block w-full"
-                        autoComplete="current-password"
-                        onChange={(e) => setData('password', e.target.value)}
-                    />
-
-                    <InputError message={errors.password} className="mt-2" />
-                </div>
-
-                <div className="mt-4 block">
-                    <label className="flex items-center">
-                        <Checkbox
+                <div className="remember-row">
+                    <label>
+                        <input
+                            type="checkbox"
                             name="remember"
                             checked={data.remember}
-                            onChange={(e) =>
-                                setData('remember', e.target.checked)
-                            }
+                            onChange={(e) => setData('remember', e.target.checked)}
                         />
-                        <span className="ms-2 text-sm text-gray-600">
-                            Remember me
-                        </span>
+                        Recordar sesión
                     </label>
+                    <a
+                        href="#"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            showToast('Funcionalidad de recuperación en desarrollo', 'warning');
+                        }}
+                    >
+                        ¿Olvidó su contraseña?
+                    </a>
                 </div>
 
-                <div className="mt-4 flex items-center justify-end">
-                    {canResetPassword && (
-                        <Link
-                            href={route('password.request')}
-                            className="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                        >
-                            Forgot your password?
-                        </Link>
-                    )}
-
-                    <PrimaryButton className="ms-4" disabled={processing}>
-                        Log in
-                    </PrimaryButton>
-                </div>
+                <button type="submit" className="login-btn" disabled={processing}>
+                    Iniciar Sesión
+                </button>
             </form>
-        </GuestLayout>
+
+            <p className="footer-text">
+                ¿No tiene cuenta? <a href="#">Regístrese aquí</a>
+            </p>
+        </>
     );
 }
+
+Login.layout = (page) => <AccessLayout>{page}</AccessLayout>;

@@ -7,10 +7,15 @@
         <title inertia>{{ config('app.name', 'Laravel') }}</title>
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
+        <!-- Theme before first paint (light by default, choice persisted by the ThemeToggle) -->
+        <script>
+            try { document.documentElement.className = localStorage.getItem('ccg-theme') === 'dark' ? 'dark' : 'light'; } catch (e) { document.documentElement.className = 'light'; }
+        </script>
+
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Orbitron:wght@500;700;800;900&display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
         <style>
             .font-orbitron {

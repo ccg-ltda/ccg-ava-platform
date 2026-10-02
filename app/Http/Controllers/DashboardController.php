@@ -2,18 +2,20 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\User;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
 class DashboardController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
+        $workspace = $request->attributes->get('workspace');
+
         return Inertia::render('Dashboard', [
             'stats' => [
-                'users' => User::count(),
+                'users' => $workspace->users()->count(),
                 'roles' => Role::count(),
                 'permissions' => Permission::count(),
             ],

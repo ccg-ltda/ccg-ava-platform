@@ -7,6 +7,7 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
@@ -41,6 +42,32 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_superuser' => 'boolean',
         ];
+    }
+
+    public function workspaces(): BelongsToMany
+    {
+        return $this->belongsToMany(Workspace::class, 'workspace_user')->withPivot('role')->withTimestamps();
+    }
+
+    /**
+     * Membership is the authorization source. Superusers may enter any Workspace.
+     */
+    public function canAccessWorkspace(Workspace $workspace): bool
+    {
+        return $this->is_superuser
+            || $this->workspaces()->whereKey($workspace->getKey())->exists();
+    }
+
+    /**
+     * Role of the user inside the given Workspace (null when none).
+     * A superuser without an explicit membership acts as admin.
+     */
+    public function roleInWorkspace(Workspace $workspace): ?string
+    {
+        $role = $this->workspaces()->whereKey($workspace->getKey())->first()?->pivot->role;
+
+        return $role ?? ($this->is_superuser ? 'admin' : null);
     }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Models\Workspace;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -16,9 +17,17 @@ class AuthenticatedSessionController extends Controller
     /**
      * Display the login view.
      */
-    public function create()
+    public function create(Request $request): Response|RedirectResponse
     {
-        return view('auth.login');
+        $workspace = Workspace::available()->find($request->session()->get('pre_login_workspace_id'));
+
+        if (! $workspace) {
+            $request->session()->forget('pre_login_workspace_id');
+
+            return redirect()->route('pre-login');
+        }
+
+        return Inertia::render('Auth/Login', ['workspace' => ['code' => $workspace->code]]);
     }
 
     /**
@@ -29,6 +38,9 @@ class AuthenticatedSessionController extends Controller
         $request->authenticate();
 
         $request->session()->regenerate();
+
+        // Server-side Workspace context, re-validated by EnsureWorkspaceContext on every request.
+        $request->session()->put('workspace_id', $request->session()->pull('pre_login_workspace_id'));
 
         return redirect()->intended(route('dashboard', absolute: false));
     }
@@ -44,6 +56,6 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerateToken();
 
-        return redirect('/login');
+        return redirect()->route('pre-login');
     }
 }
