@@ -19,35 +19,29 @@ export default function ConfirmPassword() {
     };
 
     return (
-        <GuestLayout>
-            <Head title="Confirm Password" />
+        <GuestLayout title="Confirmar contraseña">
+            <Head title="Confirmar contraseña" />
 
-            <div className="mb-4 text-sm text-gray-600">
-                This is a secure area of the application. Please confirm your
-                password before continuing.
-            </div>
+            <p className="mb-4 text-sm text-ink-muted">Esta es una zona segura. Confirma tu contraseña para continuar.</p>
 
             <form onSubmit={submit}>
-                <div className="mt-4">
-                    <InputLabel htmlFor="password" value="Password" />
+                <InputLabel htmlFor="password" value="Contraseña" />
+                <TextInput
+                    id="password"
+                    type="password"
+                    name="password"
+                    value={data.password}
+                    className="mt-1"
+                    isFocused={true}
+                    autoComplete="current-password"
+                    invalid={Boolean(errors.password)}
+                    onChange={(e) => setData('password', e.target.value)}
+                />
 
-                    <TextInput
-                        id="password"
-                        type="password"
-                        name="password"
-                        value={data.password}
-                        className="mt-1 block w-full"
-                        isFocused={true}
-                        onChange={(e) => setData('password', e.target.value)}
-                    />
-
-                    <InputError message={errors.password} className="mt-2" />
-                </div>
+                <InputError message={errors.password} className="mt-2" />
 
                 <div className="mt-4 flex items-center justify-end">
-                    <PrimaryButton className="ms-4" disabled={processing}>
-                        Confirm
-                    </PrimaryButton>
+                    <PrimaryButton disabled={processing}>Confirmar</PrimaryButton>
                 </div>
             </form>
         </GuestLayout>

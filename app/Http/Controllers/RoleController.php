@@ -30,7 +30,7 @@ class RoleController extends Controller
         $role = Role::create(['name' => $data['name'], 'guard_name' => 'web']);
         $role->syncPermissions($data['permissions'] ?? []);
 
-        return redirect()->route('users.index', ['tab' => 'roles'])->with('success', "Rol {$role->name} creado.");
+        return redirect()->back(fallback: route('users.index', ['tab' => 'roles']))->with('success', 'Rol creado correctamente');
     }
 
     /** The name is immutable: workspace_user.role stores it. Only the permissions change. */
@@ -49,23 +49,6 @@ class RoleController extends Controller
 
         $role->syncPermissions(Permission::whereIn('name', $data['permissions'] ?? [])->where('guard_name', 'web')->get());
 
-        return redirect()->route('users.index', ['tab' => 'roles'])->with('success', "Permisos de {$role->name} actualizados.");
-    }
-
-    public function destroy(Role $role): RedirectResponse
-    {
-        abort_unless($role->guard_name === 'web', 404);
-
-        if ($this->catalog->isProtected($role)) {
-            throw ValidationException::withMessages(['role' => "El rol {$role->name} es del sistema y no se puede eliminar."]);
-        }
-
-        if ($this->catalog->isInUse($role)) {
-            throw ValidationException::withMessages(['role' => "El rol {$role->name} está asignado a usuarios; reasígnalos antes de eliminarlo."]);
-        }
-
-        $role->delete();
-
-        return redirect()->route('users.index', ['tab' => 'roles'])->with('success', "Rol {$role->name} eliminado.");
+        return redirect()->back(fallback: route('users.index', ['tab' => 'roles']))->with('success', 'Rol actualizado correctamente');
     }
 }

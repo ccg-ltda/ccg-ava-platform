@@ -103,6 +103,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Remembered Access
+    |--------------------------------------------------------------------------
+    |
+    | How long "Recordar sesión" remembers the last email and Workspace (minutes).
+    | The password is never remembered. See App\Services\RememberedAccess.
+    |
+    */
+
+    'remembered_access_minutes' => (int) env('AUTH_REMEMBERED_ACCESS_MINUTES', 60 * 24 * 30),
+
+    /*
+    |--------------------------------------------------------------------------
     | Password Confirmation Timeout
     |--------------------------------------------------------------------------
     |

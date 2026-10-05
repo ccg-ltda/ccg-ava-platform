@@ -4,39 +4,39 @@ Actualiza este archivo al terminar cada tarea. Reglas en `reglas.md`.
 
 ## Pendientes
 
+Todos los que quedan esperan una decisión o una autorización; ninguno es un defecto funcional del módulo de Usuarios, Roles, Workspaces y Organizaciones.
+
+### Despliegue e infraestructura (decisión pendiente)
+
 - [ ] **Horizon:** definir quién accede a `/horizon` fuera de local (gate `viewHorizon` en `app/Providers/HorizonServiceProvider.php`; hoy no entra nadie). Opciones: solo superusuarios o lista de emails por variable.
 - [ ] **Producción — proxy:** decidir si se mantiene el servicio `proxy` (nginx) de `docker-compose.prod.yml` o se usa un DigitalOcean Load Balancer / Traefik.
 - [ ] **Producción — servicios gestionados:** decidir si Postgres y Redis serán gestionados (DigitalOcean); si sí, quitar esos servicios del compose y apuntar `DB_HOST` / `REDIS_HOST`.
-- [ ] **Scheduler:** hoy no hay tareas programadas. Al añadir la primera, usar `->onOneServer()` si el scheduler llegara a tener más de una réplica.
-- [ ] **No-root completo en `app`:** hoy el proceso maestro (nginx/php-fpm) corre como root. Requiere nginx en puerto alto y rehacer el logging.
-- [ ] **Pint:** `vendor/bin/pint --test` falla en 8 archivos por estilo (orden de imports, espacios en operadores, `fully_qualified_strict_types`...). Decidir si se aplica `pint` a todo el proyecto.
-- [ ] **Versión de PHP:** `composer.json` dice `^8.3` pero el lock exige 8.4.1+. Subir a `^8.4` o regenerar el lock.
-- [ ] **Seeders de ejemplo:** `RolesAndPermissionsSeeder` crea usuarios con contraseñas débiles (`daniel@gmail.com`...); separar lo de desarrollo de lo de producción.
 - [ ] **Valores por defecto de desarrollo en `docker-compose.yml`** (`DB_PASSWORD=secret`, `minioadmin`, `REVERB_APP_*`): decidir si se exigen desde `.env`.
 - [ ] **Imagen de MinIO:** `bitnamilegacy/minio` está congelada; valorar alternativa si se quiere consola web o parches.
-- [ ] **Traducciones:** no hay `lang/es`; los mensajes de autenticación salen en inglés.
-- [ ] **Recordar sesión:** la cookie `remember` no recuerda el Workspace, así que no evita pasar por `/pre-login`.
-- [ ] **Módulos de la referencia sin construir:** Productos, Combos, Cupones, Clientes, Pedidos, Domicilios, Sucursales y Caja (secciones DEMO/ADMIN/OPERACIONES de la imagen). Fuera de alcance por ahora; el menú vive en `resources/js/config/navigation.js`.
+- [ ] **No-root completo en `app`:** hoy el proceso maestro (nginx/php-fpm) corre como root. Requiere nginx en puerto alto y rehacer el logging.
+- [ ] **Scheduler:** hoy no hay tareas programadas. Al añadir la primera, usar `->onOneServer()` si el scheduler llegara a tener más de una réplica.
+- [ ] **Vite del contenedor `node` no ve cambios de archivos en Windows:** tras editar `.jsx` hay que ejecutar `docker compose restart node` (o activar polling, que es configuración de infraestructura que no se tocó).
+- [ ] **Versión de PHP:** `composer.json` dice `^8.3` pero el lock exige 8.4.1+. Corregirlo exige tocar dependencias (`composer update --lock`), que no se autorizó.
+- [ ] **Pint:** `vendor/bin/pint --test` falla en archivos antiguos (finales de línea CRLF, orden de imports...). Decidir si se aplica `pint` a todo el proyecto; los archivos nuevos pasan.
+
+### Producto (definición pendiente)
+
+- [ ] **Módulos de la referencia sin construir:** Productos, Combos, Cupones, Clientes, Pedidos, Domicilios, Sucursales y Caja (secciones DEMO/ADMIN/OPERACIONES de la imagen). El menú vive en `resources/js/config/navigation.js`.
+- [ ] **Configuraciones e Integraciones:** páginas base vacías; definir su contenido real.
 - [ ] **Chat de Ava:** el botón flotante (`ChatButton`) es solo visual; falta la lógica (Reverb + Echo).
 - [ ] **Contexto ITBIS / moneda:** el chip "ITBIS 18%" y el selector RD$ DOP de la referencia se dejaron fuera a propósito; añadirlos si hacen falta.
-- [ ] **Configuraciones e Integraciones:** páginas base vacías; definir su contenido real.
-- [ ] **Layouts sin uso:** `AuthenticatedLayout.jsx` y `BackButton.jsx` ya no los usa ninguna página; borrarlos con tu visto bueno.
-- [ ] **Estilo antiguo en Auth y Welcome:** las páginas de recuperación y verificación (`GuestLayout`) y `Welcome.jsx` siguen con el estilo anterior.
-- [ ] **Tests de frontend:** no hay; la nueva interfaz solo está cubierta por tests de rutas, roles y props (`NavigationPagesTest`).
-- [ ] **Alta de usuarios por invitación o autoregistro:** `/register` se cerró (no existe registro público). Si el negocio quiere que alguien se dé de alta solo, hay que decidir el mecanismo (invitación con token por Workspace, o aprobación de un admin); el Workspace elegido en el pre-login no autoriza por sí mismo.
-- [ ] **Menú por permisos:** el backend autoriza por permisos del rol (`workspace.permission`), pero `config/navigation.js` y `AppLayout` aún filtran el menú por rol `admin`; un rol personalizado con `manage-users` accede a `/users` pero no ve el enlace.
-- [ ] **Referencias a `route('register')` en archivos huérfanos:** `Pages/Welcome.jsx`, `views/login.blade.php`, `views/welcome.blade.php` y `auth/login.blade.php` (texto del enlace); ninguno es alcanzable. El enlace "Regístrese aquí" del login es inerte y ya no tiene destino.
-- [ ] **Vite del contenedor `node` no ve cambios de archivos en Windows:** tras editar `.jsx` hay que ejecutar `docker compose restart node` (o activar polling en `vite.config.js`, que es configuración de infraestructura).
-- [ ] **Unicidad del email entre Workspaces:** crear un usuario con un email que ya existe en otro Workspace falla con el error global de `unique:users` (revela que la cuenta existe). Valorar un flujo de "añadir cuenta existente" para superusuarios.
-- [ ] **Permisos por Workspace:** el catálogo de roles/permisos es global; permisos distintos por Workspace requieren Spatie `teams` (también en Ideas).
-- [ ] **Alinear el resto de páginas al sistema visual:** Reportes, Configuraciones, Integraciones y Perfil ya usan `AppLayout` y los componentes compartidos, pero no se revisaron una a una; recuperación de contraseña, verificación de correo y `Welcome.jsx` siguen con el estilo anterior.
-- [ ] **Paginación de otros listados y filtros por rol:** solo `/users` tiene búsqueda y paginación; añadir filtro por rol si hace falta.
-- [ ] **Tests de interfaz:** la validación visual y de pestañas se hizo a mano con Playwright; no hay tests automáticos de frontend.
-- [ ] **Membresías de `DESARROLLO_DEV` que desaparecieron sin causa identificada:** en dos ocasiones faltaban filas de `workspace_user` de usuarios sembrados y se restauraron con `WorkspaceSeeder`. Antes de añadir el guard, un `php artisan test` ejecutado dentro del contenedor sí podía vaciar la base de desarrollo (`RefreshDatabase`), pero no se pudo demostrar que fuera la causa de estos casos concretos. Si vuelve a ocurrir, comparar con una instantánea previa.
+- [ ] **Alta de usuarios por invitación o autoregistro:** `/register` está cerrado. Si el negocio quiere que alguien se dé de alta solo, hay que decidir el mecanismo (invitación con token por Workspace, o aprobación de un admin).
+- [ ] **Recuperación de contraseña:** el flujo existe (`/forgot-password`, ya en español y con el estilo de Ava) pero el enlace del login es inerte y el correo solo se escribe en el log (`MAIL_MAILER=log`); decidir el canal de envío antes de habilitarlo.
+
+### Autorización de limpieza (necesito tu visto bueno; no se tocó el Login)
+
+- [ ] **Login y archivos heredados:** el enlace "Regístrese aquí" del login y el de "¿Olvidó su contraseña?" son inertes; `Pages/Welcome.jsx`, `views/login.blade.php`, `views/welcome.blade.php`, `views/layouts/app.blade.php`, `auth/login.blade.php` y dos copias del HTML de referencia no tienen ruta; `app.blade.php` aún carga las fuentes Orbitron/Rajdhani y estilos `circuit-bg` / `glass-panel` que solo usan esas vistas y el acceso. Quitarlos exige tocar el Login, que se pidió no modificar.
+
+### Calidad y datos
+
+- [ ] **Tests de frontend y E2E automáticos:** no existen; la interfaz solo está cubierta por tests de rutas y props y por pruebas manuales con Playwright (`e2e:setup` / `e2e:cleanup`). Automatizarlos exige añadir dependencias (Vitest/Playwright Test).
 - [ ] **Base de pruebas en PostgreSQL:** los tests usan SQLite en memoria; las consultas específicas de PostgreSQL no se ejercitan en CI. Si se quiere, crear una base `ccg_ava_test` (el guard ya la admite).
-- [ ] **Validación de navegador no automatizada:** los pasos con Playwright se ejecutan a mano; el flujo `e2e:setup` / `e2e:cleanup` es manual (no hay un `finally` automático porque las herramientas de navegador no ejecutan Artisan).
-- [ ] **Fuentes sin uso en `app.blade.php`:** Orbitron y Rajdhani ya no las usa el login; se siguen cargando desde Google Fonts. Quitarlas cuando se confirme que ninguna página antigua (Welcome, recuperación de contraseña) las necesita.
-- [ ] TODO: añadir aquí las tareas de producto.
+- [ ] **Membresías de `DESARROLLO_DEV` que desaparecieron sin causa identificada:** en dos ocasiones faltaron filas de `workspace_user` de usuarios sembrados y se restauraron con `WorkspaceSeeder`. Se añadió un guard contra tests sobre la base de desarrollo, pero no se demostró que fuera la causa. Si vuelve a ocurrir, comparar con una instantánea previa.
 
 ## En curso
 
@@ -55,12 +55,18 @@ Actualiza este archivo al terminar cada tarea. Reglas en `reglas.md`.
 - [x] **Aislamiento y limpieza de datos de prueba:** PHPUnit usa SQLite en memoria (nada persiste) y `TestDatabaseGuard` impide que un test toque la base de desarrollo; las validaciones en navegador usan datos etiquetados (`e2e:setup` / `e2e:cleanup`, `make e2e-setup` / `make e2e-cleanup`) y la limpieza, probada tras un fallo controlado, dejó la base de desarrollo idéntica a la inicial (comparación por hash de usuarios, Workspaces, membresías, roles y permisos).
 - [x] **Rediseño de Usuarios y Roles y sistema visual del dashboard:** `/users` pasa a un módulo con tres pestañas accesibles (Usuarios con búsqueda y paginación en servidor, Roles, Permisos en matriz de solo lectura) que renderizan solo la pestaña activa y guardan la pestaña en la URL. Paleta sobria basada en azules con tokens en `app.css` (sin colores sueltos), barra lateral en degradado azul claro-profundo-casi blanco con textura y movimiento sutil (`prefers-reduced-motion` respetado), barra superior con degradado y trazos finos, contenido más ancho (`max-w-screen-2xl`). Componentes compartidos nuevos: `Tabs`, `SearchInput`, `Pagination`, `Alert`, `FlashAlert`, `Table`; mensajes de éxito del servidor (`flash.success`). `Modal` y botones/campos alineados a los tokens.
 - [x] **Usuarios, registro y roles:** `/register` cerrado (ningún usuario sin Workspace ni rol elegido por el cliente); aviso previo en `/users` cuando una cuenta compartida o superusuario no admite cambio de nombre/correo (regla única en `UserIdentityGuard`, el backend sigue siendo quien la aplica); roles: `workspace_user.role` asigna, Spatie `roles`/`permissions` son el catálogo global, rutas autorizadas por permisos (`workspace.permission`), solo superusuarios crean/editan/eliminan roles (rol `admin` protegido, roles en uso no se borran), asignación sin escalada de privilegios, sin roles Spatie globales por usuario. Tests en `UserRoleManagementTest`.
+- [x] **Usuarios sin borrado, roles sin eliminación y administración de Workspaces:** `users.is_active` (migración aditiva, default true); `/users` desactiva/activa (`users.deactivate` / `users.activate`) en vez de quitar; el login y `EnsureWorkspaceContext` bloquean cuentas inactivas (también sesiones abiertas); cuentas compartidas, superusuarios y la propia solo las cambia un superusuario (`UserIdentityGuard`). Eliminadas las rutas `DELETE /users` y `DELETE /roles`. Nueva pestaña Workspaces en `/users`: superusuarios crean/editan Workspaces (código inmutable, sin borrado, no desactivar el activo) y añaden cuentas existentes; admins con `manage-users` cambian rol y quitan membresías solo en los Workspaces que administran, sin escalada (`WorkspaceAdministration`, `WorkspaceController`, `WorkspaceMemberController`). Tests: `UserStatusTest`, `WorkspaceAdministrationTest`.
+- [x] **Paginación configurable, usuario con Workspace, edición de Workspace/Organization:** `/users` ofrece 10/20/30/50/100 por página (server-side, `per_page` en la URL, conserva búsqueda); "Nuevo usuario" elige Workspace entre los activos que el actor administra (roles según ese Workspace, sin escalada); el Workspace se edita (nombre y código, con aviso y confirmación al cambiar el código) y se activa/desactiva con `workspaces.activate|deactivate`; las Organizations se crean y renombran (sin borrado) desde la pestaña Workspaces. Tests: `WorkspaceLifecycleTest`. La limpieza E2E también elimina Organizations `E2E Org*` sin Workspaces.
+- [x] **Consistencia visual y paginación del módulo Usuarios y Roles:** campos con borde visible y estados (`.field` en `app.css`, `TextInput`, nuevo `Select` con Headless UI para todos los desplegables, incluido "Mostrar"); acciones de tabla con iconos y tooltip (`IconButton`: lápiz, power, múltiples usuarios) y encabezado Acciones centrado; Organizaciones como pestaña propia (editar, activar/desactivar con `organizations.activate|deactivate`, solo superusuarios); Roles, Permisos, Workspaces y Organizaciones con paginación 10/20/30/50/100 en servidor (`ListPagination` + `usePagedList`, claves `<sección>_page` / `<sección>_per_page`, un único `Pagination`). Tests: `ListPaginationTest`.
+- [x] **Confirmaciones, toasts y edición completa de usuarios:** `ConfirmDialog` / `useConfirm` (único diálogo de confirmación; ya no hay `window.confirm`) y `Toast` / `useToast` / `FlashToasts` (arriba a la derecha bajo la barra superior; recogen `flash.success|warning|error`; reemplazan a `FlashAlert`); el modal de edición de usuarios cambia nombre, email, contraseña opcional, Workspace (mueve la membresía en `workspace_user`) y rol, con las mismas protecciones de identidad y sin escalada. Tests: `UserEditTest`.
+- [x] **Migraciones con fecha `2026_10_02` y "Recordar sesión":** cada tabla en su propio `create_*` (usuarios, restablecimiento, sesiones, caché, bloqueos, jobs, failed_jobs, permisos Spatie, organizations, workspaces, workspace_user), verificadas con `migrate:fresh --seed` en una base aislada (esquema idéntico al de desarrollo); "Recordar sesión" recuerda el último correo y Workspace (cifrado, validado de nuevo en el servidor, nunca la contraseña) y el usuario que vuelve por la cookie `remember` recupera su Workspace. Tests: `RememberedAccessTest`.
+- [x] **Esquema inicial consolidado y cierre de pendientes del módulo:** migraciones reducidas a creates finales (se eliminaron `add_is_superuser`, `add_is_active` y `create_organizations_and_workspaces_tables`, partida en `organizations`, `workspaces` y `workspace_user`; `job_batches` eliminada por no usarse), verificadas con `migrate:fresh --seed` en una base aislada y con `SchemaTest`; miembros de un Workspace paginados (mismo `Pagination`/`Select`); filtro de usuarios por estado; mensajes de activar/desactivar unificados; menú por permisos (`config/navigation.js`); `lang/es`; Perfil y recuperación de contraseña alineados (`GuestLayout`); la autoeliminación de cuenta del Perfil se eliminó (las cuentas no se borran); seeders con contraseñas conocidas solo en local/testing; `AuthenticatedLayout`, `BackButton` y `ApplicationLogo` (sin uso) borrados.
 - [x] **Administrador inicial:** `AdminUserSeeder` idempotente (`ADMIN_EMAIL` / `ADMIN_PASSWORD`), rol `admin` con todos los permisos, superusuario, protegido en producción.
 
 ## Ideas
 
 - [ ] Chat en tiempo real sobre Reverb (infraestructura lista, falta el frontend con Echo).
-- [ ] Panel de administración de Organizations y Workspaces.
+- [ ] Filtro de usuarios por rol y recordar el tamaño de página entre sesiones (hoy el tamaño vive en la URL y vuelve a 10 al entrar de nuevo).
 - [ ] Selector de Workspace para superusuarios sin cerrar sesión.
 - [ ] Spatie `teams` para permisos por Workspace.
 - [ ] CI (tests + Pint + `composer audit`) en cada push.

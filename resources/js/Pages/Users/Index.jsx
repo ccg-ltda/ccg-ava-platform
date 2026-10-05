@@ -1,52 +1,93 @@
 import { Head } from '@inertiajs/react';
-import { KeyRound, ShieldCheck, Users } from 'lucide-react';
+import { Building, Building2, KeyRound, ShieldCheck, Users } from 'lucide-react';
 import { useState } from 'react';
 import PageHeader from '@/Components/PageHeader';
 import Tabs from '@/Components/Tabs';
 import AppLayout from '@/Layouts/AppLayout';
+import OrganizationsPanel from './Partials/OrganizationsPanel';
 import PermissionsPanel from './Partials/PermissionsPanel';
 import RolesPanel from './Partials/RolesPanel';
 import UsersPanel from './Partials/UsersPanel';
-
-const TAB_IDS = ['usuarios', 'roles', 'permisos'];
-
-const initialTab = () => {
-    const requested = new URLSearchParams(window.location.search).get('tab');
-
-    return Math.max(TAB_IDS.indexOf(requested), 0);
-};
+import WorkspacesPanel from './Partials/WorkspacesPanel';
 
 /**
- * Usuarios y Roles: one module, three tabs (only the active one is rendered).
- * The tab lives in the URL (?tab=) so it survives reloads and can be linked.
+ * Usuarios y Roles: one module, up to five tabs (only the active one is rendered). Organizaciones only
+ * exists for superusers. The tab lives in the URL (?tab=) so it survives reloads and can be linked;
+ * every list pages independently on the server (see usePagedList).
  */
-export default function Index({ users, filters, assignableRoles, roles, permissions, canManageRoles }) {
-    const [selected, setSelected] = useState(initialTab);
+export default function Index({
+    users,
+    filters,
+    perPageOptions,
+    createTargets,
+    roles,
+    permissions,
+    permissionNames,
+    permissionRoles,
+    canManageRoles,
+    workspaces,
+    organizations,
+}) {
+    const sections = [
+        {
+            id: 'usuarios',
+            label: 'Usuarios',
+            icon: Users,
+            count: filters.search || filters.status !== 'all' ? undefined : users.meta.total,
+            panel: <UsersPanel users={users} filters={filters} perPageOptions={perPageOptions} createTargets={createTargets} />,
+        },
+        {
+            id: 'roles',
+            label: 'Roles',
+            icon: ShieldCheck,
+            count: roles.meta.total,
+            panel: <RolesPanel roles={roles} permissionNames={permissionNames} perPageOptions={perPageOptions} canManage={canManageRoles} />,
+        },
+        {
+            id: 'permisos',
+            label: 'Permisos',
+            icon: KeyRound,
+            count: permissions.meta.total,
+            panel: <PermissionsPanel roles={permissionRoles} permissions={permissions} perPageOptions={perPageOptions} />,
+        },
+        {
+            id: 'workspaces',
+            label: 'Workspaces',
+            icon: Building2,
+            count: workspaces.list.meta.total,
+            panel: <WorkspacesPanel workspaces={workspaces} perPageOptions={perPageOptions} />,
+        },
+        organizations && {
+            id: 'organizaciones',
+            label: 'Organizaciones',
+            icon: Building,
+            count: organizations.meta.total,
+            panel: <OrganizationsPanel organizations={organizations} perPageOptions={perPageOptions} />,
+        },
+    ].filter(Boolean);
+
+    const [selected, setSelected] = useState(() => {
+        const requested = new URLSearchParams(window.location.search).get('tab');
+
+        return Math.max(sections.findIndex((section) => section.id === requested), 0);
+    });
 
     const select = (index) => {
         setSelected(index);
 
         const url = new URL(window.location.href);
-        url.searchParams.set('tab', TAB_IDS[index]);
+        url.searchParams.set('tab', sections[index].id);
         window.history.replaceState(window.history.state, '', url);
     };
-
-    const tabs = [
-        { id: 'usuarios', label: 'Usuarios', icon: Users, count: filters.search ? undefined : users.meta.total },
-        { id: 'roles', label: 'Roles', icon: ShieldCheck, count: roles.length },
-        { id: 'permisos', label: 'Permisos', icon: KeyRound, count: permissions.length },
-    ];
 
     return (
         <>
             <Head title="Usuarios y Roles" />
 
-            <PageHeader title="Usuarios y Roles" description="Quién accede a este Workspace, con qué rol y qué puede hacer cada rol." />
+            <PageHeader title="Usuarios y Roles" description="Quién accede, con qué rol, qué puede hacer cada rol y cómo se organizan los Workspaces." />
 
-            <Tabs tabs={tabs} selectedIndex={selected} onChange={select}>
-                <UsersPanel users={users} filters={filters} assignableRoles={assignableRoles} />
-                <RolesPanel roles={roles} permissions={permissions} canManage={canManageRoles} />
-                <PermissionsPanel roles={roles} permissions={permissions} />
+            <Tabs tabs={sections} selectedIndex={selected} onChange={select}>
+                {sections.map((section) => section.panel)}
             </Tabs>
         </>
     );

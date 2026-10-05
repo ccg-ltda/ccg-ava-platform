@@ -39,7 +39,12 @@ class HandleInertiaRequests extends Middleware
                     'roles' => ($role = $request->attributes->get('workspace_role')) ? [$role] : [],
                 ]) : null,
             ],
-            'flash' => fn () => ['success' => $request->session()->get('success')],
+            // One-shot messages the UI shows as toasts.
+            'flash' => fn () => [
+                'success' => $request->session()->get('success'),
+                'error' => $request->session()->get('error'),
+                'warning' => $request->session()->get('warning'),
+            ],
             'workspace' => fn () => ($workspace = $request->attributes->get('workspace')) ? [
                 'code' => $workspace->code,
                 'name' => $workspace->name,

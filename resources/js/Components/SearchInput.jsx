@@ -11,7 +11,7 @@ export default function SearchInput({ value, onChange, placeholder = 'Buscar', l
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 placeholder={placeholder}
-                className="w-full rounded-lg border border-line bg-card py-2 pr-3 pl-9 text-sm text-ink placeholder:text-ink-muted focus:border-primary focus:ring-1 focus:ring-primary"
+                className="field pr-3 pl-9"
             />
         </label>
     );

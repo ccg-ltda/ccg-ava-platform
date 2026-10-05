@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Models\Workspace;
+use App\Services\RememberedAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -14,6 +15,8 @@ use Inertia\Response;
 
 class AuthenticatedSessionController extends Controller
 {
+    public function __construct(private readonly RememberedAccess $remembered) {}
+
     /**
      * Display the login view.
      */
@@ -27,7 +30,10 @@ class AuthenticatedSessionController extends Controller
             return redirect()->route('pre-login');
         }
 
-        return Inertia::render('Auth/Login', ['workspace' => ['code' => $workspace->code]]);
+        return Inertia::render('Auth/Login', [
+            'workspace' => ['code' => $workspace->code],
+            'rememberedEmail' => $this->remembered->email($request),
+        ]);
     }
 
     /**
@@ -40,7 +46,15 @@ class AuthenticatedSessionController extends Controller
         $request->session()->regenerate();
 
         // Server-side Workspace context, re-validated by EnsureWorkspaceContext on every request.
-        $request->session()->put('workspace_id', $request->session()->pull('pre_login_workspace_id'));
+        $workspaceId = $request->session()->pull('pre_login_workspace_id');
+        $request->session()->put('workspace_id', $workspaceId);
+
+        // "Recordar sesión" also decides whether the email and Workspace are remembered (never the password).
+        if ($request->boolean('remember')) {
+            $this->remembered->remember($request->user()->email, $workspaceId);
+        } else {
+            $this->remembered->forget();
+        }
 
         return redirect()->intended(route('dashboard', absolute: false));
     }

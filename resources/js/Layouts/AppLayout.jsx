@@ -1,8 +1,9 @@
 import { usePage } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 import ChatButton from '@/Components/ChatButton';
-import FlashAlert from '@/Components/FlashAlert';
+import { ConfirmProvider } from '@/Components/ConfirmDialog';
 import Sidebar from '@/Components/Sidebar';
+import { FlashToasts, ToastProvider } from '@/Components/Toast';
 import Topbar from '@/Components/Topbar';
 
 /**
@@ -22,21 +23,25 @@ export default function AppLayout({ children }) {
     useEffect(() => setMenuOpen(false), [url]);
 
     return (
-        <div className="app-root flex min-h-screen min-h-dvh flex-col bg-canvas font-sans text-ink">
-            <Topbar user={user} role={role} onMenu={() => setMenuOpen(true)} />
+        <ToastProvider>
+            <ConfirmProvider>
+                <div className="app-root flex min-h-screen min-h-dvh flex-col bg-canvas font-sans text-ink">
+                    <Topbar user={user} role={role} onMenu={() => setMenuOpen(true)} />
 
-            <div className="flex min-h-0 flex-1">
-                <Sidebar role={role} workspace={props.workspace} open={menuOpen} onClose={() => setMenuOpen(false)} />
+                    <div className="flex min-h-0 flex-1">
+                        <Sidebar permissions={user?.permissions} workspace={props.workspace} open={menuOpen} onClose={() => setMenuOpen(false)} />
 
-                <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
-                    <div key={url} className="mx-auto w-full max-w-screen-2xl space-y-6 motion-safe:animate-fade-in">
-                        <FlashAlert />
-                        {children}
+                        <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
+                            <div key={url} className="mx-auto w-full max-w-screen-2xl space-y-6 motion-safe:animate-fade-in">
+                                {children}
+                            </div>
+                        </main>
                     </div>
-                </main>
-            </div>
 
-            <ChatButton />
-        </div>
+                    <ChatButton />
+                </div>
+                <FlashToasts />
+            </ConfirmProvider>
+        </ToastProvider>
     );
 }

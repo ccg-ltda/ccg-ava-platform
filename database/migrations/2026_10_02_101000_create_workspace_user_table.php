@@ -11,23 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('organizations', function (Blueprint $table) {
-            $table->id();
-            $table->string('name');
-            $table->boolean('is_active')->default(true);
-            $table->timestamps();
-        });
-
-        Schema::create('workspaces', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
-            $table->string('code')->unique();
-            $table->string('name');
-            $table->boolean('is_active')->default(true);
-            $table->timestamps();
-        });
-
-        // Membership: which users may enter which Workspace, and with which Role.
+        // Membership: which users may enter which Workspace, and with which role (a Spatie role name).
+        // Independent of `workspaces` and `users`: a user has many Workspaces and a Workspace many users.
         Schema::create('workspace_user', function (Blueprint $table) {
             $table->id();
             $table->foreignId('workspace_id')->constrained()->cascadeOnDelete();
@@ -45,7 +30,5 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('workspace_user');
-        Schema::dropIfExists('workspaces');
-        Schema::dropIfExists('organizations');
     }
 };

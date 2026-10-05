@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Workspace;
+use App\Services\RememberedAccess;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -16,16 +17,23 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class EnsureWorkspaceContext
 {
+    public function __construct(private readonly RememberedAccess $remembered) {}
+
     public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
-        $workspaceId = $request->session()->get('workspace_id');
+
+        // A user brought back by the "remember me" cookie has no session Workspace yet: use the remembered one,
+        // which goes through exactly the same checks below.
+        $fromMemory = ! $request->session()->has('workspace_id');
+        $workspaceId = $request->session()->get('workspace_id') ?? $this->remembered->workspace($request)?->id;
 
         $workspace = $workspaceId
             ? Workspace::available()->with('organization')->find($workspaceId)
             : null;
 
-        $role = ($workspace && $user->canAccessWorkspace($workspace))
+        // A deactivated account loses its open sessions too, not only the ability to log in.
+        $role = ($user->is_active && $workspace && $user->canAccessWorkspace($workspace))
             ? $user->roleInWorkspace($workspace)
             : null;
 
@@ -35,12 +43,17 @@ class EnsureWorkspaceContext
             : null;
 
         if (! $catalogRole) {
+            $this->remembered->forgetWorkspace();
             Auth::guard('web')->logout();
             $request->session()->invalidate();
             $request->session()->regenerateToken();
 
             return redirect()->route('pre-login')
                 ->withErrors(['workspace_code' => __('Tu sesión de Workspace no es válida. Ingresa nuevamente.')]);
+        }
+
+        if ($fromMemory) {
+            $request->session()->put('workspace_id', $workspace->id);
         }
 
         $request->attributes->set('workspace', $workspace);

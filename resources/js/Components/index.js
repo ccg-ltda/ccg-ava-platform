@@ -1,5 +1,3 @@
-export { default as ApplicationLogo } from './ApplicationLogo';
-export { default as BackButton } from './BackButton';
 export { default as Badge } from './Badge';
 export { default as Card } from './Card';
 export { default as ChatButton } from './ChatButton';
@@ -12,10 +10,12 @@ export { default as InputLabel } from './InputLabel';
 export { default as Modal } from './Modal';
 export { default as NavItem } from './NavItem';
 export { default as NavLink } from './NavLink';
+export { default as IconButton } from './IconButton';
 export { default as PageHeader } from './PageHeader';
 export { default as PrimaryButton } from './PrimaryButton';
 export { default as ResponsiveNavLink } from './ResponsiveNavLink';
 export { default as SecondaryButton } from './SecondaryButton';
+export { default as Select } from './Select';
 export { default as Sidebar } from './Sidebar';
 export { default as StatCard } from './StatCard';
 export { default as TextInput } from './TextInput';

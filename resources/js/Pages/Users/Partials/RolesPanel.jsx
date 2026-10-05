@@ -1,17 +1,20 @@
-import { router, useForm } from '@inertiajs/react';
-import { Lock, Pencil, Plus, Trash2 } from 'lucide-react';
+import { useForm } from '@inertiajs/react';
+import { Lock, Pencil, Plus } from 'lucide-react';
 import { useState } from 'react';
-import Alert from '@/Components/Alert';
 import Badge from '@/Components/Badge';
 import Card from '@/Components/Card';
+import Checkbox from '@/Components/Checkbox';
+import IconButton from '@/Components/IconButton';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import Modal from '@/Components/Modal';
+import Pagination from '@/Components/Pagination';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import { TableWrap, Td, Th } from '@/Components/Table';
 import TextInput from '@/Components/TextInput';
 import { roleTone } from '@/config/roles';
+import usePagedList from '@/Hooks/usePagedList';
 
 const VISIBLE_PERMISSIONS = 3;
 
@@ -21,16 +24,11 @@ function PermissionPicker({ permissions, selected, onChange, error }) {
 
     return (
         <fieldset>
-            <legend className="text-sm font-medium text-gray-700">Permisos</legend>
+            <legend className="text-sm font-medium text-ink">Permisos</legend>
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 {permissions.map((name) => (
-                    <label key={name} className="flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm text-ink">
-                        <input
-                            type="checkbox"
-                            className="rounded border-gray-300 text-primary focus:ring-primary"
-                            checked={selected.includes(name)}
-                            onChange={() => toggle(name)}
-                        />
+                    <label key={name} className="flex cursor-pointer items-center gap-2 rounded-lg border border-field px-3 py-2 text-sm text-ink transition-colors duration-150 hover:border-primary/40 has-checked:border-primary/50 has-checked:bg-primary-soft/40">
+                        <Checkbox checked={selected.includes(name)} onChange={() => toggle(name)} />
                         {name}
                     </label>
                 ))}
@@ -61,13 +59,14 @@ function RoleModal({ show, title, onClose, onSubmit, processing, children }) {
 
 /**
  * Roles tab: the global role catalog. Everyone who manages users sees it; only superusers
- * (`canManage`) can create roles, change their permissions or delete them, because the catalog
+ * (`canManage`) can create roles or change their permissions (roles are never deleted), because the catalog
  * is shared by every Workspace. The server enforces all of it.
  */
-export default function RolesPanel({ roles, permissions, canManage }) {
+export default function RolesPanel({ roles, permissionNames, perPageOptions, canManage }) {
     const [creating, setCreating] = useState(false);
     const [editing, setEditing] = useState(null);
-    const [removeError, setRemoveError] = useState('');
+
+    const list = usePagedList({ tab: 'roles', section: 'roles', only: ['roles'], meta: roles.meta, perPageOptions });
 
     const create = useForm({ name: '', permissions: [] });
     const edit = useForm({ permissions: [] });
@@ -93,16 +92,6 @@ export default function RolesPanel({ roles, permissions, canManage }) {
         edit.put(route('roles.update', editing.id), { onSuccess: () => setEditing(null) });
     };
 
-    const remove = (role) => {
-        setRemoveError('');
-        if (window.confirm(`¿Eliminar el rol ${role.name}?`)) {
-            router.delete(route('roles.destroy', role.id), {
-                preserveScroll: true,
-                onError: (errors) => setRemoveError(errors.role ?? 'No se pudo eliminar el rol.'),
-            });
-        }
-    };
-
     return (
         <Card className="overflow-hidden">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line p-4 sm:px-6">
@@ -118,23 +107,17 @@ export default function RolesPanel({ roles, permissions, canManage }) {
                 )}
             </div>
 
-            {removeError && (
-                <div className="p-4 sm:px-6">
-                    <Alert tone="danger">{removeError}</Alert>
-                </div>
-            )}
-
-            <TableWrap>
+            <TableWrap busy={list.loading}>
                 <thead>
                     <tr>
                         <Th>Rol</Th>
                         <Th>Permisos</Th>
                         <Th>Usuarios aquí</Th>
-                        {canManage && <Th className="text-right">Acciones</Th>}
+                        {canManage && <Th className="text-center">Acciones</Th>}
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
-                    {roles.map((role) => (
+                    {roles.data.map((role) => (
                         <tr key={role.id} className="transition-colors duration-150 hover:bg-canvas/70">
                             <Td className="whitespace-nowrap">
                                 <span className="flex items-center gap-2">
@@ -159,27 +142,14 @@ export default function RolesPanel({ roles, permissions, canManage }) {
                             </Td>
                             <Td className="text-ink-muted">{role.usersInWorkspace}</Td>
                             {canManage && (
-                                <Td className="text-right whitespace-nowrap">
-                                    {role.protected ? (
-                                        <span className="text-xs text-ink-muted">Rol del sistema</span>
-                                    ) : (
-                                        <>
-                                            <button type="button" onClick={() => openEdit(role)} className="me-4 inline-flex items-center gap-1 font-semibold text-primary hover:underline">
-                                                <Pencil className="size-3.5" aria-hidden="true" />
-                                                Permisos
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => remove(role)}
-                                                disabled={role.inUse}
-                                                title={role.inUse ? 'Asignado a usuarios' : 'Eliminar rol'}
-                                                className="inline-flex items-center gap-1 font-semibold text-danger hover:underline disabled:cursor-not-allowed disabled:opacity-40 disabled:no-underline"
-                                            >
-                                                <Trash2 className="size-3.5" aria-hidden="true" />
-                                                Eliminar
-                                            </button>
-                                        </>
-                                    )}
+                                <Td>
+                                    <div className="flex items-center justify-center gap-1">
+                                        {role.protected ? (
+                                            <span className="text-xs text-ink-muted">Rol del sistema</span>
+                                        ) : (
+                                            <IconButton icon={Pencil} label="Editar permisos" context={role.name} onClick={() => openEdit(role)} />
+                                        )}
+                                    </div>
                                 </Td>
                             )}
                         </tr>
@@ -187,17 +157,19 @@ export default function RolesPanel({ roles, permissions, canManage }) {
                 </tbody>
             </TableWrap>
 
+            <Pagination noun="roles" {...list.paginationProps} />
+
             <RoleModal show={creating} title="Nuevo rol" onClose={() => setCreating(false)} onSubmit={submitCreate} processing={create.processing}>
                 <div>
                     <InputLabel htmlFor="role_name" value="Nombre del rol" />
-                    <TextInput id="role_name" className="mt-1 block w-full" value={create.data.name} onChange={(e) => create.setData('name', e.target.value)} placeholder="ejemplo: coordinador" required />
+                    <TextInput id="role_name" className="mt-1" value={create.data.name} onChange={(e) => create.setData('name', e.target.value)} placeholder="ejemplo: coordinador" invalid={Boolean(create.errors.name)} required />
                     <InputError message={create.errors.name} className="mt-1" />
                 </div>
-                <PermissionPicker permissions={permissions} selected={create.data.permissions} onChange={(value) => create.setData('permissions', value)} error={create.errors.permissions} />
+                <PermissionPicker permissions={permissionNames} selected={create.data.permissions} onChange={(value) => create.setData('permissions', value)} error={create.errors.permissions} />
             </RoleModal>
 
             <RoleModal show={Boolean(editing)} title={`Permisos de ${editing?.name ?? ''}`} onClose={() => setEditing(null)} onSubmit={submitEdit} processing={edit.processing}>
-                <PermissionPicker permissions={permissions} selected={edit.data.permissions} onChange={(value) => edit.setData('permissions', value)} error={edit.errors.permissions} />
+                <PermissionPicker permissions={permissionNames} selected={edit.data.permissions} onChange={(value) => edit.setData('permissions', value)} error={edit.errors.permissions} />
             </RoleModal>
         </Card>
     );

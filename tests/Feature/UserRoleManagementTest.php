@@ -45,7 +45,7 @@ class UserRoleManagementTest extends TestCase
     private function newUserPayload(string $role, string $email = 'new@example.com'): array
     {
         return [
-            'name' => 'New User', 'email' => $email, 'role' => $role,
+            'name' => 'New User', 'email' => $email, 'role' => $role, 'workspace_id' => Workspace::first()->id,
             'password' => 'password123', 'password_confirmation' => 'password123',
         ];
     }
@@ -83,7 +83,7 @@ class UserRoleManagementTest extends TestCase
         $this->post('/users', $this->newUserPayload('cliente'))->assertSessionHasNoErrors();
 
         $this->get('/users')->assertInertia(function (AssertableInertia $page) {
-            $names = collect($page->toArray()['props']['assignableRoles'])->pluck('name')->all();
+            $names = $page->toArray()['props']['createTargets'][0]['roles'];
 
             $this->assertSame(['cliente', 'manager'], $names);
         });
@@ -197,7 +197,6 @@ class UserRoleManagementTest extends TestCase
 
         $this->post('/roles', ['name' => 'intruder', 'permissions' => ['manage-users']])->assertForbidden();
         $this->put('/roles/'.$cliente->id, ['permissions' => ['manage-users']])->assertForbidden();
-        $this->delete('/roles/'.$cliente->id)->assertForbidden();
 
         $this->assertFalse(Role::where('name', 'intruder')->exists());
         $this->assertSame(['view-dashboard'], $cliente->fresh()->permissions->pluck('name')->all());
@@ -244,31 +243,27 @@ class UserRoleManagementTest extends TestCase
         $this->assertCount(4, $admin->fresh()->permissions);
     }
 
-    public function test_roles_in_use_and_protected_roles_cannot_be_deleted(): void
+    public function test_roles_cannot_be_deleted_even_by_superusers(): void
     {
         $this->actAs('admin', superuser: true);
-        $workspace = Workspace::first();
-        $workspace->users()->attach(User::factory()->create()->id, ['role' => 'supervisor']);
-        Role::findOrCreate('unused', 'web');
+        $unused = Role::findOrCreate('unused', 'web');
 
-        $this->delete('/roles/'.Role::findByName('admin', 'web')->id)->assertSessionHasErrors('role');
-        $this->delete('/roles/'.Role::findByName('supervisor', 'web')->id)->assertSessionHasErrors('role');
-        $this->delete('/roles/'.Role::findByName('unused', 'web')->id)->assertSessionHasNoErrors();
+        $this->delete('/roles/'.$unused->id)->assertStatus(405);
+        $this->delete('/roles/'.Role::findByName('admin', 'web')->id)->assertStatus(405);
 
+        $this->assertTrue(Role::where('name', 'unused')->exists());
         $this->assertTrue(Role::where('name', 'admin')->exists());
-        $this->assertTrue(Role::where('name', 'supervisor')->exists());
-        $this->assertFalse(Role::where('name', 'unused')->exists());
     }
 
     public function test_only_superusers_receive_the_catalog_management_data(): void
     {
         $this->actAs('admin');
         $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('canManageRoles', false)->has('permissions', 4)->where('roles.0.inUse', null));
+            ->where('canManageRoles', false)->has('permissionNames', 4));
 
         $this->actAs('admin', superuser: true);
         $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('canManageRoles', true)->has('permissions', 4));
+            ->where('canManageRoles', true)->has('permissionNames', 4));
     }
 
     // --- isolation ----------------------------------------------------------------------------------------
@@ -280,7 +275,7 @@ class UserRoleManagementTest extends TestCase
         $this->otherWorkspace()->users()->attach($outsider->id, ['role' => 'cliente']);
 
         $this->put('/users/'.$outsider->id, ['name' => 'X', 'email' => 'x@example.com', 'role' => 'cliente'])->assertNotFound();
-        $this->delete('/users/'.$outsider->id)->assertNotFound();
+        $this->post('/users/'.$outsider->id.'/deactivate')->assertNotFound();
         $this->get('/users')->assertInertia(function (AssertableInertia $page) use ($outsider) {
             $emails = collect($page->toArray()['props']['users']['data'])->pluck('email');
 
@@ -288,17 +283,15 @@ class UserRoleManagementTest extends TestCase
         });
     }
 
-    public function test_deleting_a_user_only_removes_the_membership(): void
+    public function test_users_cannot_be_deleted_from_the_admin_routes(): void
     {
-        $this->actAs('admin');
+        $this->actAs('admin', superuser: true);
         $member = User::factory()->create();
         Workspace::first()->users()->attach($member->id, ['role' => 'cliente']);
-        $this->otherWorkspace()->users()->attach($member->id, ['role' => 'cliente']);
 
-        $this->delete('/users/'.$member->id)->assertRedirect('/users');
+        $this->delete('/users/'.$member->id)->assertStatus(405);
 
         $this->assertDatabaseHas('users', ['id' => $member->id]);
-        $this->assertSame(['OTHER_WS'], $member->workspaces()->pluck('code')->all());
     }
 
     public function test_permission_catalog_is_not_editable_through_the_roles_endpoint(): void
@@ -320,15 +313,15 @@ class UserRoleManagementTest extends TestCase
         $workspace->users()->attach(User::factory()->count(20)->create()->pluck('id')->all(), ['role' => 'cliente']);
 
         $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('users.data', 15)
+            ->has('users.data', 10)
             ->where('users.meta.total', 21)
-            ->where('users.meta.last_page', 2)
+            ->where('users.meta.last_page', 3)
             ->where('users.meta.from', 1)
-            ->where('users.meta.to', 15));
+            ->where('users.meta.to', 10));
 
-        $this->get('/users?page=2')->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('users.data', 6)
-            ->where('users.meta.current_page', 2));
+        $this->get('/users?page=3')->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('users.data', 1)
+            ->where('users.meta.current_page', 3));
     }
 
     public function test_search_filters_by_name_or_email_only_inside_the_workspace(): void
@@ -365,7 +358,7 @@ class UserRoleManagementTest extends TestCase
         Workspace::first()->users()->attach(User::factory()->create()->id, ['role' => 'cliente']);
 
         $this->get('/users')->assertInertia(function (AssertableInertia $page) {
-            $counts = collect($page->toArray()['props']['roles'])->pluck('usersInWorkspace', 'name');
+            $counts = collect($page->toArray()['props']['roles']['data'])->pluck('usersInWorkspace', 'name');
 
             $this->assertSame(1, $counts['cliente']);
             $this->assertSame(1, $counts['admin']);
@@ -377,7 +370,7 @@ class UserRoleManagementTest extends TestCase
         $this->actAs('admin');
 
         $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('permissions', 4)->where('canManageRoles', false));
+            ->has('permissionNames', 4)->where('canManageRoles', false));
         $this->post('/roles', ['name' => 'x', 'permissions' => ['manage-users']])->assertForbidden();
     }
 

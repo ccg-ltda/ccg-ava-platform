@@ -18,7 +18,7 @@ use Spatie\Permission\Models\Role;
  * without touching real data:
  *
  *   users          *@e2e.ccg.test
- *   workspace      E2E_*   (organization "E2E Org")
+ *   workspace      E2E_*   (organization "E2E Org"; "E2E Org*" names are cleaned too)
  *   roles          e2e_*   (create roles with this prefix during browser tests)
  *
  * Existing users, memberships, Workspaces and global roles are never modified.
@@ -100,7 +100,7 @@ class E2eFixtures
                 ->where(fn ($q) => $q->whereIn('user_id', $this->users()->pluck('id'))->orWhereIn('workspace_id', $this->workspaces()->pluck('id')))
                 ->count(),
             'workspaces' => $this->workspaces()->count(),
-            'organizations' => Organization::where('name', self::ORGANIZATION)->count(),
+            'organizations' => Organization::where('name', 'like', self::ORGANIZATION.'%')->count(),
             'roles' => $this->roles()->count(),
         ];
     }
@@ -135,7 +135,7 @@ class E2eFixtures
 
             User::whereIn('id', $userIds)->delete();
             Workspace::whereIn('id', $workspaceIds)->delete();
-            Organization::where('name', self::ORGANIZATION)->doesntHave('workspaces')->delete();
+            Organization::where('name', 'like', self::ORGANIZATION.'%')->doesntHave('workspaces')->delete();
 
             return $removed;
         });

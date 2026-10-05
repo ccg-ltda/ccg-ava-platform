@@ -38,6 +38,12 @@ class RolesAndPermissionsSeeder extends Seeder
         $supervisorRole->syncPermissions(['view-dashboard', 'view-users']);
         $clienteRole->syncPermissions(['view-dashboard']);
 
+        // Sample accounts have well-known passwords: they exist only in local/testing, never elsewhere.
+        // (The real administrator comes from AdminUserSeeder and its environment variables.)
+        if (! app()->environment('local', 'testing')) {
+            return;
+        }
+
         // Create Default Administrator: Daniel
         User::firstOrCreate(
             ['email' => 'daniel@gmail.com'],

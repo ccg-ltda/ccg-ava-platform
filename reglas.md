@@ -60,6 +60,13 @@ Toda lógica se escribe una sola vez, en un lugar central, y se importa donde se
 - Si agregas una clave de configuración, defínela en `config/*.php` y documenta la variable en `.env.example`.
 - Si cambias un contrato entre Laravel y React (nombres de campos, props, estructura, validaciones, permisos), revisa ambos lados.
 
+## 6b. Migraciones
+
+- El proyecto aún no está desplegado, así que las migraciones son el esquema inicial final, con fecha `2026_10_02_HHMMSS` y un archivo por tabla (`create_users_table`, `create_password_reset_tokens_table`, `create_sessions_table`, `create_cache_table`, `create_cache_locks_table`, `create_jobs_table`, `create_failed_jobs_table`, `create_permission_tables`, `create_organizations_table`, `create_workspaces_table`, `create_workspace_user_table`), sin `add_*` que solo reflejen el historial. La de permisos es la publicada por Spatie y se conserva en un solo archivo porque crea cinco tablas relacionadas y lee `config/permission.php`. `workspaces` y `workspace_user` son tablas independientes (un usuario en varios Workspaces y un Workspace con varios usuarios; `unique(workspace_id, user_id)`).
+- Tablas actuales y su uso: `users` (cuentas globales, `is_superuser`, `is_active`), `password_reset_tokens` (recuperación de contraseña), `sessions` (driver `database` por defecto), `cache` y `cache_locks` (driver `database` por defecto; Redis en Docker), `jobs` (cola `database` por defecto; Redis en Docker) y `failed_jobs` (Horizon y el worker guardan aquí los fallos), tablas Spatie (`permissions`, `roles`, `role_has_permissions`, `model_has_permissions`, `model_has_roles`), `organizations`, `workspaces` y `workspace_user`. `job_batches` se eliminó: no se usan lotes de trabajos.
+- Desde el primer despliegue, todo cambio de esquema va en una migración nueva (`add_*`); no se editan las ya desplegadas.
+- Para comprobar el esquema limpio sin tocar la base de desarrollo: crear una base vacía (`CREATE DATABASE ccg_ava_migrate_check`) y ejecutar `migrate:fresh --seed` con `DB_DATABASE` apuntando a ella.
+
 ## 7. Autenticación, roles y aislamiento por Workspace
 
 - Flujo de acceso: `/` redirige a `/pre-login`, se valida el código del Workspace y luego `/login` con email y contraseña.
@@ -70,6 +77,12 @@ Toda lógica se escribe una sola vez, en un lugar central, y se importa donde se
 - Las reglas de contraseña salen de una sola fuente compartida, no se repiten por controlador.
 - Fuente de verdad de roles: las tablas Spatie `roles` y `permissions` son el catálogo GLOBAL (qué permisos da cada rol); `workspace_user.role` asigna un rol a un usuario dentro de un Workspace. La autorización sale de los permisos de ese rol (`workspace.permission:<permiso>`), nunca del nombre del rol ni de roles Spatie asignados al usuario (`model_has_roles` no se usa). Solo los superusuarios cambian el catálogo (`can:manage-roles`); los admins de Workspace solo asignan roles cuyos permisos ya poseen. Lógica en `app/Services/RoleCatalog.php` y `UserIdentityGuard.php`.
 - No hay registro público (`/register` no existe): las cuentas las crea un admin del Workspace desde `/users`, siempre dentro de ese Workspace.
+- Las cuentas nunca se borran: se desactivan (`users.is_active`) y se pueden reactivar; los Workspaces y las Organizations tampoco se borran (`is_active`). Quitar a alguien de un Workspace solo borra su fila de `workspace_user`.
+- La lista de `/users` es del Workspace activo a propósito (aislamiento por Workspace): un usuario creado o movido a otro Workspace aparece al cambiar a ese Workspace. Los superusuarios administran los demás Workspaces desde la pestaña Workspaces (Miembros).
+- Crear un usuario con un correo que ya existe falla con el error de unicidad: es intencional (una cuenta es una identidad global y no se duplica). Los superusuarios añaden cuentas existentes a un Workspace desde Workspaces > Miembros.
+- Los textos de la interfaz y de los mensajes del framework están en español (`lang/es`, `APP_LOCALE=es`); las reglas que falten en `lang/es/validation.php` caen al inglés del framework.
+- "Recordar sesión" recuerda el último correo y el último Workspace en cookies cifradas y HttpOnly (`App\Services\RememberedAccess`, `AUTH_REMEMBERED_ACCESS_MINUTES`), nunca la contraseña ni en tabla. El Workspace recordado se revalida en el servidor cada vez (existe, está activo, su Organization está activa) y la membresía del usuario se sigue comprobando en el login y en `EnsureWorkspaceContext`; si ya no es válido se descarta. "Cambiar" en el login olvida el Workspace; entrar sin marcar la casilla borra ambos recuerdos.
+- Los usuarios de ejemplo con contraseña conocida (`RolesAndPermissionsSeeder`) solo se crean en `local` y `testing`.
 - El administrador inicial se crea con `AdminUserSeeder` a partir de `ADMIN_EMAIL`, `ADMIN_PASSWORD` y `ADMIN_NAME`. Nunca escribas credenciales en el código ni en documentos.
 
 ## 8. Protección contra regresiones

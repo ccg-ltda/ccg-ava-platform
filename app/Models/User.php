@@ -20,6 +20,9 @@ class User extends Authenticatable
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable, HasRoles;
 
+    /** Mirrors the column default so models built in memory are active too. */
+    protected $attributes = ['is_active' => true];
+
     protected static function booted(): void
     {
         static::creating(function ($user) {
@@ -43,6 +46,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_superuser' => 'boolean',
+            'is_active' => 'boolean',
         ];
     }
 

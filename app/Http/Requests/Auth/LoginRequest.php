@@ -48,7 +48,8 @@ class LoginRequest extends FormRequest
 
         // The user is only logged in if credentials match AND the user may enter the selected
         // Workspace (member, or superuser). Same error for both failures to avoid leaking info.
-        $credentials = $this->only('email', 'password') + [
+        // Deactivated accounts fail with the same generic error.
+        $credentials = $this->only('email', 'password') + ['is_active' => true] + [
             fn (Builder $query) => $query->where(fn (Builder $q) => $q
                 ->where('is_superuser', true)
                 ->orWhereHas('workspaces', fn (Builder $w) => $w->whereKey($workspace?->getKey()))),

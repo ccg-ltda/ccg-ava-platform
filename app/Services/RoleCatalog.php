@@ -3,8 +3,8 @@
 namespace App\Services;
 
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Role;
 
 /**
@@ -18,7 +18,7 @@ use Spatie\Permission\Models\Role;
  */
 class RoleCatalog
 {
-    /** Built-in roles that can neither be deleted nor lose permissions (the app depends on them). */
+    /** Built-in roles that can not lose permissions (the app depends on them). */
     public const PROTECTED_ROLES = ['admin'];
 
     public function isProtected(Role $role): bool
@@ -26,16 +26,16 @@ class RoleCatalog
         return in_array($role->name, self::PROTECTED_ROLES, true);
     }
 
-    /** A role still assigned to someone in any Workspace cannot be deleted. */
-    public function isInUse(Role $role): bool
+    /** @return Builder<Role> the global catalog, with each role's permissions, by name */
+    public function query(): Builder
     {
-        return DB::table('workspace_user')->where('role', $role->name)->exists();
+        return Role::with('permissions:id,name')->where('guard_name', 'web')->orderBy('name');
     }
 
     /** @return Collection<int, Role> */
     public function all(): Collection
     {
-        return Role::with('permissions:id,name')->where('guard_name', 'web')->orderBy('name')->get();
+        return $this->query()->get();
     }
 
     /**

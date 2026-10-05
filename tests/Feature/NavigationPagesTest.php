@@ -85,9 +85,9 @@ class NavigationPagesTest extends TestCase
 
         $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page
             ->component('Users/Index')
-            ->where('roles.0.name', 'admin')
-            ->where('roles.0.protected', true)
-            ->has('roles.0.permissions', 4));
+            ->where('roles.data.0.name', 'admin')
+            ->where('roles.data.0.protected', true)
+            ->has('roles.data.0.permissions', 4));
     }
 
     public function test_workspace_and_user_are_shared_with_every_page(): void

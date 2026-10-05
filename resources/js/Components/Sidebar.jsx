@@ -9,8 +9,8 @@ import NavItem from './NavItem';
  * The surface goes from light blue (top, navy text) through deep blue (navigation, white text)
  * to near white (bottom, navy text), so every zone keeps its own readable text color.
  */
-export default function Sidebar({ role, workspace, open, onClose }) {
-    const sections = visibleNavigation(role);
+export default function Sidebar({ permissions, workspace, open, onClose }) {
+    const sections = visibleNavigation(permissions);
 
     return (
         <>

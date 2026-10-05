@@ -219,7 +219,7 @@ class WorkspaceAccessTest extends TestCase
         $this->put('/users/'.$other->id, [
             'name' => 'X', 'email' => 'x@example.com', 'role' => 'admin',
         ])->assertNotFound();
-        $this->delete('/users/'.$other->id)->assertNotFound();
+        $this->post('/users/'.$other->id.'/deactivate')->assertNotFound();
         $this->assertDatabaseHas('workspace_user', ['workspace_id' => $this->prd->id, 'user_id' => $other->id]);
     }
 
@@ -312,7 +312,7 @@ class WorkspaceAccessTest extends TestCase
         $this->selectWorkspace('OPERACION_PRD');
         $this->post('/login', ['email' => $user->email, 'password' => 'password'])->assertSessionHasErrors('email');
         $this->assertGuest();
-        $this->assertStringContainsString('Too many', session('errors')->first('email'));
+        $this->assertStringContainsString('Demasiados intentos', session('errors')->first('email'));
     }
 
     public function test_failed_attempts_count_the_same_with_or_without_membership(): void
@@ -326,7 +326,7 @@ class WorkspaceAccessTest extends TestCase
         }
 
         $this->post('/login', ['email' => $outsider->email, 'password' => 'password'])->assertSessionHasErrors('email');
-        $this->assertStringContainsString('Too many', session('errors')->first('email'));
+        $this->assertStringContainsString('Demasiados intentos', session('errors')->first('email'));
     }
 
     public function test_logout_clears_the_workspace_context(): void

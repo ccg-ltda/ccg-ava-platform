@@ -36,6 +36,7 @@
     --color-canvas: #f4f7fc;
     --color-card: #ffffff;
     --color-line: #e2e8f0;
+    --color-field: #cbd5e1; /* border of inputs and selects: subtle but visible on white */
 
     /* Text */
     --color-ink: #0f172a;
@@ -88,6 +89,14 @@
 }
 
 @layer components {
+    /*
+     * Data-entry control (text inputs, selects, textareas): visible border, blue hover/focus, and
+     * explicit disabled / read-only / invalid states. Shared by TextInput, Select and SearchInput.
+     */
+    .field {
+        @apply block w-full rounded-lg border border-field bg-card px-3 py-2 text-sm text-ink shadow-sm transition-colors duration-150 placeholder:text-ink-muted/70 hover:border-primary/40 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none disabled:cursor-not-allowed disabled:bg-canvas disabled:text-ink-muted read-only:bg-canvas read-only:text-ink-muted aria-invalid:border-danger aria-invalid:ring-danger/20;
+    }
+
     /*
      * Brand surface (top bar + sidebar): isolated stacking context with very fine diagonal lines.
      * Decoration lives in pseudo-elements behind the content and stays secondary to it.

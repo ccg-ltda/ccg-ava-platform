@@ -12,36 +12,28 @@ export default function VerifyEmail({ status }) {
     };
 
     return (
-        <GuestLayout>
-            <Head title="Email Verification" />
+        <GuestLayout title="Verificar correo">
+            <Head title="Verificar correo" />
 
-            <div className="mb-4 text-sm text-gray-600">
-                Thanks for signing up! Before getting started, could you verify
-                your email address by clicking on the link we just emailed to
-                you? If you didn't receive the email, we will gladly send you
-                another.
-            </div>
+            <p className="mb-4 text-sm text-ink-muted">
+                Antes de continuar, verifica tu correo con el enlace que acabamos de enviarte. Si no lo recibiste, podemos enviarte otro.
+            </p>
 
             {status === 'verification-link-sent' && (
-                <div className="mb-4 text-sm font-medium text-green-600">
-                    A new verification link has been sent to the email address
-                    you provided during registration.
-                </div>
+                <p className="mb-4 text-sm font-medium text-accent-green">Te enviamos un nuevo enlace de verificación.</p>
             )}
 
             <form onSubmit={submit}>
-                <div className="mt-4 flex items-center justify-between">
-                    <PrimaryButton disabled={processing}>
-                        Resend Verification Email
-                    </PrimaryButton>
+                <div className="mt-4 flex items-center justify-between gap-4">
+                    <PrimaryButton disabled={processing}>Reenviar correo</PrimaryButton>
 
                     <Link
                         href={route('logout')}
                         method="post"
                         as="button"
-                        className="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                        className="rounded-md text-sm text-ink-muted underline transition-colors duration-150 hover:text-ink focus-visible:outline-2 focus-visible:outline-primary"
                     >
-                        Log Out
+                        Cerrar sesión
                     </Link>
                 </div>
             </form>

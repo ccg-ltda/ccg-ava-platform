@@ -3,14 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Services\ListPagination;
 use App\Services\RoleCatalog;
 use App\Services\UserIdentityGuard;
+use App\Services\WorkspaceAdministration;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -21,82 +24,129 @@ class UserController extends Controller
     public function __construct(
         private readonly RoleCatalog $catalog,
         private readonly UserIdentityGuard $identity,
+        private readonly WorkspaceAdministration $workspaces,
     ) {}
 
-    private const PER_PAGE = 15;
+    /** Status filter of the users list. */
+    private const STATUSES = ['all', 'active', 'inactive'];
 
     public function index(Request $request): Response
     {
         $actor = $request->user();
         $workspace = $request->attributes->get('workspace');
         $search = trim((string) $request->query('search', ''));
+        $status = in_array($request->query('status'), self::STATUSES, true) ? $request->query('status') : 'all';
 
-        $page = $workspace->users()
-            ->when($search !== '', function ($query) use ($search) {
-                // "!" is the escape character so user input cannot act as a LIKE wildcard.
-                $term = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($search)).'%';
+        // Each list is a closure so a partial reload (one tab paging) only computes that list.
+        return Inertia::render('Users/Index', [
+            'users' => fn () => $this->usersPage($request, $actor, $workspace, $search, $status),
+            'filters' => ['search' => $search, 'status' => $status, 'perPage' => ListPagination::size($request, 'users')],
+            'perPageOptions' => ListPagination::OPTIONS,
+            // Workspaces (enabled, administered by the actor) where a new user may be created, with the roles allowed in each.
+            'createTargets' => fn () => $this->workspaces->assignableTargets($actor)->map(fn ($target) => [
+                'id' => $target->id,
+                'name' => $target->name,
+                'code' => $target->code,
+                'isCurrent' => $target->is($workspace),
+                'roles' => $this->workspaces->assignableRoles($actor, $target)->pluck('name')->values(),
+            ])->values(),
+            // The role catalog with the permissions each role grants (managed only by superusers).
+            'roles' => fn () => $this->rolesPage($request, $workspace),
+            // Permissions the system defines, with the roles that grant each (read-only matrix).
+            'permissions' => fn () => $this->permissionsPage($request),
+            // The role editor offers every permission, whatever page of the permissions list is showing.
+            'permissionNames' => fn () => Permission::orderBy('name')->pluck('name'),
+            'permissionRoles' => fn () => $this->catalog->all()->map(fn ($role) => ['id' => $role->id, 'name' => $role->name])->values(),
+            'canManageRoles' => $actor->can('manage-roles'),
+            'workspaces' => fn () => $this->workspaces->overview($actor, $request),
+            'organizations' => fn () => $this->workspaces->organizations($actor, $request),
+        ]);
+    }
 
-                $query->where(fn ($q) => $q
-                    ->whereRaw("lower(users.name) like ? escape '!'", [$term])
-                    ->orWhereRaw("lower(users.email) like ? escape '!'", [$term]));
-            })
-            ->orderBy('users.name')
-            ->paginate(self::PER_PAGE)
-            ->withQueryString();
+    /** @return array<string, mixed> */
+    private function usersPage(Request $request, User $actor, $workspace, string $search, string $status): array
+    {
+        $page = ListPagination::paginate(
+            $workspace->users()
+                ->when($search !== '', function ($query) use ($search) {
+                    // "!" is the escape character so user input cannot act as a LIKE wildcard.
+                    $term = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($search)).'%';
+
+                    $query->where(fn ($q) => $q
+                        ->whereRaw("lower(users.name) like ? escape '!'", [$term])
+                        ->orWhereRaw("lower(users.email) like ? escape '!'", [$term]));
+                })
+                ->when($status !== 'all', fn ($query) => $query->where('users.is_active', $status === 'active'))
+                ->orderBy('users.name'),
+            $request,
+            'users',
+        );
 
         $locked = $this->identity->lockedIds($actor, $page->getCollection(), $workspace);
-        $assignable = $this->catalog->assignableBy($actor, $request->attributes->get('workspace_permissions', []));
-        $canManageRoles = $actor->can('manage-roles');
+
+        return [
+            'data' => $page->getCollection()->map(fn (User $user) => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'roles' => [$user->pivot->role],
+                'created_at' => $user->created_at->format('d/m/Y'),
+                'identityLocked' => in_array($user->id, $locked, true),
+                'isActive' => $user->is_active,
+                'canToggleStatus' => ! $actor->is($user) && ! in_array($user->id, $locked, true),
+            ])->values(),
+            'meta' => ListPagination::meta($page),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function rolesPage(Request $request, $workspace): array
+    {
+        $page = ListPagination::paginate($this->catalog->query(), $request, 'roles');
         $usersByRole = DB::table('workspace_user')
             ->where('workspace_id', $workspace->getKey())
             ->selectRaw('role, count(*) as total')
             ->groupBy('role')
             ->pluck('total', 'role');
 
-        return Inertia::render('Users/Index', [
-            'users' => [
-                'data' => $page->getCollection()->map(fn (User $user) => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'roles' => [$user->pivot->role],
-                    'created_at' => $user->created_at->format('d/m/Y'),
-                    'identityLocked' => in_array($user->id, $locked, true),
-                ])->values(),
-                'meta' => [
-                    'current_page' => $page->currentPage(),
-                    'last_page' => $page->lastPage(),
-                    'per_page' => $page->perPage(),
-                    'total' => $page->total(),
-                    'from' => $page->firstItem() ?? 0,
-                    'to' => $page->lastItem() ?? 0,
-                ],
-            ],
-            'filters' => ['search' => $search],
-            // Roles the actor may assign to users of this Workspace.
-            'assignableRoles' => $assignable->map(fn ($role) => ['id' => $role->id, 'name' => $role->name])->values(),
-            // Whole catalog with the permissions each role grants (managed only by superusers).
-            'roles' => $this->catalog->all()
-                ->map(fn ($role) => [
-                    'id' => $role->id,
-                    'name' => $role->name,
-                    'permissions' => $role->permissions->pluck('name')->all(),
-                    'protected' => $this->catalog->isProtected($role),
-                    'usersInWorkspace' => (int) ($usersByRole[$role->name] ?? 0),
-                    'inUse' => $canManageRoles ? $this->catalog->isInUse($role) : null,
-                ])->values(),
-            'permissions' => Permission::orderBy('name')->pluck('name'),
-            'canManageRoles' => $canManageRoles,
-        ]);
+        return [
+            'data' => $page->getCollection()->map(fn ($role) => [
+                'id' => $role->id,
+                'name' => $role->name,
+                'permissions' => $role->permissions->pluck('name')->all(),
+                'protected' => $this->catalog->isProtected($role),
+                'usersInWorkspace' => (int) ($usersByRole[$role->name] ?? 0),
+            ])->values(),
+            'meta' => ListPagination::meta($page),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function permissionsPage(Request $request): array
+    {
+        $page = ListPagination::paginate(Permission::with('roles:id,name')->orderBy('name'), $request, 'permissions');
+
+        return [
+            'data' => $page->getCollection()->map(fn ($permission) => [
+                'name' => $permission->name,
+                'roles' => $permission->roles->pluck('name')->all(),
+            ])->values(),
+            'meta' => ListPagination::meta($page),
+        ];
     }
 
     public function store(Request $request): RedirectResponse
     {
+        // The Workspace comes from the form but is only accepted among those the actor administers and that are enabled.
+        $targets = $this->workspaces->assignableTargets($request->user());
+        $request->validate(['workspace_id' => ['required', 'integer', Rule::in($targets->pluck('id')->all())]]);
+        $target = $targets->firstWhere('id', $request->integer('workspace_id'));
+
         $data = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
-            'password' => 'required|string|min:8|confirmed',
-            'role' => ['required', 'string', Rule::in($this->assignableNames($request))],
+            'password' => ['required', 'confirmed', Password::defaults()],
+            'role' => ['required', 'string', Rule::in($this->workspaces->assignableRoles($request->user(), $target)->pluck('name')->all())],
         ]);
 
         $user = User::create([
@@ -107,62 +157,118 @@ class UserController extends Controller
             'remember_token' => Str::random(10),
         ]);
 
-        $request->attributes->get('workspace')->users()->attach($user->id, ['role' => $data['role']]);
+        $target->users()->attach($user->id, ['role' => $data['role']]);
 
-        return redirect()->route('users.index')->with('success', "Usuario {$user->name} creado.");
+        return redirect()->route('users.index')->with('success', 'Usuario creado correctamente');
     }
 
+    /**
+     * Edits the account (name, email, optional password) and its membership. The Workspace select moves the
+     * membership: the `workspace_user` row of the current Workspace is replaced by one in the chosen Workspace
+     * (same user ID and global identity; only that row changes). Without `workspace_id` nothing moves.
+     */
     public function update(Request $request, User $user): RedirectResponse
     {
-        $workspace = $request->attributes->get('workspace');
-        abort_unless($workspace->users()->whereKey($user->id)->exists(), 404);
+        $actor = $request->user();
+        $current = $request->attributes->get('workspace');
+        abort_unless($current->users()->whereKey($user->id)->exists(), 404);
+
+        // Same rule as creation: only enabled Workspaces the actor administers, with the roles allowed in each.
+        $targets = $this->workspaces->assignableTargets($actor);
+        $request->validate(['workspace_id' => ['sometimes', 'integer', Rule::in($targets->pluck('id')->all())]]);
+        $target = $request->filled('workspace_id') ? $targets->firstWhere('id', $request->integer('workspace_id')) : $current;
+        $moving = ! $target->is($current);
 
         $data = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users,email,'.$user->id,
-            'role' => ['required', 'string', Rule::in($this->assignableNames($request))],
+            'password' => ['nullable', 'confirmed', Password::defaults()],
+            'role' => ['required', 'string', Rule::in($this->workspaces->assignableRoles($actor, $target)->pluck('name')->all())],
         ]);
 
-        $currentRole = $workspace->users()->whereKey($user->id)->first()->pivot->role;
+        $currentRole = $current->users()->whereKey($user->id)->first()->pivot->role;
+        $changingPassword = filled($data['password'] ?? null);
 
-        if ($request->user()->is($user) && $data['role'] !== $currentRole && ! $user->is_superuser) {
-            throw ValidationException::withMessages(['role' => 'No puedes cambiar tu propio rol.']);
+        if ($actor->is($user) && ! $user->is_superuser) {
+            if ($data['role'] !== $currentRole) {
+                throw ValidationException::withMessages(['role' => 'No puedes cambiar tu propio rol.']);
+            }
+
+            if ($moving) {
+                throw ValidationException::withMessages(['workspace_id' => 'No puedes cambiarte a ti mismo de Workspace.']);
+            }
         }
 
-        if ($this->identityChanged($data, $user) && ! $this->identity->canEdit($request->user(), $user, $workspace)) {
+        // Touching the role, the Workspace or the password of someone above the actor would be an escalation.
+        if (($moving || $changingPassword || $data['role'] !== $currentRole)
+            && ! $this->workspaces->canManageMember($actor, $current, $currentRole)) {
+            throw ValidationException::withMessages(['role' => 'Este usuario tiene un rol con más permisos que el tuyo.']);
+        }
+
+        // Name, email and password belong to the global account: same protection for all three.
+        if (($this->identityChanged($data, $user) || $changingPassword) && ! $this->identity->canEdit($actor, $user, $current)) {
             throw ValidationException::withMessages([
-                'email' => 'Esta cuenta tiene acceso a otros Workspaces; solo un superusuario puede modificar su nombre o correo.',
+                'email' => 'Esta cuenta tiene acceso a otros Workspaces; solo un superusuario puede modificar su nombre, correo o contraseña.',
             ]);
         }
 
-        $user->update(['name' => $data['name'], 'email' => $data['email']]);
-        $workspace->users()->updateExistingPivot($user->id, ['role' => $data['role']]);
+        if ($moving && $target->users()->whereKey($user->id)->exists()) {
+            throw ValidationException::withMessages(['workspace_id' => 'Este usuario ya pertenece a ese Workspace.']);
+        }
 
-        return redirect()->route('users.index')->with('success', "Usuario {$user->name} actualizado.");
+        DB::transaction(function () use ($user, $data, $changingPassword, $current, $target, $moving) {
+            $user->name = $data['name'];
+            $user->email = $data['email'];
+            if ($changingPassword) {
+                $user->password = $data['password']; // the model's `hashed` cast hashes it
+            }
+            $user->save();
+
+            if ($moving) {
+                $target->users()->attach($user->id, ['role' => $data['role']]);
+                $current->users()->detach($user->id);
+            } else {
+                $current->users()->updateExistingPivot($user->id, ['role' => $data['role']]);
+            }
+        });
+
+        return redirect()->route('users.index')->with('success', 'Usuario actualizado correctamente');
     }
 
-    public function destroy(Request $request, User $user): RedirectResponse
+    public function deactivate(Request $request, User $user): RedirectResponse
+    {
+        $this->authorizeStatusChange($request, $user);
+        $user->forceFill(['is_active' => false])->save();
+
+        return redirect()->route('users.index')->with('success', 'Usuario desactivado correctamente');
+    }
+
+    public function activate(Request $request, User $user): RedirectResponse
+    {
+        $this->authorizeStatusChange($request, $user);
+        $user->forceFill(['is_active' => true])->save();
+
+        return redirect()->route('users.index')->with('success', 'Usuario activado correctamente');
+    }
+
+    /**
+     * Status belongs to the global account, so it follows the same rule as name/email: a Workspace admin
+     * cannot lock out accounts that also work in other Workspaces or superusers. Nothing is ever deleted.
+     */
+    private function authorizeStatusChange(Request $request, User $user): void
     {
         $workspace = $request->attributes->get('workspace');
         abort_unless($workspace->users()->whereKey($user->id)->exists(), 404);
 
         if ($request->user()->is($user)) {
-            return redirect()->route('users.index');
+            throw ValidationException::withMessages(['status' => 'No puedes cambiar el estado de tu propia cuenta.']);
         }
 
-        // Removes the user from this Workspace only; the account may belong to other Workspaces.
-        $workspace->users()->detach($user->id);
-
-        return redirect()->route('users.index')->with('success', "{$user->name} ya no tiene acceso a este Workspace.");
-    }
-
-    /** @return list<string> */
-    private function assignableNames(Request $request): array
-    {
-        return $this->catalog
-            ->assignableBy($request->user(), $request->attributes->get('workspace_permissions', []))
-            ->pluck('name')
-            ->all();
+        if (! $this->identity->canEdit($request->user(), $user, $workspace)) {
+            throw ValidationException::withMessages([
+                'status' => 'Esta cuenta tiene acceso a otros Workspaces o es superusuario; solo un superusuario puede cambiar su estado.',
+            ]);
+        }
     }
 
     /** @param  array{name: string, email: string}  $data */

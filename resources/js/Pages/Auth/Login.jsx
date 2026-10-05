@@ -13,9 +13,13 @@ const isEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
  * Step 2 of access. The Workspace comes from the server session (shown here only as a badge);
  * credentials and Workspace membership are checked by the server on submit.
  */
-export default function Login({ workspace }) {
+export default function Login({ workspace, rememberedEmail }) {
     const { showToast } = useAccess();
-    const { data, setData, post, processing, errors, clearErrors } = useForm({ email: '', password: '', remember: false });
+    const { data, setData, post, processing, errors, clearErrors } = useForm({
+        email: rememberedEmail ?? '',
+        password: '',
+        remember: Boolean(rememberedEmail),
+    });
     const [client, setClient] = useState({ email: '', password: '' });
     const [showPassword, setShowPassword] = useState(false);
 
