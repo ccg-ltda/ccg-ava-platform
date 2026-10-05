@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AuditController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\IntegrationController;
 use App\Http\Controllers\OrganizationController;
@@ -38,6 +39,12 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         Route::post('/{integration}/deactivate', [IntegrationController::class, 'deactivate'])->whereNumber('integration')->name('deactivate');
         // Each test is a real outbound request: keep it from being used to hammer a third party.
         Route::post('/{integration}/test', [IntegrationController::class, 'test'])->whereNumber('integration')->middleware('throttle:20,1')->name('test');
+    });
+
+    // Auditoría reads the change history of the active Workspace; `manage-settings` governs it like the other admin pages.
+    Route::middleware('workspace.permission:manage-settings')->prefix('audit')->name('audit.')->group(function () {
+        Route::get('/', [AuditController::class, 'index'])->name('index');
+        Route::get('/export', [AuditController::class, 'export'])->middleware('throttle:10,1')->name('export');
     });
 
     Route::get('/users', [UserController::class, 'index'])

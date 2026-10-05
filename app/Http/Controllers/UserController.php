@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Audit\AuditLogger;
 use App\Models\User;
 use App\Services\ListPagination;
 use App\Services\RoleCatalog;
@@ -25,6 +26,7 @@ class UserController extends Controller
         private readonly RoleCatalog $catalog,
         private readonly UserIdentityGuard $identity,
         private readonly WorkspaceAdministration $workspaces,
+        private readonly AuditLogger $audit,
     ) {}
 
     /** Status filter of the users list. */
@@ -158,6 +160,10 @@ class UserController extends Controller
         ]);
 
         $target->users()->attach($user->id, ['role' => $data['role']]);
+        $this->audit->record('created', 'membership', $user->id, $user->name, [
+            AuditLogger::change('Workspace', null, $target->name),
+            AuditLogger::change('Rol', null, $data['role']),
+        ], $target);
 
         return redirect()->route('users.index')->with('success', 'Usuario creado correctamente');
     }
@@ -216,7 +222,7 @@ class UserController extends Controller
             throw ValidationException::withMessages(['workspace_id' => 'Este usuario ya pertenece a ese Workspace.']);
         }
 
-        DB::transaction(function () use ($user, $data, $changingPassword, $current, $target, $moving) {
+        DB::transaction(function () use ($user, $data, $changingPassword, $current, $currentRole, $target, $moving) {
             $user->name = $data['name'];
             $user->email = $data['email'];
             if ($changingPassword) {
@@ -227,8 +233,19 @@ class UserController extends Controller
             if ($moving) {
                 $target->users()->attach($user->id, ['role' => $data['role']]);
                 $current->users()->detach($user->id);
+                $this->audit->record('deleted', 'membership', $user->id, $user->name, [
+                    AuditLogger::change('Workspace', $current->name, null),
+                    AuditLogger::change('Rol', $currentRole, null),
+                ], $current);
+                $this->audit->record('created', 'membership', $user->id, $user->name, [
+                    AuditLogger::change('Workspace', null, $target->name),
+                    AuditLogger::change('Rol', null, $data['role']),
+                ], $target);
             } else {
                 $current->users()->updateExistingPivot($user->id, ['role' => $data['role']]);
+                $this->audit->record('updated', 'membership', $user->id, $user->name, $data['role'] === $currentRole ? [] : [
+                    AuditLogger::change('Rol', $currentRole, $data['role']),
+                ], $current);
             }
         });
 

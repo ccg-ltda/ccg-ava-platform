@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\Audited;
+use Closure;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -13,6 +15,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 #[Fillable(['organization_id', 'code', 'name', 'is_active'])]
 class Workspace extends Model
 {
+    use Audited;
+
     protected function casts(): array
     {
         return ['is_active' => 'boolean'];
@@ -26,6 +30,31 @@ class Workspace extends Model
     public function setCodeAttribute(string $value): void
     {
         $this->attributes['code'] = static::normalizeCode($value);
+    }
+
+    public function auditResource(): string
+    {
+        return 'workspace';
+    }
+
+    public function auditLabel(): string
+    {
+        return "{$this->name} ({$this->code})";
+    }
+
+    public function auditFields(): array
+    {
+        return ['code' => 'Código', 'name' => 'Nombre', 'is_active' => 'Activo'];
+    }
+
+    public function auditWorkspace(): ?Workspace
+    {
+        return $this;
+    }
+
+    public function auditSnapshot(Closure $get): array
+    {
+        return $this->auditBaseSnapshot($get) + ['Organización' => Organization::whereKey($get('organization_id'))->value('name')];
     }
 
     public function organization(): BelongsTo

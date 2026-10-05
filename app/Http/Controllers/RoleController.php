@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Audit\AuditLogger;
 use App\Services\RoleCatalog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,7 +18,10 @@ use Spatie\Permission\Models\Role;
  */
 class RoleController extends Controller
 {
-    public function __construct(private readonly RoleCatalog $catalog) {}
+    public function __construct(
+        private readonly RoleCatalog $catalog,
+        private readonly AuditLogger $audit,
+    ) {}
 
     public function store(Request $request): RedirectResponse
     {
@@ -29,6 +33,10 @@ class RoleController extends Controller
 
         $role = Role::create(['name' => $data['name'], 'guard_name' => 'web']);
         $role->syncPermissions($data['permissions'] ?? []);
+        $this->audit->record('created', 'role', $role->id, $role->name, array_values(array_filter([
+            AuditLogger::change('Nombre', null, $role->name),
+            ($data['permissions'] ?? []) ? AuditLogger::change('Permisos', null, $this->list($data['permissions'])) : null,
+        ])));
 
         return redirect()->back(fallback: route('users.index', ['tab' => 'roles']))->with('success', 'Rol creado correctamente');
     }
@@ -47,8 +55,24 @@ class RoleController extends Controller
             'permissions.*' => ['string', Rule::exists('permissions', 'name')->where('guard_name', 'web')],
         ]);
 
+        $before = $role->permissions()->pluck('name')->all();
         $role->syncPermissions(Permission::whereIn('name', $data['permissions'] ?? [])->where('guard_name', 'web')->get());
+        $after = $role->permissions()->pluck('name')->all();
+        $added = array_diff($after, $before);
+        $removed = array_diff($before, $after);
+        $this->audit->record('updated', 'role', $role->id, $role->name, array_values(array_filter([
+            $added ? AuditLogger::change('Permisos añadidos', null, $this->list($added)) : null,
+            $removed ? AuditLogger::change('Permisos quitados', $this->list($removed), null) : null,
+        ])));
 
         return redirect()->back(fallback: route('users.index', ['tab' => 'roles']))->with('success', 'Rol actualizado correctamente');
+    }
+
+    /** @param  list<string>  $names */
+    private function list(array $names): string
+    {
+        sort($names);
+
+        return implode(', ', $names);
     }
 }

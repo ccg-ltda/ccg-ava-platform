@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\Audited;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -18,7 +19,7 @@ use Spatie\Permission\Traits\HasRoles;
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable, HasRoles;
+    use Audited, HasFactory, HasRoles, Notifiable;
 
     /** Mirrors the column default so models built in memory are active too. */
     protected $attributes = ['is_active' => true];
@@ -48,6 +49,26 @@ class User extends Authenticatable
             'is_superuser' => 'boolean',
             'is_active' => 'boolean',
         ];
+    }
+
+    public function auditResource(): string
+    {
+        return 'user';
+    }
+
+    public function auditLabel(): string
+    {
+        return $this->name;
+    }
+
+    public function auditFields(): array
+    {
+        return ['name' => 'Nombre', 'email' => 'Correo', 'is_active' => 'Activo', 'is_superuser' => 'Superusuario'];
+    }
+
+    public function auditMasked(): array
+    {
+        return ['password' => 'Contraseña'];
     }
 
     public function workspaces(): BelongsToMany

@@ -1,4 +1,4 @@
-import { BarChart3, Plug, Settings, Users } from 'lucide-react';
+import { BarChart3, History, Plug, Settings, Users } from 'lucide-react';
 
 /**
  * Single definition of the sidebar menu. Every `route` is a real Laravel route name;
@@ -8,7 +8,10 @@ import { BarChart3, Plug, Settings, Users } from 'lucide-react';
 export const navigation = [
     {
         label: 'Analytics',
-        items: [{ label: 'Reportes', route: 'dashboard', icon: BarChart3 }],
+        items: [
+            { label: 'Reportes', route: 'dashboard', icon: BarChart3 },
+            { label: 'Auditoría', route: 'audit.index', icon: History, permission: 'manage-settings' },
+        ],
     },
     {
         label: 'Sistema',

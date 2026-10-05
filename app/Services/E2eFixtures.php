@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AuditLog;
 use App\Models\Organization;
 use App\Models\User;
 use App\Models\Workspace;
@@ -91,7 +92,7 @@ class E2eFixtures
     /**
      * What a cleanup would remove (or did remove).
      *
-     * @return array{users: int, memberships: int, workspaces: int, organizations: int, roles: int}
+     * @return array{users: int, memberships: int, workspaces: int, organizations: int, roles: int, audit: int}
      */
     public function pending(): array
     {
@@ -103,13 +104,14 @@ class E2eFixtures
             'workspaces' => $this->workspaces()->count(),
             'organizations' => Organization::where('name', 'like', self::ORGANIZATION.'%')->count(),
             'roles' => $this->roles()->count(),
+            'audit' => $this->auditLogs()->count(),
         ];
     }
 
     /**
      * Removes only what carries the e2e naming convention, inside one transaction.
      *
-     * @return array{users: int, memberships: int, workspaces: int, organizations: int, roles: int} what was removed
+     * @return array{users: int, memberships: int, workspaces: int, organizations: int, roles: int, audit: int} what was removed
      */
     public function cleanup(): array
     {
@@ -137,12 +139,20 @@ class E2eFixtures
             // Logos uploaded from Configuraciones live in the storage disk, not in the database.
             $workspaceIds->each(fn (int $id) => Storage::deleteDirectory("workspaces/{$id}"));
 
+            // The audit history of the e2e Workspaces and users (the rows survive their deletion by design).
+            $this->auditLogs()->delete();
+
             User::whereIn('id', $userIds)->delete();
             Workspace::whereIn('id', $workspaceIds)->delete();
             Organization::where('name', 'like', self::ORGANIZATION.'%')->doesntHave('workspaces')->delete();
 
             return $removed;
         });
+    }
+
+    private function auditLogs()
+    {
+        return AuditLog::where(fn ($q) => $q->where('workspace_code', 'like', self::WORKSPACE_PREFIX.'%')->orWhere('user_email', 'like', '%'.self::EMAIL_DOMAIN));
     }
 
     private function users()

@@ -126,6 +126,7 @@ Ejecuta las que correspondan al cambio y repórtalas:
 - No elimines validaciones, autenticación ni autorización, ni desactives middleware de seguridad.
 - Toda modificación debe mantener o mejorar la seguridad.
 - `.env` no se versiona. `.env.example` sí, con valores de ejemplo y sin secretos.
+- Auditoría: todo cambio administrativo (crear, modificar, eliminar) se registra en `audit_logs` por `App\Audit\AuditLogger`: los modelos usan el trait `Audited` (campos declarados, credenciales enmascaradas con `Masked`) y lo que no es un modelo lo registra el controlador. Se guarda solo la diferencia relevante, el usuario y el Workspace (copiados por nombre), y la IP; nunca navegador, contraseñas, tokens ni secretos. Los registros son de solo añadir y la consulta parte siempre del Workspace de la sesión (solo un superusuario puede ampliarla). Un módulo o acción administrativa nueva no está terminada sin su auditoría.
 - Integraciones: pertenecen a un Workspace y toda consulta parte de `$workspace->integrations()`. Las credenciales se cifran (`encrypted:array`), son de solo escritura (el frontend recibe solo "guardada") y nunca se serializan, se registran en logs ni se flashean. Las conexiones salientes pasan por `SafeHttpTarget` (sin IPs internas/reservadas, sin redirecciones). Se desactivan, no se borran; las gobierna `manage-settings`. Un tipo nuevo se añade en `config/integrations.php`, sin lógica por proveedor en la página.
 
 ## 12. Rendimiento

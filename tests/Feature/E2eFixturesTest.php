@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AuditLog;
 use App\Models\Organization;
 use App\Models\User;
 use App\Models\Workspace;
@@ -87,6 +88,21 @@ class E2eFixturesTest extends TestCase
         $this->assertSame(0, array_sum($this->fixtures->pending()));
     }
 
+    public function test_cleanup_removes_the_audit_history_of_the_e2e_data_only(): void
+    {
+        $this->realData();
+        $row = fn (string $workspace, string $email) => AuditLog::create([
+            'workspace_code' => $workspace, 'workspace_name' => $workspace, 'user_name' => 'X', 'user_email' => $email, 'action' => 'created',
+            'resource_type' => 'user', 'resource_label' => 'X', 'description' => 'Creó el usuario X', 'changes' => [],
+        ]);
+        $this->fixtures->setup(extraUsers: 1, withSuperuser: false);
+        $row('E2E_WS', 'admin@e2e.ccg.test');
+        $row('REAL', 'real@example.com');
+
+        $this->assertSame(1, $this->fixtures->cleanup()['audit']);
+        $this->assertSame(['REAL'], AuditLog::pluck('workspace_code')->all());
+    }
+
     public function test_only_exact_conventions_match(): void
     {
         [$workspace, $user] = $this->realData();
@@ -142,7 +158,7 @@ class E2eFixturesTest extends TestCase
         $this->fixtures->cleanup();
         $second = $this->fixtures->cleanup();
 
-        $this->assertSame(['users' => 0, 'memberships' => 0, 'workspaces' => 0, 'organizations' => 0, 'roles' => 0], $second);
+        $this->assertSame(['users' => 0, 'memberships' => 0, 'workspaces' => 0, 'organizations' => 0, 'roles' => 0, 'audit' => 0], $second);
     }
 
     public function test_setup_creates_nothing_when_the_base_roles_are_missing(): void

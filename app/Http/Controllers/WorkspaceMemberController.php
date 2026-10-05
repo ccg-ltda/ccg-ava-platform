@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Audit\AuditLogger;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\WorkspaceAdministration;
@@ -16,7 +17,10 @@ use Illuminate\Validation\ValidationException;
  */
 class WorkspaceMemberController extends Controller
 {
-    public function __construct(private readonly WorkspaceAdministration $administration) {}
+    public function __construct(
+        private readonly WorkspaceAdministration $administration,
+        private readonly AuditLogger $audit,
+    ) {}
 
     /** Adds an existing account (superusers only, see the routes). */
     public function store(Request $request, Workspace $workspace): RedirectResponse
@@ -35,6 +39,10 @@ class WorkspaceMemberController extends Controller
         }
 
         $workspace->users()->attach($user->id, ['role' => $data['role']]);
+        $this->audit->record('created', 'membership', $user->id, $user->name, [
+            AuditLogger::change('Workspace', null, $workspace->name),
+            AuditLogger::change('Rol', null, $data['role']),
+        ], $workspace);
 
         return $this->back('Miembro añadido correctamente', $workspace);
     }
@@ -51,7 +59,11 @@ class WorkspaceMemberController extends Controller
             throw ValidationException::withMessages(['role' => 'No puedes cambiar tu propio rol.']);
         }
 
+        $previous = $workspace->users()->whereKey($user->id)->first()->pivot->role;
         $workspace->users()->updateExistingPivot($user->id, ['role' => $data['role']]);
+        $this->audit->record('updated', 'membership', $user->id, $user->name, $previous === $data['role'] ? [] : [
+            AuditLogger::change('Rol', $previous, $data['role']),
+        ], $workspace);
 
         return $this->back('Rol del miembro actualizado correctamente', $workspace);
     }
@@ -64,7 +76,12 @@ class WorkspaceMemberController extends Controller
             throw ValidationException::withMessages(['member' => 'No puedes quitarte a ti mismo del Workspace.']);
         }
 
+        $role = $workspace->users()->whereKey($user->id)->first()->pivot->role;
         $workspace->users()->detach($user->id);
+        $this->audit->record('deleted', 'membership', $user->id, $user->name, [
+            AuditLogger::change('Workspace', $workspace->name, null),
+            AuditLogger::change('Rol', $role, null),
+        ], $workspace);
 
         return $this->back('Miembro quitado correctamente', $workspace);
     }

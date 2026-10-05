@@ -16,7 +16,7 @@ class SchemaTest extends TestCase
     {
         foreach (['users', 'password_reset_tokens', 'sessions', 'cache', 'cache_locks', 'jobs', 'failed_jobs',
             'permissions', 'roles', 'model_has_permissions', 'model_has_roles', 'role_has_permissions',
-            'organizations', 'workspaces', 'workspace_user', 'workspace_settings', 'integrations'] as $table) {
+            'organizations', 'workspaces', 'workspace_user', 'workspace_settings', 'integrations', 'audit_logs'] as $table) {
             $this->assertTrue(Schema::hasTable($table), "Missing table [{$table}].");
         }
 

@@ -4,6 +4,8 @@ const TONES = {
     blue: { border: 'border-t-primary', icon: 'bg-primary-soft text-primary' },
     violet: { border: 'border-t-accent-violet', icon: 'bg-accent-violet/10 text-accent-violet' },
     green: { border: 'border-t-accent-green', icon: 'bg-accent-green/10 text-accent-green' },
+    amber: { border: 'border-t-accent-amber', icon: 'bg-accent-amber/10 text-accent-amber' },
+    red: { border: 'border-t-danger', icon: 'bg-danger/10 text-danger' },
 };
 
 /** Metric card with a thin colored top border. Prefer blue; use the others sparingly. */

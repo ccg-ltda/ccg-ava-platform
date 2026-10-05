@@ -25,6 +25,7 @@ Todos los que quedan esperan una decisión o una autorización; ninguno es un de
 - [ ] **Módulos de la referencia sin construir:** Productos, Combos, Cupones, Clientes, Pedidos, Domicilios, Sucursales y Caja (secciones DEMO/ADMIN/OPERACIONES de la imagen). El menú vive en `resources/js/config/navigation.js`.
 - [ ] **Integraciones, fases futuras:** la base genérica (HTTP/REST) está hecha. Falta: OAuth 2.0 (solo si un proveedor lo exige), webhooks, varios endpoints/acciones por integración, mapeo de request/response, sincronización o polling, logs técnicos de llamadas, requisitos propios de cada proveedor, y decidir si se separa un permiso `manage-integrations` de `manage-settings`.
 - [ ] **Integraciones en desarrollo local:** `INTEGRATIONS_ALLOW_PRIVATE_HOSTS=true` permite probar contra una API mock interna; debe quedar en `false` en producción.
+- [ ] **Auditoría, fases futuras:** hoy registra altas, cambios y bajas administrativas de usuarios, miembros, roles, Workspaces, organizaciones, configuraciones e integraciones. Falta decidir una política de retención o archivado del histórico (la tabla `audit_logs` solo crece) y si se auditan también los accesos (inicio y cierre de sesión) y las exportaciones. Cada módulo de negocio nuevo (productos, pedidos, caja...) debe auditarse al construirse.
 - [ ] **Chat de Ava:** el botón flotante (`ChatButton`) es solo visual; falta la lógica (Reverb + Echo).
 - [ ] **Contexto ITBIS / moneda:** el chip "ITBIS 18%" y el selector RD$ DOP de la referencia se dejaron fuera a propósito; añadirlos si hacen falta.
 - [ ] **Alta de usuarios por invitación o autoregistro:** `/register` está cerrado. Si el negocio quiere que alguien se dé de alta solo, hay que decidir el mecanismo (invitación con token por Workspace, o aprobación de un admin).
@@ -52,6 +53,8 @@ Todos los que quedan esperan una decisión o una autorización; ninguno es un de
 - [ ] TODO: nada en curso.
 
 ## Hecho
+
+- [x] **Auditoría administrativa:** página `/audit` (menú Analytics, permiso `manage-settings`) con resumen, filtros (búsqueda, fechas, usuario, módulo, acción, Workspace para superusuarios), paginación, detalle con solo los campos que cambiaron (antes/después), y exportación a PDF generada sin dependencias nuevas. Tabla `audit_logs` con usuario y Workspace copiados por nombre, IP y sin datos del navegador; credenciales y bodies enmascarados. Reportes se conserva como página de inicio.
 
 - [x] **Integraciones (base genérica):** tabla `integrations` por Workspace, tipo "API HTTP / REST" (URL base, endpoint, método, auth none/API key/Bearer/Basic, headers, query, body JSON), credenciales cifradas y de solo escritura, activar/desactivar, "Probar conexión" con protección SSRF, sin borrado. Tipos nuevos se registran en `config/integrations.php`.
 
