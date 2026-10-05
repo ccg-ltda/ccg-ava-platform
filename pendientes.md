@@ -23,7 +23,8 @@ Todos los que quedan esperan una decisión o una autorización; ninguno es un de
 ### Producto (definición pendiente)
 
 - [ ] **Módulos de la referencia sin construir:** Productos, Combos, Cupones, Clientes, Pedidos, Domicilios, Sucursales y Caja (secciones DEMO/ADMIN/OPERACIONES de la imagen). El menú vive en `resources/js/config/navigation.js`.
-- [ ] **Integraciones:** página base vacía; definir su contenido real.
+- [ ] **Integraciones, fases futuras:** la base genérica (HTTP/REST) está hecha. Falta: OAuth 2.0 (solo si un proveedor lo exige), webhooks, varios endpoints/acciones por integración, mapeo de request/response, sincronización o polling, logs técnicos de llamadas, requisitos propios de cada proveedor, y decidir si se separa un permiso `manage-integrations` de `manage-settings`.
+- [ ] **Integraciones en desarrollo local:** `INTEGRATIONS_ALLOW_PRIVATE_HOSTS=true` permite probar contra una API mock interna; debe quedar en `false` en producción.
 - [ ] **Chat de Ava:** el botón flotante (`ChatButton`) es solo visual; falta la lógica (Reverb + Echo).
 - [ ] **Contexto ITBIS / moneda:** el chip "ITBIS 18%" y el selector RD$ DOP de la referencia se dejaron fuera a propósito; añadirlos si hacen falta.
 - [ ] **Alta de usuarios por invitación o autoregistro:** `/register` está cerrado. Si el negocio quiere que alguien se dé de alta solo, hay que decidir el mecanismo (invitación con token por Workspace, o aprobación de un admin).
@@ -51,6 +52,8 @@ Todos los que quedan esperan una decisión o una autorización; ninguno es un de
 - [ ] TODO: nada en curso.
 
 ## Hecho
+
+- [x] **Integraciones (base genérica):** tabla `integrations` por Workspace, tipo "API HTTP / REST" (URL base, endpoint, método, auth none/API key/Bearer/Basic, headers, query, body JSON), credenciales cifradas y de solo escritura, activar/desactivar, "Probar conexión" con protección SSRF, sin borrado. Tipos nuevos se registran en `config/integrations.php`.
 
 - [x] **Acceso por Workspace:** pre-login, login con diseño aprobado, middleware de contexto y rol por Workspace, superusuarios, tests.
 - [x] **Protección de cuentas compartidas:** un admin de Workspace no puede cambiar nombre/email de cuentas con acceso a otros Workspaces ni de superusuarios; throttle del login independiente del Workspace.

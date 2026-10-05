@@ -29,8 +29,16 @@ Route::middleware(['auth', 'workspace'])->group(function () {
     Route::post('/settings', [SettingsController::class, 'update'])
         ->middleware('workspace.permission:manage-settings')->name('settings.update');
     Route::get('/workspace/logo', WorkspaceLogoController::class)->name('workspace.logo');
-    Route::get('/integrations', [IntegrationController::class, 'index'])
-        ->middleware('workspace.permission:manage-settings')->name('integrations.index');
+    // Integrations belong to the active Workspace; `manage-settings` governs them like the rest of Configuraciones.
+    Route::middleware('workspace.permission:manage-settings')->prefix('integrations')->name('integrations.')->group(function () {
+        Route::get('/', [IntegrationController::class, 'index'])->name('index');
+        Route::post('/', [IntegrationController::class, 'store'])->name('store');
+        Route::put('/{integration}', [IntegrationController::class, 'update'])->whereNumber('integration')->name('update');
+        Route::post('/{integration}/activate', [IntegrationController::class, 'activate'])->whereNumber('integration')->name('activate');
+        Route::post('/{integration}/deactivate', [IntegrationController::class, 'deactivate'])->whereNumber('integration')->name('deactivate');
+        // Each test is a real outbound request: keep it from being used to hammer a third party.
+        Route::post('/{integration}/test', [IntegrationController::class, 'test'])->whereNumber('integration')->middleware('throttle:20,1')->name('test');
+    });
 
     Route::get('/users', [UserController::class, 'index'])
         ->middleware('workspace.permission:manage-users')->name('users.index');

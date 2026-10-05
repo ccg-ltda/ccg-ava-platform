@@ -38,6 +38,9 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // A failed validation flashes the submitted input into the session: never credentials of an integration.
+        $exceptions->dontFlash(['auth_secret', 'headers', 'query', 'body']);
+
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );

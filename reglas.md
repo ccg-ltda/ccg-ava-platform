@@ -126,6 +126,7 @@ Ejecuta las que correspondan al cambio y repórtalas:
 - No elimines validaciones, autenticación ni autorización, ni desactives middleware de seguridad.
 - Toda modificación debe mantener o mejorar la seguridad.
 - `.env` no se versiona. `.env.example` sí, con valores de ejemplo y sin secretos.
+- Integraciones: pertenecen a un Workspace y toda consulta parte de `$workspace->integrations()`. Las credenciales se cifran (`encrypted:array`), son de solo escritura (el frontend recibe solo "guardada") y nunca se serializan, se registran en logs ni se flashean. Las conexiones salientes pasan por `SafeHttpTarget` (sin IPs internas/reservadas, sin redirecciones). Se desactivan, no se borran; las gobierna `manage-settings`. Un tipo nuevo se añade en `config/integrations.php`, sin lógica por proveedor en la página.
 
 ## 12. Rendimiento
 
