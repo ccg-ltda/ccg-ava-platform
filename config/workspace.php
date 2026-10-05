@@ -5,6 +5,13 @@
  * the validation share one source. Fiscal data is informational: the tax defaults are starting values, not rules.
  */
 return [
+    /*
+     * Code of the administrative Workspace of Ava Platform (the internal operations Workspace). A superuser working
+     * inside it may look at every Workspace or pick one; nobody else may. It is a code, not an id, because the code
+     * is the stable identity users already type at login.
+     */
+    'admin_code' => env('WORKSPACE_ADMIN_CODE', 'DESARROLLO_DEV'),
+
     'currencies' => [
         'COP' => 'Peso colombiano',
         'DOP' => 'Peso dominicano',

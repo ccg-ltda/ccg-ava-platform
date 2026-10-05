@@ -17,6 +17,7 @@ import SecondaryButton from '@/Components/SecondaryButton';
 import Select from '@/Components/Select';
 import { TableWrap, Td, Th } from '@/Components/Table';
 import TextInput from '@/Components/TextInput';
+import WorkspaceCombobox from '@/Components/WorkspaceCombobox';
 import { useToast } from '@/Components/Toast';
 import { roleTone } from '@/config/roles';
 import usePagedList from '@/Hooks/usePagedList';
@@ -29,8 +30,8 @@ const STATUS_OPTIONS = [
     { value: 'inactive', label: 'Inactivos' },
 ];
 
-/** Fields shared by the create and edit forms. `targets` (create only) are the Workspaces the new user may join. */
-function UserFields({ data, setData, errors, roles, targets, withPassword = false, passwordOptional = false, lockIdentity = false }) {
+/** Fields shared by the create and edit forms. The Workspace is searched on the server (the list may be huge). */
+function UserFields({ data, setData, errors, roles, withPassword = false, passwordOptional = false, lockIdentity = false }) {
     return (
         <div className="space-y-4">
             {lockIdentity && (
@@ -77,21 +78,19 @@ function UserFields({ data, setData, errors, roles, targets, withPassword = fals
                 </>
             )}
 
-            {targets && (
-                <div>
-                    <InputLabel htmlFor="workspace_id" value="Workspace" />
-                    <Select
-                        id="workspace_id"
-                        className={FIELD}
-                        value={data.workspace_id}
-                        onChange={(value) => setData((previous) => ({ ...previous, workspace_id: value, role: '' }))}
-                        options={targets.map((target) => ({ value: String(target.id), label: `${target.name} (${target.code})` }))}
-                        placeholder="Seleccionar Workspace"
-                        invalid={Boolean(errors.workspace_id)}
-                    />
-                    <InputError message={errors.workspace_id} className="mt-1" />
-                </div>
-            )}
+            <div>
+                <InputLabel htmlFor="workspace_id" value="Workspace" />
+                <WorkspaceCombobox
+                    id="workspace_id"
+                    purpose="assign"
+                    className={FIELD}
+                    value={data.workspace_option}
+                    onChange={(option) => setData((previous) => ({ ...previous, workspace_option: option, workspace_id: option ? String(option.id) : '', role: '' }))}
+                    placeholder="Buscar Workspace por nombre o código"
+                    invalid={Boolean(errors.workspace_id)}
+                />
+                <InputError message={errors.workspace_id} className="mt-1" />
+            </div>
 
             <div>
                 <InputLabel htmlFor="role" value="Rol" />
@@ -134,8 +133,8 @@ export default function UsersPanel({ users, filters, perPageOptions, createTarge
     const { auth } = usePage().props;
     const canManageUsers = (auth?.user?.permissions || []).includes('manage-users');
 
-    const create = useForm({ name: '', email: '', password: '', password_confirmation: '', workspace_id: '', role: '' });
-    const edit = useForm({ name: '', email: '', password: '', password_confirmation: '', workspace_id: '', role: '' });
+    const create = useForm({ name: '', email: '', password: '', password_confirmation: '', workspace_id: '', workspace_option: null, role: '' });
+    const edit = useForm({ name: '', email: '', password: '', password_confirmation: '', workspace_id: '', workspace_option: null, role: '' });
     const confirm = useConfirm();
     const toast = useToast();
     const [showCreate, setShowCreate] = useState(false);
@@ -169,14 +168,15 @@ export default function UsersPanel({ users, filters, perPageOptions, createTarge
     const openCreate = () => {
         create.clearErrors();
         const current = createTargets.find((target) => target.isCurrent) ?? createTargets[0];
-        create.setData((previous) => ({ ...previous, workspace_id: current ? String(current.id) : '' }));
+        create.setData((previous) => ({ ...previous, workspace_option: current ?? null, workspace_id: current ? String(current.id) : '' }));
         setShowCreate(true);
     };
 
-    const rolesFor = (workspaceId) => (createTargets.find((target) => String(target.id) === String(workspaceId))?.roles ?? []).map((name) => ({ id: name, name }));
+    const rolesFor = (option) => (option?.roles ?? []).map((name) => ({ id: name, name }));
 
     const submitCreate = (e) => {
         e.preventDefault();
+        create.transform(({ workspace_option, ...data }) => data);
         create.post(route('users.store'), {
             onSuccess: () => {
                 create.reset();
@@ -189,12 +189,12 @@ export default function UsersPanel({ users, filters, perPageOptions, createTarge
         setEditingUser(user);
         edit.clearErrors();
         const current = createTargets.find((target) => target.isCurrent);
-        edit.setData({ name: user.name, email: user.email, password: '', password_confirmation: '', workspace_id: current ? String(current.id) : '', role: user.roles[0] || '' });
+        edit.setData({ name: user.name, email: user.email, password: '', password_confirmation: '', workspace_id: current ? String(current.id) : '', workspace_option: current ?? null, role: user.roles[0] || '' });
     };
 
     const submitEdit = (e) => {
         e.preventDefault();
-        edit.transform((data) => ({ ...data, password: data.password || null, password_confirmation: data.password_confirmation || null }));
+        edit.transform(({ workspace_option, ...data }) => ({ ...data, password: data.password || null, password_confirmation: data.password_confirmation || null }));
         edit.put(route('users.update', editingUser.id), { onSuccess: () => setEditingUser(null) });
     };
 
@@ -299,11 +299,11 @@ export default function UsersPanel({ users, filters, perPageOptions, createTarge
             <Pagination noun="usuarios" {...list.paginationProps} />
 
             <FormModal show={showCreate} title="Nuevo usuario" onClose={() => setShowCreate(false)} onSubmit={submitCreate} processing={create.processing} submitLabel={create.processing ? 'Guardando...' : 'Crear usuario'}>
-                <UserFields data={create.data} setData={create.setData} errors={create.errors} roles={rolesFor(create.data.workspace_id)} targets={createTargets} withPassword />
+                <UserFields data={create.data} setData={create.setData} errors={create.errors} roles={rolesFor(create.data.workspace_option)} withPassword />
             </FormModal>
 
             <FormModal show={Boolean(editingUser)} title="Editar usuario" onClose={() => setEditingUser(null)} onSubmit={submitEdit} processing={edit.processing} submitLabel={edit.processing ? 'Guardando...' : 'Guardar cambios'}>
-                <UserFields data={edit.data} setData={edit.setData} errors={edit.errors} roles={rolesFor(edit.data.workspace_id)} targets={createTargets} withPassword passwordOptional lockIdentity={Boolean(editingUser?.identityLocked)} />
+                <UserFields data={edit.data} setData={edit.setData} errors={edit.errors} roles={rolesFor(edit.data.workspace_option)} withPassword passwordOptional lockIdentity={Boolean(editingUser?.identityLocked)} />
             </FormModal>
         </Card>
     );

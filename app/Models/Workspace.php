@@ -27,6 +27,28 @@ class Workspace extends Model
         return strtoupper(trim($code));
     }
 
+    /** The administrative Workspace of Ava Platform (see config/workspace.php `admin_code`). */
+    public function isAdministrative(): bool
+    {
+        return $this->code === static::normalizeCode((string) config('workspace.admin_code'));
+    }
+
+    /** Workspaces whose name, code or Organization contains the text (case-insensitive, wildcards are literal). */
+    public function scopeSearch(Builder $query, string $term): Builder
+    {
+        if ($term === '') {
+            return $query;
+        }
+
+        // "!" is the escape character so user input cannot act as a LIKE wildcard.
+        $like = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($term)).'%';
+
+        return $query->where(fn (Builder $q) => $q
+            ->whereRaw("lower(workspaces.name) like ? escape '!'", [$like])
+            ->orWhereRaw("lower(workspaces.code) like ? escape '!'", [$like])
+            ->orWhereHas('organization', fn (Builder $o) => $o->whereRaw("lower(organizations.name) like ? escape '!'", [$like])));
+    }
+
     public function setCodeAttribute(string $value): void
     {
         $this->attributes['code'] = static::normalizeCode($value);

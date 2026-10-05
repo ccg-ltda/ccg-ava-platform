@@ -51,7 +51,13 @@ class WorkspaceAdministration
      */
     public function assignableTargets(User $actor): Collection
     {
-        return $this->administrable($actor)->available()->orderBy('name')->get();
+        return $this->assignable($actor)->orderBy('name')->get();
+    }
+
+    /** @return Builder<Workspace> the enabled Workspaces the actor may assign people to (see assignableTargets) */
+    public function assignable(User $actor): Builder
+    {
+        return $this->administrable($actor)->available();
     }
 
     public function canAdminister(User $actor, Workspace $workspace): bool

@@ -17,14 +17,19 @@ use Illuminate\Support\Collection;
  */
 class AuditReport
 {
+    public function __construct(private readonly WorkspaceScope $scope) {}
+
     /** Filters a query by everything except the action (the summary counts each action under the other filters). */
     public function query(Workspace $active, User $viewer, array $filters, bool $withAction = true): Builder
     {
         $query = AuditLog::query();
 
+        // Only who may choose a scope (WorkspaceScope) can widen it; any other filter value falls back to the session's Workspace.
+        $chooses = $this->scope->canChoose($viewer, $active);
+
         match (true) {
-            $viewer->is_superuser && $filters['workspace'] === 'all' => null,
-            $viewer->is_superuser && $filters['workspace'] !== null => $query->where('workspace_id', (int) $filters['workspace']),
+            $chooses && $filters['workspace'] === WorkspaceScope::ALL => null,
+            $chooses && $filters['workspace'] !== null => $query->where('workspace_id', (int) $filters['workspace']),
             default => $query->where('workspace_id', $active->id),
         };
 

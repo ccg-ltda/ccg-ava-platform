@@ -6,6 +6,7 @@ import SearchInput from '@/Components/SearchInput';
 import SecondaryButton from '@/Components/SecondaryButton';
 import Select from '@/Components/Select';
 import TextInput from '@/Components/TextInput';
+import WorkspaceCombobox, { ALL_WORKSPACES } from '@/Components/WorkspaceCombobox';
 
 const ALL = '';
 
@@ -15,7 +16,7 @@ const withAll = (label, options) => [{ value: ALL, label }, ...options];
  * Filters of Auditoría. Everything except the search applies at once; the search waits for a pause in typing.
  * `onChange(partial)` runs the query; the server returns the filters it used, which are the source of truth.
  */
-export default function AuditFilters({ filters, options, onChange, onClear, active }) {
+export default function AuditFilters({ filters, options, scope, onChange, onClear, active }) {
     const [search, setSearch] = useState(filters.search);
     const first = useRef(true);
 
@@ -60,20 +61,21 @@ export default function AuditFilters({ filters, options, onChange, onClear, acti
                     <Select id="audit_resource" className="mt-1" value={value('resource')} onChange={(resource) => onChange({ resource })} options={withAll('Todos los módulos', options.resources)} />
                 </div>
 
-                {options.workspaces && (
+                {options.canChoose && (
                     <div className="sm:col-span-2 lg:col-span-3">
                         <InputLabel htmlFor="audit_workspace" value="Workspace" />
-                        <Select
+                        <WorkspaceCombobox
                             id="audit_workspace"
+                            purpose="view"
+                            includeAll
                             className="mt-1"
-                            value={value('workspace')}
-                            onChange={(workspace) => onChange({ workspace, user: ALL })}
-                            options={[{ value: ALL, label: 'Workspace activo' }, { value: 'all', label: 'Todos los Workspaces' }, ...options.workspaces]}
+                            value={scope.mode === 'all' ? ALL_WORKSPACES : scope.workspace}
+                            onChange={(option) => option && onChange({ workspace: String(option.id), user: ALL })}
                         />
                     </div>
                 )}
 
-                <div className={`sm:col-span-2 ${options.workspaces ? 'lg:col-span-3' : 'lg:col-span-6'}`}>
+                <div className={`sm:col-span-2 ${options.canChoose ? 'lg:col-span-3' : 'lg:col-span-6'}`}>
                     <p className="text-sm font-medium text-ink">Acción</p>
                     <div className="mt-1 flex flex-wrap gap-2" role="group" aria-label="Filtrar por acción">
                         {withAll('Todos', options.actions).map((action) => {

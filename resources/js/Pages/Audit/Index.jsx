@@ -20,7 +20,7 @@ const queryOf = (filters) => Object.fromEntries(FILTER_KEYS.filter((key) => filt
  * Auditoría: the change history of the Workspace (who, what, on which record, when, from which IP). The server
  * filters, sorts and pages; this page only asks and shows. The PDF uses the filters currently applied.
  */
-export default function Index({ events, summary, filters, perPageOptions, options }) {
+export default function Index({ events, summary, filters, perPageOptions, options, scope }) {
     const [selected, setSelected] = useState(null);
     const [loading, setLoading] = useState(false);
     const active = Object.keys(queryOf(filters)).length > 0;
@@ -58,7 +58,7 @@ export default function Index({ events, summary, filters, perPageOptions, option
                 <StatCard label="Eliminados" value={summary.deleted} hint="Registros o accesos quitados" icon={Trash2} tone="red" delay={180} />
             </div>
 
-            <AuditFilters filters={filters} options={options} active={active} onChange={(partial) => change(partial)} onClear={() => visit({ per_page: filters.perPage })} />
+            <AuditFilters filters={filters} options={options} scope={scope} active={active} onChange={(partial) => change(partial)} onClear={() => visit({ per_page: filters.perPage })} />
 
             <section aria-label="Eventos de auditoría" aria-busy={loading} className={loading ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
                 {events.data.length === 0 ? (

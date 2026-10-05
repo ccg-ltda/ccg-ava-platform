@@ -44,14 +44,9 @@ class UserController extends Controller
             'users' => fn () => $this->usersPage($request, $actor, $workspace, $search, $status),
             'filters' => ['search' => $search, 'status' => $status, 'perPage' => ListPagination::size($request, 'users')],
             'perPageOptions' => ListPagination::OPTIONS,
-            // Workspaces (enabled, administered by the actor) where a new user may be created, with the roles allowed in each.
-            'createTargets' => fn () => $this->workspaces->assignableTargets($actor)->map(fn ($target) => [
-                'id' => $target->id,
-                'name' => $target->name,
-                'code' => $target->code,
-                'isCurrent' => $target->is($workspace),
-                'roles' => $this->workspaces->assignableRoles($actor, $target)->pluck('name')->values(),
-            ])->values(),
+            // Where the user form starts: the current Workspace when the actor may place people in it (otherwise the first one
+            // they may). Any other Workspace is searched on demand (workspaces.search, purpose "assign"), never listed whole.
+            'createTargets' => fn () => $this->initialTargets($actor, $workspace),
             // The role catalog with the permissions each role grants (managed only by superusers).
             'roles' => fn () => $this->rolesPage($request, $workspace),
             // Permissions the system defines, with the roles that grant each (read-only matrix).
@@ -63,6 +58,23 @@ class UserController extends Controller
             'workspaces' => fn () => $this->workspaces->overview($actor, $request),
             'organizations' => fn () => $this->workspaces->organizations($actor, $request),
         ]);
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function initialTargets(User $actor, $workspace): array
+    {
+        $assignable = $this->workspaces->assignable($actor);
+        $target = (clone $assignable)->whereKey($workspace->getKey())->with('organization:id,name')->first()
+            ?? $assignable->with('organization:id,name')->orderBy('name')->first();
+
+        return $target ? [[
+            'id' => $target->id,
+            'name' => $target->name,
+            'code' => $target->code,
+            'organization' => $target->organization->name,
+            'isCurrent' => $target->is($workspace),
+            'roles' => $this->workspaces->assignableRoles($actor, $target)->pluck('name')->values(),
+        ]] : [];
     }
 
     /** @return array<string, mixed> */

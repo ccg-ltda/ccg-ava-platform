@@ -128,7 +128,10 @@ class WorkspaceAccessTest extends TestCase
         $user = $this->member($this->dev);
         $this->loginTo($user);
 
-        $this->get('/dashboard?workspace=OPERACION_PRD&workspace_id='.$this->prd->id)->assertOk();
+        // An unknown input is ignored; a `workspace` scope is refused for anyone who may not choose one (WorkspaceScope).
+        $this->get('/dashboard?workspace_id='.$this->prd->id)->assertOk();
+        $this->get('/dashboard?workspace='.$this->prd->id)->assertForbidden();
+        $this->get('/dashboard?workspace=all')->assertForbidden();
         $this->assertSame($this->dev->id, session('workspace_id'));
     }
 

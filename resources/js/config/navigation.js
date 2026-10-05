@@ -9,7 +9,7 @@ export const navigation = [
     {
         label: 'Analytics',
         items: [
-            { label: 'Reportes', route: 'dashboard', icon: BarChart3 },
+            { label: 'Reportes', route: 'dashboard', icon: BarChart3, permission: 'view-dashboard' },
             { label: 'Auditoría', route: 'audit.index', icon: History, permission: 'manage-settings' },
         ],
     },

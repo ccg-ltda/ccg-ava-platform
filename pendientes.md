@@ -26,6 +26,8 @@ Todos los que quedan esperan una decisión o una autorización; ninguno es un de
 - [ ] **Integraciones, fases futuras:** la base genérica (HTTP/REST) está hecha. Falta: OAuth 2.0 (solo si un proveedor lo exige), webhooks, varios endpoints/acciones por integración, mapeo de request/response, sincronización o polling, logs técnicos de llamadas, requisitos propios de cada proveedor, y decidir si se separa un permiso `manage-integrations` de `manage-settings`.
 - [ ] **Integraciones en desarrollo local:** `INTEGRATIONS_ALLOW_PRIVATE_HOSTS=true` permite probar contra una API mock interna; debe quedar en `false` en producción.
 - [ ] **Auditoría, fases futuras:** hoy registra altas, cambios y bajas administrativas de usuarios, miembros, roles, Workspaces, organizaciones, configuraciones e integraciones. Falta decidir una política de retención o archivado del histórico (la tabla `audit_logs` solo crece) y si se auditan también los accesos (inicio y cierre de sesión) y las exportaciones. Cada módulo de negocio nuevo (productos, pedidos, caja...) debe auditarse al construirse.
+- [ ] **Conectar Reportes a sus módulos:** Reportes ya tiene periodo, granularidad, métricas (`config/reports.php`), gráficos reutilizables y las secciones Conversaciones, Interacciones, Preguntas, Encuestas y Tendencias, pero ninguna métrica tiene fuente porque esos módulos no existen. Al construir cada uno, darle su `source`, calcular los datos desde sus tablas partiendo del Workspace activo y sustituir el estado vacío del gráfico.
+- [ ] **Aterrizaje sin `view-dashboard`:** el inicio tras el login es Reportes, que exige `view-dashboard`. Un rol sin ese permiso (posible desde Usuarios y Roles) recibe 403 al entrar; hace falta decidir a dónde se le envía.
 - [ ] **Chat de Ava:** el botón flotante (`ChatButton`) es solo visual; falta la lógica (Reverb + Echo).
 - [ ] **Contexto ITBIS / moneda:** el chip "ITBIS 18%" y el selector RD$ DOP de la referencia se dejaron fuera a propósito; añadirlos si hacen falta.
 - [ ] **Alta de usuarios por invitación o autoregistro:** `/register` está cerrado. Si el negocio quiere que alguien se dé de alta solo, hay que decidir el mecanismo (invitación con token por Workspace, o aprobación de un admin).
@@ -53,6 +55,8 @@ Todos los que quedan esperan una decisión o una autorización; ninguno es un de
 - [ ] TODO: nada en curso.
 
 ## Hecho
+
+- [x] **Reportes (centro de analítica):** `/dashboard` con selector de periodo, secciones, tarjetas de métricas, gráficos SVG reutilizables (`Components/Charts`) y estados vacíos diseñados; sin datos inventados. Lo único con datos reales hoy es el equipo del Workspace (altas por periodo y granularidad, usuarios por rol). Exige `view-dashboard`.
 
 - [x] **Auditoría administrativa:** página `/audit` (menú Analytics, permiso `manage-settings`) con resumen, filtros (búsqueda, fechas, usuario, módulo, acción, Workspace para superusuarios), paginación, detalle con solo los campos que cambiaron (antes/después), y exportación a PDF generada sin dependencias nuevas. Tabla `audit_logs` con usuario y Workspace copiados por nombre, IP y sin datos del navegador; credenciales y bodies enmascarados. Reportes se conserva como página de inicio.
 

@@ -299,7 +299,7 @@ class AuditTest extends TestCase
 
         $this->get('/audit')->assertInertia(fn (AssertableInertia $page) => $page
             ->component('Audit/Index')->has('events.data', 2)->where('events.data.0.record', 'Nueva')->where('events.data.1.record', 'Vieja')
-            ->where('summary.total', 2)->where('options.workspaces', null)
+            ->where('summary.total', 2)->where('options.canChoose', false)
             ->where('events.data.0.ip', '203.0.113.5')->has('events.data.0.date')->has('events.data.0.time')->has('events.data.0.changes', 1));
     }
 
@@ -310,29 +310,42 @@ class AuditTest extends TestCase
         $this->log(['resource_label' => 'Mía']);
         $this->log(['resource_label' => 'Ajena', 'workspace' => $other]);
 
-        foreach ([['workspace' => 'all'], ['workspace' => (string) $other->id]] as $query) {
-            $this->get('/audit?'.http_build_query($query))->assertInertia(fn (AssertableInertia $page) => $page
-                ->has('events.data', 1)->where('events.data.0.record', 'Mía')->where('filters.workspace', null));
+        foreach (['all', (string) $other->id] as $workspace) {
+            $this->get('/audit?workspace='.$workspace)->assertForbidden();
+            $this->get('/audit/export?workspace='.$workspace)->assertForbidden();
         }
 
         // The users offered in the filter are only people who acted in this Workspace.
         $outsider = User::withoutEvents(fn () => User::factory()->create(['name' => 'Fuera']));
         $this->log(['user_id' => $outsider->id, 'user_name' => 'Fuera', 'workspace' => $other]);
-        $this->get('/audit')->assertInertia(fn (AssertableInertia $page) => $page->where('options.users', fn ($users) => ! collect($users)->contains('label', 'Fuera')));
+        $this->get('/audit')->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('events.data', 1)->where('options.canChoose', false)->where('options.users', fn ($users) => ! collect($users)->contains('label', 'Fuera')));
     }
 
-    public function test_a_superuser_may_choose_one_workspace_or_all_and_each_event_names_its_workspace(): void
+    public function test_a_superuser_outside_the_administrative_workspace_cannot_widen_the_scope(): void
     {
         $this->actAs('admin', superuser: true);
+        $other = $this->otherWorkspace();
+
+        $this->get('/audit?workspace=all')->assertForbidden();
+        $this->get("/audit?workspace={$other->id}")->assertForbidden();
+        $this->get('/audit')->assertInertia(fn (AssertableInertia $page) => $page->where('options.canChoose', false));
+    }
+
+    public function test_a_superuser_in_the_administrative_workspace_may_choose_one_workspace_or_all(): void
+    {
+        $this->actAs('admin', superuser: true);
+        config(['workspace.admin_code' => 'TEST_WS']);
         $other = $this->otherWorkspace();
         $this->log(['resource_label' => 'Mía']);
         $this->log(['resource_label' => 'Ajena', 'workspace' => $other]);
 
-        $this->get('/audit')->assertInertia(fn (AssertableInertia $page) => $page->has('events.data', 1)->has('options.workspaces', 2));
+        $this->get('/audit')->assertInertia(fn (AssertableInertia $page) => $page->has('events.data', 1)->where('options.canChoose', true)->where('scope.mode', 'active'));
         $this->get('/audit?workspace=all')->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('events.data', 2)->where('events.data.0.workspace.name', fn ($name) => in_array($name, ['Test Workspace', $other->name], true)));
+            ->has('events.data', 2)->where('scope.mode', 'all')->where('events.data.0.workspace.name', fn ($name) => in_array($name, ['Test Workspace', $other->name], true)));
         $this->get("/audit?workspace={$other->id}")->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('events.data', 1)->where('events.data.0.record', 'Ajena')->where('events.data.0.workspace.code', 'OTHER_WS'));
+            ->has('events.data', 1)->where('events.data.0.record', 'Ajena')->where('events.data.0.workspace.code', 'OTHER_WS')->where('scope.workspace.code', 'OTHER_WS'));
+        $this->get('/audit?workspace=999999')->assertNotFound();
     }
 
     public function test_only_users_with_manage_settings_can_see_or_export_the_audit(): void

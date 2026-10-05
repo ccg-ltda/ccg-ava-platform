@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Services\AuditReport;
 use App\Services\ListPagination;
+use App\Services\WorkspaceScope;
 use Carbon\Carbon;
 use Illuminate\Http\Response;
 use Inertia\Inertia;
@@ -20,13 +21,18 @@ use Inertia\Response as InertiaResponse;
  */
 class AuditController extends Controller
 {
-    public function __construct(private readonly AuditReport $report) {}
+    public function __construct(
+        private readonly AuditReport $report,
+        private readonly WorkspaceScope $scope,
+    ) {}
 
     public function index(AuditFilterRequest $request): InertiaResponse
     {
         $workspace = $request->attributes->get('workspace');
         $viewer = $request->user();
         $filters = $request->filters();
+        // Refuses (403) a Workspace parameter from anyone who may not choose a scope, before anything is read.
+        $chosen = $this->scope->resolve($viewer, $workspace, $filters['workspace']);
         $present = new AuditPresenter($workspace->settingsOrDefault());
 
         $page = $this->report->ordered($this->report->query($workspace, $viewer, $filters))
@@ -43,11 +49,11 @@ class AuditController extends Controller
             'perPageOptions' => ListPagination::OPTIONS,
             'options' => [
                 'users' => $this->report->users($workspace, $viewer, $filters['workspace']),
-                'workspaces' => $viewer->is_superuser ? $this->workspaceOptions() : null,
+                'canChoose' => $this->scope->canChoose($viewer, $workspace),
                 'resources' => $this->labels('resources'),
                 'actions' => $this->labels('actions'),
             ],
-            'currentWorkspace' => ['id' => $workspace->id, 'name' => $workspace->name],
+            'scope' => $this->scopeProps($chosen),
         ]);
     }
 
@@ -56,6 +62,7 @@ class AuditController extends Controller
         $workspace = $request->attributes->get('workspace');
         $viewer = $request->user();
         $filters = $request->filters();
+        $chosen = $this->scope->resolve($viewer, $workspace, $filters['workspace']);
         $settings = $workspace->settingsOrDefault();
         $present = new AuditPresenter($settings);
         $limit = (int) config('audit.pdf_max_events');
@@ -66,7 +73,7 @@ class AuditController extends Controller
 
         $now = now();
         $pdf = (new AuditPdf)->render($events, [
-            'workspace' => $this->scopeName($workspace, $viewer, $filters['workspace']),
+            'workspace' => $this->scopeName($chosen),
             'period' => $this->period($filters, $settings),
             'filters' => $this->appliedFilters($filters, $viewer, $workspace),
             'generatedBy' => "{$viewer->name} ({$viewer->email})",
@@ -91,27 +98,21 @@ class AuditController extends Controller
         return collect(config("audit.{$group}"))->map(fn ($item, $key) => ['value' => $key, 'label' => $item['label']])->values()->all();
     }
 
-    /** @return list<array{value: string, label: string}> */
-    private function workspaceOptions(): array
+    /**
+     * @param  array{mode: string, workspace: ?Workspace}  $chosen
+     * @return array{mode: string, workspace: ?array{id: int, name: string, code: string}}
+     */
+    private function scopeProps(array $chosen): array
     {
-        return Workspace::orderBy('name')->get(['id', 'name', 'code'])
-            ->map(fn ($workspace) => ['value' => (string) $workspace->id, 'label' => "{$workspace->name} ({$workspace->code})"])
-            ->all();
+        $workspace = $chosen['workspace'];
+
+        return ['mode' => $chosen['mode'], 'workspace' => $workspace ? ['id' => $workspace->id, 'name' => $workspace->name, 'code' => $workspace->code] : null];
     }
 
-    private function scopeName(Workspace $workspace, User $viewer, ?string $filter): string
+    /** @param  array{mode: string, workspace: ?Workspace}  $chosen */
+    private function scopeName(array $chosen): string
     {
-        if (! $viewer->is_superuser || $filter === null) {
-            return "{$workspace->name} ({$workspace->code})";
-        }
-
-        if ($filter === 'all') {
-            return 'Todos los Workspaces';
-        }
-
-        $chosen = Workspace::find((int) $filter);
-
-        return $chosen ? "{$chosen->name} ({$chosen->code})" : "{$workspace->name} ({$workspace->code})";
+        return $chosen['workspace'] ? "{$chosen['workspace']->name} ({$chosen['workspace']->code})" : 'Todos los Workspaces';
     }
 
     /** @param  array<string, mixed>  $filters */

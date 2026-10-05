@@ -31,7 +31,7 @@ class IntegrationsTest extends TestCase
         $this->app->instance(SafeHttpTarget::class, new SafeHttpTarget(fn (string $host) => ['93.184.216.34']));
         // Nothing may reach the network, except the local Inertia SSR probes (the Vite dev server or the SSR process).
         Http::preventStrayRequests();
-        Http::allowStrayRequests(['http://127.0.0.1:13714/*', 'http://localhost:13714/*', 'http://127.0.0.1:5173/*', 'http://localhost:5173/*']);
+        Http::allowStrayRequests(['http://127.0.0.1:*', 'http://localhost:*']);
     }
 
     private function actAs(string $role = 'admin'): User

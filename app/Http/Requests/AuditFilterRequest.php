@@ -8,8 +8,8 @@ use Illuminate\Validation\Rule;
 
 /**
  * Filters of Auditoría (the page and the PDF share them). Authorization is the `workspace.permission:manage-settings`
- * route middleware. The Workspace is never taken from here except for superusers, who may widen the view; anyone else
- * is always limited to the Workspace of the session.
+ * route middleware. The Workspace parameter is only honored for a superuser working inside the administrative Workspace
+ * (WorkspaceScope); anyone else who sends it is refused, and everyone else is limited to the session's Workspace.
  */
 class AuditFilterRequest extends FormRequest
 {
@@ -49,7 +49,7 @@ class AuditFilterRequest extends FormRequest
             'from' => $data['from'] ?? null,
             'to' => $data['to'] ?? null,
             'user' => isset($data['user']) ? (int) $data['user'] : null,
-            'workspace' => $this->user()->is_superuser ? ($data['workspace'] ?? null) : null,
+            'workspace' => $data['workspace'] ?? null,
             'resource' => $data['resource'] ?? null,
             'action' => $data['action'] ?? null,
         ];

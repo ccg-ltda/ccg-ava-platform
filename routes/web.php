@@ -11,6 +11,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\WorkspaceController;
 use App\Http\Controllers\WorkspaceLogoController;
 use App\Http\Controllers\WorkspaceMemberController;
+use App\Http\Controllers\WorkspaceSearchController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/pre-login');
@@ -18,7 +19,7 @@ Route::redirect('/', '/pre-login');
 // Everything below requires an authenticated user AND a valid Workspace context
 // (re-validated on every request by EnsureWorkspaceContext).
 Route::middleware(['auth', 'verified', 'workspace'])->group(function () {
-    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/dashboard', [DashboardController::class, 'index'])->middleware('workspace.permission:view-dashboard')->name('dashboard');
 });
 
 Route::middleware(['auth', 'workspace'])->group(function () {
@@ -30,6 +31,8 @@ Route::middleware(['auth', 'workspace'])->group(function () {
     Route::post('/settings', [SettingsController::class, 'update'])
         ->middleware('workspace.permission:manage-settings')->name('settings.update');
     Route::get('/workspace/logo', WorkspaceLogoController::class)->name('workspace.logo');
+    // Text search behind the Workspace selector (what it may find depends on the purpose; see the controller).
+    Route::get('/workspaces/search', WorkspaceSearchController::class)->middleware('throttle:60,1')->name('workspaces.search');
     // Integrations belong to the active Workspace; `manage-settings` governs them like the rest of Configuraciones.
     Route::middleware('workspace.permission:manage-settings')->prefix('integrations')->name('integrations.')->group(function () {
         Route::get('/', [IntegrationController::class, 'index'])->name('index');

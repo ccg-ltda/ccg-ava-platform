@@ -92,9 +92,10 @@ class WorkspaceLifecycleTest extends TestCase
         $this->actAs('admin', superuser: true);
         $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page
             ->has('createTargets', 1)->where('createTargets.0.code', 'WS_A')->where('createTargets.0.isCurrent', true));
+        $this->getJson('/workspaces/search?purpose=assign')->assertJsonPath('data.*.code', ['WS_A']);
 
         $this->b->update(['is_active' => true]);
-        $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page->has('createTargets', 2));
+        $this->getJson('/workspaces/search?purpose=assign')->assertJsonPath('data.*.code', ['WS_A', 'WS_B']);
     }
 
     public function test_admin_cannot_create_users_in_other_inactive_or_unknown_workspaces(): void

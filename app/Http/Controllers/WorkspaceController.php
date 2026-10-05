@@ -41,6 +41,11 @@ class WorkspaceController extends Controller
             'name' => ['required', 'string', 'max:255'],
         ], ['code.regex' => self::CODE_FORMAT_MESSAGE]);
 
+        // The administrative Workspace is identified by its code (config `workspace.admin_code`): renaming the code would orphan it.
+        if ($workspace->isAdministrative() && $data['code'] !== $workspace->code) {
+            throw ValidationException::withMessages(['code' => 'El código del Workspace administrativo de Ava Platform no se puede cambiar.']);
+        }
+
         // Members, roles and history hang from the ID, so changing the code touches nothing else.
         $workspace->update($data);
 
@@ -51,6 +56,10 @@ class WorkspaceController extends Controller
     {
         if ($workspace->is($request->attributes->get('workspace'))) {
             throw ValidationException::withMessages(['status' => 'No puedes desactivar el Workspace en el que estás trabajando.']);
+        }
+
+        if ($workspace->isAdministrative()) {
+            throw ValidationException::withMessages(['status' => 'El Workspace administrativo de Ava Platform no se puede desactivar.']);
         }
 
         $workspace->update(['is_active' => false]);
