@@ -90,7 +90,7 @@ class UserController extends Controller
                 'name' => $user->name,
                 'email' => $user->email,
                 'roles' => [$user->pivot->role],
-                'created_at' => $user->created_at->format('d/m/Y'),
+                'created_at' => $workspace->settingsOrDefault()->formatDate($user->created_at),
                 'identityLocked' => in_array($user->id, $locked, true),
                 'isActive' => $user->is_active,
                 'canToggleStatus' => ! $actor->is($user) && ! in_array($user->id, $locked, true),

@@ -4,6 +4,7 @@ import ChatButton from '@/Components/ChatButton';
 import { ConfirmProvider } from '@/Components/ConfirmDialog';
 import Sidebar from '@/Components/Sidebar';
 import { FlashToasts, ToastProvider } from '@/Components/Toast';
+import useWorkspaceTheme from '@/Hooks/useWorkspaceTheme';
 import Topbar from '@/Components/Topbar';
 
 /**
@@ -19,6 +20,9 @@ export default function AppLayout({ children }) {
     const role = user?.roles?.[0];
     const [menuOpen, setMenuOpen] = useState(false);
 
+    // The Workspace's primary color and light/dark/system mode, applied while the app shell is mounted.
+    useWorkspaceTheme(props.workspace?.settings);
+
     // Close the mobile panel after every navigation.
     useEffect(() => setMenuOpen(false), [url]);
 
@@ -32,7 +36,7 @@ export default function AppLayout({ children }) {
                         <Sidebar permissions={user?.permissions} workspace={props.workspace} open={menuOpen} onClose={() => setMenuOpen(false)} />
 
                         <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
-                            <div key={url} className="mx-auto w-full max-w-screen-2xl space-y-6 motion-safe:animate-fade-in">
+                            <div key={url.split('?')[0]} className="mx-auto w-full max-w-screen-2xl space-y-6 motion-safe:animate-fade-in">
                                 {children}
                             </div>
                         </main>

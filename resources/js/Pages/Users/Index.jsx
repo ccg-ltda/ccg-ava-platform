@@ -1,8 +1,8 @@
 import { Head } from '@inertiajs/react';
 import { Building, Building2, KeyRound, ShieldCheck, Users } from 'lucide-react';
-import { useState } from 'react';
 import PageHeader from '@/Components/PageHeader';
 import Tabs from '@/Components/Tabs';
+import useUrlTab from '@/Hooks/useUrlTab';
 import AppLayout from '@/Layouts/AppLayout';
 import OrganizationsPanel from './Partials/OrganizationsPanel';
 import PermissionsPanel from './Partials/PermissionsPanel';
@@ -66,19 +66,7 @@ export default function Index({
         },
     ].filter(Boolean);
 
-    const [selected, setSelected] = useState(() => {
-        const requested = new URLSearchParams(window.location.search).get('tab');
-
-        return Math.max(sections.findIndex((section) => section.id === requested), 0);
-    });
-
-    const select = (index) => {
-        setSelected(index);
-
-        const url = new URL(window.location.href);
-        url.searchParams.set('tab', sections[index].id);
-        window.history.replaceState(window.history.state, '', url);
-    };
+    const [selected, select] = useUrlTab(sections.map((section) => section.id));
 
     return (
         <>

@@ -81,6 +81,8 @@ Todo sale de `.env` (ver `.env.example`). El cableado de arquitectura (pgsql, dr
 | `TRUSTED_PROXIES` | `*` o lista de IPs cuando hay balanceador delante |
 | `APP_PORT`, `VITE_PORT`, `DB_FORWARD_PORT`, `MINIO_PORT` | Puertos del host (desarrollo) |
 
+El bucket de MinIO es **privado** (`MINIO_DEFAULT_BUCKETS` sin `:public`): los archivos (por ejemplo el logo de cada Workspace) solo salen por rutas autenticadas de Laravel, nunca por una URL directa del objeto. Si tu volumen de MinIO es anterior a este cambio y el bucket sigue público, ciérralo sin perder datos: `docker compose exec minio sh -c 'mc alias set local http://localhost:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" && mc anonymous set none local/ccg-ava'`.
+
 ## Producción / DigitalOcean
 
 `docker-compose.prod.yml` es una base: sin bind mounts, sin node ni minio, sin puertos de postgres/redis en el host, `APP_DEBUG=false`, caches de Laravel en el arranque, **sin migraciones automáticas** y con `worker`, `scheduler` y `reverb` corriendo como `www-data`.

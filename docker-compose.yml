@@ -155,14 +155,15 @@ services:
   # S3-compatible storage, local only. Production uses DigitalOcean Spaces (see docker-compose.prod.yml).
   # Note: MinIO no longer publishes images on Docker Hub; bitnamilegacy/minio is a frozen community copy, fine for local use.
   # It has no web console (removed from the community build): use the S3 API on :9000 or `mc`.
-  # MINIO_DEFAULT_BUCKETS creates the bucket on first boot ("name:public" makes it publicly readable).
+  # MINIO_DEFAULT_BUCKETS creates the bucket on first boot. It stays PRIVATE (no ":public"): Workspace logos and any other
+  # file are served only through authenticated Laravel routes, never by a direct object URL.
   minio:
     image: bitnamilegacy/minio:latest
     restart: unless-stopped
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
-      MINIO_DEFAULT_BUCKETS: ${AWS_BUCKET:-ccg-ava}:public
+      MINIO_DEFAULT_BUCKETS: ${AWS_BUCKET:-ccg-ava}
     volumes:
       - minio-data:/bitnami/minio/data
     ports:

@@ -62,14 +62,26 @@ export default function Sidebar({ permissions, workspace, open, onClose }) {
                     ))}
                 </nav>
 
+                {/* Tablet: the sidebar is collapsed to icons, so only the Workspace logo is shown. */}
+                {workspace?.settings?.logoUrl && (
+                    <img src={workspace.settings.logoUrl} alt={`Logo de ${workspace.name}`} className="mx-auto mb-3 hidden size-9 rounded-lg bg-white object-contain p-0.5 md:block lg:hidden" />
+                )}
+
                 {workspace && (
                     <div className="m-3 rounded-xl bg-white/10 p-3 text-xs text-white ring-1 ring-white/20 md:hidden lg:block">
                         <p className="flex items-center gap-2 font-semibold">
                             <span className="size-2 rounded-full bg-accent-green" aria-hidden="true" />
                             Workspace activo
                         </p>
-                        <p className="mt-1 truncate font-bold tracking-wide">{workspace.code}</p>
-                        <p className="truncate text-white/70">{workspace.organization}</p>
+                        <div className="mt-2 flex items-center gap-2">
+                            {workspace.settings?.logoUrl && (
+                                <img src={workspace.settings.logoUrl} alt="" className="size-9 shrink-0 rounded-lg bg-white object-contain p-0.5" />
+                            )}
+                            <div className="min-w-0">
+                                <p className="truncate font-bold tracking-wide">{workspace.code}</p>
+                                <p className="truncate text-white/70">{workspace.organization}</p>
+                            </div>
+                        </div>
                     </div>
                 )}
             </aside>

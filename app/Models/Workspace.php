@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable(['organization_id', 'code', 'name', 'is_active'])]
 class Workspace extends Model
@@ -29,6 +30,21 @@ class Workspace extends Model
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);
+    }
+
+    public function settings(): HasOne
+    {
+        return $this->hasOne(WorkspaceSetting::class);
+    }
+
+    /** The saved preferences, or the defaults of config/workspace.php for a Workspace that never saved them. */
+    public function settingsOrDefault(): WorkspaceSetting
+    {
+        if (! $this->relationLoaded('settings') || $this->getRelation('settings') === null) {
+            $this->setRelation('settings', $this->settings()->first() ?? new WorkspaceSetting(WorkspaceSetting::defaults()));
+        }
+
+        return $this->getRelation('settings');
     }
 
     public function users(): BelongsToMany

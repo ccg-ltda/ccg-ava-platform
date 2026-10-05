@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use RuntimeException;
 use Spatie\Permission\Models\Role;
@@ -132,6 +133,9 @@ class E2eFixtures
                     $removed['roles']++;
                 }
             });
+
+            // Logos uploaded from Configuraciones live in the storage disk, not in the database.
+            $workspaceIds->each(fn (int $id) => Storage::deleteDirectory("workspaces/{$id}"));
 
             User::whereIn('id', $userIds)->delete();
             Workspace::whereIn('id', $workspaceIds)->delete();

@@ -88,6 +88,29 @@
     }
 }
 
+/*
+ * Dark mode of the application shell. It is switched by `data-app-theme="dark"` on <html>, which only exists while
+ * the shell is mounted (Hooks/useWorkspaceTheme), so the access screens keep their own light/dark theme.
+ * Only the neutral surface and text tokens change; the blue brand surfaces and status colors stay.
+ */
+html[data-app-theme='dark'] {
+    color-scheme: dark;
+    --color-canvas: #0b1220;
+    --color-card: #121c33;
+    --color-line: #24324f;
+    --color-field: #3a4a6b;
+    --color-ink: #e6edf7;
+    --color-ink-muted: #94a3b8;
+    /* Status and accent colors lifted so their text keeps contrast on dark surfaces. */
+    --color-accent-blue: #60a5fa;
+    --color-accent-violet: #a78bfa;
+    --color-accent-green: #34d399;
+    --color-accent-amber: #fbbf24;
+    --color-danger: #f87171;
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 2px 10px rgb(0 0 0 / 0.3);
+    --shadow-card-hover: 0 2px 4px rgb(0 0 0 / 0.5), 0 8px 20px rgb(0 0 0 / 0.4);
+}
+
 @layer components {
     /*
      * Data-entry control (text inputs, selects, textareas): visible border, blue hover/focus, and

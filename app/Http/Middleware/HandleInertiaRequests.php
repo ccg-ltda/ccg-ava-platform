@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\WorkspaceSettingsService;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 use Spatie\Permission\Models\Role;
@@ -49,6 +50,7 @@ class HandleInertiaRequests extends Middleware
                 'code' => $workspace->code,
                 'name' => $workspace->name,
                 'organization' => $workspace->organization->name,
+                'settings' => app(WorkspaceSettingsService::class)->shared($workspace),
             ] : null,
         ];
     }

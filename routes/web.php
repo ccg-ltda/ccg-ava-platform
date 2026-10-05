@@ -8,6 +8,7 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WorkspaceController;
+use App\Http\Controllers\WorkspaceLogoController;
 use App\Http\Controllers\WorkspaceMemberController;
 use Illuminate\Support\Facades\Route;
 
@@ -25,6 +26,9 @@ Route::middleware(['auth', 'workspace'])->group(function () {
 
     Route::get('/settings', [SettingsController::class, 'index'])
         ->middleware('workspace.permission:manage-settings')->name('settings.index');
+    Route::post('/settings', [SettingsController::class, 'update'])
+        ->middleware('workspace.permission:manage-settings')->name('settings.update');
+    Route::get('/workspace/logo', WorkspaceLogoController::class)->name('workspace.logo');
     Route::get('/integrations', [IntegrationController::class, 'index'])
         ->middleware('workspace.permission:manage-settings')->name('integrations.index');
 

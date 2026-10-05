@@ -40,7 +40,7 @@ class WorkspaceReport
                     'name' => $user->name,
                     'email' => $user->email,
                     'role' => $user->pivot->role,
-                    'createdAt' => $user->created_at->format('d/m/Y'),
+                    'createdAt' => $workspace->settingsOrDefault()->formatDate($user->created_at),
                 ])
                 ->values()
                 ->all(),

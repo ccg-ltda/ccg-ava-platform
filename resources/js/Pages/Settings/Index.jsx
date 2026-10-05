@@ -1,48 +1,82 @@
-import { Head, usePage } from '@inertiajs/react';
-import { SlidersHorizontal } from 'lucide-react';
-import Card from '@/Components/Card';
-import EmptyState from '@/Components/EmptyState';
+import { Head, useForm } from '@inertiajs/react';
+import { Globe, Palette, Receipt, SlidersHorizontal } from 'lucide-react';
 import PageHeader from '@/Components/PageHeader';
+import Tabs from '@/Components/Tabs';
+import { useToast } from '@/Components/Toast';
+import useUrlTab from '@/Hooks/useUrlTab';
 import AppLayout from '@/Layouts/AppLayout';
+import AppearancePanel from './Partials/AppearancePanel';
+import GeneralPanel from './Partials/GeneralPanel';
+import RegionalPanel from './Partials/RegionalPanel';
+import TaxesPanel from './Partials/TaxesPanel';
 
-/** Configuraciones: base page, ready to be filled. */
-export default function Index() {
-    const { workspace } = usePage().props;
-    const rows = [
-        ['Organization', workspace?.organization],
-        ['Workspace', workspace?.name],
-        ['Workspace code', workspace?.code],
+/** The tab that owns each field, to take the user to the first one with an error. */
+const TAB_OF_FIELD = {
+    name: 'general',
+    description: 'general',
+    currency: 'regional',
+    timezone: 'regional',
+    date_format: 'regional',
+    time_format: 'regional',
+    logo: 'apariencia',
+    primary_color: 'apariencia',
+    appearance: 'apariencia',
+    tax_country: 'impuestos',
+    tax_enabled: 'impuestos',
+    tax_name: 'impuestos',
+    tax_rate: 'impuestos',
+};
+
+const TAB_IDS = ['general', 'regional', 'apariencia', 'impuestos'];
+
+/**
+ * Configuraciones: preferences of the ACTIVE Workspace in four tabs. One form and one save button for all of
+ * them (the server only ever writes to the Workspace of the session). Success arrives as a toast.
+ */
+export default function Index({ settings, catalog }) {
+    const toast = useToast();
+    const [selected, select] = useUrlTab(TAB_IDS);
+    const form = useForm({ ...settings, logo: null, remove_logo: false });
+
+    const save = (event) => {
+        event.preventDefault();
+
+        form.post(route('settings.update'), {
+            preserveScroll: true,
+            onSuccess: (page) => {
+                // The server's saved values become the new baseline (and the visible values) of the form.
+                const saved = { ...page.props.settings, logo: null, remove_logo: false };
+                form.setDefaults(saved);
+                form.setData(saved);
+            },
+            onError: (errors) => {
+                toast.error('Revisa los campos marcados.');
+
+                const tab = TAB_IDS.indexOf(TAB_OF_FIELD[Object.keys(errors)[0]]);
+                if (tab >= 0) select(tab);
+            },
+        });
+    };
+
+    const tabs = [
+        { id: 'general', label: 'General', icon: SlidersHorizontal },
+        { id: 'regional', label: 'Regional', icon: Globe },
+        { id: 'apariencia', label: 'Apariencia', icon: Palette },
+        { id: 'impuestos', label: 'Impuestos', icon: Receipt },
     ];
 
     return (
         <>
             <Head title="Configuraciones" />
 
-            <PageHeader title="Configuraciones" description="Ajustes del Workspace activo." />
+            <PageHeader title="Configuraciones" description="Personaliza tu Workspace: identidad, formatos, apariencia e impuestos." />
 
-            <div className="grid gap-6 lg:grid-cols-3">
-                <Card className="p-6 lg:col-span-1">
-                    <h2 className="text-sm font-bold uppercase tracking-wider text-ink">Workspace</h2>
-                    <dl className="mt-4 space-y-3">
-                        {rows.map(([label, value]) => (
-                            <div key={label}>
-                                <dt className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted">{label}</dt>
-                                <dd className="mt-0.5 truncate text-sm font-semibold text-ink">{value}</dd>
-                            </div>
-                        ))}
-                    </dl>
-                </Card>
-
-                <Card delay={80} className="p-6 lg:col-span-2">
-                    <h2 className="text-sm font-bold uppercase tracking-wider text-ink">Preferencias</h2>
-                    <EmptyState
-                        className="mt-4"
-                        icon={SlidersHorizontal}
-                        title="Aún no hay configuraciones"
-                        description="Las opciones de configuración de Ava aparecerán en esta sección."
-                    />
-                </Card>
-            </div>
+            <Tabs tabs={tabs} selectedIndex={selected} onChange={select}>
+                <GeneralPanel form={form} onSave={save} />
+                <RegionalPanel form={form} onSave={save} catalog={catalog} />
+                <AppearancePanel form={form} onSave={save} catalog={catalog} />
+                <TaxesPanel form={form} onSave={save} catalog={catalog} />
+            </Tabs>
         </>
     );
 }
