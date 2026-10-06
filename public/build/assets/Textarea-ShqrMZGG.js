@@ -1,1 +1,0 @@
-import{c as e,d as t,t as n}from"./app-DW6289un.js";var r=t(e(),1),i=n(),a=(0,r.forwardRef)(function({className:e=``,invalid:t=!1,rows:n=3,...r},a){return(0,i.jsx)(`textarea`,{...r,ref:a,rows:n,"aria-invalid":t||void 0,className:`field resize-y ${e}`})});export{a as t};

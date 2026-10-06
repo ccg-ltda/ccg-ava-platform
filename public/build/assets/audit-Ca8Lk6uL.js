@@ -1,1 +1,0 @@
-import{t as e}from"./pencil-B7lDxpGD.js";import{t}from"./plus-DZjQl6Bz.js";import{t as n}from"./trash-CGcTJuue.js";var r={created:{tone:`green`,icon:t,bar:`bg-accent-green`},updated:{tone:`amber`,icon:e,bar:`bg-accent-amber`},deleted:{tone:`red`,icon:n,bar:`bg-danger`}},i=e=>r[e]?.tone??`neutral`;export{r as n,i as t};

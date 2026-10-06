@@ -1,1 +1,0 @@
-import{t as e}from"./app-DW6289un.js";var t=e();function n({value:e,className:n=``,children:r,...i}){return(0,t.jsx)(`label`,{...i,className:`block text-sm font-medium text-ink `+n,children:e||r})}export{n as t};
