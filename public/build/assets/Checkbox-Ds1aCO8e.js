@@ -1,0 +1,1 @@
+import{t as e}from"./app-DW6289un.js";var t=e();function n({className:e=``,...n}){return(0,t.jsx)(`input`,{...n,type:`checkbox`,className:`size-4 rounded border border-field accent-primary focus-visible:outline-2 focus-visible:outline-primary `+e})}export{n as t};

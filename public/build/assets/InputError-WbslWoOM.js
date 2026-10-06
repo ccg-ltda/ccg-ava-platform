@@ -1,0 +1,1 @@
+import{t as e}from"./app-DW6289un.js";var t=e();function n({message:e,className:n=``,...r}){return e?(0,t.jsx)(`p`,{...r,className:`text-sm text-danger `+n,children:e}):null}export{n as t};

@@ -1,0 +1,1 @@
+var e={admin:`violet`,supervisor:`blue`},t=t=>e[t]??`neutral`;export{t};
