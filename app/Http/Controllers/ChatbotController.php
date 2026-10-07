@@ -105,6 +105,7 @@ class ChatbotController extends Controller
     public function generateAgentToken(Request $request, int $chatbot, AgentAccess $access): RedirectResponse
     {
         $request->session()->flash('agent_token', $access->generate($this->find($request, $chatbot)));
+        $request->session()->flash('agent_token_chatbot', $chatbot);
 
         return $this->back($chatbot, 'Token generado. Cópialo ahora: no se volverá a mostrar.');
     }

@@ -21,10 +21,10 @@ class IntegrationRegistry
         return app($class);
     }
 
-    /** @return list<string> the generic connection types (those a chatbot channel owns are left out) */
+    /** @return list<string> the generic connection types (those a chatbot channel or a dedicated card owns are left out) */
     public function keys(): array
     {
-        return array_values(array_diff(array_keys(config('integrations.types')), $this->channels->integrationTypes()));
+        return array_values(array_diff(array_keys(config('integrations.types')), $this->channels->integrationTypes(), config('integrations.dedicated')));
     }
 
     /** @return list<array{value: string, label: string}> */

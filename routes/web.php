@@ -39,6 +39,8 @@ Route::middleware(['auth', 'workspace'])->group(function () {
     Route::middleware('workspace.permission:manage-settings')->prefix('integrations')->name('integrations.')->group(function () {
         Route::get('/', [IntegrationController::class, 'index'])->name('index');
         Route::post('/', [IntegrationController::class, 'store'])->name('store');
+        Route::put('/n8n', [IntegrationController::class, 'updateN8n'])->name('n8n.update');
+        Route::delete('/n8n', [IntegrationController::class, 'disconnectN8n'])->name('n8n.destroy');
         Route::put('/channels/{channel}', [IntegrationController::class, 'updateChannel'])->where('channel', '[a-z_]+')->name('channels.update');
         Route::put('/{integration}', [IntegrationController::class, 'update'])->whereNumber('integration')->name('update');
         Route::post('/{integration}/activate', [IntegrationController::class, 'activate'])->whereNumber('integration')->name('activate');

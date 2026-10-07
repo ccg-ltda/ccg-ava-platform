@@ -107,7 +107,67 @@ class IntegrationService
     public function saveChannel(Workspace $workspace, string $channel, array $data): Integration
     {
         $definition = $this->channels->get($channel);
-        $type = $this->types->get($definition['integration']);
+
+        return $this->saveSingle($workspace, $definition['integration'], $definition['label'], $data);
+    }
+
+    /**
+     * The state of the Workspace's n8n connection AS AVA CAN VERIFY IT: not_configured (nothing saved), configured
+     * (saved, never tested), verified (the last real test succeeded) or error (it failed). Never the secret.
+     *
+     * @return array<string, mixed>
+     */
+    public function n8n(Workspace $workspace): array
+    {
+        $integration = $workspace->integrations()->where('type', 'n8n')->first();
+
+        if (! $integration) {
+            return ['state' => 'not_configured', 'id' => null];
+        }
+
+        $when = $this->moment($workspace);
+
+        return [
+            'id' => $integration->id,
+            'state' => match (true) {
+                $integration->last_tested_at === null => 'configured',
+                (bool) $integration->last_test_ok => 'verified',
+                default => 'error',
+            },
+            'baseUrl' => $integration->config['base_url'],
+            'host' => parse_url($integration->config['base_url'], PHP_URL_HOST),
+            'apiKeySet' => filled($integration->secrets['api_key'] ?? null),
+            'updatedAt' => $when($integration->updated_at),
+            'lastTest' => $integration->last_tested_at ? [
+                'at' => $when($integration->last_tested_at),
+                'ok' => (bool) $integration->last_test_ok,
+                'message' => $integration->last_test_message,
+            ] : null,
+            'form' => $this->types->get('n8n')->form($integration),
+        ];
+    }
+
+    /** Saves the Workspace's n8n connection (one per Workspace). @param  array<string, mixed>  $data */
+    public function saveN8n(Workspace $workspace, array $data): Integration
+    {
+        return $this->saveSingle($workspace, 'n8n', 'n8n', $data);
+    }
+
+    /** Removes the n8n connection and with it the API Key: a disconnected n8n keeps no credential in Ava. */
+    public function disconnectN8n(Workspace $workspace): void
+    {
+        $workspace->integrations()->where('type', 'n8n')->get()->each->delete();
+    }
+
+    /**
+     * Creates or updates the Workspace's own integration of a type that exists once per Workspace (a channel's account,
+     * n8n). It is named after what it is; a generic connection already using that name would clash.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function saveSingle(Workspace $workspace, string $typeKey, string $label, array $data): Integration
+    {
+        $type = $this->types->get($typeKey);
         $current = $workspace->integrations()->where('type', $type->key())->first();
         $built = $type->build($data, $current);
 
@@ -125,13 +185,12 @@ class IntegrationService
             return $current;
         }
 
-        // The channel integration is named after the channel; a generic connection already using that name would clash.
-        if ($workspace->integrations()->where('name', $definition['label'])->exists()) {
-            throw ValidationException::withMessages(['name' => "Ya existe una integración llamada {$definition['label']} en este Workspace. Renómbrala para configurar el canal."]);
+        if ($workspace->integrations()->where('name', $label)->exists()) {
+            throw ValidationException::withMessages(['name' => "Ya existe una integración llamada {$label} en este Workspace. Renómbrala para configurarla."]);
         }
 
         return $workspace->integrations()->create([
-            'name' => $definition['label'],
+            'name' => $label,
             'type' => $type->key(),
             'is_active' => true,
             'config' => $built['config'],

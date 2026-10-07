@@ -1,6 +1,7 @@
 <?php
 
 use App\Integrations\HttpApiType;
+use App\Integrations\N8nType;
 use App\Integrations\WebType;
 use App\Integrations\WhatsAppType;
 
@@ -15,7 +16,14 @@ return [
         'http' => HttpApiType::class,
         'whatsapp' => WhatsAppType::class,
         'web' => WebType::class,
+        'n8n' => N8nType::class,
     ],
+
+    /*
+     * Types with their own card in Integraciones (not a generic connection and not a chatbot channel): they never
+     * appear in the generic connection form or list.
+     */
+    'dedicated' => ['n8n'],
 
     'http' => [
         'methods' => ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
@@ -34,6 +42,9 @@ return [
         /* Headers the HTTP client must control itself. */
         'reserved_headers' => ['host', 'content-length', 'transfer-encoding', 'connection', 'upgrade', 'te', 'trailer', 'expect'],
     ],
+
+    /* n8n: seconds Ava waits for the n8n API when testing the connection. */
+    'n8n' => ['timeout' => 10],
 
     /* WhatsApp Business (Meta Graph API): used only to verify a number with its token (read-only). */
     'whatsapp' => [

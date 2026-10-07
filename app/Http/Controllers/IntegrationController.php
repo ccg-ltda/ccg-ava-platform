@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\SaveChannelIntegrationRequest;
 use App\Http\Requests\SaveIntegrationRequest;
+use App\Http\Requests\SaveN8nIntegrationRequest;
 use App\Integrations\IntegrationRegistry;
 use App\Models\Integration;
 use App\Services\ChatbotService;
@@ -38,7 +39,9 @@ class IntegrationController extends Controller
         return Inertia::render('Integrations/Index', [
             'channels' => $this->integrations->channels($viewing),
             'integrations' => $this->integrations->list($viewing),
-            'automation' => $this->chatbots->automation($viewing),
+            'automation' => $this->chatbots->automation($viewing) + ['connection' => $this->integrations->n8n($viewing)],
+            // The token just generated for a chatbot (shown once, only to the Workspace that owns it).
+            'newToken' => $viewing->is($active) && $request->session()->has('agent_token') ? ['chatbotId' => $request->session()->get('agent_token_chatbot'), 'token' => $request->session()->get('agent_token')] : null,
             'catalog' => $this->integrations->catalog(),
             'scope' => [
                 'workspace' => ['id' => $viewing->id, 'name' => $viewing->name, 'code' => $viewing->code],
@@ -46,6 +49,20 @@ class IntegrationController extends Controller
                 'canChoose' => $this->scope->canChoose($request->user(), $active),
             ],
         ]);
+    }
+
+    public function updateN8n(SaveN8nIntegrationRequest $request): RedirectResponse
+    {
+        $this->integrations->saveN8n($request->attributes->get('workspace'), $request->validated());
+
+        return $this->back('n8n guardado.');
+    }
+
+    public function disconnectN8n(Request $request): RedirectResponse
+    {
+        $this->integrations->disconnectN8n($request->attributes->get('workspace'));
+
+        return $this->back('n8n desconectado. Ava ya no guarda su API Key.');
     }
 
     public function updateChannel(SaveChannelIntegrationRequest $request, string $channel): RedirectResponse

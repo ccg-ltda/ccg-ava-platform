@@ -18,7 +18,7 @@ import IntegrationFormModal from './Partials/IntegrationFormModal';
  * with what THIS Workspace has configured for each, and the Workspace's generic connections (HTTP/REST today). An
  * administrator of the platform can look (read only) at one other Workspace. Results arrive as the global toasts.
  */
-export default function Index({ channels, integrations, catalog, automation, scope }) {
+export default function Index({ channels, integrations, catalog, automation, newToken, scope }) {
     const confirm = useConfirm();
     const readOnly = scope.readOnly;
     const [editing, setEditing] = useState(null); // null = closed, 'new' = creating, otherwise the integration
@@ -90,7 +90,7 @@ export default function Index({ channels, integrations, catalog, automation, sco
                     </h2>
                     <p className="text-sm text-ink-muted">Quién ejecuta el flujo de cada chatbot.</p>
                 </div>
-                <AutomationCard automation={automation} workspaceId={readOnly ? scope.workspace.id : undefined} />
+                <AutomationCard automation={automation} newToken={newToken} readOnly={readOnly} workspaceId={readOnly ? scope.workspace.id : undefined} />
             </section>
 
             <section aria-labelledby="channels-heading" className="space-y-4">

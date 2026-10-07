@@ -36,7 +36,7 @@ class WhatsAppType implements ChannelIntegrationType
 
     public function notice(): string
     {
-        return 'Ava usa estos datos para verificar el número con Meta. Guardarlos no activa ninguna conversación: n8n responde con sus propias credenciales de WhatsApp.';
+        return 'Ava usa estos datos solo para comprobar el número con Meta. Guardarlos no conecta n8n ni activa ninguna conversación: n8n responde con sus propias credenciales de WhatsApp y se configura aparte, en Integraciones → n8n.';
     }
 
     public function rules(array $input, ?Integration $current): array

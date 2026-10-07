@@ -99,6 +99,9 @@ export default function ConnectionPanel({ channel, chatbot, reportEndpoint, canC
                 </div>
 
                 <Alert tone="info">Ava guarda el texto, el tipo y la hora; no descarga audio, imágenes ni archivos.</Alert>
+                <Alert tone="warning">
+                    Tener la cuenta de {channel.label} configurada no conecta n8n, y conectar n8n no conecta {channel.label}. Ambas piezas deben estar listas: la conexión de n8n se hace en Integraciones → n8n.
+                </Alert>
             </Card>
         </div>
     );
