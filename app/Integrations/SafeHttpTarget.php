@@ -3,6 +3,10 @@
 namespace App\Integrations;
 
 use Closure;
+use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Support\Facades\Http;
+use Psr\Http\Message\ResponseInterface;
+use RuntimeException;
 
 /**
  * Guards server-side requests to URLs typed by users (SSRF). Only http(s), no credentials in the URL, and the host
@@ -11,6 +15,9 @@ use Closure;
  */
 class SafeHttpTarget
 {
+    /** Responses announcing more than this are dropped: a test or a relay only needs a small answer. */
+    private const MAX_RESPONSE_BYTES = 1_048_576;
+
     private const SPECIAL_USE = ['100.64.0.0/10', '192.0.0.0/24', '192.0.2.0/24', '192.88.99.0/24', '198.18.0.0/15', '198.51.100.0/24', '203.0.113.0/24', '64:ff9b::/96', '2001:db8::/32'];
 
     /** @var Closure(string): list<string> */
@@ -62,6 +69,35 @@ class SafeHttpTarget
         }
 
         return ['scheme' => $scheme, 'host' => $host, 'port' => $port, 'ip' => $ips[0]];
+    }
+
+    /**
+     * A client for a target already validated by `resolve()`: pinned to its address, no redirects and no huge responses.
+     *
+     * @param  array{scheme: string, host: string, port: int, ip: string}  $pinned
+     * @param  array<string, string>  $headers
+     */
+    public function client(array $pinned, int $timeout, array $headers = []): PendingRequest
+    {
+        // `stream` is deliberately not used: it switches Guzzle to the PHP stream handler, which ignores CURLOPT_RESOLVE.
+        $options = [
+            'on_headers' => function (ResponseInterface $response): void {
+                if ((int) $response->getHeaderLine('Content-Length') > self::MAX_RESPONSE_BYTES) {
+                    throw new RuntimeException('Response too large.');
+                }
+            },
+        ];
+
+        // Pin the connection to the address that was validated, so DNS cannot send it somewhere internal later.
+        if (defined('CURLOPT_RESOLVE')) {
+            $options['curl'] = [CURLOPT_RESOLVE => ["{$pinned['host']}:{$pinned['port']}:{$pinned['ip']}"]];
+        }
+
+        return Http::timeout($timeout)
+            ->connectTimeout(min($timeout, 10))
+            ->withoutRedirecting()
+            ->withOptions($options)
+            ->withHeaders($headers);
     }
 
     /** Special-use ranges PHP's reserved filter lets through (shared address space, documentation, benchmarking, NAT64). */

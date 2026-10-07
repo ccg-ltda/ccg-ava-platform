@@ -3,8 +3,11 @@
 namespace App\Providers;
 
 use App\Models\User;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Foundation\DevCommands;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
 
@@ -30,6 +33,13 @@ class AppServiceProvider extends ServiceProvider
 
         // Creating or editing a Workspace is an Organization-level operation: superusers only.
         Gate::define('manage-workspaces', fn (User $user) => $user->is_superuser);
+
+        // The public widget is open to the whole internet: each visitor (IP) is limited per widget, since every message
+        // reaches a workflow that may call a paid model.
+        RateLimiter::for('widget-messages', fn (Request $request) => Limit::perMinute((int) config('chatbots.widget.messages_per_minute'))->by($request->ip().'|'.$request->route('key')));
+        RateLimiter::for('widget-config', fn (Request $request) => Limit::perMinute((int) config('chatbots.widget.config_per_minute'))->by($request->ip().'|'.$request->route('key')));
+        // The automation of a chatbot reads its configuration on every conversation.
+        RateLimiter::for('agent', fn (Request $request) => Limit::perMinute((int) config('chatbots.agent_per_minute'))->by(sha1((string) $request->bearerToken()).'|'.$request->ip()));
 
         // `composer run dev` (php artisan dev) runs on the host. Horizon (needs pcntl + Redis) and Reverb
         // (needs Redis) are only available in the Docker stack, so keep them out of the host dev processes.

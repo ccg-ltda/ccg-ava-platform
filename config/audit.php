@@ -14,6 +14,8 @@ return [
         'organization' => ['label' => 'Organizaciones', 'noun' => 'la organización'],
         'settings' => ['label' => 'Configuraciones', 'noun' => 'la configuración del Workspace'],
         'integration' => ['label' => 'Integraciones', 'noun' => 'la integración'],
+        'chatbot' => ['label' => 'Chatbots', 'noun' => 'el chatbot'],
+        'chatbot_channel' => ['label' => 'Canales de chatbots', 'noun' => 'el canal'],
     ],
 
     'actions' => [

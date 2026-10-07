@@ -2,14 +2,12 @@
 
 namespace App\Integrations;
 
+use App\Audit\Masked;
 use App\Models\Integration;
 use Illuminate\Http\Client\ConnectionException;
-use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
-use Psr\Http\Message\ResponseInterface;
-use RuntimeException;
 use Throwable;
 
 /**
@@ -19,9 +17,6 @@ use Throwable;
  */
 class HttpApiType implements IntegrationType
 {
-    /** Responses announcing more than this are dropped: a test only needs the status. */
-    private const MAX_RESPONSE_BYTES = 1_048_576;
-
     public function __construct(private readonly SafeHttpTarget $target) {}
 
     public function key(): string
@@ -143,6 +138,43 @@ class HttpApiType implements IntegrationType
         ];
     }
 
+    public function supportsTest(): bool
+    {
+        return true;
+    }
+
+    /**
+     * The HTTP settings are audited field by field. Credentials, secret header/query values and the body (free text
+     * that may hold a credential) are masked: their change is recorded, their content never.
+     */
+    public function auditValues(array $config, ?array $secrets): array
+    {
+        $show = fn (mixed $value) => $value === null || $value === '' ? null : (string) $value;
+        $auth = $config['auth'] ?? [];
+        $hasSecrets = filled(array_filter($secrets['headers'] ?? [])) || filled(array_filter($secrets['query'] ?? [])) || filled($secrets['auth'] ?? null);
+
+        $values = [
+            'URL base' => $show($config['base_url'] ?? null),
+            'Endpoint' => $show($config['endpoint'] ?? null),
+            'Método' => $show($config['method'] ?? null),
+            'Tiempo de espera (s)' => $show($config['timeout'] ?? null),
+            'Autenticación' => config('integrations.http.auth_types.'.($auth['type'] ?? 'none')),
+            'Nombre de la credencial' => $show($auth['name'] ?? null),
+            'Ubicación de la credencial' => $show($auth['location'] ?? null),
+            'Usuario' => $show($auth['username'] ?? null),
+            'Body' => Masked::of($config['body'] ?? null),
+            'Credenciales' => Masked::of($hasSecrets ? $secrets : null),
+        ];
+
+        foreach (['headers' => 'Header', 'query' => 'Parámetro'] as $key => $noun) {
+            foreach ($config[$key] ?? [] as $row) {
+                $values["{$noun} {$row['name']}"] = ($row['secret'] ?? false) ? 'Secreto' : $show($row['value'] ?? null);
+            }
+        }
+
+        return $values;
+    }
+
     public function test(Integration $integration): TestResult
     {
         $config = $integration->config;
@@ -159,7 +191,7 @@ class HttpApiType implements IntegrationType
         $start = hrtime(true);
 
         try {
-            $response = $this->client($pinned, $timeout, $headers)->send($config['method'], $url, array_filter([
+            $response = $this->target->client($pinned, $timeout, $headers)->send($config['method'], $url, array_filter([
                 'query' => $query,
                 'body' => $config['body'] ?? null,
             ], fn ($value) => $value !== [] && $value !== null));
@@ -217,33 +249,6 @@ class HttpApiType implements IntegrationType
         }
 
         return [$url, $query, $headers];
-    }
-
-    /**
-     * @param  array{scheme: string, host: string, port: int, ip: string}  $pinned
-     * @param  array<string, string>  $headers
-     */
-    private function client(array $pinned, int $timeout, array $headers): PendingRequest
-    {
-        // `stream` is deliberately not used: it switches Guzzle to the PHP stream handler, which ignores CURLOPT_RESOLVE.
-        $options = [
-            'on_headers' => function (ResponseInterface $response): void {
-                if ((int) $response->getHeaderLine('Content-Length') > self::MAX_RESPONSE_BYTES) {
-                    throw new RuntimeException('Response too large.');
-                }
-            },
-        ];
-
-        // Pin the connection to the address that was validated, so DNS cannot send it somewhere internal later.
-        if (defined('CURLOPT_RESOLVE')) {
-            $options['curl'] = [CURLOPT_RESOLVE => ["{$pinned['host']}:{$pinned['port']}:{$pinned['ip']}"]];
-        }
-
-        return Http::timeout($timeout)
-            ->connectTimeout(min($timeout, 10))
-            ->withoutRedirecting()
-            ->withOptions($options)
-            ->withHeaders($headers);
     }
 
     // --- results --------------------------------------------------------------------------------------------

@@ -50,10 +50,12 @@ export default function Sidebar({ permissions, workspace, open, onClose }) {
 
                 <nav className="mt-6 flex-1 space-y-5 overflow-y-auto px-3 py-4">
                     {sections.map((section) => (
-                        <div key={section.label} className="space-y-1">
-                            <p className="px-3 pb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-white/70 md:hidden lg:block">
-                                {section.label}
-                            </p>
+                        <div key={section.label ?? section.items[0].route} className="space-y-1">
+                            {section.label && (
+                                <p className="px-3 pb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-white/70 md:hidden lg:block">
+                                    {section.label}
+                                </p>
+                            )}
                             <div className="hidden h-px bg-white/20 md:block lg:hidden" />
                             {section.items.map((item) => (
                                 <NavItem key={item.route} item={item} active={route().current(item.route)} onNavigate={onClose} />

@@ -2,6 +2,7 @@
 
 namespace App\Integrations;
 
+use App\Audit\Masked;
 use App\Models\Integration;
 
 /**
@@ -46,6 +47,19 @@ interface IntegrationType
      */
     public function summary(Integration $integration): array;
 
+    /** Whether `test()` can really talk to the service. A type that cannot must say so instead of faking a result. */
+    public function supportsTest(): bool;
+
     /** Talks to the service with the stored configuration. Must not throw and must not leak secrets. */
     public function test(Integration $integration): TestResult;
+
+    /**
+     * Type-specific part of the audit trail: field label => display value (`Masked` for anything secret).
+     * `$config` and `$secrets` are the state being described (old or new).
+     *
+     * @param  array<string, mixed>  $config
+     * @param  array<string, mixed>|null  $secrets
+     * @return array<string, string|Masked|null>
+     */
+    public function auditValues(array $config, ?array $secrets): array;
 }

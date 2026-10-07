@@ -20,6 +20,9 @@ class SaveIntegrationRequest extends FormRequest
     {
         if ($this->route('integration') !== null) {
             $this->current = $this->attributes->get('workspace')->integrations()->findOrFail($this->route('integration'));
+
+            // The integration of a chatbot channel is configured from its channel, not with the generic form.
+            abort_unless(in_array($this->current->type, app(IntegrationRegistry::class)->keys(), true), 404);
         }
 
         return true;

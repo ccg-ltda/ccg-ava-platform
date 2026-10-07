@@ -89,6 +89,11 @@ class Workspace extends Model
         return $this->hasMany(Integration::class);
     }
 
+    public function chatbots(): HasMany
+    {
+        return $this->hasMany(Chatbot::class);
+    }
+
     public function settings(): HasOne
     {
         return $this->hasOne(WorkspaceSetting::class);

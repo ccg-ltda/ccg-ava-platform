@@ -1,9 +1,8 @@
-import { ImagePlus, Monitor, Moon, Sun, Trash2 } from 'lucide-react';
-import { useEffect, useMemo, useRef } from 'react';
+import { Monitor, Moon, Sun } from 'lucide-react';
 import Badge from '@/Components/Badge';
+import ImageField from '@/Components/ImageField';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
-import SecondaryButton from '@/Components/SecondaryButton';
 import TextInput from '@/Components/TextInput';
 import { brandVariables, contrastWithWhite, isHexColor } from '@/lib/theme';
 import SettingsSection from './SettingsSection';
@@ -19,56 +18,20 @@ const MIN_CONTRAST = 4.5;
 /** Logo of the Workspace: upload, preview and removal. The file is validated again by the server. */
 function LogoField({ form }) {
     const { data, setData, errors } = form;
-    const input = useRef(null);
-    const preview = useMemo(() => (data.logo ? URL.createObjectURL(data.logo) : null), [data.logo]);
-    const shown = data.remove_logo ? null : (preview ?? data.logo_url);
-
-    useEffect(() => () => preview && URL.revokeObjectURL(preview), [preview]);
-
-    const choose = (event) => {
-        const file = event.target.files?.[0];
-
-        if (file) {
-            setData((previous) => ({ ...previous, logo: file, remove_logo: false }));
-        }
-
-        event.target.value = '';
-    };
-
-    const remove = () => setData((previous) => ({ ...previous, logo: null, remove_logo: true }));
 
     return (
-        <div>
-            <InputLabel htmlFor="settings_logo" value="Logo del Workspace" />
-            <div className="mt-2 flex flex-wrap items-center gap-4">
-                <div className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-xl border border-line bg-canvas">
-                    {shown ? (
-                        <img src={shown} alt="Logo del Workspace" className="size-full object-contain p-1" />
-                    ) : (
-                        <ImagePlus className="size-6 text-ink-muted" aria-hidden="true" />
-                    )}
-                </div>
-
-                <div className="space-y-2">
-                    <div className="flex flex-wrap gap-2">
-                        <SecondaryButton type="button" onClick={() => input.current?.click()} className="gap-2">
-                            <ImagePlus className="size-4" aria-hidden="true" />
-                            {shown ? 'Cambiar logo' : 'Subir logo'}
-                        </SecondaryButton>
-                        {shown && (
-                            <SecondaryButton type="button" onClick={remove} className="gap-2 text-danger">
-                                <Trash2 className="size-4" aria-hidden="true" />
-                                Quitar
-                            </SecondaryButton>
-                        )}
-                    </div>
-                    <p className="text-xs text-ink-muted">PNG, JPG o WebP. Máximo 1 MB.</p>
-                </div>
-
-                <input ref={input} id="settings_logo" type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={choose} />
-            </div>
-            <InputError message={errors.logo} className="mt-2" />
-        </div>
+        <ImageField
+            id="settings_logo"
+            label="Logo del Workspace"
+            noun="logo"
+            alt="Logo del Workspace"
+            file={data.logo}
+            removed={data.remove_logo}
+            currentUrl={data.logo_url}
+            onChoose={(file) => setData((previous) => ({ ...previous, logo: file, remove_logo: false }))}
+            onRemove={() => setData((previous) => ({ ...previous, logo: null, remove_logo: true }))}
+            error={errors.logo}
+        />
     );
 }
 

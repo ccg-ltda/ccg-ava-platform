@@ -32,6 +32,8 @@ return new class extends Migration
             $table->timestamps();
 
             $table->unique(['workspace_id', 'name']);
+            // Lets a chatbot's channel point at an integration AND its Workspace together (composite foreign key).
+            $table->unique(['id', 'workspace_id']);
         });
     }
 

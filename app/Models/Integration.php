@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\Audit\Masked;
+use App\Integrations\IntegrationRegistry;
 use App\Models\Concerns\Audited;
 use Closure;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -54,42 +54,12 @@ class Integration extends Model
         return ['name' => 'Nombre', 'provider' => 'Proveedor', 'description' => 'Descripción', 'is_active' => 'Activa'];
     }
 
-    /**
-     * The generic HTTP settings are audited field by field. Credentials, secret header/query values and the body
-     * (free text that may hold a credential) are masked: their change is recorded, their content never.
-     */
+    /** The common fields plus whatever the integration type audits (see IntegrationType::auditValues). */
     public function auditSnapshot(Closure $get): array
     {
-        $config = $get('config') ?? [];
-        $auth = $config['auth'] ?? [];
-        $values = $this->auditBaseSnapshot($get) + [
-            'URL base' => $this->auditDisplay($config['base_url'] ?? null),
-            'Endpoint' => $this->auditDisplay($config['endpoint'] ?? null),
-            'Método' => $this->auditDisplay($config['method'] ?? null),
-            'Tiempo de espera (s)' => $this->auditDisplay($config['timeout'] ?? null),
-            'Autenticación' => config('integrations.http.auth_types.'.($auth['type'] ?? 'none')),
-            'Nombre de la credencial' => $this->auditDisplay($auth['name'] ?? null),
-            'Ubicación de la credencial' => $this->auditDisplay($auth['location'] ?? null),
-            'Usuario' => $this->auditDisplay($auth['username'] ?? null),
-            'Body' => Masked::of($config['body'] ?? null),
-            'Credenciales' => Masked::of($this->plainSecrets($get)),
-        ];
+        $type = app(IntegrationRegistry::class)->get($get('type') ?? $this->type);
 
-        foreach (['headers' => 'Header', 'query' => 'Parámetro'] as $key => $noun) {
-            foreach ($config[$key] ?? [] as $row) {
-                $values["{$noun} {$row['name']}"] = ($row['secret'] ?? false) ? 'Secreto' : $this->auditDisplay($row['value'] ?? null);
-            }
-        }
-
-        return $values;
-    }
-
-    /** Only the fingerprint of the decrypted credentials is ever used; they are not stored or shown. */
-    private function plainSecrets(Closure $get): mixed
-    {
-        $secrets = $get('secrets');
-
-        return blank(array_filter($secrets['headers'] ?? [])) && blank(array_filter($secrets['query'] ?? [])) && blank($secrets['auth'] ?? null) ? null : $secrets;
+        return $this->auditBaseSnapshot($get) + $type->auditValues($get('config') ?? [], $get('secrets'));
     }
 
     public function workspace(): BelongsTo

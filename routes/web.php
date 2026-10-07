@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\AuditController;
+use App\Http\Controllers\ChatbotController;
+use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\IntegrationController;
 use App\Http\Controllers\OrganizationController;
@@ -37,11 +39,34 @@ Route::middleware(['auth', 'workspace'])->group(function () {
     Route::middleware('workspace.permission:manage-settings')->prefix('integrations')->name('integrations.')->group(function () {
         Route::get('/', [IntegrationController::class, 'index'])->name('index');
         Route::post('/', [IntegrationController::class, 'store'])->name('store');
+        Route::put('/channels/{channel}', [IntegrationController::class, 'updateChannel'])->where('channel', '[a-z_]+')->name('channels.update');
         Route::put('/{integration}', [IntegrationController::class, 'update'])->whereNumber('integration')->name('update');
         Route::post('/{integration}/activate', [IntegrationController::class, 'activate'])->whereNumber('integration')->name('activate');
         Route::post('/{integration}/deactivate', [IntegrationController::class, 'deactivate'])->whereNumber('integration')->name('deactivate');
         // Each test is a real outbound request: keep it from being used to hammer a third party.
         Route::post('/{integration}/test', [IntegrationController::class, 'test'])->whereNumber('integration')->middleware('throttle:20,1')->name('test');
+    });
+
+    // Chatbots belong to the active Workspace. Reading needs `view-chatbots`; changing anything needs `manage-chatbots`.
+    Route::prefix('chatbots')->name('chatbots.')->group(function () {
+        Route::middleware('workspace.permission:view-chatbots')->group(function () {
+            Route::get('/', [ChatbotController::class, 'index'])->name('index');
+            Route::get('/{chatbot}', [ChatbotController::class, 'show'])->whereNumber('chatbot')->name('show');
+            Route::get('/{chatbot}/avatar', [ChatbotController::class, 'avatar'])->whereNumber('chatbot')->name('avatar');
+        });
+        // The conversations of a channel hold what the contacts wrote: their own permission.
+        Route::get('/{chatbot}/channels/{channel}/conversations', [ConversationController::class, 'index'])
+            ->whereNumber('chatbot')->where('channel', '[a-z_]+')->middleware('workspace.permission:view-conversations')->name('conversations');
+        Route::middleware('workspace.permission:manage-chatbots')->group(function () {
+            Route::post('/', [ChatbotController::class, 'store'])->name('store');
+            // POST (not PUT) because the form may carry the avatar file.
+            Route::post('/{chatbot}', [ChatbotController::class, 'update'])->whereNumber('chatbot')->name('update');
+            Route::post('/{chatbot}/activate', [ChatbotController::class, 'activate'])->whereNumber('chatbot')->name('activate');
+            Route::post('/{chatbot}/deactivate', [ChatbotController::class, 'deactivate'])->whereNumber('chatbot')->name('deactivate');
+            Route::post('/{chatbot}/agent-token', [ChatbotController::class, 'generateAgentToken'])->whereNumber('chatbot')->middleware('throttle:10,1')->name('agent-token.generate');
+            Route::delete('/{chatbot}/agent-token', [ChatbotController::class, 'revokeAgentToken'])->whereNumber('chatbot')->name('agent-token.revoke');
+            Route::put('/{chatbot}/channels/{channel}', [ChatbotController::class, 'updateChannel'])->whereNumber('chatbot')->where('channel', '[a-z_]+')->name('channels.update');
+        });
     });
 
     // Auditoría reads the change history of the active Workspace; `manage-settings` governs it like the other admin pages.

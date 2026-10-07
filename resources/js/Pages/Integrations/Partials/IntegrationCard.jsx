@@ -30,7 +30,7 @@ function ConnectionState({ lastTest }) {
 }
 
 /** One integration as an independent entity: identity, state, connection health and its three actions. */
-export default function IntegrationCard({ integration, delay, testing, onEdit, onTest, onToggle }) {
+export default function IntegrationCard({ integration, delay, testing, readOnly = false, onEdit, onTest, onToggle }) {
     const { name, provider, description, typeLabel, isActive, summary, lastTest, updatedAt } = integration;
 
     return (
@@ -74,11 +74,13 @@ export default function IntegrationCard({ integration, delay, testing, onEdit, o
 
             <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-3">
                 <p className="min-w-0 truncate text-xs text-ink-muted">Actualizada {updatedAt}</p>
-                <div className="flex shrink-0 items-center gap-1">
-                    <IconButton icon={Pencil} label="Editar" context={name} onClick={onEdit} />
-                    <IconButton icon={PlugZap} label={testing ? 'Probando...' : 'Probar conexión'} context={name} onClick={onTest} disabled={testing || !isActive} />
-                    <IconButton icon={Power} label={isActive ? 'Desactivar' : 'Activar'} context={name} tone={isActive ? 'danger' : 'primary'} onClick={onToggle} />
-                </div>
+                {!readOnly && (
+                    <div className="flex shrink-0 items-center gap-1">
+                        <IconButton icon={Pencil} label="Editar" context={name} onClick={onEdit} />
+                        <IconButton icon={PlugZap} label={testing ? 'Probando...' : 'Probar conexión'} context={name} onClick={onTest} disabled={testing || !isActive} />
+                        <IconButton icon={Power} label={isActive ? 'Desactivar' : 'Activar'} context={name} tone={isActive ? 'danger' : 'primary'} onClick={onToggle} />
+                    </div>
+                )}
             </div>
         </Card>
     );

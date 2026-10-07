@@ -87,7 +87,7 @@ class NavigationPagesTest extends TestCase
             ->component('Users/Index')
             ->where('roles.data.0.name', 'admin')
             ->where('roles.data.0.protected', true)
-            ->has('roles.data.0.permissions', 4));
+            ->has('roles.data.0.permissions', 7));
     }
 
     public function test_workspace_and_user_are_shared_with_every_page(): void

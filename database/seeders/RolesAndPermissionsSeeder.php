@@ -27,6 +27,9 @@ class RolesAndPermissionsSeeder extends Seeder
         Permission::firstOrCreate(['name' => 'manage-settings']);
         Permission::firstOrCreate(['name' => 'view-dashboard']);
         Permission::firstOrCreate(['name' => 'view-users']);
+        Permission::firstOrCreate(['name' => 'view-chatbots']);
+        Permission::firstOrCreate(['name' => 'manage-chatbots']);
+        Permission::firstOrCreate(['name' => 'view-conversations']);
 
         // Create Roles
         $adminRole = Role::firstOrCreate(['name' => 'admin']);
@@ -35,7 +38,7 @@ class RolesAndPermissionsSeeder extends Seeder
 
         // Assign Permissions to Roles
         $adminRole->syncPermissions(Permission::all());
-        $supervisorRole->syncPermissions(['view-dashboard', 'view-users']);
+        $supervisorRole->syncPermissions(['view-dashboard', 'view-users', 'view-chatbots']);
         $clienteRole->syncPermissions(['view-dashboard']);
 
         // Sample accounts have well-known passwords: they exist only in local/testing, never elsewhere.

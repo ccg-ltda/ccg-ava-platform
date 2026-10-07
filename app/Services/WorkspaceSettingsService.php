@@ -118,29 +118,10 @@ class WorkspaceSettingsService
         }
     }
 
-    /**
-     * Streams the logo through the app, so it needs no public bucket and only reaches signed-in members.
-     * The same URL returns a different logo per Workspace, so the browser may keep a copy (ETag) but must
-     * revalidate it with the server on every use (`no-cache`): a copy cached for one session is never shown
-     * to another, because the server answers by the requester's own Workspace.
-     */
+    /** Streams the logo through the app, so it needs no public bucket and only reaches signed-in members. */
     public function logoResponse(Workspace $workspace, Request $request): Response|StreamedResponse
     {
-        $path = $workspace->settingsOrDefault()->logo_path;
-
-        abort_unless($path && Storage::exists($path), 404);
-
-        $headers = [
-            'Cache-Control' => 'private, no-cache',
-            'ETag' => '"'.sha1($path).'"',
-            'X-Content-Type-Options' => 'nosniff',
-        ];
-
-        if ($request->header('If-None-Match') === $headers['ETag']) {
-            return response('', 304, $headers);
-        }
-
-        return Storage::response($path, null, $headers);
+        return PrivateImage::response($workspace->settingsOrDefault()->logo_path, $request);
     }
 
     private function logoUrl(WorkspaceSetting $settings): ?string

@@ -47,6 +47,19 @@ class WorkspaceScope
     }
 
     /**
+     * For data that must never be mixed between Workspaces (integrations, chatbots): exactly ONE Workspace, the
+     * active one unless an administrator of the platform asks for another. "All" does not exist here (404).
+     */
+    public function resolveOne(User $user, Workspace $active, mixed $requested): Workspace
+    {
+        $chosen = $this->resolve($user, $active, is_string($requested) ? $requested : null);
+
+        abort_if($chosen['workspace'] === null, 404);
+
+        return $chosen['workspace'];
+    }
+
+    /**
      * Workspaces offered by the Workspace selector, searched by text and capped (the list can be large).
      *
      * @return Builder<Workspace>

@@ -2,11 +2,14 @@
 
 namespace App\Integrations;
 
+use App\Services\ChannelCatalog;
 use InvalidArgumentException;
 
 /** The integration types the application knows (config/integrations.php). */
 class IntegrationRegistry
 {
+    public function __construct(private readonly ChannelCatalog $channels) {}
+
     public function get(string $key): IntegrationType
     {
         $class = config("integrations.types.{$key}");
@@ -18,10 +21,10 @@ class IntegrationRegistry
         return app($class);
     }
 
-    /** @return list<string> */
+    /** @return list<string> the generic connection types (those a chatbot channel owns are left out) */
     public function keys(): array
     {
-        return array_keys(config('integrations.types'));
+        return array_values(array_diff(array_keys(config('integrations.types')), $this->channels->integrationTypes()));
     }
 
     /** @return list<array{value: string, label: string}> */

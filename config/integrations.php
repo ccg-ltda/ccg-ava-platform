@@ -1,15 +1,20 @@
 <?php
 
 use App\Integrations\HttpApiType;
+use App\Integrations\WebType;
+use App\Integrations\WhatsAppType;
 
 /*
  * Integraciones: catalog of integration TYPES and the limits of the generic HTTP/REST type.
  * A new type (OAuth, webhook, a specific provider...) is one class implementing App\Integrations\IntegrationType
- * registered here; the page, the table and the permissions stay the same.
+ * registered here; the page, the table and the permissions stay the same. A type that a chatbot channel uses
+ * (config/chatbots.php) is configured from the channel cards, not from the generic connection form.
  */
 return [
     'types' => [
         'http' => HttpApiType::class,
+        'whatsapp' => WhatsAppType::class,
+        'web' => WebType::class,
     ],
 
     'http' => [
@@ -28,6 +33,13 @@ return [
         'max_body_bytes' => 20000,
         /* Headers the HTTP client must control itself. */
         'reserved_headers' => ['host', 'content-length', 'transfer-encoding', 'connection', 'upgrade', 'te', 'trailer', 'expect'],
+    ],
+
+    /* WhatsApp Business (Meta Graph API): used only to verify a number with its token (read-only). */
+    'whatsapp' => [
+        'graph_url' => env('WHATSAPP_GRAPH_URL', 'https://graph.facebook.com'),
+        'graph_version' => env('WHATSAPP_GRAPH_VERSION', 'v25.0'),
+        'timeout' => 10,
     ],
 
     /*
