@@ -25,6 +25,7 @@ class ChatbotService
     public function __construct(
         private readonly ChannelCatalog $channels,
         private readonly IntegrationRegistry $types,
+        private readonly ChannelAppearanceService $appearance,
     ) {}
 
     /**
@@ -74,7 +75,7 @@ class ChatbotService
         $takenBy = ChatbotChannel::whereIn('integration_id', $integrations->pluck('id'))->where('is_active', true)
             ->where('chatbot_id', '!=', $chatbot->id)->with('chatbot:id,name')->get()->keyBy('integration_id');
 
-        return array_map(function (array $channel) use ($integrations, $rows, $takenBy, $settings) {
+        return array_map(function (array $channel) use ($chatbot, $integrations, $rows, $takenBy, $settings) {
             $integration = $channel['integration'] ? $integrations->get($channel['integration']) : null;
             $other = $integration ? $takenBy->get($integration->id)?->chatbot : null;
 
@@ -91,7 +92,7 @@ class ChatbotService
                 'conversations' => (bool) ($channel['conversations'] ?? false),
                 'testable' => $channel['integration'] ? $this->types->get($channel['integration'])->supportsTest() : false,
                 'connection' => $integration ? $this->connection($integration, $settings) : null,
-                'installCode' => $state === 'active' && ($channel['embeddable'] ?? false) && $row?->public_key ? $this->installCode($row->public_key) : null,
+                'installCode' => $state === 'active' && ($channel['embeddable'] ?? false) && $row?->public_key && $this->appearance->destination($chatbot->workspace, $channel['key'])['ready'] ? $this->installCode($row->public_key) : null,
             ];
         }, $this->channels->all());
     }

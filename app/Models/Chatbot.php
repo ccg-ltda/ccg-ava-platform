@@ -66,4 +66,9 @@ class Chatbot extends Model
     {
         return $this->hasMany(ChatbotChannel::class);
     }
+
+    public function appearances(): HasMany
+    {
+        return $this->hasMany(ChatbotChannelAppearance::class);
+    }
 }

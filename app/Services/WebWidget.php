@@ -17,18 +17,24 @@ use Throwable;
  */
 class WebWidget
 {
-    public function __construct(private readonly SafeHttpTarget $target) {}
+    public function __construct(
+        private readonly SafeHttpTarget $target,
+        private readonly ChannelAppearanceService $look,
+    ) {}
 
     public function resolve(string $publicKey): ?ChatbotChannel
     {
         $channel = ChatbotChannel::with(['chatbot.workspace.organization', 'integration'])
-            ->where('public_key', $publicKey)->where('channel', 'web')->where('is_active', true)->first();
+            ->where('public_key', $publicKey)->whereIn('channel', array_keys(array_filter(config('chatbots.channels'), fn (array $channel) => $channel['embeddable'] ?? false)))
+            ->where('is_active', true)->first();
 
         return $channel
             && $channel->chatbot->is_active
             && $channel->chatbot->workspace->is_active
             && $channel->chatbot->workspace->organization->is_active
             && $channel->integration?->is_active
+            && $this->look->destination($channel->chatbot->workspace, $channel->channel)['ready']
+            && $this->look->enabled($channel->chatbot, $channel->channel)
                 ? $channel
                 : null;
     }
@@ -41,18 +47,25 @@ class WebWidget
         return $allowed === [] || ($origin !== null && in_array(strtolower(rtrim($origin, '/')), $allowed, true));
     }
 
-    /** What the widget needs to draw itself: the chatbot's identity and the Workspace's global appearance. */
+    /**
+     * What the script needs to draw itself: the chatbot's identity, the client's visual settings for this channel and the
+     * Workspace's light / dark mode. Only presentation: the destination of a WhatsApp button is its public link.
+     */
     public function appearance(ChatbotChannel $channel, string $publicKey): array
     {
         $chatbot = $channel->chatbot;
         $settings = $chatbot->workspace->settingsOrDefault();
+        $style = $this->look->publicStyle($chatbot, $channel->channel);
 
         return [
+            'type' => $this->look->kind($channel->channel),
             'name' => $chatbot->name,
             'description' => $chatbot->description,
             'avatarUrl' => $chatbot->avatar_path ? url("/api/widget/{$publicKey}/avatar").'?v='.$chatbot->updated_at?->timestamp : null,
-            'primaryColor' => $settings->primary_color,
+            'primaryColor' => $style['primaryColor'],
             'appearance' => $settings->appearance,
+            'style' => $style,
+            'href' => $channel->channel === 'whatsapp' ? $this->look->whatsappLink($chatbot) : null,
         ];
     }
 

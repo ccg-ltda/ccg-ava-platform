@@ -16,6 +16,7 @@ return [
         'integration' => ['label' => 'Integraciones', 'noun' => 'la integración'],
         'chatbot' => ['label' => 'Chatbots', 'noun' => 'el chatbot'],
         'chatbot_channel' => ['label' => 'Canales de chatbots', 'noun' => 'el canal'],
+        'chatbot_channel_appearance' => ['label' => 'Apariencia de canales', 'noun' => 'la apariencia del canal'],
     ],
 
     'actions' => [

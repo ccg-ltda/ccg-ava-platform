@@ -72,7 +72,13 @@ class WhatsAppType implements ChannelIntegrationType
 
     public function summary(Integration $integration): array
     {
-        return ['rows' => [['label' => 'ID del número', 'value' => $integration->config['phone_number_id']]]];
+        $rows = [['label' => 'ID del número', 'value' => $integration->config['phone_number_id']]];
+
+        if ($number = $integration->config['display_number'] ?? null) {
+            $rows[] = ['label' => 'Número verificado', 'value' => '+'.$number];
+        }
+
+        return ['rows' => $rows];
     }
 
     public function agentView(Integration $integration): array
@@ -112,7 +118,7 @@ class WhatsAppType implements ChannelIntegrationType
         $code = (int) $response->json('error.code');
 
         return match (true) {
-            $status === 200 && (string) $response->json('id') === $id => new TestResult(true, $this->verified($response->json('verified_name'), $response->json('display_phone_number')), $status, $ms),
+            $status === 200 && (string) $response->json('id') === $id => new TestResult(true, $this->verified($response->json('verified_name'), $response->json('display_phone_number')), $status, $ms, $this->facts($response->json('display_phone_number'))),
             $status === 200 => TestResult::failure('Meta respondió con un número distinto al configurado.', $status, $ms),
             $status === 401 || $code === 190 => TestResult::failure('Meta rechazó el token: es inválido o expiró.', $status, $ms),
             in_array($status, [400, 403, 404], true) => TestResult::failure('Meta no encontró ese ID de número o el token no tiene permiso sobre él.', $status, $ms),
@@ -128,6 +134,14 @@ class WhatsAppType implements ChannelIntegrationType
             'ID del número' => $show($config['phone_number_id'] ?? null),
             'Token de acceso' => Masked::of($secrets['access_token'] ?? null),
         ];
+    }
+
+    /** The dialable number Meta reported (digits only, as a wa.me link needs it); nothing when Meta gave no usable one. */
+    private function facts(mixed $number): array
+    {
+        $digits = is_string($number) ? preg_replace('/\D+/', '', $number) : '';
+
+        return preg_match('/^\d{7,15}$/', $digits) ? ['display_number' => $digits] : [];
     }
 
     private function verified(mixed $name, mixed $number): string

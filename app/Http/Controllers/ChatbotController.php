@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\ViewsWorkspace;
 use App\Http\Requests\SaveChatbotRequest;
 use App\Models\Chatbot;
 use App\Services\AgentAccess;
+use App\Services\ChannelAppearanceService;
 use App\Services\ChatbotService;
 use App\Services\PrivateImage;
 use App\Services\WorkspaceScope;
@@ -29,6 +30,7 @@ class ChatbotController extends Controller
 
     public function __construct(
         private readonly ChatbotService $chatbots,
+        private readonly ChannelAppearanceService $appearance,
         WorkspaceScope $scope,
     ) {
         $this->scope = $scope;
@@ -54,6 +56,13 @@ class ChatbotController extends Controller
             // The plain token exists only in the flash of the request that generated it.
             'agentToken' => $this->chatbots->agentAccess($chatbot, $request->session()->get('agent_token')),
             'channels' => $this->chatbots->channelStates($chatbot),
+            'appearance' => [
+                'channels' => $this->appearance->forPage($chatbot),
+                'options' => $this->appearance->options(),
+                // How the Workspace's pages are themed: the preview draws the widget exactly as the script does.
+                'mode' => $viewing->settingsOrDefault()->appearance,
+                'scriptUrl' => url('/widget/ava-widget.js'),
+            ],
             'instructionsMax' => config('chatbots.instructions_max'),
             'avatar' => ['maxKb' => config('chatbots.avatar.max_kb')],
             'scope' => $this->scopeProps($request, $viewing, $foreign, 'manage-chatbots'),

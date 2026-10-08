@@ -264,6 +264,8 @@ class IntegrationService
         $result = $this->types->get($integration->type)->test($integration);
 
         $integration->forceFill([
+            // What the test verified (for WhatsApp, the real number) is kept in the config next to the data it came from.
+            'config' => $result->ok ? array_merge($integration->config ?? [], $result->facts) : $integration->config,
             'last_tested_at' => now(),
             'last_test_ok' => $result->ok,
             'last_test_status' => $result->httpStatus,

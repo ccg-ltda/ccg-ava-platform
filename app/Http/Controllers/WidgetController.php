@@ -35,6 +35,8 @@ class WidgetController extends Controller
     public function message(Request $request, string $key): JsonResponse
     {
         $channel = $this->channel($request, $key);
+        // Only the chat widget talks to the automation; a WhatsApp button is just a link.
+        abort_unless($channel->channel === 'web', 404);
         $data = $request->validate([
             'session_id' => ['required', 'string', 'regex:/^[A-Za-z0-9_-]{8,64}$/'],
             'message' => ['required', 'string', 'max:'.config('chatbots.widget.max_message')],

@@ -1,5 +1,5 @@
-import { Head, Link, router, useForm } from '@inertiajs/react';
-import { ArrowLeft, Cable, Power, SlidersHorizontal, Sparkles } from 'lucide-react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
+import { ArrowLeft, Cable, Palette, Power, SlidersHorizontal, Sparkles } from 'lucide-react';
 import Badge from '@/Components/Badge';
 import { useConfirm } from '@/Components/ConfirmDialog';
 import PageHeader from '@/Components/PageHeader';
@@ -9,21 +9,25 @@ import { useToast } from '@/Components/Toast';
 import { ReadOnlyWorkspaceNotice } from '@/Components/WorkspaceViewSelector';
 import useUrlTab from '@/Hooks/useUrlTab';
 import AppLayout from '@/Layouts/AppLayout';
+import AppearanceTab from './Partials/AppearanceTab';
 import BehaviorTab from './Partials/BehaviorTab';
 import ChannelsTab from './Partials/ChannelsTab';
 import ChatbotAvatar from './Partials/ChatbotAvatar';
 import GeneralTab from './Partials/GeneralTab';
 
-const TAB_IDS = ['general', 'canales', 'ia'];
+const TAB_IDS = ['general', 'canales', 'apariencia', 'ia'];
+const tabIndex = (id) => TAB_IDS.indexOf(id);
 const FIELDS = ['name', 'description', 'instructions', 'avatar'];
 
 /**
- * One chatbot in three tabs: General (its presentation: the identity form the first time, the preview afterwards),
- * Canales (where it answers) and IA y comportamiento (where it is edited and where the automation gets its access).
+ * One chatbot in four tabs: General (its presentation: the identity form the first time, the preview afterwards),
+ * Canales (where it answers), Canales y apariencia (how each channel's button / widget looks on the customer's site)
+ * and IA y comportamiento (where it is edited and where the automation gets its access).
  * The form lives here so it survives switching tabs. Everything is read only when the user cannot manage chatbots or
  * is looking at another Workspace.
  */
-export default function Show({ chatbot, channels, agentToken, instructionsMax, avatar, scope }) {
+export default function Show({ chatbot, channels, appearance, agentToken, instructionsMax, avatar, scope }) {
+    const { auth } = usePage().props;
     const confirm = useConfirm();
     const toast = useToast();
     const [selected, select] = useUrlTab(TAB_IDS);
@@ -44,7 +48,7 @@ export default function Show({ chatbot, channels, agentToken, instructionsMax, a
                 toast.error('Revisa los campos marcados.');
 
                 // The fields live in General until the identity is saved, and in IA y comportamiento afterwards.
-                if (FIELDS.includes(Object.keys(errors)[0])) select(chatbot.profileSaved ? 2 : 0);
+                if (FIELDS.includes(Object.keys(errors)[0])) select(tabIndex(chatbot.profileSaved ? 'ia' : 'general'));
             },
         });
     };
@@ -66,6 +70,7 @@ export default function Show({ chatbot, channels, agentToken, instructionsMax, a
     const tabs = [
         { id: 'general', label: 'General', icon: SlidersHorizontal },
         { id: 'canales', label: 'Canales', icon: Cable },
+        { id: 'apariencia', label: 'Canales y apariencia', icon: Palette },
         { id: 'ia', label: 'IA y comportamiento', icon: Sparkles },
     ];
 
@@ -97,8 +102,9 @@ export default function Show({ chatbot, channels, agentToken, instructionsMax, a
             <ReadOnlyWorkspaceNotice scope={scope} what="este chatbot" />
 
             <Tabs tabs={tabs} selectedIndex={selected} onChange={select}>
-                <GeneralTab form={form} chatbot={chatbot} channels={channels} canManage={scope.canManage} avatarMaxKb={avatar.maxKb} onSubmit={save} onEdit={() => select(2)} onChannels={() => select(1)} />
+                <GeneralTab form={form} chatbot={chatbot} channels={channels} canManage={scope.canManage} avatarMaxKb={avatar.maxKb} onSubmit={save} onEdit={() => select(tabIndex('ia'))} onChannels={() => select(tabIndex('canales'))} />
                 <ChannelsTab chatbot={chatbot} channels={channels} canManage={scope.canManage} workspaceId={scope.readOnly ? scope.workspace.id : undefined} />
+                <AppearanceTab chatbot={chatbot} appearance={appearance} channels={channels} canManage={scope.canManage} canConfigure={auth.user.permissions.includes('manage-settings')} onChannels={() => select(tabIndex('canales'))} />
                 <BehaviorTab form={form} chatbot={chatbot} canManage={scope.canManage} instructionsMax={instructionsMax} avatarMaxKb={avatar.maxKb} onSubmit={save} agentToken={agentToken} />
             </Tabs>
         </>

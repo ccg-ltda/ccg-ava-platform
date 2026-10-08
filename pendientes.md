@@ -57,11 +57,15 @@ Todos los que quedan esperan una decisión o una autorización; ninguno es un de
 - [ ] **Base de pruebas en PostgreSQL:** los tests usan SQLite en memoria; las consultas específicas de PostgreSQL no se ejercitan en CI. Si se quiere, crear una base `ccg_ava_test` (el guard ya la admite).
 - [ ] **Membresías de `DESARROLLO_DEV` que desaparecieron sin causa identificada:** en dos ocasiones faltaron filas de `workspace_user` de usuarios sembrados y se restauraron con `WorkspaceSeeder`. Se añadió un guard contra tests sobre la base de desarrollo, pero no se demostró que fuera la causa. Si vuelve a ocurrir, comparar con una instantánea previa.
 
+- [ ] **Canales y apariencia — pendientes menores:** el icono del botón solo admite el avatar del chatbot o el icono del canal (no una imagen propia); el botón de WhatsApp es flotante (no hay variante en línea); las apariencias de Instagram y Messenger no existen porque los canales no están disponibles; los tests de navegador siguen siendo manuales (Playwright MCP), no automatizados; el número del botón de WhatsApp sale de la última "Probar conexión" correcta (cuentas verificadas antes de este cambio deben volver a probarse).
+
 ## En curso
 
 - [ ] TODO: nada en curso.
 
 ## Hecho
+
+- [x] **Chatbots → Canales y apariencia:** nueva pestaña con lista de canales (Web, WhatsApp; Instagram y Messenger "Pronto"), formulario visual (texto, icono, colores, tamaño, forma, posición, sombra; chat: título, mensaje inicial, tamaño, redondeo, apertura), vista previa en vivo que ejecuta el MISMO script público (`public/widget/ava-widget.js`, modo preview), guardado por Workspace + chatbot + canal (`chatbot_channel_appearances`), código de instalación único (la apariencia se lee en cada carga) y botón de WhatsApp con enlace `wa.me` al número verificado con Meta. Tests: `ChannelAppearanceTest`.
 
 - [x] **n8n como integración real por Workspace:** dirección de la instancia y API Key cifrada (`N8nType`), "Probar conexión" real contra la API de n8n con mensajes de error útiles, estados honestos (sin probar / conectado / error), cambiar y desconectar, y la tarjeta separa Ava -> n8n de n8n -> Ava (token por chatbot generado también desde la tarjeta) y explica dónde verá el usuario las conversaciones. Tests: `N8nIntegrationTest`.
 - [x] **Chatbots: General como presentación, edición en IA y comportamiento, n8n y WhatsApp como canal operativo:** General pide la identidad la primera vez y después muestra la vista previa del chatbot (canales reales y su verificación); IA y comportamiento concentra la edición (identidad, instrucciones, token de n8n); Integraciones muestra n8n como tarjeta con el estado que Ava puede verificar; el canal WhatsApp tiene su página de conversaciones (lista, búsqueda, chat de solo lectura, mensajes entrantes y salientes, estado de entrega, tipo de contenido) alimentada por `POST /api/agent/messages`, con permiso `view-conversations` y aislamiento por Workspace. Tests: `ConversationsTest` y ampliaciones de `ChatbotsTest` y `AgentApiTest`.
