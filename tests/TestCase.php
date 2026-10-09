@@ -26,16 +26,18 @@ abstract class TestCase extends BaseTestCase
 
     /**
      * The same role/permission catalog the seeders create:
-     * admin = every permission, supervisor = view-dashboard + view-users + view-chatbots, cliente = view-dashboard.
+     * admin = every permission, supervisor = view-dashboard + view-users + view-chatbots, cliente = view-dashboard,
+     * agente = view-dashboard + view/reply conversations.
      */
     protected function seedRoleCatalog(): void
     {
-        $permissions = collect(['manage-users', 'manage-settings', 'view-dashboard', 'view-users', 'view-chatbots', 'manage-chatbots', 'view-conversations'])
+        $permissions = collect(['manage-users', 'manage-settings', 'view-dashboard', 'view-users', 'view-chatbots', 'manage-chatbots', 'view-conversations', 'reply-conversations', 'manage-conversations'])
             ->each(fn (string $name) => Permission::findOrCreate($name, 'web'));
 
         Role::findOrCreate('admin', 'web')->syncPermissions($permissions->all());
         Role::findOrCreate('supervisor', 'web')->syncPermissions(['view-dashboard', 'view-users', 'view-chatbots']);
         Role::findOrCreate('cliente', 'web')->syncPermissions(['view-dashboard']);
+        Role::findOrCreate('agente', 'web')->syncPermissions(['view-dashboard', 'view-conversations', 'reply-conversations']);
     }
 
     /**

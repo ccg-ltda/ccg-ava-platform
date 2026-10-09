@@ -3,7 +3,8 @@
  *   <script src="https://<ava>/widget/ava-widget.js" data-chatbot="<public key>" defer></script>
  * It asks Ava for the public configuration of that channel (the chatbot's identity and the look the client chose in
  * Ava) every time the page loads, so changing the look never needs a new script. Depending on the channel it draws:
- *   - a floating button and a chat panel (web), whose messages go to /api/widget/<key>/messages, or
+ *   - a floating button and a chat panel (web), whose messages go to /api/widget/<key>/messages (the same endpoint
+ *     returns, on GET, what a human agent wrote to this visitor while the panel is open), or
  *   - a floating button that opens a WhatsApp conversation (whatsapp).
  * Everything is drawn inside a shadow root (the host page's CSS cannot reach it) and everything that comes from the
  * network is set as plain text, never parsed as markup. The same code draws the live preview in Ava's interface
@@ -22,6 +23,14 @@
     var PANELS = { sm: { width: 320, height: 440 }, md: { width: 370, height: 540 }, lg: { width: 420, height: 640 } };
     var SHADOWS = { none: 'none', soft: '0 8px 24px rgba(0,0,0,.25)', strong: '0 12px 36px rgba(0,0,0,.45)' };
     var AUTO_OPEN_MS = 5000;
+    var POLL_MS = 5000;
+    /* What the visitor is told when the person answering changes (the server decides it; the text is the widget's own). */
+    var NOTES = {
+        pending: 'Un agente te atenderá en breve.',
+        human: 'Un agente se unió a la conversación.',
+        resolved: 'La conversación fue marcada como resuelta.',
+        ai: 'El asistente vuelve a atenderte.'
+    };
 
     function pick(table, key, fallback) {
         return Object.prototype.hasOwnProperty.call(table, key) ? table[key] : table[fallback];
@@ -119,6 +128,8 @@
             '.msg{max-width:85%;padding:9px 12px;border-radius:14px;font-size:14px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}',
             '.msg.bot{align-self:flex-start;background:' + surface + ';color:' + ink + ';border-bottom-left-radius:4px}',
             '.msg.me{align-self:flex-end;background:' + l.color + ';color:' + l.text + ';border-bottom-right-radius:4px}',
+            '.msg.agent{align-self:flex-start;background:' + surface + ';color:' + ink + ';border-left:3px solid ' + l.color + ';border-bottom-left-radius:4px}',
+            '.msg.note{align-self:center;max-width:100%;padding:2px 8px;background:transparent;color:' + (dark ? '#94a3b8' : '#64748b') + ';font-size:12px;text-align:center}',
             '.msg.err{align-self:flex-start;background:transparent;color:#dc2626;border:1px solid #dc2626;font-size:13px}',
             '.msg.typing{color:' + (dark ? '#94a3b8' : '#64748b') + ';font-style:italic}',
             'form{display:flex;gap:8px;padding:10px;border-top:1px solid ' + line + ';background:' + bg + '}',
@@ -188,6 +199,8 @@
         var panel = null;
         var fab = null;
         var autoTimer = null;
+        var pollTimer = null;
+        var handling = null;
 
         function add(kind, text) {
             var node = el('div', 'msg ' + kind, text);
@@ -196,11 +209,44 @@
             return node;
         }
 
+        /* Tells the visitor once when the person answering changes; a conversation the AI keeps says nothing. */
+        function noteHandling(next) {
+            if (typeof next !== 'string' || next === handling) return;
+            var first = handling === null;
+            handling = next;
+            if (!(first && next === 'ai') && Object.prototype.hasOwnProperty.call(NOTES, next)) add('note', NOTES[next]);
+        }
+
+        /* Asks Ava for what a human agent wrote to this visitor and who is answering now. */
+        function poll() {
+            if (preview || !session) return;
+
+            fetch(options.api + '/messages?session_id=' + encodeURIComponent(session), { headers: { 'Accept': 'application/json' } })
+                .then(function (response) { return response.ok ? response.json() : null; })
+                .then(function (body) {
+                    if (!body) return;
+                    noteHandling(body.handling);
+                    (Array.isArray(body.messages) ? body.messages : []).forEach(function (item) {
+                        if (item && typeof item.text === 'string') add('agent', item.text);
+                    });
+                })
+                .catch(function () { /* the next poll tries again */ });
+        }
+
+        function startPolling() {
+            if (preview || pollTimer || !session) return;
+            poll();
+            pollTimer = window.setInterval(function () {
+                if (open && document.visibilityState === 'visible') poll();
+            }, POLL_MS);
+        }
+
         function setOpen(next) {
             open = next;
             if (!panel) return;
             panel.classList.toggle('open', open);
             fab.setAttribute('aria-expanded', String(open));
+            if (open && log) startPolling();
         }
 
         function whatsapp(l) {
@@ -300,7 +346,9 @@
                 }).then(function (response) {
                     return response.json().catch(function () { return {}; }).then(function (body) {
                         typing.remove();
+                        if (response.ok) noteHandling(body.handling);
                         if (response.ok && typeof body.reply === 'string') add('bot', body.reply);
+                        else if (response.ok) { /* a person is answering: their reply arrives through the poll */ }
                         else add('err', typeof body.message === 'string' ? body.message : 'No se pudo enviar el mensaje. Inténtalo de nuevo.');
                     });
                 }).catch(function () {
@@ -346,6 +394,7 @@
             setOpen: setOpen,
             destroy: function () {
                 if (autoTimer) window.clearTimeout(autoTimer);
+                if (pollTimer) window.clearInterval(pollTimer);
                 host.remove();
             }
         };

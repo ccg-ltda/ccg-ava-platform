@@ -12,9 +12,10 @@ use Throwable;
 /**
  * The WhatsApp Business (Cloud API) number of ONE Workspace: its phone number ID (`config`, not secret) and an access
  * token (`secrets`, encrypted, write-only). Ava uses them to VERIFY the number against Meta (a read-only request); the
- * conversation itself runs in n8n with its own WhatsApp credentials, and Ava never hands this token to anyone.
+ * conversation itself runs in n8n with its own WhatsApp credentials, and Ava never hands this token to anyone. The same
+ * credentials let Ava deliver the replies of a human agent (`send`), the only message Ava itself puts on this channel.
  */
-class WhatsAppType implements ChannelIntegrationType
+class WhatsAppType implements ChannelIntegrationType, SendsMessages
 {
     public function key(): string
     {
@@ -123,6 +124,41 @@ class WhatsAppType implements ChannelIntegrationType
             $status === 401 || $code === 190 => TestResult::failure('Meta rechazó el token: es inválido o expiró.', $status, $ms),
             in_array($status, [400, 403, 404], true) => TestResult::failure('Meta no encontró ese ID de número o el token no tiene permiso sobre él.', $status, $ms),
             default => TestResult::failure("Meta respondió HTTP {$status}.", $status, $ms),
+        };
+    }
+
+    /**
+     * Sends a text message through the Cloud API. Success means Meta ACCEPTED it (it returns the message id); delivery
+     * and reading arrive later as statuses through n8n. Only fixed reasons are returned: neither the token nor Meta's
+     * error text is echoed.
+     */
+    public function send(Integration $integration, string $to, string $text): SendResult
+    {
+        $id = $integration->config['phone_number_id'];
+        $url = rtrim(config('integrations.whatsapp.graph_url'), '/').'/'.config('integrations.whatsapp.graph_version')."/{$id}/messages";
+        $timeout = (int) config('integrations.whatsapp.timeout');
+
+        try {
+            $response = Http::withToken((string) ($integration->secrets['access_token'] ?? ''))
+                ->acceptJson()->asJson()->timeout($timeout)->connectTimeout(min($timeout, 10))->withoutRedirecting()
+                ->post($url, ['messaging_product' => 'whatsapp', 'recipient_type' => 'individual', 'to' => $to, 'type' => 'text', 'text' => ['body' => $text, 'preview_url' => false]]);
+        } catch (ConnectionException) {
+            return SendResult::failed('No se pudo conectar con Meta.');
+        } catch (Throwable) {
+            return SendResult::failed('No se pudo completar la solicitud a Meta.');
+        }
+
+        $status = $response->status();
+        $code = (int) $response->json('error.code');
+        $messageId = $response->json('messages.0.id');
+
+        return match (true) {
+            $status === 200 && is_string($messageId) && $messageId !== '' => SendResult::accepted($messageId),
+            $status === 401 || $code === 190 => SendResult::failed('Meta rechazó el token de WhatsApp: es inválido o expiró.'),
+            $code === 131047 => SendResult::failed('Pasaron más de 24 horas desde el último mensaje del contacto: WhatsApp solo permite enviarle una plantilla aprobada.'),
+            $code === 131030 => SendResult::failed('El número del contacto no está autorizado en esta cuenta de WhatsApp.'),
+            $status === 200 => SendResult::failed('Meta respondió sin confirmar el mensaje.'),
+            default => SendResult::failed("Meta no aceptó el mensaje (HTTP {$status})."),
         };
     }
 

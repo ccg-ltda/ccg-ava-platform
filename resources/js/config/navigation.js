@@ -1,4 +1,4 @@
-import { BarChart3, Bot, History, Plug, Settings, Users } from 'lucide-react';
+import { BarChart3, Bot, History, MessagesSquare, Plug, Settings, Users } from 'lucide-react';
 
 /**
  * Single definition of the sidebar menu. A section without `label` is shown without a heading. Every `route` is a real Laravel route name;
@@ -9,7 +9,10 @@ export const navigation = [
     {
         // The first entry is the assistants themselves, so it carries no heading of its own (it would repeat its name).
         label: null,
-        items: [{ label: 'Asistentes', route: 'chatbots.index', icon: Bot, permission: 'view-chatbots' }],
+        items: [
+            { label: 'Asistentes', route: 'chatbots.index', icon: Bot, permission: 'view-chatbots' },
+            { label: 'Conversaciones', route: 'conversations.index', icon: MessagesSquare, permission: 'view-conversations' },
+        ],
     },
     {
         label: 'Analytics',

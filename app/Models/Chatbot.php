@@ -20,7 +20,7 @@ class Chatbot extends Model
 
     protected function casts(): array
     {
-        return ['is_active' => 'boolean', 'agent_token_created_at' => 'datetime', 'profile_saved_at' => 'datetime', 'agent_last_seen_at' => 'datetime'];
+        return ['is_active' => 'boolean', 'is_demo' => 'boolean', 'agent_token_created_at' => 'datetime', 'profile_saved_at' => 'datetime', 'agent_last_seen_at' => 'datetime'];
     }
 
     public function auditResource(): string

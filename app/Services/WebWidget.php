@@ -5,8 +5,12 @@ namespace App\Services;
 use App\Integrations\SafeHttpTarget;
 use App\Integrations\UnsafeTarget;
 use App\Integrations\WebType;
+use App\Models\Chatbot;
 use App\Models\ChatbotChannel;
+use App\Models\Conversation;
+use App\Models\Message;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /**
@@ -20,6 +24,8 @@ class WebWidget
     public function __construct(
         private readonly SafeHttpTarget $target,
         private readonly ChannelAppearanceService $look,
+        private readonly ConversationService $conversations,
+        private readonly ConversationControl $control,
     ) {}
 
     public function resolve(string $publicKey): ?ChatbotChannel
@@ -70,11 +76,72 @@ class WebWidget
     }
 
     /**
-     * Sends the visitor's message to the n8n webhook of the Workspace and returns the reply it gives back.
+     * Records the visitor's message and, while the AI has the conversation, sends it to the n8n webhook of the Workspace
+     * and returns the reply it gives back. While a person has the conversation (or asked for one) n8n is not called and
+     * there is no reply: the agent answers through `collect`. A reply prepared before control changed is dropped.
      *
-     * @return array{status: int, reply?: string, message?: string}
+     * @return array{status: int, reply?: ?string, handling?: string, message?: string}
      */
     public function relay(ChatbotChannel $channel, string $sessionId, string $message): array
+    {
+        $chatbot = $channel->chatbot;
+        $conversation = $this->conversations->record($chatbot, 'web', [
+            'contact_id' => $sessionId, 'direction' => 'in', 'type' => 'text', 'body' => $message, 'sent_at' => now(),
+        ])['conversation'];
+
+        if (! $conversation->aiMayReply()) {
+            return ['status' => 200, 'reply' => null, 'handling' => $conversation->handling];
+        }
+
+        $answer = $this->askAutomation($channel, $sessionId, $message);
+
+        if (isset($answer['status'])) {
+            return $answer;
+        }
+
+        $reply = mb_substr($answer['reply'], 0, (int) config('chatbots.widget.max_reply'));
+        $stored = $this->storeReply($chatbot, $conversation, $reply);
+
+        if ($stored && $answer['handoff']) {
+            $this->control->requestHuman($conversation, 'Solicitado por el asistente.');
+        }
+
+        return ['status' => 200, 'reply' => $stored ? $reply : null, 'handling' => $conversation->fresh()->handling];
+    }
+
+    /**
+     * What the visitor has not received yet: the messages a human agent wrote (each is marked delivered once handed over)
+     * and who is answering now. The session id is the visitor's only key, so only that conversation is read.
+     *
+     * @return array{messages: list<array{id: int, text: string}>, handling: string}
+     */
+    public function collect(ChatbotChannel $channel, string $sessionId): array
+    {
+        $conversation = $channel->chatbot->conversations()->where('channel', 'web')->where('contact_id', $sessionId)->first();
+
+        if (! $conversation) {
+            return ['messages' => [], 'handling' => Conversation::AI];
+        }
+
+        $messages = DB::transaction(function () use ($conversation) {
+            $waiting = $conversation->messages()->where('direction', 'out')->where('sender', 'agent')->where('status', 'sent')->orderBy('id')->get();
+            $conversation->messages()->whereIn('id', $waiting->pluck('id'))->update(['status' => 'delivered']);
+
+            return $waiting;
+        });
+
+        return [
+            'messages' => $messages->map(fn (Message $message) => ['id' => $message->id, 'text' => (string) $message->body])->all(),
+            'handling' => $conversation->handling,
+        ];
+    }
+
+    /**
+     * Calls the n8n webhook. Returns `['reply' => string, 'handoff' => bool]`, or the failure to give the visitor.
+     *
+     * @return array{reply: string, handoff: bool}|array{status: int, message: string}
+     */
+    private function askAutomation(ChatbotChannel $channel, string $sessionId, string $message): array
     {
         $integration = $channel->integration;
         $url = $integration->config['webhook_url'];
@@ -105,6 +172,24 @@ class WebWidget
             return ['status' => 502, 'message' => 'El asistente no pudo responder.'];
         }
 
-        return ['status' => 200, 'reply' => mb_substr($reply, 0, (int) config('chatbots.widget.max_reply'))];
+        return ['reply' => $reply, 'handoff' => $response->json('handoff') === true];
+    }
+
+    /** Stores the AI's reply unless control changed since the message was received; false when it was dropped. */
+    private function storeReply(Chatbot $chatbot, Conversation $seen, string $reply): bool
+    {
+        return DB::transaction(function () use ($chatbot, $seen, $reply) {
+            $current = Conversation::whereKey($seen->id)->lockForUpdate()->first();
+
+            if (! $current->aiMayReply() || $current->handling_version !== $seen->handling_version) {
+                return false;
+            }
+
+            $this->conversations->record($chatbot, 'web', [
+                'contact_id' => $current->contact_id, 'direction' => 'out', 'type' => 'text', 'body' => $reply, 'status' => 'sent', 'sent_at' => now(),
+            ]);
+
+            return true;
+        });
     }
 }

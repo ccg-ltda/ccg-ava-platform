@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Message;
 use App\Services\ChannelCatalog;
+use App\Services\ConversationControl;
 use App\Services\ConversationService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -14,7 +15,7 @@ use Throwable;
 
 /**
  * Where the automation (n8n) tells Ava what happened on a channel: each message (`store`) and each delivery state
- * (`status`). The chatbot, and through it the Workspace, comes from the token (see AuthenticateAgent); the caller only
+ * (`status`), and where it asks who answers a contact (`authorizeReply`) or asks for a person (`handoff`). The chatbot, and through it the Workspace, comes from the token (see AuthenticateAgent); the caller only
  * names the channel and the contact. A message is accepted only for a channel the chatbot currently has switched on.
  */
 class AgentMessageController extends Controller
@@ -22,6 +23,7 @@ class AgentMessageController extends Controller
     public function __construct(
         private readonly ConversationService $conversations,
         private readonly ChannelCatalog $channels,
+        private readonly ConversationControl $control,
     ) {}
 
     public function store(Request $request): JsonResponse
@@ -54,7 +56,51 @@ class AgentMessageController extends Controller
             'sent_at' => $this->moment($data['timestamp'] ?? null),
         ]);
 
-        return response()->json(['id' => $result['message']->id, 'created' => $result['created']], $result['created'] ? 201 : 200)->header('Cache-Control', 'no-store');
+        // A message the automation already reported (a retry) must not make it answer a second time.
+        $control = $this->conversations->control($result['conversation']);
+        $control['ai_allowed'] = $control['ai_allowed'] && $result['created'] && $data['direction'] === 'in';
+
+        return response()->json(['id' => $result['message']->id, 'created' => $result['created'], 'control' => $control], $result['created'] ? 201 : 200)->header('Cache-Control', 'no-store');
+    }
+
+    /**
+     * "May I answer this contact?" The automation asks right before it sends an automatic reply. `version` is the one
+     * it received when it reported the message it is answering: if control changed meanwhile, the reply is stale.
+     */
+    public function authorizeReply(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'channel' => ['required', 'string', Rule::in($this->conversationChannels())],
+            'contact_id' => ['required', 'string', 'regex:/^[A-Za-z0-9._-]{3,64}$/'],
+            'version' => ['nullable', 'integer', 'min:0'],
+        ]);
+
+        $this->assertChannelActive($request, $data['channel']);
+
+        return response()->json(['control' => $this->conversations->currentControl($request->attributes->get('chatbot'), $data['channel'], $data['contact_id'], isset($data['version']) ? (int) $data['version'] : null)])
+            ->header('Cache-Control', 'no-store');
+    }
+
+    /** The automation asks for a person: the conversation waits for an agent and the AI stops answering it. */
+    public function handoff(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'channel' => ['required', 'string', Rule::in($this->conversationChannels())],
+            'contact_id' => ['required', 'string', 'regex:/^[A-Za-z0-9._-]{3,64}$/'],
+            'contact_name' => ['nullable', 'string', 'max:100'],
+            'reason' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $chatbot = $request->attributes->get('chatbot');
+        $this->assertChannelActive($request, $data['channel']);
+
+        $conversation = $chatbot->conversations()->firstOrCreate(
+            ['channel' => $data['channel'], 'contact_id' => $data['contact_id']],
+            ['workspace_id' => $chatbot->workspace_id, 'contact_name' => $data['contact_name'] ?? null],
+        );
+
+        return response()->json(['control' => $this->conversations->control($this->control->requestHuman($conversation, $data['reason'] ?? null))])
+            ->header('Cache-Control', 'no-store');
     }
 
     public function status(Request $request): JsonResponse

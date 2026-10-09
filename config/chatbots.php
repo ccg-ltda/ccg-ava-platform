@@ -7,7 +7,11 @@
  *
  *  - `integration`: key of the integration type (config/integrations.php) that holds the Workspace's credentials
  *    for the channel, or null when the channel needs none.
- *  - `conversations`: the automation reports this channel's messages to Ava, which shows them as conversations.
+ *  - `conversations`: Ava keeps this channel's messages as conversations (the automation reports them, or Ava records
+ *    them itself, like the web widget) and a human agent may take them over.
+ *  - `delivery`: how a message written by a human agent reaches the contact: `integration` (Ava sends it through the
+ *    Workspace's integration for the channel, which must implement SendsMessages) or `pull` (the contact's widget
+ *    fetches it). A channel without it cannot carry agent replies, and Ava says so instead of pretending.
  *  - `embeddable`: the channel is a script on the customer's site (it gets a public key in its install code).
  *  - `appearance`: how its button looks on the customer's site is configured by the client: `widget` (button + chat
  *    panel) or `button` (a link button). Channels without it have no visual configuration.
@@ -22,6 +26,8 @@ return [
             'label' => 'Web',
             'description' => 'Widget de chat para insertar en el sitio web del cliente.',
             'integration' => 'web',
+            'conversations' => true,
+            'delivery' => 'pull',
             'embeddable' => true,
             'appearance' => 'widget',
             'available' => true,
@@ -32,6 +38,7 @@ return [
             'description' => 'Conversaciones con el número de WhatsApp Business del Workspace.',
             'integration' => 'whatsapp',
             'conversations' => true,
+            'delivery' => 'integration',
             'embeddable' => true,
             'appearance' => 'button',
             'available' => true,
@@ -59,6 +66,7 @@ return [
         'timeout' => 30,
         'max_reply' => 4000,
         'messages_per_minute' => 20,
+        'poll_per_minute' => 30,
         'config_per_minute' => 60,
     ],
 
@@ -81,6 +89,9 @@ return [
         /* Button color of a channel whose client has not chosen one (Web uses the Workspace's main color). */
         'default_colors' => ['whatsapp' => '#128C7E'],
     ],
+
+    /* Human attention: longest message an agent can send. */
+    'agent_message_max' => 4096,
 
     /* Requests per minute an automation may make with one chatbot token (every message it reports is one). */
     'agent_per_minute' => 600,

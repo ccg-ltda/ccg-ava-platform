@@ -98,6 +98,13 @@ export default function ConnectionPanel({ channel, chatbot, reportEndpoint, canC
                     </p>
                 </div>
 
+                <div className="space-y-2">
+                    <p className="text-sm font-semibold text-ink">Atención humana: respetar el control de Ava</p>
+                    <p className="text-xs text-ink-muted">
+                        Al reportar un mensaje entrante, Ava responde <code className="font-mono">control.ai_allowed</code>: solo si es <code className="font-mono">true</code> la IA puede contestar. Justo antes de enviar su respuesta, el workflow debe preguntar de nuevo con <code className="font-mono">POST /api/agent/conversations/authorize</code> (<code className="font-mono">channel</code>, <code className="font-mono">contact_id</code> y el <code className="font-mono">control.version</code> recibido) y no enviar si <code className="font-mono">ai_allowed</code> es <code className="font-mono">false</code>: un agente pudo tomar la conversación mientras la IA pensaba. Para pedir una persona, <code className="font-mono">POST /api/agent/conversations/handoff</code> (<code className="font-mono">reason</code> opcional).
+                    </p>
+                </div>
+
                 <Alert tone="info">Ava guarda el texto, el tipo y la hora; no descarga audio, imágenes ni archivos.</Alert>
                 <Alert tone="warning">
                     Tener la cuenta de {channel.label} configurada no conecta n8n, y conectar n8n no conecta {channel.label}. Ambas piezas deben estar listas: la conexión de n8n se hace en Integraciones → n8n.

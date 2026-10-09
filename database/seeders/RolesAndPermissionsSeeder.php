@@ -30,16 +30,21 @@ class RolesAndPermissionsSeeder extends Seeder
         Permission::firstOrCreate(['name' => 'view-chatbots']);
         Permission::firstOrCreate(['name' => 'manage-chatbots']);
         Permission::firstOrCreate(['name' => 'view-conversations']);
+        Permission::firstOrCreate(['name' => 'reply-conversations']);
+        Permission::firstOrCreate(['name' => 'manage-conversations']);
 
         // Create Roles
         $adminRole = Role::firstOrCreate(['name' => 'admin']);
         $supervisorRole = Role::firstOrCreate(['name' => 'supervisor']);
         $clienteRole = Role::firstOrCreate(['name' => 'cliente']);
+        $agentRole = Role::firstOrCreate(['name' => 'agente']);
 
         // Assign Permissions to Roles
         $adminRole->syncPermissions(Permission::all());
         $supervisorRole->syncPermissions(['view-dashboard', 'view-users', 'view-chatbots']);
         $clienteRole->syncPermissions(['view-dashboard']);
+        // Attends conversations (read, take, write, give back to the AI, resolve) but cannot assign them to others.
+        $agentRole->syncPermissions(['view-dashboard', 'view-conversations', 'reply-conversations']);
 
         // Sample accounts have well-known passwords: they exist only in local/testing, never elsewhere.
         // (The real administrator comes from AdminUserSeeder and its environment variables.)

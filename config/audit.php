@@ -17,12 +17,17 @@ return [
         'chatbot' => ['label' => 'Chatbots', 'noun' => 'el chatbot'],
         'chatbot_channel' => ['label' => 'Canales de chatbots', 'noun' => 'el canal'],
         'chatbot_channel_appearance' => ['label' => 'Apariencia de canales', 'noun' => 'la apariencia del canal'],
+        'conversation' => ['label' => 'Conversaciones', 'noun' => 'la conversación'],
     ],
 
     'actions' => [
         'created' => ['label' => 'Creado', 'verb' => 'Creó'],
         'updated' => ['label' => 'Modificado', 'verb' => 'Modificó'],
         'deleted' => ['label' => 'Eliminado', 'verb' => 'Eliminó'],
+        'taken' => ['label' => 'Tomado', 'verb' => 'Tomó'],
+        'assigned' => ['label' => 'Asignado', 'verb' => 'Asignó'],
+        'returned' => ['label' => 'Devuelto a la IA', 'verb' => 'Devolvió a la IA'],
+        'resolved' => ['label' => 'Resuelto', 'verb' => 'Resolvió'],
     ],
 
     'pdf_max_events' => 1000,

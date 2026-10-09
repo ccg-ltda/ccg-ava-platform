@@ -399,7 +399,6 @@ class ConversationsTest extends TestCase
         [$bot] = $this->liveBot($workspace);
         $this->actAs(in: $workspace);
 
-        $this->get($this->url($bot, 'web'))->assertNotFound();
         $this->get($this->url($bot, 'instagram'))->assertNotFound();
         $this->get($this->url($bot, 'nope'))->assertNotFound();
     }
@@ -464,7 +463,7 @@ class ConversationsTest extends TestCase
         $channels = collect($this->get("/chatbots/{$bot->id}")->viewData('page')['props']['channels'])->keyBy('key');
 
         $this->assertTrue($channels['whatsapp']['conversations']);
-        $this->assertFalse($channels['web']['conversations']);
+        $this->assertTrue($channels['web']['conversations']);
         $this->assertFalse($channels['instagram']['conversations']);
     }
 }

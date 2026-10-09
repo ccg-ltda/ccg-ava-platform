@@ -57,7 +57,7 @@ class ListPaginationTest extends TestCase
         }
 
         $this->get('/users?roles_per_page=100')->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('roles.data', 100)->where('roles.meta.total', 113)
+            ->has('roles.data', 100)->where('roles.meta.total', 114)
             // Other lists keep their own size: it is not shared.
             ->where('users.meta.per_page', 10)->where('permissions.meta.per_page', 10));
     }
@@ -68,7 +68,7 @@ class ListPaginationTest extends TestCase
 
         $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page
             ->where('permissions.data', fn ($rows) => collect($rows)->firstWhere('name', 'manage-users')['roles'] === ['admin'])
-            ->has('permissionRoles', 3)->has('permissionNames', 7));
+            ->has('permissionRoles', 4)->has('permissionNames', 9));
     }
 
     public function test_partial_reloads_only_resolve_the_requested_list(): void

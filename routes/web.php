@@ -3,8 +3,10 @@
 use App\Http\Controllers\AuditController;
 use App\Http\Controllers\ChannelAppearanceController;
 use App\Http\Controllers\ChatbotController;
+use App\Http\Controllers\ConversationActionController;
 use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DemoConversationController;
 use App\Http\Controllers\IntegrationController;
 use App\Http\Controllers\OrganizationController;
 use App\Http\Controllers\ProfileController;
@@ -48,6 +50,27 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         Route::post('/{integration}/deactivate', [IntegrationController::class, 'deactivate'])->whereNumber('integration')->name('deactivate');
         // Each test is a real outbound request: keep it from being used to hammer a third party.
         Route::post('/{integration}/test', [IntegrationController::class, 'test'])->whereNumber('integration')->middleware('throttle:20,1')->name('test');
+    });
+
+    // Conversations hold what the contacts wrote: reading them is `view-conversations`; attending them (take, write, give
+    // back to the AI, resolve) is `reply-conversations`; assigning them to another agent is `manage-conversations`.
+    Route::middleware('workspace.permission:view-conversations')->prefix('conversations')->name('conversations.')->group(function () {
+        Route::get('/', [ConversationController::class, 'index'])->name('index');
+        Route::middleware('workspace.permission:reply-conversations')->group(function () {
+            Route::post('/{conversation}/take', [ConversationActionController::class, 'take'])->whereNumber('conversation')->name('take');
+            Route::post('/{conversation}/release', [ConversationActionController::class, 'release'])->whereNumber('conversation')->name('release');
+            Route::post('/{conversation}/resolve', [ConversationActionController::class, 'resolve'])->whereNumber('conversation')->name('resolve');
+            Route::post('/{conversation}/messages', [ConversationActionController::class, 'message'])->whereNumber('conversation')->middleware('throttle:60,1')->name('messages.store');
+        });
+        // Demo bench (404 outside demo environments): generate / reset / clean scenarios and simulate traffic on DEMO conversations.
+        Route::middleware('workspace.permission:manage-conversations')->group(function () {
+            Route::post('/demo/{action}', [DemoConversationController::class, 'manage'])->where('action', 'generate|reset|clean')->name('demo');
+            Route::post('/{conversation}/simulate/incoming', [DemoConversationController::class, 'incoming'])->whereNumber('conversation')->name('simulate.incoming');
+            Route::post('/{conversation}/simulate/ai-reply', [DemoConversationController::class, 'aiReply'])->whereNumber('conversation')->name('simulate.ai-reply');
+            Route::post('/{conversation}/simulate/handoff', [DemoConversationController::class, 'handoff'])->whereNumber('conversation')->name('simulate.handoff');
+            Route::post('/{conversation}/messages/{message}/simulate-status', [DemoConversationController::class, 'status'])->whereNumber(['conversation', 'message'])->name('simulate.status');
+        });
+        Route::post('/{conversation}/assign', [ConversationActionController::class, 'assign'])->whereNumber('conversation')->middleware('workspace.permission:manage-conversations')->name('assign');
     });
 
     // Chatbots belong to the active Workspace. Reading needs `view-chatbots`; changing anything needs `manage-chatbots`.

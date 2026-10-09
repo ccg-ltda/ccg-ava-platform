@@ -45,9 +45,25 @@ class WidgetController extends Controller
         $result = $this->widget->relay($channel, $data['session_id'], trim($data['message']));
 
         return response()->json(
-            $result['status'] === 200 ? ['reply' => $result['reply']] : ['message' => $result['message']],
+            $result['status'] === 200 ? $this->answer($result) : ['message' => $result['message']],
             $result['status'],
         )->header('Cache-Control', 'no-store');
+    }
+
+    /** The visitor's answer: just `reply` while the AI is the one answering (the original contract), plus `handling` when a person is. */
+    private function answer(array $result): array
+    {
+        return ['reply' => $result['reply']] + ($result['handling'] === 'ai' ? [] : ['handling' => $result['handling']]);
+    }
+
+    /** What a human agent wrote to this visitor since the last time it asked, and who is answering now. */
+    public function poll(Request $request, string $key): JsonResponse
+    {
+        $channel = $this->channel($request, $key);
+        abort_unless($channel->channel === 'web', 404);
+        $data = $request->validate(['session_id' => ['required', 'string', 'regex:/^[A-Za-z0-9_-]{8,64}$/']]);
+
+        return response()->json($this->widget->collect($channel, $data['session_id']))->header('Cache-Control', 'no-store');
     }
 
     /** The live channel behind the key, or a 404 that does not say why; 403 when the site may not embed the widget. */
