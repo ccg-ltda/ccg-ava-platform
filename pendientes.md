@@ -18,7 +18,6 @@ Todos los que quedan esperan una decisión o una autorización; ninguno es un de
 - [ ] **Scheduler:** hoy no hay tareas programadas. Al añadir la primera, usar `->onOneServer()` si el scheduler llegara a tener más de una réplica.
 - [ ] **Vite del contenedor `node` no ve cambios de archivos en Windows:** tras editar `.jsx` hay que ejecutar `docker compose restart node` (o activar polling, que es configuración de infraestructura que no se tocó).
 - [ ] **Versión de PHP:** `composer.json` dice `^8.3` pero el lock exige 8.4.1+. Corregirlo exige tocar dependencias (`composer update --lock`), que no se autorizó.
-- [ ] **Pint:** `vendor/bin/pint --test` falla en archivos antiguos (finales de línea CRLF, orden de imports...). Decidir si se aplica `pint` a todo el proyecto; los archivos nuevos pasan.
 
 ### Producto (definición pendiente)
 
@@ -48,7 +47,7 @@ Todos los que quedan esperan una decisión o una autorización; ninguno es un de
 
 ### Autorización de limpieza (necesito tu visto bueno; no se tocó el Login)
 
-- [ ] **Login y archivos heredados:** el enlace "Regístrese aquí" del login y el de "¿Olvidó su contraseña?" son inertes; `Pages/Welcome.jsx`, `views/login.blade.php`, `views/welcome.blade.php`, `views/layouts/app.blade.php`, `auth/login.blade.php` y dos copias del HTML de referencia no tienen ruta; `app.blade.php` aún carga las fuentes Orbitron/Rajdhani y estilos `circuit-bg` / `glass-panel` que solo usan esas vistas y el acceso. Quitarlos exige tocar el Login, que se pidió no modificar.
+- [ ] **Login — enlaces inertes y `tailwind.config.js`:** en `Pages/Auth/Login.jsx` los enlaces «¿Olvidó su contraseña?» y «Regístrese aquí» siguen apuntando a `#` (el registro está cerrado; la recuperación espera decidir el canal de correo). `tailwind.config.js` está huérfano (Tailwind 4 se configura en `app.css`) pero el `Dockerfile` lo copia (`COPY ... tailwind.config.js ...`): quitarlo exige tocar el Dockerfile, que no se tocó.
 
 ### Calidad y datos
 
@@ -58,7 +57,7 @@ Todos los que quedan esperan una decisión o una autorización; ninguno es un de
 
 - [ ] **Canales y apariencia — pendientes menores:** el icono del botón solo admite el avatar del chatbot o el icono del canal (no una imagen propia); el botón de WhatsApp es flotante (no hay variante en línea); las apariencias de Instagram y Messenger no existen porque los canales no están disponibles; los tests de navegador siguen siendo manuales (Playwright MCP), no automatizados; el número del botón de WhatsApp sale de la última "Probar conexión" correcta (cuentas verificadas antes de este cambio deben volver a probarse).
 
-- [ ] **Atención humana — prueba real y alcance:** probado con tests automáticos (Meta y n8n simulados) y en navegador con el canal web (agente, widget, asignación, 1280/820/390 px). NO probado: envío real a WhatsApp con credenciales de Meta (ventana de 24 h: fuera de ella solo se permiten plantillas aprobadas, que Ava no envía), ni un workflow de n8n real llamando a `authorize`/`handoff` (hay que añadir esos nodos al workflow del usuario). Pendiente decidir: reintentar un mensaje `failed`, imágenes/archivos del agente, notas internas, asignación automática/round-robin, límite de agentes por plan (`ConversationAgents`), tiempo real con Reverb en vez del refresco cada 5 s, y qué hace la IA con una conversación `pending` que nadie toma (hoy espera hasta que alguien la tome o la devuelva a la IA).
+- [ ] **Atención humana — prueba real y alcance:** probado con tests automáticos (Meta y n8n simulados) y en navegador con el canal web y el entorno DEMO. NO probado: envío real a WhatsApp con credenciales de Meta (ventana de 24 h: fuera de ella solo se permiten plantillas aprobadas, que Ava no envía), ni un workflow de n8n real llamando a `authorize`/`handoff` (hay que añadir esos nodos al workflow del usuario). Sin decidir: reintentar un mensaje `failed`, imágenes/archivos del agente, notas internas, asignación automática, límite de agentes por plan (`ConversationAgents`), tiempo real con Reverb en vez del refresco cada 5 s, y qué hace la IA con una conversación `pending` que nadie toma (hoy espera hasta que alguien la tome o la devuelva a la IA).
 - [ ] **Widget web — historial:** las conversaciones web ya se guardan en Ava, pero el widget sigue sin mostrar mensajes anteriores al recargar la página (solo recibe los del agente que no había recibido).
 
 - [ ] **Entorno DEMO — límites:** Messenger e Instagram no tienen escenarios (no son canales con conversaciones); Reportes no tiene métricas de conversaciones, así que los datos demo no aparecen ahí; la «IA» simulada es un texto fijo; los escenarios en atención se asignan al primer agente del Workspace (en `Desarrollo_DEV` hoy solo el administrador).
@@ -68,6 +67,8 @@ Todos los que quedan esperan una decisión o una autorización; ninguno es un de
 - [ ] TODO: nada en curso.
 
 ## Hecho
+
+- [x] **Cierre técnico (reproducibilidad y limpieza):** `jsconfig.json` sin `baseUrl` (los alias `@/*` y `ziggy-js` se resuelven relativos al propio archivo); `RolesAndPermissionsSeeder` re-ejecutable sobre una base existente (`admin` recibe siempre todos los permisos y el resto de roles solo sus valores por defecto al crearse; `RolesSeederTest`); `migrate:fresh --seed` verificado en una base aislada; eliminados los archivos sin uso demostrado (vistas Blade de acceso antiguas, `Pages/Welcome.jsx`, las dos copias del HTML de referencia) y los estilos y fuentes Orbitron/Rajdhani de `app.blade.php`; Pint limpio en todo el proyecto; README reescrito.
 
 - [x] **Entorno DEMO de Conversaciones:** `demo:conversations generate|reset|clean`, panel DEMO en la bandeja y simulador (entrante, respuesta de IA fija, pedido de agente, estados de entrega) sobre 11 escenarios marcados (`demo_key`, `is_demo`, `simulated`) en `Desarrollo_DEV`; protegido contra producción y contra otros Workspaces. Tests: `DemoConversationsTest`.
 

@@ -70,6 +70,7 @@ Toda lógica se escribe una sola vez, en un lugar central, y se importa donde se
   5. Funcionalidades posteriores llevan su propia migración `create_*` con fecha de su día (`2026_10_05_..._create_workspace_settings_table`: `workspace_settings`, 1:1 con `workspaces`; `2026_10_07_100000_create_chatbots_tables`: `chatbots` con su token de acceso y `chatbot_channels` con su clave pública; `2026_10_07_200000_create_conversations_tables`: `conversations` y `messages`; `2026_10_09_100000_add_human_handling_to_conversations` añade modo de atención, asignación y remitente, y `2026_10_09_110000_add_demo_markers` las marcas demo: son `add_*` porque la base de desarrollo ya tiene datos de conversaciones).
 - Auditoría de tablas (según el código y la configuración reales): `users` (identidad global), `password_reset_tokens` (broker de contraseñas de Laravel, `config/auth.php`), `failed_jobs` (`queue.failed.driver=database-uuids` en todos los entornos, también con Redis/Horizon) y las de Ava/Spatie se usan siempre. `sessions`, `cache`, `cache_locks` y `jobs` solo se usan cuando el driver es `database`: es el valor por defecto del framework y el que usa el `.env` de desarrollo en el host (`composer run dev`); Docker y `.env.example` usan Redis y no las tocan. Se conservan porque la configuración actual las necesita y porque cambiar los drivers para quitarlas no estaba autorizado; `cache_locks` es la tabla de bloqueos de ese mismo store. Spatie: se conservan las cinco (`model_has_roles` y `model_has_permissions` no guardan datos nuevos porque los roles se asignan por Workspace, pero `HasRoles` y los modelos de Spatie las consultan, por ejemplo al borrar un usuario o un rol).
 - Mientras Ava no esté desplegada (etapa actual), un cambio estructural de una tabla que aún forma parte del esquema inicial se integra en su migración `create_*` y no se acumulan migraciones `add_*` (así se hizo con el token de acceso, la clave pública y la marca de última lectura de n8n, y con el índice único compuesto de `integrations`). Tras consolidar se comprueba el esquema desde cero en una base aislada y se alinea la tabla `migrations` de la base de desarrollo (renombrar o borrar las filas de los archivos absorbidos) sin reconstruirla ni perder datos.
+- Los permisos y roles no se crean en migraciones sino en `RolesAndPermissionsSeeder`, que es re-ejecutable: sobre una base existente da a `admin` todos los permisos y a los demás roles sus valores por defecto solo si el rol no existía (nunca pisa cambios de un superusuario). Tras añadir un permiso hay que ejecutar `php artisan db:seed` (o `--class=RolesAndPermissionsSeeder`).
 - Desde el primer despliegue, todo cambio de esquema va en una migración nueva (`add_*`); no se editan las ya desplegadas.
 - Para comprobar el esquema limpio sin tocar la base de desarrollo: crear una base vacía (`CREATE DATABASE ccg_ava_migrate_check`) y ejecutar `migrate:fresh --seed` con `DB_DATABASE` apuntando a ella.
 
@@ -109,7 +110,7 @@ Ejecuta las que correspondan al cambio y repórtalas:
 - `php artisan test` (en host o con `make test`, que fuerza SQLite en memoria; nunca lo ejecutes contra la base de desarrollo: `tests/TestCase.php` lo bloquea si la base no es de pruebas).
 - Validaciones en navegador: usa `make e2e-setup` y `make e2e-cleanup` (datos etiquetados `*@e2e.ccg.test`, `E2E_*`, `e2e_*`); nunca modifiques usuarios, membresías ni roles reales para probar, y ejecuta siempre la limpieza al terminar, aunque falle.
 - `npm run build`.
-- `make pint` (Pint). Hoy falla en 8 archivos antiguos: tu cambio no debe empeorar ese número, y los archivos que toques deben quedar limpios.
+- `make pint` (Pint). Debe pasar en todo el proyecto.
 - No hay ESLint, Prettier ni tests de frontend todavía. Si la tarea los necesita, regístralo en `pendientes.md`.
 - No desactives ni saltes tests para que pasen.
 
@@ -182,9 +183,9 @@ La tarea está terminada solo si: el requerimiento está completo, no hay duplic
 
 ## 17. Deuda técnica conocida (para no agravarla)
 
-- Hay tres sistemas de estilos (Tailwind compilado, Tailwind por CDN y CSS propio en Blade) y dos claves distintas de tema en `localStorage`. Todo estilo nuevo va al sistema de tokens de Tailwind 4.
-- Hay vistas y páginas sin ruta: `login.blade.php`, `welcome.blade.php`, `layouts/app.blade.php`, `Pages/Welcome.jsx`, `Auth/Login.jsx`, `Auth/Register.jsx`, y dos copias del HTML de referencia. No las uses como base.
-- `AppLayout.jsx` y `AuthenticatedLayout.jsx` conviven; `Hooks/` y `Services/` están vacíos; `tailwind.config.js` está huérfano.
+- Conviven Tailwind 4 compilado (`app.css`, el sistema de tokens) y el CSS propio del acceso (`ava.css`, que deriva sus tokens de los de la app). Todo estilo nuevo va al sistema de tokens de Tailwind 4.
+- Quedan sin uso el enlace «Regístrese aquí» y el de «¿Olvidó su contraseña?» del login (apuntan a `#`).
+- `Hooks/` y `Services/` casi no tienen contenido; `tailwind.config.js` está huérfano pero el `Dockerfile` lo copia, así que no se borra sin tocar el Dockerfile.
 - Sin capa de servicios ni acciones: la lógica nueva no debe crecer dentro de los controladores.
 - `composer.json` pide PHP ^8.3 pero el lock exige 8.4.1 o más.
 - La imagen de MinIO es solo para desarrollo.
