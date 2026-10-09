@@ -39,12 +39,21 @@ class RolesAndPermissionsSeeder extends Seeder
         $clienteRole = Role::firstOrCreate(['name' => 'cliente']);
         $agentRole = Role::firstOrCreate(['name' => 'agente']);
 
-        // Assign Permissions to Roles
+        // `admin` always holds every permission (so a permission added later reaches it on the next run). The other
+        // roles get their defaults only when they are created: an existing database keeps whatever a superuser
+        // changed in the catalog, and the seeder can run again on it without undoing that.
         $adminRole->syncPermissions(Permission::all());
-        $supervisorRole->syncPermissions(['view-dashboard', 'view-users', 'view-chatbots']);
-        $clienteRole->syncPermissions(['view-dashboard']);
-        // Attends conversations (read, take, write, give back to the AI, resolve) but cannot assign them to others.
-        $agentRole->syncPermissions(['view-dashboard', 'view-conversations', 'reply-conversations']);
+
+        foreach ([
+            [$supervisorRole, ['view-dashboard', 'view-users', 'view-chatbots']],
+            [$clienteRole, ['view-dashboard']],
+            // Attends conversations (read, take, write, give back to the AI, resolve) but cannot assign them to others.
+            [$agentRole, ['view-dashboard', 'view-conversations', 'reply-conversations']],
+        ] as [$role, $defaults]) {
+            if ($role->wasRecentlyCreated) {
+                $role->syncPermissions($defaults);
+            }
+        }
 
         // Sample accounts have well-known passwords: they exist only in local/testing, never elsewhere.
         // (The real administrator comes from AdminUserSeeder and its environment variables.)
