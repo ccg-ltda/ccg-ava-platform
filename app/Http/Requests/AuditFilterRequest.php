@@ -29,6 +29,8 @@ class AuditFilterRequest extends FormRequest
             'workspace' => ['nullable', 'string', 'regex:/^(all|\d+)$/'],
             'resource' => ['nullable', Rule::in(array_keys(config('audit.resources')))],
             'action' => ['nullable', Rule::in(array_keys(config('audit.actions')))],
+            'actor' => ['nullable', Rule::in(['user', 'system'])],
+            'outcome' => ['nullable', Rule::in(['success', 'failed'])],
             'per_page' => ['nullable', 'integer'],
             'page' => ['nullable', 'integer', 'min:1'],
         ];
@@ -36,10 +38,10 @@ class AuditFilterRequest extends FormRequest
 
     public function attributes(): array
     {
-        return ['from' => 'fecha inicial', 'to' => 'fecha final', 'resource' => 'módulo', 'action' => 'acción', 'user' => 'usuario'];
+        return ['from' => 'fecha inicial', 'to' => 'fecha final', 'resource' => 'módulo', 'action' => 'acción', 'user' => 'usuario', 'actor' => 'origen', 'outcome' => 'resultado'];
     }
 
-    /** @return array{search: string, from: ?string, to: ?string, user: ?int, workspace: ?string, resource: ?string, action: ?string} */
+    /** @return array{search: string, from: ?string, to: ?string, user: ?int, workspace: ?string, resource: ?string, action: ?string, actor: ?string, outcome: ?string} */
     public function filters(): array
     {
         $data = $this->validated();
@@ -52,6 +54,8 @@ class AuditFilterRequest extends FormRequest
             'workspace' => $data['workspace'] ?? null,
             'resource' => $data['resource'] ?? null,
             'action' => $data['action'] ?? null,
+            'actor' => $data['actor'] ?? null,
+            'outcome' => $data['outcome'] ?? null,
         ];
     }
 

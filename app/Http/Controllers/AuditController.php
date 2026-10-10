@@ -54,6 +54,8 @@ class AuditController extends Controller
                 'canChoose' => $this->scope->canChoose($viewer, $workspace),
                 'resources' => $this->labels('resources'),
                 'actions' => $this->labels('actions'),
+                'actors' => [['value' => 'user', 'label' => 'Una persona'], ['value' => 'system', 'label' => 'Automático']],
+                'outcomes' => [['value' => 'success', 'label' => 'Correcto'], ['value' => 'failed', 'label' => 'Fallido']],
             ],
             'scope' => $this->scopeProps($chosen),
             'savedFilters' => $this->saved->for($viewer, $workspace, 'audit'),
@@ -154,6 +156,14 @@ class AuditController extends Controller
 
         if ($filters['action']) {
             $applied[] = 'Acción: '.config("audit.actions.{$filters['action']}.label");
+        }
+
+        if ($filters['actor']) {
+            $applied[] = 'Origen: '.($filters['actor'] === 'system' ? 'Automático' : 'Una persona');
+        }
+
+        if ($filters['outcome']) {
+            $applied[] = 'Resultado: '.($filters['outcome'] === 'failed' ? 'Fallido' : 'Correcto');
         }
 
         return $applied;

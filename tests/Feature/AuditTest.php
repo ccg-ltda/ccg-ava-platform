@@ -404,7 +404,7 @@ class AuditTest extends TestCase
         $this->assertSame(['Gamma'], $names('from=2026-03-20'));
 
         $this->get('/audit?from=2026-03-01&to=2026-03-31&action=updated')->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('summary', ['total' => 2, 'created' => 1, 'updated' => 1, 'deleted' => 0])->has('events.data', 1));
+            ->where('summary', ['total' => 2, 'created' => 1, 'updated' => 1, 'deleted' => 0, 'failed' => 0, 'automatic' => 0])->has('events.data', 1));
     }
 
     public function test_search_treats_wildcards_literally(): void

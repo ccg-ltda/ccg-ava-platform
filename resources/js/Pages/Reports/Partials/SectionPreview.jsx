@@ -7,9 +7,8 @@ import MetricCard from '@/Components/MetricCard';
 import { metricStyles } from '@/config/reports';
 
 /**
- * A section whose data source does not exist yet. It shows what the section will answer, its metric with no value and
- * the outline of each chart, and it never draws a number or a series. When the module exists, the chart gets its
- * `points`/`items` from the server and replaces the empty state.
+ * A section whose data source does not exist: Ava stores nothing to compute it from. It says so (`reason`), shows its
+ * metric with no value and the outline of each chart, and it never draws a number or a series.
  */
 export default function SectionPreview({ section, metrics }) {
     const metric = metrics.find((item) => item.key === section.metric);
@@ -25,11 +24,11 @@ export default function SectionPreview({ section, metrics }) {
                         <h2 className="text-base font-bold text-ink">{section.label}</h2>
                         <Badge tone="neutral">
                             <Hourglass className="me-1 size-3" aria-hidden="true" />
-                            Módulo pendiente
+                            Sin fuente de datos
                         </Badge>
                     </div>
                     <p className="mt-1 text-sm text-ink-muted">{section.description}</p>
-                    <p className="mt-1 text-xs text-ink-muted">Estos gráficos se llenarán cuando exista {section.module === 'las métricas de Ava' ? section.module : `el módulo de ${section.module}`} y registre actividad en este Workspace.</p>
+                    <p className="mt-1 text-xs text-ink-muted">{section.reason}</p>
                 </div>
             </Card>
 

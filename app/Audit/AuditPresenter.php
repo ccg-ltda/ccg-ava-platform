@@ -26,6 +26,8 @@ class AuditPresenter
             'record' => $log->resource_label,
             'recordId' => $log->resource_id,
             'user' => ['name' => $log->user_name, 'email' => $log->user_email],
+            'actor' => $log->actor,
+            'outcome' => $log->outcome,
             'workspace' => ['name' => $log->workspace_name, 'code' => $log->workspace_code],
             'date' => $this->settings->formatDate($log->created_at),
             'time' => $this->settings->formatPreciseTime($log->created_at),

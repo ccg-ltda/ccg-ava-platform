@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Audit\AuditLogger;
 use App\Exceptions\DemoNotAllowed;
 use App\Models\Chatbot;
 use App\Models\Conversation;
@@ -23,7 +24,7 @@ class DemoConversations
 {
     public const CHATBOT = 'Demo · Asistente (simulado)';
 
-    public function __construct(private readonly ConversationAgents $agents) {}
+    public function __construct(private readonly ConversationAgents $agents, private readonly AuditLogger $audit) {}
 
     /** Whether the demo tools exist in this environment at all. */
     public function enabled(): bool
@@ -67,7 +68,7 @@ class DemoConversations
     {
         $this->assertAllowed($workspace);
 
-        return DB::transaction(function () use ($workspace) {
+        $result = DB::transaction(function () use ($workspace) {
             $bot = $workspace->chatbots()->where('is_demo', true)->first()
                 ?? $workspace->chatbots()->create(['name' => self::CHATBOT, 'description' => 'Chatbot ficticio para probar Conversaciones. No usa ningún canal ni modelo real.', 'is_active' => true]);
             $bot->forceFill(['is_demo' => true])->save();
@@ -91,6 +92,10 @@ class DemoConversations
 
             return $result;
         });
+
+        $this->audit($workspace, 'created', null, (string) $result['created']);
+
+        return $result;
     }
 
     /**
@@ -102,7 +107,7 @@ class DemoConversations
     {
         $this->assertAllowed($workspace);
 
-        return DB::transaction(function () use ($workspace) {
+        $removed = DB::transaction(function () use ($workspace) {
             $removed = Conversation::where('workspace_id', $workspace->id)->whereNotNull('demo_key')->delete();
 
             // The demo chatbot goes only when no conversation (real or demo) is left on it.
@@ -110,6 +115,20 @@ class DemoConversations
 
             return $removed;
         });
+
+        $this->audit($workspace, 'deleted', (string) $removed, null);
+
+        return $removed;
+    }
+
+    /** One event per operation (not one per conversation), only when it changed something; a person's if signed in, else the console's. */
+    private function audit(Workspace $workspace, string $action, ?string $before, ?string $after): void
+    {
+        if (($after ?? $before) === '0') {
+            return;
+        }
+
+        $this->audit->recordForActor($action, 'conversation', null, 'Entorno demo', [AuditLogger::change('Conversaciones demo', $before, $after)], $workspace, 'Consola de la plataforma');
     }
 
     /** Clean and generate again. */

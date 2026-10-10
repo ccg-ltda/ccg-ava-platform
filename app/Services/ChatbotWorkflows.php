@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Audit\AuditLogger;
 use App\Chatbots\ResolvedWorkflow;
 use App\Models\Chatbot;
 use InvalidArgumentException;
@@ -20,6 +21,8 @@ use InvalidArgumentException;
  */
 class ChatbotWorkflows
 {
+    public function __construct(private readonly AuditLogger $audit) {}
+
     private const PATH = '/^[A-Za-z0-9_-]+(\/[A-Za-z0-9_-]+)*$/';
 
     /** The authorized workflow of the chatbot, or null when it has none (or it is switched off, unknown or malformed). */
@@ -31,12 +34,24 @@ class ChatbotWorkflows
     /** Gives an ACTIVE chatbot a workflow of the catalog (platform team only). */
     public function assign(Chatbot $chatbot, string $key): void
     {
+        $before = $chatbot->workflow_key;
         $chatbot->forceFill(['workflow_key' => $key])->save(); // the `saving` hook refuses what is not valid
+        $this->audit($chatbot, $before, $key);
     }
 
     public function unassign(Chatbot $chatbot): void
     {
+        $before = $chatbot->workflow_key;
         $chatbot->forceFill(['workflow_key' => null])->save();
+        $this->audit($chatbot, $before, null);
+    }
+
+    /** The platform team's change of a chatbot's workflow (only the console does it) is an event of its own source. */
+    private function audit(Chatbot $chatbot, ?string $before, ?string $after): void
+    {
+        if ($before !== $after) {
+            $this->audit->recordForActor('updated', 'chatbot', $chatbot->id, $chatbot->name, [AuditLogger::change('Workflow', $before, $after)], $chatbot->workspace, 'Consola de la plataforma');
+        }
     }
 
     /**

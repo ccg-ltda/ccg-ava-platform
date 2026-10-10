@@ -196,7 +196,7 @@ Lo que sí es nuevo y transversal en esta fase:
 ### 6.4. Reportes
 
 - **Propósito.** Analítica del Workspace: conversaciones, interacciones, preguntas, encuestas y tendencias.
-- **Existe / Parcial.** Periodo, granularidad, gráficos SVG propios y estados vacíos. Solo hay datos reales del equipo del Workspace; las métricas de `config/reports.php` tienen `source` nulo y muestran «Sin datos todavía». `pendientes.md` ya define la regla: al construir cada módulo, darle su `source`.
+- **Existe.** [Existe, Etapa 2] Periodo, granularidad, gráficos SVG propios y estados vacíos; chats e interacciones con cifra, comparación contra el periodo anterior, actividad en el tiempo, canales, estados, franjas horarias y tendencias, calculados con `DashboardMetrics` (los mismos cálculos del Dashboard). Cada sección falla por separado. Los nombres de personas solo con `view-users`. Preguntas y Encuestas no tienen fuente y lo dicen. Pruebas: `ReportsTest`, `ReportsDataTest`.
 - **Adaptación necesaria.** [Propuesto] Conectar primero las métricas que ya tienen datos propios (conversaciones, mensajes, atención humana, ejecuciones). Las métricas de cada solución se añaden con su módulo. Nunca se muestran números inventados. Exportación a PDF o Excel: D-12.
 - **Conexiones.** Conversaciones, Asistentes, módulos específicos, Auditoría.
 - **Criterios de «listo».** Cada métrica mostrada tiene fuente real y se calcula desde el Workspace consultado; sin fuente, muestra el estado vacío; no mezcla datos de Workspaces.
@@ -204,7 +204,7 @@ Lo que sí es nuevo y transversal en esta fase:
 ### 6.5. Auditoría
 
 - **Propósito.** Historial de cambios administrativos y de control de conversaciones.
-- **Existe.** [Existe] Filtros, resumen, detalle antes/después, exportación a PDF, enmascarado de credenciales, solo se añade. Prueba: `AuditTest` (30).
+- **Existe.** [Existe, Etapa 3] Filtros (búsqueda, fechas, usuario, módulo, acción, origen, resultado, Workspace autorizado), resumen con fallidos y automáticos, detalle, PDF, enmascarado de credenciales, solo se añade. Origen (`actor`: persona o automático) y resultado (`outcome`) por registro. Matriz de acciones auditadas: usuarios, miembros, roles, Workspaces, organizaciones, configuraciones, integraciones (crear, modificar, eliminar y probar con resultado), asistentes (incluido su token, sin guardarlo) y canales, control de conversaciones (tomar, asignar, devolver, resolver, persona pedida por el asistente, reabierta por el contacto), asignación de workflow, entorno DEMO y ejecuciones automáticas fallidas o con envío rechazado/incierto. Sin evento: inicio/cierre de sesión y exportaciones. Pruebas: `AuditTest`, `AuditEventsTest`.
 - **Adaptación necesaria.** [Propuesto] Cada módulo específico registra sus cambios (obligatorio por `reglas.md` §11). La asignación o el cambio de solución de un Workspace se audita. Falta decidir la retención del histórico (`pendientes.md`).
 - **Conexiones.** Todos los módulos.
 - **Criterios de «listo».** Toda acción administrativa nueva aparece con usuario, Workspace, IP y diferencia; no se guardan secretos ni mensajes.

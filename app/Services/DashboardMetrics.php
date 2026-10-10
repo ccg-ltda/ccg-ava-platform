@@ -102,6 +102,56 @@ class DashboardMetrics
     }
 
     /**
+     * Period figures against those of the previous period of the same length: the two headline metrics of Reportes
+     * (`chats`: conversations started; `interactions`: messages received plus replies sent) and the rows of the
+     * comparison table. The Dashboard's `kpis()` is computed from the same `activity()`, so both pages agree.
+     *
+     * @return array{chats: array<string, mixed>, interactions: array<string, mixed>, rows: list<array<string, mixed>>}
+     */
+    public function comparison(?Workspace $target, ReportPeriod $period): array
+    {
+        $days = (int) config("reports.periods.{$period->key}.days");
+        $now = $this->activity($target, $period->from, $period->to);
+        $before = $this->activity($target, $period->from->subDays($days), $period->from->subSecond());
+        $rows = [
+            'conversations' => 'Conversaciones nuevas',
+            'received' => 'Mensajes recibidos',
+            'sent' => 'Respuestas enviadas',
+            'ai' => 'Respuestas de la IA',
+            'agents' => 'Respuestas de agentes',
+        ];
+
+        return [
+            'chats' => $this->compare($now['conversations'], $before['conversations']),
+            'interactions' => $this->compare($now['received'] + $now['sent'], $before['received'] + $before['sent']),
+            'rows' => collect($rows)->map(fn (string $label, string $key) => ['key' => $key, 'label' => $label] + $this->compare($now[$key], $before[$key]))->values()->all(),
+        ];
+    }
+
+    /**
+     * When the activity happens: conversations started or messages received per hour of the day (0-23) in the
+     * Workspace's timezone, over the whole period. Every hour is present, even at zero.
+     *
+     * @return array{total: int, points: list<array{key: string, label: string, short: string, value: int}>}
+     */
+    public function hours(?Workspace $target, ReportPeriod $period, string $of): array
+    {
+        $counts = $of === 'messages'
+            ? $this->hourly($this->messages($target)->where('direction', 'in'), 'sent_at', $period)
+            : $this->hourly($this->conversations($target), 'created_at', $period);
+        $byHour = array_fill(0, 24, 0);
+
+        foreach ($counts as $hour => $total) {
+            $byHour[CarbonImmutable::parse($hour, 'UTC')->setTimezone($period->timezone)->hour] += $total;
+        }
+
+        return [
+            'total' => array_sum($byHour),
+            'points' => collect($byHour)->map(fn (int $total, int $hour) => ['key' => (string) $hour, 'label' => sprintf('%02d:00 – %02d:59', $hour, $hour), 'short' => sprintf('%02d', $hour), 'value' => $total])->values()->all(),
+        ];
+    }
+
+    /**
      * Who has the conversations that had activity in the period, as they are NOW (every state is present, even at zero).
      *
      * @return list<array{key: string, label: string, value: int}>

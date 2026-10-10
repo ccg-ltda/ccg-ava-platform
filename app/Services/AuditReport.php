@@ -13,7 +13,7 @@ use Illuminate\Support\Collection;
  * Reads the audit log for Auditoría and its PDF. The scope always starts from the Workspace of the request: a
  * superuser may widen it to another Workspace or to all of them, anyone else never leaves their own.
  *
- * @phpstan-type Filters array{search: string, from: ?string, to: ?string, user: ?int, workspace: ?string, resource: ?string, action: ?string}
+ * @phpstan-type Filters array{search: string, from: ?string, to: ?string, user: ?int, workspace: ?string, resource: ?string, action: ?string, actor: ?string, outcome: ?string}
  */
 class AuditReport
 {
@@ -40,6 +40,8 @@ class AuditReport
             ->when($filters['to'], fn (Builder $q, string $to) => $q->where('created_at', '<=', $this->endOf($to, $timezone)))
             ->when($filters['user'], fn (Builder $q, int $user) => $q->where('user_id', $user))
             ->when($filters['resource'], fn (Builder $q, string $resource) => $q->where('resource_type', $resource))
+            ->when($filters['actor'], fn (Builder $q, string $actor) => $q->where('actor', $actor))
+            ->when($filters['outcome'], fn (Builder $q, string $outcome) => $q->where('outcome', $outcome))
             ->when($withAction ? $filters['action'] : null, fn (Builder $q, string $action) => $q->where('action', $action))
             ->when($filters['search'] !== '', fn (Builder $q) => $this->search($q, $filters['search']));
     }
@@ -50,7 +52,7 @@ class AuditReport
         return $query->orderByDesc('created_at')->orderByDesc('id');
     }
 
-    /** @return array{total: int, created: int, updated: int, deleted: int} */
+    /** @return array{total: int, created: int, updated: int, deleted: int, failed: int, automatic: int} */
     public function summary(Workspace $active, User $viewer, array $filters): array
     {
         $counts = $this->query($active, $viewer, $filters, withAction: false)
@@ -58,11 +60,17 @@ class AuditReport
             ->groupBy('action')
             ->pluck('total', 'action');
 
+        // How many of those events failed and how many were automatic (the other filters apply; the action does not).
+        $failed = $this->query($active, $viewer, $filters, withAction: false)->where('outcome', 'failed')->count();
+        $automatic = $this->query($active, $viewer, $filters, withAction: false)->where('actor', 'system')->count();
+
         return [
             'total' => (int) $counts->sum(),
             'created' => (int) ($counts['created'] ?? 0),
             'updated' => (int) ($counts['updated'] ?? 0),
             'deleted' => (int) ($counts['deleted'] ?? 0),
+            'failed' => $failed,
+            'automatic' => $automatic,
         ];
     }
 
@@ -87,7 +95,7 @@ class AuditReport
     /** @return array<string, ?string> every filter empty, with the given ones set */
     public function blank(array $set = []): array
     {
-        return $set + ['search' => '', 'from' => null, 'to' => null, 'user' => null, 'workspace' => null, 'resource' => null, 'action' => null];
+        return $set + ['search' => '', 'from' => null, 'to' => null, 'user' => null, 'workspace' => null, 'resource' => null, 'action' => null, 'actor' => null, 'outcome' => null];
     }
 
     private function startOf(string $date, string $timezone): Carbon

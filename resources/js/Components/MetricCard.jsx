@@ -24,7 +24,7 @@ export default function MetricCard({ label, value, hint, icon: Icon, tone = 'blu
                     {hasValue ? (
                         <span className="mt-2 flex items-baseline gap-2">
                             <span className="truncate text-3xl font-extrabold text-ink">{formatValue(value)}</span>
-                            {change && <span className="text-xs font-semibold text-accent-green">{change}</span>}
+                            {change && <span className={`text-xs font-semibold ${String(change).startsWith('-') ? 'text-danger' : 'text-accent-green'}`}>{change}</span>}
                         </span>
                     ) : (
                         <span className="mt-2 block text-sm font-bold text-ink-muted">Sin datos todavía</span>

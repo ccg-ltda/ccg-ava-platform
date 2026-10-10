@@ -31,11 +31,15 @@ class ConversationControl
     public function requestHuman(Conversation $conversation, ?string $reason = null): Conversation
     {
         return $this->change($conversation, function (Conversation $locked) use ($reason) {
-            if (! in_array($locked->handling, [Conversation::PENDING, Conversation::HUMAN], true)) {
-                $this->move($locked, Conversation::PENDING, null, ['handoff_reason' => filled($reason) ? mb_substr(trim($reason), 0, 255) : null]);
+            if (in_array($locked->handling, [Conversation::PENDING, Conversation::HUMAN], true)) {
+                return null;
             }
 
-            return null;
+            $before = $this->snapshot($locked);
+            $this->move($locked, Conversation::PENDING, null, ['handoff_reason' => filled($reason) ? mb_substr(trim($reason), 0, 255) : null]);
+
+            // Only the first request is an event; an automatic one (the assistant) is attributed to its source, never to a person.
+            return ['requested', $before];
         });
     }
 
@@ -109,7 +113,9 @@ class ConversationControl
     public function reopen(Conversation $locked): void
     {
         if ($locked->handling === Conversation::RESOLVED) {
+            $before = $this->snapshot($locked);
             $this->move($locked, Conversation::AI, null);
+            $this->record('reopened', $locked, $before);
         }
     }
 
@@ -185,6 +191,15 @@ class ConversationControl
             }
         }
 
-        $this->audit->record($action, 'conversation', $conversation->id, $conversation->contact_name ?: $conversation->contact_id, $changes, $conversation->chatbot->workspace);
+        $label = $conversation->contact_name ?: $conversation->contact_id;
+        $workspace = $conversation->chatbot->workspace;
+
+        // What an automatic process can do (the assistant asks for a person, a contact reopens a case) is recorded as its own
+        // source's event; what only a person can do needs that person (nothing is recorded without a signed-in user).
+        match ($action) {
+            'requested' => $this->audit->recordForActor($action, 'conversation', $conversation->id, $label, $changes, $workspace, 'Asistente (automático)'),
+            'reopened' => $this->audit->recordForActor($action, 'conversation', $conversation->id, $label, $changes, $workspace, 'Contacto (mensaje nuevo)'),
+            default => $this->audit->record($action, 'conversation', $conversation->id, $label, $changes, $workspace),
+        };
     }
 }

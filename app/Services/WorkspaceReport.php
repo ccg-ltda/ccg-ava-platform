@@ -20,9 +20,12 @@ class WorkspaceReport
      * The team figures of the scope: one Workspace (`$target`) or, with `$global`, every Workspace. Dates use the
      * regional settings of the Workspace the viewer is working in (`$active`).
      *
-     * @return array{stats: array<string, int>, roleBreakdown: list<array{role: string, count: int}>, recentUsers: list<array<string, mixed>>}
+     * The aggregates (counts per role) are for anyone who sees Reportes; the NAMES and emails of recent users identify
+     * people, so they are read only with `$withPeople` (the viewer holds `view-users`) and are null otherwise.
+     *
+     * @return array{stats: array<string, int>, roleBreakdown: list<array{role: string, count: int}>, recentUsers: ?list<array<string, mixed>>}
      */
-    public function for(Workspace $active, string $role, ?Workspace $target = null, bool $global = false): array
+    public function for(Workspace $active, string $role, ?Workspace $target = null, bool $global = false, bool $withPeople = false): array
     {
         $target ??= $active;
         $members = fn () => DB::table('workspace_user')
@@ -45,7 +48,7 @@ class WorkspaceReport
                 'permissions' => Role::findByName($role, 'web')->permissions()->count(),
             ],
             'roleBreakdown' => $byRole->map(fn ($count, $name) => ['role' => $name, 'count' => (int) $count])->values()->all(),
-            'recentUsers' => $members()
+            'recentUsers' => ! $withPeople ? null : $members()
                 ->join('workspaces', 'workspaces.id', '=', 'workspace_user.workspace_id')
                 ->orderByDesc('users.created_at')->orderByDesc('users.id')
                 ->limit(self::RECENT_USERS)
@@ -72,8 +75,9 @@ class WorkspaceReport
     }
 
     /**
-     * What the analytics part of Reportes needs: the period with its options, the metrics (none has a source yet, so
-     * none reports a value) and the one real series available today, the people added to this Workspace.
+     * What the analytics part of Reportes needs: the period with its options, the definition of each metric (`connected`
+     * says whether it has a source; the figures of the connected ones come from `DashboardMetrics`, the same
+     * calculations as the Dashboard) and the series of the people added to this Workspace.
      *
      * @return array<string, mixed>
      */
@@ -88,14 +92,13 @@ class WorkspaceReport
                 'periods' => collect(config('reports.periods'))->map(fn ($p, $key) => ['value' => $key, 'label' => $p['label']])->values()->all(),
                 'granularities' => collect($period->granularities())->map(fn ($g) => ['value' => $g, 'label' => config("reports.granularities.{$g}")])->all(),
             ],
-            // A metric is "connected" once it has a source; until then it carries no value at all (never a placeholder number).
+            // A metric is "connected" once it has a source; one without a source has no figure at all (never a placeholder number).
             'metrics' => collect(config('reports.metrics'))->map(fn ($metric, $key) => [
                 'key' => $key,
                 'label' => $metric['label'],
                 'hint' => $metric['hint'],
                 'section' => $metric['section'],
                 'connected' => $metric['source'] !== null,
-                'value' => null,
             ])->values()->all(),
             'teamGrowth' => $this->teamGrowth($active, $period, $target ?? $active, $global),
         ];

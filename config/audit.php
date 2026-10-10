@@ -18,6 +18,7 @@ return [
         'chatbot_channel' => ['label' => 'Canales de chatbots', 'noun' => 'el canal'],
         'chatbot_channel_appearance' => ['label' => 'Apariencia de canales', 'noun' => 'la apariencia del canal'],
         'conversation' => ['label' => 'Conversaciones', 'noun' => 'la conversación'],
+        'chatbot_execution' => ['label' => 'Ejecuciones de asistentes', 'noun' => 'el workflow del asistente'],
     ],
 
     'actions' => [
@@ -28,6 +29,10 @@ return [
         'assigned' => ['label' => 'Asignado', 'verb' => 'Asignó'],
         'returned' => ['label' => 'Devuelto a la IA', 'verb' => 'Devolvió a la IA'],
         'resolved' => ['label' => 'Resuelto', 'verb' => 'Resolvió'],
+        'tested' => ['label' => 'Probado', 'verb' => 'Probó'],
+        'requested' => ['label' => 'Persona pedida', 'verb' => 'Pidió una persona para'],
+        'reopened' => ['label' => 'Reabierto', 'verb' => 'Reabrió'],
+        'executed' => ['label' => 'Ejecutado', 'verb' => 'Ejecutó'],
     ],
 
     'pdf_max_events' => 1000,

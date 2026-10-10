@@ -9,6 +9,7 @@ use App\Chatbots\RunResult;
 use App\Integrations\SafeHttpTarget;
 use App\Integrations\WhatsAppType;
 use App\Jobs\RunChatbotExecution;
+use App\Models\AuditLog;
 use App\Models\Chatbot;
 use App\Models\ChatbotExecution;
 use App\Models\Conversation;
@@ -548,6 +549,31 @@ class ChatbotExecutionTest extends TestCase
         $this->assertSame(1, ChatbotExecution::count());
     }
 
+    public function test_a_workflow_handoff_through_the_webhook_is_one_automatic_event_of_that_workspace_without_message_text(): void
+    {
+        $this->workflow();
+        $workspace = $this->workspace('WS_A');
+        $unrelated = $this->workspace('WS_B');
+        $this->bot($workspace, '1000001', 'support');
+        $setup = AuditLog::count();
+        $this->n8nAnswers('Te paso con una persona.', ['handoff' => true]);
+
+        // A forged event is refused before anything is written; the real one is audited once.
+        $this->deliver($this->event('1000001', 'Quiero un humano SECRETO'), 'forged')->assertForbidden();
+        $this->assertSame($setup, AuditLog::count());
+        $this->deliver($this->event('1000001', 'Quiero un humano SECRETO'))->assertOk();
+        $this->deliver($this->event('1000001', 'Hola?'))->assertOk();
+
+        $events = AuditLog::where('action', 'requested')->get();
+        $this->assertCount(1, $events);
+        $this->assertSame([$workspace->id, 'system', 'success', null], [$events[0]->workspace_id, $events[0]->actor, $events[0]->outcome, $events[0]->user_id]);
+        $this->assertSame(0, AuditLog::where('workspace_id', $unrelated->id)->count());
+        $trail = json_encode(AuditLog::all()->toArray());
+        foreach (['SECRETO', 'Te paso con', self::TOKEN, self::SECRET, self::APP_SECRET] as $forbidden) {
+            $this->assertStringNotContainsString($forbidden, $trail);
+        }
+    }
+
     public function test_a_resolved_conversation_reopens_with_the_ai_when_the_contact_writes_again(): void
     {
         [$bot] = $this->bot($this->workspace('WS_A'), '1000001', $this->workflow());
@@ -824,6 +850,47 @@ class ChatbotExecutionTest extends TestCase
         $this->assertStringNotContainsString(self::TOKEN, (string) $reply->failure_reason);
         $this->assertSame(['succeeded', 'failed'], [$this->execution()->status, $this->execution()->delivery]);
         $this->assertSame([], $this->inboundStatuses());
+    }
+
+    public function test_a_good_run_writes_no_audit_event(): void
+    {
+        $this->workflow();
+        $this->bot($this->workspace('WS_A'), '1000001', 'support');
+        $setup = AuditLog::count(); // the workflow assignment of the scenery is itself an event
+        $this->n8nAnswers('Hola');
+
+        $this->deliver($this->event('1000001'))->assertOk();
+
+        $this->assertSame('accepted', $this->execution()->delivery);
+        $this->assertSame($setup, AuditLog::count(), 'a normal run is not an administrative event');
+    }
+
+    public function test_a_refused_reply_is_one_automatic_failed_event_without_secrets(): void
+    {
+        $this->workflow();
+        $workspace = $this->workspace('WS_A');
+        $unrelated = $this->workspace('WS_B');
+        $this->bot($workspace, '1000001', 'support');
+        $setup = AuditLog::count();
+
+        Http::fake([
+            self::N8N.'/*' => fn (Request $request) => Http::response(['execution_id' => $request->header('X-Ava-Execution')[0], 'reply' => 'Hola']),
+            self::GRAPH => Http::response(['error' => ['code' => 131047, 'message' => 'token '.self::TOKEN]], 400),
+        ]);
+        $this->deliver($this->event('1000001', 'Otra', '573009998877'))->assertOk();
+
+        $logs = AuditLog::where('action', 'executed')->get();
+        $this->assertCount(1, $logs);
+        $this->assertSame($setup + 1, AuditLog::count());
+        $log = $logs->first();
+        $this->assertSame(['executed', 'system', 'failed', $workspace->id, null], [$log->action, $log->actor, $log->outcome, $log->workspace_id, $log->user_id]);
+        $this->assertSame('Ejecución automática', $log->user_name);
+        $this->assertSame(ChatbotExecution::orderByDesc('id')->firstOrFail()->id, $log->resource_id);
+        $trail = json_encode(AuditLog::all()->toArray());
+        foreach ([self::TOKEN, self::SECRET, self::APP_SECRET, 'Otra', 'Hola'] as $forbidden) {
+            $this->assertStringNotContainsString($forbidden, $trail);
+        }
+        $this->assertSame(0, AuditLog::where('workspace_id', $unrelated->id)->count());
     }
 
     // --- 9. no secrets in logs or answers ----------------------------------------------------------------------

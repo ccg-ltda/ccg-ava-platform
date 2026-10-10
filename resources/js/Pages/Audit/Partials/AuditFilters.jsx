@@ -61,6 +61,14 @@ export default function AuditFilters({ filters, options, scope, onChange, onClea
                     <InputLabel htmlFor="audit_resource" value="Módulo" />
                     <Select id="audit_resource" className="mt-1" value={value('resource')} onChange={(resource) => onChange({ resource })} options={withAll('Todos los módulos', options.resources)} />
                 </div>
+                <div className="lg:col-span-3">
+                    <InputLabel htmlFor="audit_actor" value="Origen" />
+                    <Select id="audit_actor" className="mt-1" value={value('actor')} onChange={(actor) => onChange({ actor })} options={withAll('Personas y automáticos', options.actors)} />
+                </div>
+                <div className="lg:col-span-3">
+                    <InputLabel htmlFor="audit_outcome" value="Resultado" />
+                    <Select id="audit_outcome" className="mt-1" value={value('outcome')} onChange={(outcome) => onChange({ outcome })} options={withAll('Correctos y fallidos', options.outcomes)} />
+                </div>
 
                 {options.canChoose && (
                     <div className="sm:col-span-2 lg:col-span-3">

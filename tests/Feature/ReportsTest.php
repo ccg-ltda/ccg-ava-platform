@@ -13,7 +13,7 @@ use Inertia\Testing\AssertableInertia;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
-/** Reportes: the Workspace analytics center. No module feeds it yet, so no metric may carry a value. */
+/** Reportes: the Workspace analytics center (team figures, filters, scope). The conversation figures are in ReportsDataTest. */
 class ReportsTest extends TestCase
 {
     use RefreshDatabase;
@@ -40,13 +40,14 @@ class ReportsTest extends TestCase
         return Workspace::create(['organization_id' => Organization::firstOrFail()->id, 'code' => 'OTHER_WS', 'name' => 'Other']);
     }
 
-    public function test_every_metric_is_unconnected_and_has_no_value(): void
+    public function test_only_the_metrics_with_a_source_are_connected_and_none_carries_a_placeholder_value(): void
     {
         $this->actAs();
 
         $this->get('/reports')->assertInertia(fn (AssertableInertia $page) => $page
             ->component('Reports/Index')->has('metrics', 4)
-            ->where('metrics', fn ($metrics) => collect($metrics)->every(fn ($m) => $m['connected'] === false && $m['value'] === null))
+            ->where('metrics', fn ($metrics) => collect($metrics)->pluck('connected', 'key')->all() === ['chats' => true, 'interactions' => true, 'questions' => false, 'surveys' => false]
+                && collect($metrics)->every(fn ($m) => ! array_key_exists('value', $m)))
             ->where('metrics.0.key', 'chats')->where('metrics.3.key', 'surveys'));
     }
 

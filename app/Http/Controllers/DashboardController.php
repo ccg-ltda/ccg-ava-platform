@@ -2,17 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ReadsSections;
 use App\Http\Requests\ReportFilterRequest;
 use App\Services\DashboardMetrics;
 use App\Services\WorkspaceScope;
-use Closure;
-use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
-use Throwable;
 
 class DashboardController extends Controller
 {
+    use ReadsSections;
+
     /**
      * Dashboard: the executive and operational summary of the Workspace and the home page after login (the detailed
      * analytics are Reportes). Requires `view-dashboard`. It summarizes the Workspace of the session; only a superuser working
@@ -61,22 +61,5 @@ class DashboardController extends Controller
             'recentActivity' => $can['settings'] ? $this->section('recentActivity', fn () => $metrics->recentActivity($target, $settings)) : null,
             'demo' => $this->section('demo', fn () => $metrics->demoConversations($target)),
         ]);
-    }
-
-    /**
-     * Runs one section. A failure is logged with its class only (an exception can carry data) and the page receives an
-     * error for that section, so "nothing to show" and "could not be read" are never confused.
-     *
-     * @return array{data: mixed, error: ?string}
-     */
-    private function section(string $name, Closure $compute): array
-    {
-        try {
-            return ['data' => $compute(), 'error' => null];
-        } catch (Throwable $e) {
-            Log::error('dashboard_section_failed', ['section' => $name, 'exception' => $e::class]);
-
-            return ['data' => null, 'error' => 'No se pudieron leer estos datos. Intenta de nuevo en unos minutos.'];
-        }
     }
 }

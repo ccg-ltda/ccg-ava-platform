@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Audit\AuditLogger;
 use App\Chatbots\ChatbotExecutor;
 use App\Chatbots\ExecutionOutcome;
 use App\Chatbots\ResolvedWorkflow;
@@ -48,6 +49,7 @@ class ChatbotExecutions
         private readonly ChatbotWorkflows $workflows,
         private readonly ConversationControl $control,
         private readonly ChannelDelivery $delivery,
+        private readonly AuditLogger $audit,
     ) {}
 
     /** Whether the chatbot is switched on and in an active Workspace and Organization. */
@@ -162,8 +164,12 @@ class ChatbotExecutions
         $counts = ['requeued' => 0, 'resumed' => 0, 'uncertain' => 0];
 
         // A run that keeps dying (a bug, not a lost job) must not be queued forever.
-        ChatbotExecution::where('status', ChatbotExecution::RUNNING)->where('updated_at', '<', $stale)->where('attempts', '>=', (int) config('n8n.tries') + 3)
-            ->update(['status' => ChatbotExecution::FAILED, 'outcome_code' => 'crashed', 'finished_at' => now()]);
+        ChatbotExecution::with('chatbot.workspace')->where('status', ChatbotExecution::RUNNING)->where('updated_at', '<', $stale)->where('attempts', '>=', (int) config('n8n.tries') + 3)->get()
+            ->each(function (ChatbotExecution $execution) {
+                if (ChatbotExecution::whereKey($execution->id)->where('status', ChatbotExecution::RUNNING)->update(['status' => ChatbotExecution::FAILED, 'outcome_code' => 'crashed', 'finished_at' => now()]) === 1) {
+                    $this->auditFailure($execution, 'crashed');
+                }
+            });
 
         ChatbotExecution::where(fn ($q) => $q->where('status', ChatbotExecution::PENDING)->where('updated_at', '<', $waiting)
             ->orWhere(fn ($q) => $q->where('status', ChatbotExecution::RUNNING)->where('updated_at', '<', $stale)))
@@ -360,7 +366,11 @@ class ChatbotExecutions
         $message = Message::findOrFail($messageId);
         $this->delivery->deliver($message);
 
-        ChatbotExecution::whereKey($executionId)->where('delivery', ChatbotExecution::DELIVERY_SENDING)->update(['delivery' => $this->deliveryState($message->refresh())]);
+        $state = $this->deliveryState($message->refresh());
+
+        if (ChatbotExecution::whereKey($executionId)->where('delivery', ChatbotExecution::DELIVERY_SENDING)->update(['delivery' => $state]) === 1) {
+            $this->auditDelivery(ChatbotExecution::with('chatbot.workspace')->findOrFail($executionId), $state);
+        }
     }
 
     /** What the channel did with the reply, as recorded on the message itself. Anything we cannot read as a clear answer is uncertain. */
@@ -389,7 +399,8 @@ class ChatbotExecutions
                 $this->delivery->unconfirm($message, 'No se pudo confirmar el envío: pudo haberse enviado. No se reintenta solo; verifica en WhatsApp antes de reenviarlo.');
             }
 
-            $row->update(['delivery' => $message ? $this->deliveryState($message->refresh()) : ChatbotExecution::DELIVERY_UNCERTAIN]);
+            $row->update(['delivery' => $state = $message ? $this->deliveryState($message->refresh()) : ChatbotExecution::DELIVERY_UNCERTAIN]);
+            $this->auditDelivery($row->load('chatbot.workspace'), $state);
 
             return true;
         });
@@ -413,9 +424,39 @@ class ChatbotExecutions
 
     private function settle(ChatbotExecution $execution, string $status, string $code): RunResult
     {
-        ChatbotExecution::whereKey($execution->id)->where('status', ChatbotExecution::RUNNING)->update(['status' => $status, 'outcome_code' => $code, 'finished_at' => now()]);
+        $changed = ChatbotExecution::whereKey($execution->id)->where('status', ChatbotExecution::RUNNING)->update(['status' => $status, 'outcome_code' => $code, 'finished_at' => now()]) === 1;
+
+        if ($changed && $status === ChatbotExecution::FAILED) {
+            $this->auditFailure($execution, $code);
+        }
 
         return $this->finish($execution, $status === ChatbotExecution::FAILED ? RunResult::failed($code) : RunResult::discarded($code));
+    }
+
+    /**
+     * An execution that failed for good is an event of the automatic process, with a fixed code and the attempts made.
+     * (Discarded executions are not: they are the control rules working, and a successful reply is the message itself.)
+     */
+    private function auditFailure(ChatbotExecution $execution, string $code): void
+    {
+        $execution->loadMissing('chatbot.workspace');
+        $this->audit->system('executed', 'chatbot_execution', $execution->id, $execution->chatbot->name, [
+            AuditLogger::change('Resultado', null, 'Falló'),
+            AuditLogger::change('Código', null, $code),
+            AuditLogger::change('Intentos', null, (string) $execution->attempts),
+        ], $execution->chatbot->workspace, 'Ejecución automática', AuditLogger::FAILED);
+    }
+
+    /** A reply the channel refused, or whose outcome nobody knows, is an event of the automatic process (an accepted one is not). */
+    private function auditDelivery(ChatbotExecution $execution, string $state): void
+    {
+        if (! in_array($state, [ChatbotExecution::DELIVERY_FAILED, ChatbotExecution::DELIVERY_UNCERTAIN], true)) {
+            return;
+        }
+
+        $this->audit->system('executed', 'chatbot_execution', $execution->id, $execution->chatbot->name, [
+            AuditLogger::change('Envío de la respuesta', null, $state === ChatbotExecution::DELIVERY_FAILED ? 'Rechazado por el canal' : 'Sin confirmar'),
+        ], $execution->chatbot->workspace, 'Ejecución automática', AuditLogger::FAILED);
     }
 
     /** Operational log: identifiers and fixed codes only, never message text, contact data or credentials. */

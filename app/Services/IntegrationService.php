@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Audit\AuditLogger;
 use App\Integrations\ChannelIntegrationType;
 use App\Integrations\IntegrationRegistry;
 use App\Integrations\TestResult;
@@ -21,6 +22,7 @@ class IntegrationService
     public function __construct(
         private readonly IntegrationRegistry $types,
         private readonly ChannelCatalog $channels,
+        private readonly AuditLogger $audit,
     ) {}
 
     /** The generic connections of the Workspace (the integrations of its channels are listed by `channels()`). @return list<array<string, mixed>> */
@@ -271,6 +273,11 @@ class IntegrationService
             'last_test_status' => $result->httpStatus,
             'last_test_message' => mb_substr($result->message, 0, 255),
         ])->save();
+
+        // A test is a real request to the provider: it is recorded with its outcome (fixed words, never the provider's answer).
+        $this->audit->record('tested', 'integration', $integration->id, $integration->name, [
+            AuditLogger::change('Resultado', null, $result->ok ? 'Conexión verificada' : 'La prueba no pasó'),
+        ], $integration->workspace, $result->ok ? AuditLogger::SUCCESS : AuditLogger::FAILED);
 
         return $result;
     }

@@ -74,6 +74,8 @@ class SavedFilters
                 'criteria.user' => ['nullable', 'integer', Rule::exists('workspace_user', 'user_id')->where('workspace_id', $workspace->id)],
                 'criteria.resource' => ['nullable', Rule::in(array_keys(config('audit.resources')))],
                 'criteria.action' => ['nullable', Rule::in(array_keys(config('audit.actions')))],
+                'criteria.actor' => ['nullable', Rule::in(['user', 'system'])],
+                'criteria.outcome' => ['nullable', Rule::in(['success', 'failed'])],
             ],
             'conversations' => [
                 'criteria.q' => ['nullable', 'string', 'max:100'],

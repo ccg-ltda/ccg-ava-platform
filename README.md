@@ -59,11 +59,11 @@ Permisos de Conversaciones: `view-conversations` (leer), `reply-conversations` (
 | Módulo | Para qué sirve |
 |---|---|
 | Dashboard | Resumen ejecutivo y operativo: indicadores, actividad en el tiempo, estado de las conversaciones, lo que requiere atención, integraciones y accesos rápidos (solo datos reales) |
-| Reportes (`/reports`) | Analítica del Workspace (solo muestra datos reales; sin fuente dice «Sin datos todavía») |
+| Reportes (`/reports`) | Analítica detallada del Workspace con los mismos cálculos del Dashboard: chats e interacciones con comparación contra el periodo anterior, actividad en el tiempo, canales, estados, franjas horarias y tendencias; Preguntas y Encuestas no tienen fuente de datos y lo dicen |
 | Asistentes (Chatbots) | Identidad, instrucciones, token de acceso de n8n, canales y apariencia del chat / botón |
 | Conversaciones | Bandeja unificada: filtros IA / pendientes / en atención / resueltas, asignación, respuesta del agente y devolución a la IA |
 | Integraciones | n8n (Ava → n8n con prueba de conexión real), WhatsApp Business, canal Web y conexiones HTTP |
-| Auditoría | Historial de cambios administrativos y de control de conversaciones (con exportación a PDF) |
+| Auditoría | Historial de cambios administrativos, de control de conversaciones y de procesos automáticos, con origen (persona o automático) y resultado, filtros en el servidor y exportación a PDF |
 | Configuraciones | Identidad, región, apariencia e impuestos del Workspace |
 | Usuarios y Roles | Cuentas, roles, permisos, Workspaces y Organizaciones |
 
@@ -106,5 +106,5 @@ graphify update .                # actualiza el grafo de código (graphify-out/,
 - **WhatsApp y n8n reales no están validados de punta a punta:** el envío por la Graph API, el WhatsApp Trigger y los nodos `authorize` / `handoff` se probaron solo con simulaciones. Hacen falta una cuenta de WhatsApp Business y un n8n reales.
 - **La ejecución iniciada por Ava (webhook de Meta + n8n de la plataforma) solo se probó con simulaciones.** Falta un n8n con el workflow, una app de Meta con el webhook apuntando a Ava y verificar con n8n que su licencia permite este modelo de servicio antes del uso comercial. Meta no ofrece idempotencia al enviar: si el resultado de un envío es incierto, Ava no lo reenvía y depende de que Meta devuelva el estado con la etiqueta `ava:{id}` para completarlo.
 - Fuera de la ventana de 24 h de WhatsApp solo se pueden enviar plantillas aprobadas, que Ava no envía.
-- Reportes todavía no tiene métricas de conversaciones; la «IA» del entorno DEMO es un texto fijo.
+- Reportes no tiene Preguntas ni Encuestas (Ava no guarda esa información) ni tiempos de respuesta; la «IA» del entorno DEMO es un texto fijo.
 - Más pendientes y decisiones abiertas en [`pendientes.md`](pendientes.md).

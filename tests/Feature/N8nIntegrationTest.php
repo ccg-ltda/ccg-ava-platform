@@ -179,7 +179,7 @@ class N8nIntegrationTest extends TestCase
         $trail = json_encode(AuditLog::all()->toArray());
         $this->assertStringNotContainsString(self::KEY, $trail);
         $this->assertStringNotContainsString('ANOTHER-SECRET-456', $trail);
-        $this->assertSame(['created', 'updated', 'deleted'], AuditLog::where('resource_type', 'integration')->orderBy('id')->pluck('action')->all());
+        $this->assertSame(['created', 'tested', 'updated', 'deleted'], AuditLog::where('resource_type', 'integration')->orderBy('id')->pluck('action')->all());
         $this->assertContains('API Key de n8n', collect(AuditLog::where('action', 'updated')->firstOrFail()->changes)->pluck('field')->all());
 
         foreach (['info', 'warning', 'error', 'debug', 'notice'] as $level) {

@@ -7,11 +7,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * One recorded administrative change (see App\Audit\AuditLogger). Rows are append-only: the application never
+ * One recorded administrative change or automatic event (see App\Audit\AuditLogger). Rows are append-only: the application never
  * updates or deletes them.
  */
 #[Fillable([
-    'workspace_id', 'workspace_code', 'workspace_name', 'user_id', 'user_name', 'user_email', 'action',
+    'workspace_id', 'workspace_code', 'workspace_name', 'user_id', 'user_name', 'user_email', 'actor', 'outcome', 'action',
     'resource_type', 'resource_id', 'resource_label', 'description', 'changes', 'ip_address',
 ])]
 class AuditLog extends Model

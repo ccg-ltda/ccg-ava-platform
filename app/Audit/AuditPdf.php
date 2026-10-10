@@ -166,7 +166,7 @@ class AuditPdf
     private function layout(array $event): array
     {
         $total = SimplePdf::WIDTH - 2 * self::MARGIN;
-        $updated = $event['action'] === 'updated';
+        $updated = ! in_array($event['action'], ['created', 'deleted'], true);
         $columns = $updated ? [120, ($total - 120) / 2, ($total - 120) / 2] : [120, $total - 120];
         $titles = $updated ? ['Campo', 'Antes', 'Después'] : ['Campo', $event['action'] === 'created' ? 'Valor' : 'Valor anterior'];
         $side = $event['action'] === 'created' ? 'after' : 'before';
