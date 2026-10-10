@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Integrations\IntegrationRegistry;
 use App\Integrations\SendsMessages;
+use App\Models\ChatbotChannel;
 use App\Models\Conversation;
 use App\Models\Integration;
 use App\Models\Message;
@@ -36,6 +37,15 @@ class ChannelDelivery
         }
 
         $label = config("chatbots.channels.{$conversation->channel}.label", $conversation->channel);
+
+        // Same switches as every other path (agent API, widget, webhook, executions): a deactivated chatbot or a channel that is off is silent.
+        if (! $conversation->chatbot->is_active) {
+            return ['ok' => false, 'message' => 'El chatbot está desactivado: actívalo para responder desde Ava.'];
+        }
+
+        if ($this->channel($conversation) === null) {
+            return ['ok' => false, 'message' => "El canal {$label} está apagado o sin cuenta configurada para este chatbot."];
+        }
 
         return match (config("chatbots.channels.{$conversation->channel}.delivery")) {
             self::PULL => ['ok' => true, 'message' => null],
@@ -112,8 +122,14 @@ class ChannelDelivery
     /** The active integration of the conversation's channel, always through its own chatbot (so its own Workspace). */
     private function integration(Conversation $conversation): ?Integration
     {
-        $channel = $conversation->chatbot->channels()->where('channel', $conversation->channel)->where('is_active', true)->with('integration')->first();
+        $channel = $this->channel($conversation);
 
         return $channel?->integration?->is_active ? $channel->integration : null;
+    }
+
+    /** The conversation's channel of its own chatbot, only while it is switched on. */
+    private function channel(Conversation $conversation): ?ChatbotChannel
+    {
+        return $conversation->chatbot->channels()->where('channel', $conversation->channel)->where('is_active', true)->with('integration')->first();
     }
 }

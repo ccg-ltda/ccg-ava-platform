@@ -98,7 +98,7 @@ class WorkspaceMemberController extends Controller
         $member = $workspace->users()->whereKey($user->id)->first();
         abort_unless($member, 404);
 
-        if (! $this->administration->canManageMember($request->user(), $workspace, $member->pivot->role)) {
+        if (! $this->administration->canManageMember($request->user(), $workspace, $member->pivot->role, $member)) {
             throw ValidationException::withMessages(['member' => 'Este usuario tiene un rol con más permisos que el tuyo.']);
         }
     }

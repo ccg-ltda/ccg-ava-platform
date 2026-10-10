@@ -32,8 +32,8 @@ export const navigation = [
     },
 ];
 
-/** Top bar tabs. For now a single tab covers the whole platform. */
-export const topTabs = [{ label: 'General', route: 'dashboard' }];
+/** Top bar tabs. For now a single tab covers the whole platform; like the menu, it is shown only to roles that can open it. */
+export const topTabs = [{ label: 'General', route: 'dashboard', permission: 'view-dashboard' }];
 
 /** Sections and items the given permissions allow (empty sections are dropped). */
 export function visibleNavigation(permissions = []) {

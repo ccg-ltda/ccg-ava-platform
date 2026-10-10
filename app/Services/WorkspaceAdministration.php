@@ -70,8 +70,9 @@ class WorkspaceAdministration
     {
         $role = $actor->roleInWorkspace($workspace);
 
+        // A role missing from the catalog grants nothing (EnsureWorkspaceContext closes such a session).
         return $role
-            ? Role::findByName($role, 'web')->permissions->pluck('name')->all()
+            ? Role::with('permissions:id,name')->where('name', $role)->where('guard_name', 'web')->first()?->permissions->pluck('name')->all() ?? []
             : [];
     }
 
@@ -81,9 +82,17 @@ class WorkspaceAdministration
         return $this->catalog->assignableBy($actor, $this->permissionsIn($actor, $workspace));
     }
 
-    /** A member whose role is above the actor's own permissions cannot be modified by the actor. */
-    public function canManageMember(User $actor, Workspace $workspace, string $memberRole): bool
+    /**
+     * A member whose role is above the actor's own permissions cannot be modified by the actor. A superuser's membership
+     * (role, Workspace) is only touched by another superuser, like the rest of their account (UserIdentityGuard): a
+     * Workspace admin could otherwise demote them to a weaker role inside that Workspace.
+     */
+    public function canManageMember(User $actor, Workspace $workspace, string $memberRole, ?User $member = null): bool
     {
+        if ($member?->is_superuser && ! $actor->is_superuser) {
+            return false;
+        }
+
         return $this->assignableRoles($actor, $workspace)->contains('name', $memberRole);
     }
 
@@ -167,7 +176,7 @@ class WorkspaceAdministration
                     'role' => $member->pivot->role,
                     'isActive' => $member->is_active,
                     'isSelf' => $actor->is($member),
-                    'canManage' => $assignable->contains('name', $member->pivot->role),
+                    'canManage' => $this->canManageMember($actor, $workspace, $member->pivot->role, $member),
                 ])->values(),
                 'meta' => ListPagination::meta($page),
             ],

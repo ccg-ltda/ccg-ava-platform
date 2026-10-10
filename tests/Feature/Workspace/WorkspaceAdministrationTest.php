@@ -173,4 +173,33 @@ class WorkspaceAdministrationTest extends TestCase
         $this->put("/workspaces/{$this->a->id}/members/{$admin->id}", ['role' => 'cliente'])->assertSessionHasErrors('role');
         $this->assertSame('admin', $this->a->users()->find($admin->id)->pivot->role);
     }
+
+    public function test_a_workspace_admin_cannot_demote_move_or_remove_a_superusers_membership(): void
+    {
+        $super = $this->member($this->a, 'admin');
+        $super->forceFill(['is_superuser' => true])->save();
+        $this->actAs('admin');
+
+        $this->put("/workspaces/{$this->a->id}/members/{$super->id}", ['role' => 'cliente'])->assertSessionHasErrors('member');
+        $this->delete("/workspaces/{$this->a->id}/members/{$super->id}")->assertSessionHasErrors('member');
+        $this->put("/users/{$super->id}", ['name' => $super->name, 'email' => $super->email, 'role' => 'cliente'])->assertSessionHasErrors('role');
+        $this->put("/users/{$super->id}", ['name' => $super->name, 'email' => $super->email, 'role' => 'admin', 'workspace_id' => $this->b->id])->assertSessionHasErrors();
+
+        $this->assertSame('admin', $this->a->users()->whereKey($super->id)->firstOrFail()->pivot->role);
+        $this->assertFalse($this->b->users()->whereKey($super->id)->exists());
+        $this->assertTrue($super->fresh()->is_superuser);
+    }
+
+    public function test_a_superuser_can_still_manage_another_superusers_membership_and_an_admin_other_admins(): void
+    {
+        $other = $this->member($this->a, 'admin');
+        $other->forceFill(['is_superuser' => true])->save();
+        $peer = $this->member($this->a, 'admin');
+        $this->actAs('admin', superuser: true);
+
+        $this->put("/workspaces/{$this->a->id}/members/{$other->id}", ['role' => 'cliente'])->assertSessionHasNoErrors();
+        $this->assertSame('cliente', $this->a->users()->whereKey($other->id)->firstOrFail()->pivot->role);
+
+        $this->put("/workspaces/{$this->a->id}/members/{$peer->id}", ['role' => 'cliente'])->assertSessionHasNoErrors();
+    }
 }

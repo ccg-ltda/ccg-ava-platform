@@ -13,6 +13,7 @@ use App\Models\Organization;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\AgentAccess;
+use App\Services\ChannelDelivery;
 use App\Services\ConversationControl;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as HttpRequest;
@@ -616,5 +617,58 @@ class HumanHandlingTest extends TestCase
         $this->assertContains(['field' => 'Agente', 'before' => null, 'after' => $agent->name], $log->changes);
         $this->assertStringContainsString('Tomó la conversación', $log->description);
         $this->assertSame('Devolvió a la IA la conversación María', AuditLog::where('action', 'returned')->firstOrFail()->description);
+    }
+
+    // --- a switched-off chatbot or channel is silent for the agent too --------------------------------------------
+
+    public function test_an_agent_cannot_write_through_a_deactivated_chatbot_or_a_channel_that_is_off(): void
+    {
+        $workspace = $this->workspace('WS_A');
+        [$bot] = $this->liveBot($workspace);
+        [$webBot, $key] = $this->liveWidget($workspace);
+        $agent = $this->member($workspace, 'agente');
+        Http::fake([self::HOOK => Http::response(['reply' => 'ok']), 'graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.X']]], 200)]);
+        $this->postJson("/api/widget/{$key}/messages", ['session_id' => 'visitor-1234', 'message' => 'Hola'])->assertOk();
+        $whatsapp = $this->conversation($bot);
+        $web = Conversation::where('channel', 'web')->firstOrFail();
+
+        $this->signIn($agent, $workspace);
+        $this->post("/conversations/{$whatsapp->id}/take");
+        $this->post("/conversations/{$web->id}/take");
+
+        // Chatbot off: neither the integration channel nor the pull channel accepts the message, and nothing is stored or sent.
+        $bot->update(['is_active' => false]);
+        $webBot->update(['is_active' => false]);
+        $this->post("/conversations/{$whatsapp->id}/messages", ['body' => 'hola'])->assertSessionHas('error');
+        $this->post("/conversations/{$web->id}/messages", ['body' => 'hola'])->assertSessionHas('error');
+
+        // Chatbot on but the web channel off: the visitor could never fetch it.
+        $webBot->update(['is_active' => true]);
+        $this->actingAs($this->member($workspace, 'admin'))->withSession(['workspace_id' => $workspace->id])->put("/chatbots/{$webBot->id}/channels/web", ['is_active' => false]);
+        $this->signIn($agent, $workspace)->post("/conversations/{$web->id}/messages", ['body' => 'hola'])->assertSessionHas('error');
+
+        $this->assertSame(0, Message::where('sender', 'agent')->count());
+        Http::assertNotSent(fn (HttpRequest $request) => str_contains($request->url(), 'graph.facebook.com'));
+    }
+
+    public function test_a_queued_agent_message_is_not_sent_if_the_chatbot_is_deactivated_before_the_job_runs(): void
+    {
+        $workspace = $this->workspace('WS_A');
+        [$bot] = $this->liveBot($workspace);
+        $agent = $this->member($workspace, 'agente');
+        Bus::fake();
+        $this->metaAccepts();
+        $conversation = $this->conversation($bot);
+
+        $this->signIn($agent, $workspace);
+        $this->post("/conversations/{$conversation->id}/take");
+        $this->post("/conversations/{$conversation->id}/messages", ['body' => 'hola'])->assertSessionMissing('error');
+        $message = Message::where('sender', 'agent')->firstOrFail();
+        $bot->update(['is_active' => false]);
+
+        app(ChannelDelivery::class)->deliver($message);
+
+        $this->assertSame('failed', $message->fresh()->status);
+        Http::assertNothingSent();
     }
 }

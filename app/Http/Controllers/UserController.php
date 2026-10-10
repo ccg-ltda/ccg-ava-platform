@@ -219,7 +219,7 @@ class UserController extends Controller
 
         // Touching the role, the Workspace or the password of someone above the actor would be an escalation.
         if (($moving || $changingPassword || $data['role'] !== $currentRole)
-            && ! $this->workspaces->canManageMember($actor, $current, $currentRole)) {
+            && ! $this->workspaces->canManageMember($actor, $current, $currentRole, $user)) {
             throw ValidationException::withMessages(['role' => 'Este usuario tiene un rol con más permisos que el tuyo.']);
         }
 

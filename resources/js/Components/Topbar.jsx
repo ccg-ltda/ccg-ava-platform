@@ -29,7 +29,7 @@ export default function Topbar({ user, role, onMenu }) {
             <p className="text-sm font-extrabold tracking-[0.2em] uppercase">CCG Avachat</p>
 
             <nav className="ml-2 hidden items-center gap-1 sm:flex" aria-label="Secciones">
-                {topTabs.map((tab) => (
+                {topTabs.filter((tab) => !tab.permission || user?.permissions?.includes(tab.permission)).map((tab) => (
                     <Link
                         key={tab.label}
                         href={route(tab.route)}

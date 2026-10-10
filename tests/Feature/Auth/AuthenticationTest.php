@@ -6,7 +6,6 @@ use App\Models\Organization;
 use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class AuthenticationTest extends TestCase
@@ -15,7 +14,7 @@ class AuthenticationTest extends TestCase
 
     private function workspaceWithMember(User $user): void
     {
-        Role::findOrCreate('cliente', 'web');
+        $this->seedRoleCatalog();
         $workspace = Workspace::create([
             'organization_id' => Organization::create(['name' => 'Test Org'])->id,
             'code' => 'TEST_WS',

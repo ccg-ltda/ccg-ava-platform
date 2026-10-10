@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Models\Workspace;
+use App\Services\LandingPage;
 use App\Services\RememberedAccess;
+use App\Services\WorkspaceAdministration;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -14,7 +16,11 @@ use Inertia\Response;
 
 class AuthenticatedSessionController extends Controller
 {
-    public function __construct(private readonly RememberedAccess $remembered) {}
+    public function __construct(
+        private readonly RememberedAccess $remembered,
+        private readonly LandingPage $landing,
+        private readonly WorkspaceAdministration $administration,
+    ) {}
 
     /**
      * Display the login view.
@@ -55,7 +61,10 @@ class AuthenticatedSessionController extends Controller
             $this->remembered->forget();
         }
 
-        return redirect()->intended(route('dashboard', absolute: false));
+        // The Dashboard, or the first page the user's role in this Workspace can open (a role without `view-dashboard`).
+        $permissions = $this->administration->permissionsIn($request->user(), Workspace::findOrFail($workspaceId));
+
+        return redirect()->intended(route($this->landing->route($permissions), absolute: false));
     }
 
     /**

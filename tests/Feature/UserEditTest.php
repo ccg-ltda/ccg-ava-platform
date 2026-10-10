@@ -112,7 +112,7 @@ class UserEditTest extends TestCase
         foreach ([$shared, $super] as $target) {
             $hash = $target->password;
             $this->put('/users/'.$target->id, $this->payload($target, ['password' => 'Nueva-clave-123', 'password_confirmation' => 'Nueva-clave-123']))
-                ->assertSessionHasErrors('email');
+                ->assertSessionHasErrors($target->is($super) ? 'role' : 'email'); // a superuser's membership is refused before the identity check
             $this->assertSame($hash, $target->fresh()->password);
         }
 
