@@ -10,6 +10,7 @@ use App\Http\Controllers\DemoConversationController;
 use App\Http\Controllers\IntegrationController;
 use App\Http\Controllers\OrganizationController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SavedFilterController;
 use App\Http\Controllers\SettingsController;
@@ -25,7 +26,9 @@ Route::redirect('/', '/pre-login');
 // Everything below requires an authenticated user AND a valid Workspace context
 // (re-validated on every request by EnsureWorkspaceContext).
 Route::middleware(['auth', 'verified', 'workspace'])->group(function () {
+    // Dashboard: the executive and operational summary and the home page after login. Reportes: the detailed analytics.
     Route::get('/dashboard', [DashboardController::class, 'index'])->middleware('workspace.permission:view-dashboard')->name('dashboard');
+    Route::get('/reports', [ReportController::class, 'index'])->middleware('workspace.permission:view-dashboard')->name('reports.index');
 });
 
 Route::middleware(['auth', 'workspace'])->group(function () {

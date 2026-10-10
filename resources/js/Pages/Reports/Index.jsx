@@ -33,7 +33,7 @@ export default function Index({ stats, roleBreakdown, recentUsers, filters, rang
     const selectedWorkspace = scope.mode === 'all' ? ALL_WORKSPACES : scope.workspace;
 
     const visit = (params, { everything = false } = {}) =>
-        router.get(route('dashboard'), { ...params, tab: SECTION_IDS[tab] }, {
+        router.get(route('reports.index'), { ...params, tab: SECTION_IDS[tab] }, {
             // Period and grouping only change the series; a new scope changes every figure.
             only: everything ? undefined : ['filters', 'range', 'options', 'teamGrowth', 'errors'],
             preserveState: true,

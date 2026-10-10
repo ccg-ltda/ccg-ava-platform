@@ -1,4 +1,4 @@
-import { BarChart3, Bot, History, MessagesSquare, Plug, Settings, Users } from 'lucide-react';
+import { BarChart3, Bot, History, LayoutDashboard, MessagesSquare, Plug, Settings, Users } from 'lucide-react';
 
 /**
  * Single definition of the sidebar menu. A section without `label` is shown without a heading. Every `route` is a real Laravel route name;
@@ -7,9 +7,10 @@ import { BarChart3, Bot, History, MessagesSquare, Plug, Settings, Users } from '
  */
 export const navigation = [
     {
-        // The first entry is the assistants themselves, so it carries no heading of its own (it would repeat its name).
+        // The first entries are the Dashboard (the home page) and the assistants themselves, so the section carries no heading.
         label: null,
         items: [
+            { label: 'Dashboard', route: 'dashboard', icon: LayoutDashboard, permission: 'view-dashboard' },
             { label: 'Asistentes', route: 'chatbots.index', icon: Bot, permission: 'view-chatbots' },
             { label: 'Conversaciones', route: 'conversations.index', icon: MessagesSquare, permission: 'view-conversations' },
         ],
@@ -17,7 +18,7 @@ export const navigation = [
     {
         label: 'Analytics',
         items: [
-            { label: 'Reportes', route: 'dashboard', icon: BarChart3, permission: 'view-dashboard' },
+            { label: 'Reportes', route: 'reports.index', icon: BarChart3, permission: 'view-dashboard' },
             { label: 'Auditoría', route: 'audit.index', icon: History, permission: 'manage-settings' },
         ],
     },

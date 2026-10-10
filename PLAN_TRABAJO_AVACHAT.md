@@ -71,7 +71,7 @@ Provienen de `reglas.md` y del encargo; se citan para que cualquier módulo se p
 | Ejecución de workflows de n8n iniciada por Ava | Existe, solo con simulaciones | `ChatbotExecutions`, `N8nExecutor`, `config/n8n.php`, tabla `chatbot_executions`; `ChatbotExecutionTest` (53) |
 | API del agente (n8n → Ava) | Existe | `routes/api.php` (`/api/agent/config`, `messages`, `messages/status`, `conversations/authorize`, `conversations/handoff`); `AgentApiTest` (15) |
 | Integraciones | Existe | tipos `http`, `whatsapp`, `web`, `n8n` en `config/integrations.php`; `IntegrationsTest` (28), `N8nIntegrationTest` (21) |
-| Reportes (ruta `/dashboard`) | Parcial | `DashboardController` renderiza `Reports/Index`; solo el equipo del Workspace tiene datos reales, el resto dice «Sin datos todavía» (`config/reports.php`, `ReportsTest`) |
+| Reportes (ruta `/reports`) | Parcial | `ReportController` renderiza `Reports/Index`; solo el equipo del Workspace tiene datos reales, el resto dice «Sin datos todavía» (`config/reports.php`, `ReportsTest`) |
 | Auditoría | Existe | `AuditController`, `audit_logs`, exportación a PDF; `AuditTest` (30) |
 | Configuraciones | Existe | `Pages/Settings` (general, regional, apariencia, impuestos); `WorkspaceSettingsTest` (17) |
 | Usuarios, roles, Workspaces y organizaciones | Existe | `Pages/Users` (usuarios, roles, permisos, Workspaces, organizaciones); `UserRoleManagementTest` (26), `WorkspaceAccessTest` (24), `WorkspaceAdministrationTest` (11), `WorkspaceLifecycleTest` (12) |
@@ -79,7 +79,7 @@ Provienen de `reglas.md` y del encargo; se citan para que cualquier módulo se p
 
 Observaciones importantes que condicionan el plan:
 
-- **No existe un Dashboard separado de Reportes.** La ruta `dashboard` muestra Reportes y es la página de inicio tras el login (`reglas.md` §11, Reportes). Ver D-04.
+- **Dashboard y Reportes son pantallas distintas.** `/dashboard` (`DashboardController`, `Pages/Dashboard`) es el resumen y la página de inicio tras el login; `/reports` (`ReportController`) conserva el análisis detallado (`reglas.md` §11). Resuelve D-04.
 - **La conexión real con Meta y n8n no está validada de punta a punta.** Todo lo que depende de ellas se probó con simulaciones (`pendientes.md`, «Chatbots — prueba manual con credenciales reales» y «Ejecución iniciada por Ava»).
 - **Instagram y Messenger no están disponibles** como canales (`config/chatbots.php`).
 - **Configuraciones no tiene horario de atención ni datos de negocio propios de una solución.** Región, moneda, zona horaria e impuestos existen y hoy solo se aplican a las fechas de las tablas (`pendientes.md`, «Configuraciones, fase futura»).
@@ -164,7 +164,7 @@ Lo que sí es nuevo y transversal en esta fase:
 ### 6.1. Dashboard
 
 - **Propósito.** Resumen del día del negocio y puerta de entrada tras el login.
-- **Existe / adaptación.** [Parcial] No existe como página aparte: `/dashboard` es Reportes. Decisión D-04: separar un Dashboard operativo (resumen del día, conversaciones pendientes, accesos rápidos) de Reportes (analítica por periodo), o mantener una sola página.
+- **Existe / adaptación.** [Existe] Implementado en la Etapa 1: `/dashboard` (`DashboardController`, `DashboardMetrics`, `Pages/Dashboard`) es independiente de Reportes, que pasó a `/reports` (`ReportController`). Pruebas: `DashboardTest`. D-04 queda resuelta: son dos pantallas. Pendiente de adaptación: tarjetas específicas de cada solución cuando existan sus módulos.
 - **Funcionalidades propuestas.** Conversaciones pendientes de agente y en atención (datos que ya existen, `ConversationInbox::counts`), estado de los canales, accesos rápidos a los módulos disponibles del Workspace, y tarjetas específicas de la solución solo cuando existan sus módulos.
 - **Por solución.** Mismo módulo. Las tarjetas de cada solución aparecen cuando sus módulos específicos existan y estén disponibles; hasta entonces es igual para las cuatro.
 - **Consulta y acciones.** Consulta; sin acciones de escritura propias.
@@ -513,7 +513,7 @@ Notas sobre el orden:
 
 **Producto y alcance**
 - **D-01.** Nombre comercial y público de cada solución («Servicios y Reservas», «eCommerce», etc.) y su descripción.
-- **D-04.** Si Dashboard y Reportes son pantallas distintas o una sola.
+- **D-04. [Resuelta en la Etapa 1]** Dashboard y Reportes son pantallas distintas (ver 6.1 y 6.4).
 - **D-09.** Terminología por solución (paciente, cliente, huésped; cita, reserva, turno).
 - **D-10.** Contenido de las plantillas iniciales de asistente por solución.
 - **D-13.** Horario de atención y qué datos de negocio guarda Configuraciones.

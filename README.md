@@ -58,7 +58,8 @@ Permisos de Conversaciones: `view-conversations` (leer), `reply-conversations` (
 
 | Módulo | Para qué sirve |
 |---|---|
-| Reportes | Analítica del Workspace (solo muestra datos reales; sin fuente dice «Sin datos todavía») |
+| Dashboard | Resumen ejecutivo y operativo: indicadores, actividad en el tiempo, estado de las conversaciones, lo que requiere atención, integraciones y accesos rápidos (solo datos reales) |
+| Reportes (`/reports`) | Analítica del Workspace (solo muestra datos reales; sin fuente dice «Sin datos todavía») |
 | Asistentes (Chatbots) | Identidad, instrucciones, token de acceso de n8n, canales y apariencia del chat / botón |
 | Conversaciones | Bandeja unificada: filtros IA / pendientes / en atención / resueltas, asignación, respuesta del agente y devolución a la IA |
 | Integraciones | n8n (Ava → n8n con prueba de conexión real), WhatsApp Business, canal Web y conexiones HTTP |

@@ -39,7 +39,7 @@ class WorkspaceReport
 
         return [
             'stats' => [
-                'users' => $members()->distinct()->count('workspace_user.user_id'),
+                'users' => $this->memberCount($global ? null : $target),
                 'admins' => (int) ($byRole['admin'] ?? 0),
                 'rolesInUse' => $byRole->count(),
                 'permissions' => Role::findByName($role, 'web')->permissions()->count(),
@@ -61,6 +61,14 @@ class WorkspaceReport
                 ->values()
                 ->all(),
         ];
+    }
+
+    /** People with a membership in one Workspace, or in any of them when `$target` is null (each person counted once). */
+    public function memberCount(?Workspace $target): int
+    {
+        return DB::table('workspace_user')
+            ->when($target, fn ($query) => $query->where('workspace_id', $target->id))
+            ->distinct()->count('user_id');
     }
 
     /**

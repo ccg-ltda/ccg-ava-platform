@@ -32,7 +32,7 @@ class NavigationPagesTest extends TestCase
     {
         $this->member('admin');
 
-        $this->get('/dashboard')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->component('Reports/Index'));
+        $this->get('/reports')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->component('Reports/Index'));
         $this->get('/settings')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->component('Settings/Index'));
         $this->get('/integrations')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->component('Integrations/Index'));
         $this->get('/users')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->component('Users/Index'));
@@ -63,7 +63,7 @@ class NavigationPagesTest extends TestCase
         $workspace->users()->attach(User::factory()->create()->id, ['role' => 'cliente']);
         $other->users()->attach(User::factory()->count(3)->create()->pluck('id')->all(), ['role' => 'cliente']);
 
-        $this->get('/dashboard')->assertInertia(fn (AssertableInertia $page) => $page
+        $this->get('/reports')->assertInertia(fn (AssertableInertia $page) => $page
             ->component('Reports/Index')
             ->where('stats.users', 2)
             ->where('stats.admins', 1)
@@ -76,7 +76,7 @@ class NavigationPagesTest extends TestCase
     {
         $this->member('cliente');
 
-        $this->get('/dashboard')->assertInertia(fn (AssertableInertia $page) => $page->where('stats.permissions', 1));
+        $this->get('/reports')->assertInertia(fn (AssertableInertia $page) => $page->where('stats.permissions', 1));
     }
 
     public function test_users_page_lists_roles_with_their_permissions(): void

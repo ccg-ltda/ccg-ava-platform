@@ -5,7 +5,7 @@ import Card from '@/Components/Card';
  * Frame of every chart: title, description, an actions slot and the three states the content can be in. `loading`
  * shows a skeleton, `error` (a message) shows the failure with an optional `onRetry`; otherwise `children` is drawn.
  */
-export default function ChartCard({ title, description, actions, loading = false, error = null, onRetry, height = 240, delay = 0, className = '', children }) {
+export default function ChartCard({ title, description, actions, loading = false, error = null, errorTitle = 'No se pudo cargar el gráfico', onRetry, height = 240, delay = 0, className = '', children }) {
     return (
         <Card delay={delay} className={`min-w-0 p-5 sm:p-6 ${className}`}>
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -23,7 +23,7 @@ export default function ChartCard({ title, description, actions, loading = false
                     <div className="grid place-items-center rounded-xl border border-danger/30 bg-danger/5 px-6 text-center" style={{ minHeight: height }} role="alert">
                         <div className="flex flex-col items-center gap-2">
                             <AlertTriangle className="size-6 text-danger" aria-hidden="true" />
-                            <p className="text-sm font-semibold text-ink">No se pudo cargar el gráfico</p>
+                            <p className="text-sm font-semibold text-ink">{errorTitle}</p>
                             <p className="max-w-xs text-xs text-ink-muted">{error}</p>
                             {onRetry && (
                                 <button type="button" onClick={onRetry} className="mt-1 inline-flex items-center gap-1.5 text-xs font-semibold tracking-wider text-primary uppercase focus-visible:outline-2 focus-visible:outline-primary">

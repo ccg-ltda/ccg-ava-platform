@@ -77,6 +77,18 @@
             opacity: 1;
         }
     }
+
+    /* Charts: a line is drawn once when it appears and a donut segment grows from nothing (see Components/Charts). */
+    --animate-chart-draw: chart-draw 700ms ease-out both;
+
+    @keyframes chart-draw {
+        from {
+            stroke-dashoffset: 1;
+        }
+        to {
+            stroke-dashoffset: 0;
+        }
+    }
 }
 
 @keyframes drift {
