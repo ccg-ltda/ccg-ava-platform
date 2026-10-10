@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Chatbots\ChatbotExecutor;
+use App\Chatbots\N8nExecutor;
 use App\Models\User;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Foundation\DevCommands;
@@ -18,7 +20,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // What runs a chatbot's workflow (today the platform's n8n); the rest of Ava only knows the contract.
+        $this->app->bind(ChatbotExecutor::class, N8nExecutor::class);
     }
 
     /**

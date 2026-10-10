@@ -27,7 +27,8 @@ function Bubble({ message, simulate, conversationId }) {
     const mine = message.direction === 'out';
     const type = TYPES[message.type];
     const Icon = type?.icon;
-    const failed = message.status === 'failed';
+    // A message Meta may or may not have delivered is flagged like a failed one: someone must look before sending it again.
+    const failed = message.status === 'failed' || message.status === 'unconfirmed';
 
     return (
         <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>

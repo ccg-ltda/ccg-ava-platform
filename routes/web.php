@@ -11,6 +11,7 @@ use App\Http\Controllers\IntegrationController;
 use App\Http\Controllers\OrganizationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RoleController;
+use App\Http\Controllers\SavedFilterController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WorkspaceController;
@@ -100,6 +101,14 @@ Route::middleware(['auth', 'workspace'])->group(function () {
     Route::middleware('workspace.permission:manage-settings')->prefix('audit')->name('audit.')->group(function () {
         Route::get('/', [AuditController::class, 'index'])->name('index');
         Route::get('/export', [AuditController::class, 'export'])->middleware('throttle:10,1')->name('export');
+    });
+
+    // Search filters a user saves per module. The module decides the permission; the filters are always the user's own in
+    // the active Workspace (see SavedFilters), so there is no way to name another user's or Workspace's filter.
+    Route::prefix('saved-filters/{scope}')->where(['scope' => '[a-z_]+'])->name('saved-filters.')->group(function () {
+        Route::post('/', [SavedFilterController::class, 'store'])->middleware('throttle:30,1')->name('store');
+        Route::put('/{filter}', [SavedFilterController::class, 'update'])->whereNumber('filter')->middleware('throttle:30,1')->name('update');
+        Route::delete('/{filter}', [SavedFilterController::class, 'destroy'])->whereNumber('filter')->name('destroy');
     });
 
     Route::get('/users', [UserController::class, 'index'])

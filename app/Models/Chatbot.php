@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Audit\Masked;
 use App\Models\Concerns\Audited;
+use App\Services\ChatbotWorkflows;
 use Closure;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -17,6 +18,16 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Chatbot extends Model
 {
     use Audited;
+
+    protected static function booted(): void
+    {
+        // A workflow key is valid or it is not stored, whichever Eloquent code writes it (see ChatbotWorkflows).
+        static::saving(function (Chatbot $chatbot) {
+            if ($chatbot->workflow_key !== null && $chatbot->isDirty('workflow_key')) {
+                app(ChatbotWorkflows::class)->assertAssignable($chatbot);
+            }
+        });
+    }
 
     protected function casts(): array
     {

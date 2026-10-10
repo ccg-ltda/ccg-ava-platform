@@ -9,6 +9,7 @@ use App\Services\ChannelCatalog;
 use App\Services\ChatbotService;
 use App\Services\ConversationInbox;
 use App\Services\DemoConversations;
+use App\Services\SavedFilters;
 use App\Services\WorkspaceScope;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -30,6 +31,7 @@ class ConversationController extends Controller
         private readonly ChatbotService $chatbots,
         private readonly ChannelCatalog $channels,
         private readonly DemoConversations $demo,
+        private readonly SavedFilters $saved,
         WorkspaceScope $scope,
     ) {
         $this->scope = $scope;
@@ -72,6 +74,8 @@ class ConversationController extends Controller
             ],
             // The demo tools: only in a demo environment, and managed only from the administrative Workspace itself.
             'demo' => $this->demo->enabled() ? ['canManage' => ! $foreign && $viewing->isAdministrative() && in_array('manage-conversations', $permissions, true)] + $this->demo->counts($viewing) : null,
+            // Saved filters are the user's own in their Workspace and belong to the shared inbox: not offered on a channel's page nor on another Workspace seen read only.
+            'savedFilters' => $bot || $foreign ? null : $this->saved->for($request->user(), $viewing, 'conversations'),
             'reportEndpoint' => url('/api/agent/messages'),
             'canConfigure' => ! $foreign && in_array('manage-settings', $permissions, true),
             'scope' => $this->scopeProps($request, $viewing, $foreign, 'manage-chatbots'),

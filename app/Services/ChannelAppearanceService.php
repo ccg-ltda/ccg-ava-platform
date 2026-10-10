@@ -41,13 +41,13 @@ class ChannelAppearanceService
     private const DEFAULTS = [
         'widget' => [
             'enabled' => true, 'button_text' => null, 'header_title' => null, 'welcome_message' => null, 'icon' => 'avatar',
-            'primary_color' => null, 'text_color' => null, 'size' => 'md', 'shape' => 'round', 'position' => 'bottom-right',
-            'shadow' => 'soft', 'widget_size' => 'md', 'radius' => 16, 'open_behavior' => 'click',
+            'primary_color' => null, 'text_color' => null, 'size' => 60, 'shape' => 50, 'position' => 'bottom-right',
+            'shadow' => 2, 'widget_size' => 370, 'radius' => 16, 'open_behavior' => 'click',
         ],
         'button' => [
             'enabled' => true, 'button_text' => null, 'message' => null, 'icon' => 'channel',
-            'primary_color' => null, 'text_color' => null, 'size' => 'md', 'shape' => 'round', 'position' => 'bottom-right',
-            'shadow' => 'soft',
+            'primary_color' => null, 'text_color' => null, 'size' => 60, 'shape' => 50, 'position' => 'bottom-right',
+            'shadow' => 2,
         ],
     ];
 
@@ -81,7 +81,19 @@ class ChannelAppearanceService
         $saved = $chatbot->appearances()->where('channel', $channelKey)->value('settings');
         $defaults = self::DEFAULTS[$kind];
 
-        return array_replace($defaults, array_intersect_key(is_array($saved) ? $saved : [], $defaults));
+        return array_replace($defaults, $this->modernized(array_intersect_key(is_array($saved) ? $saved : [], $defaults)));
+    }
+
+    /** A look saved with the earlier named choices (small, soft...) becomes the number that draws the same thing. */
+    private function modernized(array $saved): array
+    {
+        foreach (config('chatbots.appearance.legacy') as $setting => $names) {
+            if (isset($saved[$setting]) && is_string($saved[$setting])) {
+                $saved[$setting] = $names[$saved[$setting]] ?? self::DEFAULTS['widget'][$setting];
+            }
+        }
+
+        return $saved;
     }
 
     /** The button color when the client has not chosen one: the channel's own color or the Workspace's main color. */
@@ -182,6 +194,7 @@ class ChannelAppearanceService
         $options = config('chatbots.appearance');
         $length = $options['max_length'];
         $choice = fn (string $list) => ['required', 'string', Rule::in(array_keys($options[$list]))];
+        $range = fn (string $setting) => ['bail', 'required', 'integer', "between:{$options[$setting]['min']},{$options[$setting]['max']}", "multiple_of:{$options[$setting]['step']}"];
 
         $rules = [
             'enabled' => ['required', 'boolean'],
@@ -189,18 +202,18 @@ class ChannelAppearanceService
             'icon' => $choice('icons'),
             'primary_color' => ['nullable', 'string', 'regex:'.self::HEX],
             'text_color' => ['bail', 'nullable', 'string', 'regex:'.self::HEX, $this->readableOn($primary)],
-            'size' => $choice('sizes'),
-            'shape' => $choice('shapes'),
+            'size' => $range('size'),
+            'shape' => $range('shape'),
             'position' => $choice('positions'),
-            'shadow' => $choice('shadows'),
+            'shadow' => $range('shadow'),
         ];
 
         if ($kind === 'widget') {
             $rules += [
                 'header_title' => ['nullable', 'string', 'max:'.$length['header_title']],
                 'welcome_message' => ['nullable', 'string', 'max:'.$length['welcome_message']],
-                'widget_size' => $choice('widget_sizes'),
-                'radius' => ['required', 'integer', 'between:'.$options['radius']['min'].','.$options['radius']['max']],
+                'widget_size' => $range('widget_size'),
+                'radius' => $range('radius'),
                 'open_behavior' => $choice('open_behaviors'),
             ];
         } else {
@@ -221,14 +234,10 @@ class ChannelAppearanceService
         $list = fn (array $items) => collect($items)->map(fn ($label, $value) => ['value' => $value, 'label' => $label])->values()->all();
 
         return [
-            'sizes' => $list($options['sizes']),
-            'shapes' => $list($options['shapes']),
             'positions' => $list($options['positions']),
-            'shadows' => $list($options['shadows']),
-            'widgetSizes' => $list($options['widget_sizes']),
             'openBehaviors' => $list($options['open_behaviors']),
             'icons' => $list($options['icons']),
-            'radius' => $options['radius'],
+            'ranges' => collect(['size', 'shape', 'shadow', 'widget_size', 'radius'])->mapWithKeys(fn (string $setting) => [Str::camel($setting) => $options[$setting]])->all(),
             'maxLength' => collect($options['max_length'])->mapWithKeys(fn ($max, $key) => [Str::camel($key) => $max])->all(),
         ];
     }

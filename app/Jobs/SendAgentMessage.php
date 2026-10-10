@@ -10,7 +10,7 @@ use Throwable;
 
 /**
  * Delivers one message of a human agent to its channel. It runs once only: a retry after the channel may already have
- * accepted the message would send it twice, so a crash leaves the message `failed` ("no se pudo confirmar") instead.
+ * accepted the message would send it twice, so a crash leaves the message `unconfirmed` (it may have gone out) instead.
  */
 class SendAgentMessage implements ShouldQueue
 {
@@ -30,7 +30,7 @@ class SendAgentMessage implements ShouldQueue
     public function failed(Throwable $e): void
     {
         if (($message = Message::find($this->messageId)) && $message->status === Message::PENDING) {
-            app(ChannelDelivery::class)->fail($message, 'No se pudo confirmar el envío.');
+            app(ChannelDelivery::class)->unconfirm($message, 'No se pudo confirmar el envío: pudo haberse enviado. No se reintenta solo; verifica en WhatsApp antes de reenviarlo.');
         }
     }
 }

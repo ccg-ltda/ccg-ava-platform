@@ -12,4 +12,4 @@ export const handlingStates = {
 };
 
 /** Delivery states of an outgoing message. `pending` is a message Ava accepted from an agent and has not handed to the channel yet. */
-export const messageStatuses = { pending: 'Enviando…', sent: 'Enviado', delivered: 'Entregado', read: 'Leído', failed: 'No se pudo enviar' };
+export const messageStatuses = { pending: 'Enviando…', sent: 'Enviado', delivered: 'Entregado', read: 'Leído', failed: 'No se pudo enviar', unconfirmed: 'Sin confirmar' };

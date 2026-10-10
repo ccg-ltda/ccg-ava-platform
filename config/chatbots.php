@@ -75,14 +75,27 @@ return [
      * value looks like; here live only the allowed values and limits, so the form and the validation share one source.
      */
     'appearance' => [
-        'sizes' => ['sm' => 'Pequeño', 'md' => 'Mediano', 'lg' => 'Grande'],
-        'shapes' => ['round' => 'Redondo', 'rounded' => 'Redondeado', 'square' => 'Cuadrado'],
         'positions' => ['bottom-right' => 'Inferior derecha', 'bottom-left' => 'Inferior izquierda'],
-        'shadows' => ['none' => 'Sin sombra', 'soft' => 'Suave', 'strong' => 'Marcada'],
-        'widget_sizes' => ['sm' => 'Compacto', 'md' => 'Estándar', 'lg' => 'Amplio'],
         'open_behaviors' => ['click' => 'Al hacer clic', 'auto' => 'Abrir solo a los 5 segundos'],
         'icons' => ['avatar' => 'Avatar del chatbot', 'channel' => 'Icono del canal'],
-        'radius' => ['min' => 0, 'max' => 28],
+        /*
+         * Continuous settings, drawn as sliders. `size` and `widget_size` are pixels (button side, chat window width: its
+         * height follows from the width), `shape` is the corner rounding of the button as a percentage of its side (50 =
+         * circle), `shadow` a level (0 = none) and `radius` the corner radius of the chat in pixels. The widget script
+         * draws each value; here live the limits, which the form and the validation share.
+         */
+        'size' => ['min' => 48, 'max' => 72, 'step' => 4],
+        'shape' => ['min' => 0, 'max' => 50, 'step' => 5],
+        'shadow' => ['min' => 0, 'max' => 4, 'step' => 1],
+        'widget_size' => ['min' => 320, 'max' => 420, 'step' => 10],
+        'radius' => ['min' => 0, 'max' => 28, 'step' => 1],
+        /* What the earlier named choices (before the sliders) mean now, so a look saved with them keeps its appearance. */
+        'legacy' => [
+            'size' => ['sm' => 48, 'md' => 60, 'lg' => 72],
+            'shape' => ['square' => 10, 'rounded' => 30, 'round' => 50],
+            'shadow' => ['none' => 0, 'soft' => 2, 'strong' => 3],
+            'widget_size' => ['sm' => 320, 'md' => 370, 'lg' => 420],
+        ],
         'max_length' => ['button_text' => 40, 'header_title' => 40, 'welcome_message' => 280, 'message' => 200],
         /* Lowest contrast (WCAG ratio) a custom text color may have against the button color. */
         'min_contrast' => 3,

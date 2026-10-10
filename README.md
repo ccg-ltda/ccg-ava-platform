@@ -72,6 +72,10 @@ Permisos de Conversaciones: `view-conversations` (leer), `reply-conversations` (
 - **WhatsApp:** n8n recibe y responde, y reporta cada mensaje a Ava. Las respuestas de un agente las envía Ava por la Graph API con el token de la integración del Workspace. Instagram y Messenger aún no están disponibles.
 - **Atención humana:** `ai → pending → human → resolved`. Mientras una persona tiene la conversación, la IA no responde (n8n debe consultar `authorize` antes de enviar; el widget web lo aplica Ava misma).
 
+### n8n de la plataforma (ejecución iniciada por Ava)
+
+Modo opcional para WhatsApp, apagado mientras no se configure. Ava recibe el webhook de Meta (`/api/webhooks/whatsapp`, firmado con `META_APP_SECRET`), guarda el mensaje una sola vez y, si la IA tiene la conversación y el chatbot tiene un workflow asignado, lo ejecuta en el n8n de la plataforma (`N8N_EXECUTION_URL` y `N8N_EXECUTION_SECRET`, firma HMAC por solicitud). La respuesta vuelve en la misma llamada, Ava comprueba que el control no cambió y la envía por la Graph API. Los workflows existen en el catálogo `config/n8n.php`; el equipo los asigna a un chatbot con `php artisan workflows:manage assign|unassign|list` (columna `chatbots.workflow_key`); los clientes no la ven ni la eligen. Cada ejecución queda en `chatbot_executions` (estado, intentos, workflow usado, resultado del control y de la entrega) y `executions:recover` (programado cada minuto) retoma lo que un fallo dejó a medias sin reenviar nunca un mensaje. Un envío a WhatsApp cuyo resultado es incierto queda «Sin confirmar» y no se reintenta solo. El modo anterior (n8n recibe de Meta y reporta a Ava) sigue funcionando; no actives los dos para el mismo número. Tras desplegar, reinicia el worker (`horizon:terminate`).
+
 ### Entorno DEMO
 
 Para probar Conversaciones sin APIs reales, en el Workspace administrativo y solo en `local`/`testing`:
@@ -99,6 +103,7 @@ graphify update .                # actualiza el grafo de código (graphify-out/,
 ## Limitaciones conocidas
 
 - **WhatsApp y n8n reales no están validados de punta a punta:** el envío por la Graph API, el WhatsApp Trigger y los nodos `authorize` / `handoff` se probaron solo con simulaciones. Hacen falta una cuenta de WhatsApp Business y un n8n reales.
+- **La ejecución iniciada por Ava (webhook de Meta + n8n de la plataforma) solo se probó con simulaciones.** Falta un n8n con el workflow, una app de Meta con el webhook apuntando a Ava y verificar con n8n que su licencia permite este modelo de servicio antes del uso comercial. Meta no ofrece idempotencia al enviar: si el resultado de un envío es incierto, Ava no lo reenvía y depende de que Meta devuelva el estado con la etiqueta `ava:{id}` para completarlo.
 - Fuera de la ventana de 24 h de WhatsApp solo se pueden enviar plantillas aprobadas, que Ava no envía.
 - Reportes todavía no tiene métricas de conversaciones; la «IA» del entorno DEMO es un texto fijo.
 - Más pendientes y decisiones abiertas en [`pendientes.md`](pendientes.md).

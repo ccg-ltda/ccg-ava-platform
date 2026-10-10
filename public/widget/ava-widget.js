@@ -18,10 +18,13 @@
     var CHAT_ICON = 'M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 4V6a2 2 0 0 1 2-2z';
     var WHATSAPP_ICON = 'M17.47 14.38c-.3-.15-1.76-.87-2.03-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.94 1.16-.17.2-.35.22-.64.07-.3-.15-1.26-.46-2.39-1.47-.88-.79-1.48-1.76-1.65-2.06-.17-.3-.02-.46.13-.6.13-.14.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.08-.15-.67-1.61-.92-2.2-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.88 1.21 3.07c.15.2 2.1 3.2 5.08 4.49.71.3 1.26.49 1.7.63.71.23 1.36.2 1.87.12.57-.08 1.76-.72 2-1.41.25-.7.25-1.29.17-1.41-.07-.13-.27-.2-.57-.35M12.05 21.8h-.01a9.87 9.87 0 0 1-5.03-1.38l-.36-.21-3.74.98 1-3.65-.24-.37a9.86 9.86 0 0 1-1.51-5.26c0-5.45 4.44-9.88 9.89-9.88 2.64 0 5.12 1.03 6.99 2.9a9.83 9.83 0 0 1 2.89 6.99c0 5.45-4.44 9.88-9.88 9.88M20.46 3.49A11.82 11.82 0 0 0 12.05 0C5.5 0 .16 5.34.16 11.89c0 2.1.55 4.14 1.59 5.95L.06 24l6.3-1.65a11.88 11.88 0 0 0 5.68 1.45h.01c6.55 0 11.89-5.34 11.89-11.89 0-3.18-1.24-6.17-3.48-8.42';
 
-    /* What each value the client can choose looks like. Unknown values fall back to the first entry. */
-    var SIZES = { sm: { button: 48, icon: 22, font: 13 }, md: { button: 60, icon: 26, font: 14 }, lg: { button: 72, icon: 30, font: 16 } };
-    var PANELS = { sm: { width: 320, height: 440 }, md: { width: 370, height: 540 }, lg: { width: 420, height: 640 } };
-    var SHADOWS = { none: 'none', soft: '0 8px 24px rgba(0,0,0,.25)', strong: '0 12px 36px rgba(0,0,0,.45)' };
+    /*
+     * What each number the client can choose looks like (limits mirror config/chatbots.php `appearance`; a value outside
+     * them is pulled back in, so a stale or hand-edited configuration never breaks the page).
+     */
+    var LIMITS = { size: [48, 72, 60], widgetSize: [320, 420, 370], shape: [0, 50, 50], shadow: [0, 4, 2], radius: [0, 28, 16] };
+    /* Opacity of the button shadow per level; blur and offset grow with the level. */
+    var SHADOW_ALPHA = [0, 0.15, 0.25, 0.45, 0.55];
     var AUTO_OPEN_MS = 5000;
     var POLL_MS = 5000;
     /* What the visitor is told when the person answering changes (the server decides it; the text is the widget's own). */
@@ -32,8 +35,10 @@
         ai: 'El asistente vuelve a atenderte.'
     };
 
-    function pick(table, key, fallback) {
-        return Object.prototype.hasOwnProperty.call(table, key) ? table[key] : table[fallback];
+    function number(limits, value) {
+        var parsed = parseInt(value, 10);
+
+        return isNaN(parsed) ? limits[2] : Math.max(limits[0], Math.min(limits[1], parsed));
     }
 
     function hexOr(hex, fallback) {
@@ -76,25 +81,30 @@
         return svg;
     }
 
+    /** Corner radius of a square of `side` px whose rounding is `percent` of the side (50 = circle). */
+    function corner(side, percent) {
+        return percent >= 50 ? '999px' : Math.round(side * percent / 100) + 'px';
+    }
+
     /** The look of a configuration as plain numbers and safe CSS values. */
     function look(config) {
         var style = config.style || {};
         var color = hexOr(style.primaryColor || config.primaryColor, DEFAULT_COLOR);
-        var size = pick(SIZES, style.size, 'md');
-        var panel = pick(PANELS, style.widgetSize, 'md');
-        var shape = style.shape === 'square' ? 'square' : style.shape === 'rounded' ? 'rounded' : 'round';
-        var radius = parseInt(style.radius, 10);
+        var button = number(LIMITS.size, style.size);
+        var width = number(LIMITS.widgetSize, style.widgetSize);
+        var shape = number(LIMITS.shape, style.shape);
+        var level = number(LIMITS.shadow, style.shadow);
 
         return {
             color: color,
             text: hexOr(style.textColor, readableOn(color)),
-            size: size,
-            panel: panel,
+            size: { button: button, icon: Math.round(22 + (button - 48) / 3), font: button < 56 ? 13 : button < 68 ? 14 : 16 },
+            panel: { width: width, height: 2 * width - 200 },
             shape: shape,
-            buttonRadius: shape === 'round' ? '999px' : shape === 'rounded' ? Math.round(size.button * 0.3) + 'px' : '6px',
-            shadow: pick(SHADOWS, style.shadow, 'soft'),
+            buttonRadius: corner(button, shape),
+            shadow: level === 0 ? 'none' : '0 ' + level * 4 + 'px ' + level * 12 + 'px rgba(0,0,0,' + SHADOW_ALPHA[level] + ')',
             side: style.position === 'bottom-left' ? 'left' : 'right',
-            panelRadius: (isNaN(radius) ? 16 : Math.max(0, Math.min(28, radius))) + 'px',
+            panelRadius: number(LIMITS.radius, style.radius) + 'px',
             label: typeof style.buttonText === 'string' ? style.buttonText : '',
             useAvatar: style.icon !== 'channel' && !!config.avatarUrl
         };
@@ -116,7 +126,7 @@
             '.fab{position:' + pos + ';' + gap + 'bottom:20px;z-index:2147483000;height:' + l.size.button + 'px;min-width:' + l.size.button + 'px;max-width:calc(100% - 40px);border:0;border-radius:' + l.buttonRadius + ';cursor:pointer;background:' + l.color + ';color:' + l.text + ';display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:' + l.shadow + ';overflow:hidden;padding:' + (withText ? '0 18px 0 8px' : '0') + ';text-decoration:none;font-size:' + l.size.font + 'px;font-weight:700;line-height:1}',
             (preview ? '.fab,.panel{pointer-events:auto}' : '') + '.fab:focus-visible,.send:focus-visible,.close:focus-visible{outline:3px solid ' + l.color + ';outline-offset:3px}',
             '.fab .label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-            '.mark{width:' + inner + 'px;height:' + inner + 'px;display:grid;place-items:center;flex:none;overflow:hidden;border-radius:' + (l.shape === 'round' ? '50%' : l.shape === 'rounded' ? Math.round(inner * 0.3) + 'px' : '4px') + '}',
+            '.mark{width:' + inner + 'px;height:' + inner + 'px;display:grid;place-items:center;flex:none;overflow:hidden;border-radius:' + corner(inner, l.shape) + '}',
             '.mark img,.badge img{width:100%;height:100%;object-fit:cover}',
             '.panel{position:' + pos + ';' + gap + 'bottom:' + (20 + l.size.button + 12) + 'px;z-index:2147483000;width:' + l.panel.width + 'px;max-width:calc(100% - 24px);height:' + l.panel.height + 'px;max-height:calc(100% - ' + (20 + l.size.button + 12 + 12) + 'px);display:none;flex-direction:column;background:' + bg + ';color:' + ink + ';border:1px solid ' + line + ';border-radius:' + l.panelRadius + ';box-shadow:0 16px 48px rgba(0,0,0,.3);overflow:hidden}',
             '.panel.open{display:flex}',

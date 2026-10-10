@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Services\AuditReport;
 use App\Services\ListPagination;
+use App\Services\SavedFilters;
 use App\Services\WorkspaceScope;
 use Carbon\Carbon;
 use Illuminate\Http\Response;
@@ -24,6 +25,7 @@ class AuditController extends Controller
     public function __construct(
         private readonly AuditReport $report,
         private readonly WorkspaceScope $scope,
+        private readonly SavedFilters $saved,
     ) {}
 
     public function index(AuditFilterRequest $request): InertiaResponse
@@ -54,6 +56,7 @@ class AuditController extends Controller
                 'actions' => $this->labels('actions'),
             ],
             'scope' => $this->scopeProps($chosen),
+            'savedFilters' => $this->saved->for($viewer, $workspace, 'audit'),
         ]);
     }
 

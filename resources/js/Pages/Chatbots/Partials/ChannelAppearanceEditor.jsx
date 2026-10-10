@@ -6,11 +6,13 @@ import CopyBlock from '@/Components/CopyBlock';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import PrimaryButton from '@/Components/PrimaryButton';
+import RangeField from '@/Components/RangeField';
 import SecondaryButton from '@/Components/SecondaryButton';
 import SegmentedControl from '@/Components/SegmentedControl';
 import Textarea from '@/Components/Textarea';
 import TextInput from '@/Components/TextInput';
 import Toggle from '@/Components/Toggle';
+import { describeButtonSize, describeChatRadius, describeChatSize, describeShadow, describeShape, shadowNames, withHelp } from '@/config/appearance';
 import { channelStates } from '@/config/chatbots';
 import WidgetPreview from './WidgetPreview';
 
@@ -47,7 +49,7 @@ function ButtonFields({ channel, draft, set, errors, options, disabled, hasAvata
             </Field>
 
             <div>
-                <SegmentedControl label="Icono" options={options.icons} value={draft.icon} onChange={(value) => set('icon', value)} disabled={disabled} hint={draft.icon === 'avatar' && !hasAvatar ? 'Este chatbot todavía no tiene avatar: se usará el icono del canal.' : undefined} />
+                <SegmentedControl label="Icono" options={withHelp('icon', options.icons)} value={draft.icon} onChange={(value) => set('icon', value)} disabled={disabled} hint={draft.icon === 'avatar' && !hasAvatar ? 'Este chatbot todavía no tiene avatar: se usará el icono del canal.' : undefined} />
                 <InputError message={errors.icon} className="mt-1" />
             </div>
 
@@ -70,10 +72,10 @@ function ButtonFields({ channel, draft, set, errors, options, disabled, hasAvata
             </div>
 
             <div className="grid gap-5 2xl:grid-cols-2">
-                <SegmentedControl label="Tamaño" options={options.sizes} value={draft.size} onChange={(value) => set('size', value)} disabled={disabled} />
-                <SegmentedControl label="Forma" options={options.shapes} value={draft.shape} onChange={(value) => set('shape', value)} disabled={disabled} />
-                <SegmentedControl label="Posición" options={options.positions} value={draft.position} onChange={(value) => set('position', value)} disabled={disabled} />
-                <SegmentedControl label="Sombra" options={options.shadows} value={draft.shadow} onChange={(value) => set('shadow', value)} disabled={disabled} />
+                <RangeField label="Tamaño" unit="px" {...options.ranges.size} value={draft.size} onChange={(value) => set('size', value)} describe={describeButtonSize} error={errors.size} disabled={disabled} />
+                <RangeField label="Forma" format={(value) => (value >= 50 ? 'Redonda' : value === 0 ? 'Cuadrada' : `Redondeada ${value} %`)} {...options.ranges.shape} value={draft.shape} onChange={(value) => set('shape', value)} describe={describeShape} error={errors.shape} disabled={disabled} />
+                <SegmentedControl label="Posición" options={withHelp('position', options.positions)} value={draft.position} onChange={(value) => set('position', value)} disabled={disabled} />
+                <RangeField label="Sombra" format={(value) => shadowNames[value]} {...options.ranges.shadow} value={draft.shadow} onChange={(value) => set('shadow', value)} describe={describeShadow} error={errors.shadow} disabled={disabled} />
             </div>
         </div>
     );
@@ -81,8 +83,6 @@ function ButtonFields({ channel, draft, set, errors, options, disabled, hasAvata
 
 /** Fields of the chat panel that opens from the web button. */
 function ChatFields({ channel, draft, set, errors, options, disabled }) {
-    const { min, max } = options.radius;
-
     return (
         <div className="grid gap-5">
             <Field id={`${channel.key}_header_title`} label="Título del encabezado" error={errors.header_title} hint="Si lo dejas vacío se usa el nombre del chatbot.">
@@ -94,13 +94,11 @@ function ChatFields({ channel, draft, set, errors, options, disabled }) {
             </Field>
 
             <div className="grid gap-5 2xl:grid-cols-2">
-                <SegmentedControl label="Tamaño del chat" options={options.widgetSizes} value={draft.widget_size} onChange={(value) => set('widget_size', value)} disabled={disabled} />
-                <SegmentedControl label="Apertura" options={options.openBehaviors} value={draft.open_behavior} onChange={(value) => set('open_behavior', value)} disabled={disabled} />
+                <RangeField label="Tamaño del chat" unit="px" {...options.ranges.widgetSize} value={draft.widget_size} onChange={(value) => set('widget_size', value)} describe={describeChatSize} error={errors.widget_size} disabled={disabled} />
+                <SegmentedControl label="Apertura" options={withHelp('open_behavior', options.openBehaviors)} value={draft.open_behavior} onChange={(value) => set('open_behavior', value)} disabled={disabled} />
             </div>
 
-            <Field id={`${channel.key}_radius`} label={`Redondeo de las esquinas del chat: ${draft.radius} px`} error={errors.radius}>
-                <input id={`${channel.key}_radius`} type="range" min={min} max={max} step="1" value={draft.radius} onChange={(e) => set('radius', Number(e.target.value))} disabled={disabled} className="w-full accent-primary" />
-            </Field>
+            <RangeField label="Redondeo de las esquinas del chat" unit="px" {...options.ranges.radius} value={draft.radius} onChange={(value) => set('radius', value)} describe={describeChatRadius} error={errors.radius} disabled={disabled} />
         </div>
     );
 }

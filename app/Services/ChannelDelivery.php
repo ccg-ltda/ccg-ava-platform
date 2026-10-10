@@ -7,6 +7,7 @@ use App\Integrations\SendsMessages;
 use App\Models\Conversation;
 use App\Models\Integration;
 use App\Models\Message;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -68,17 +69,27 @@ class ChannelDelivery
 
         try {
             $integration = $this->integration($conversation);
-            $result = $this->types->get($integration->type)->send($integration, $conversation->contact_id, (string) $message->body);
+            // `ava:{id}` comes back in the channel's delivery states, which lets an unconfirmed message be recognized later.
+            $result = $this->types->get($integration->type)->send($integration, $conversation->contact_id, (string) $message->body, "ava:{$message->id}");
         } catch (Throwable $e) {
-            report($e);
-            $this->fail($message, 'No se pudo confirmar el envío.');
+            // Only the class is logged: the text of an exception may carry the message itself or a credential.
+            Log::error('channel_delivery_error', ['exception' => $e::class, 'message' => $message->id]);
+            $this->unconfirm($message, 'No se pudo confirmar el envío: pudo haberse enviado. No se reintenta solo; verifica en WhatsApp antes de reenviarlo.');
 
             return;
         }
 
-        $result->ok
-            ? $message->update(['status' => 'sent', 'external_id' => $result->externalId, 'failure_reason' => null])
-            : $this->fail($message, $result->reason);
+        match (true) {
+            $result->ok => $message->update(['status' => 'sent', 'external_id' => $result->externalId, 'failure_reason' => null]),
+            $result->uncertain => $this->unconfirm($message, $result->reason),
+            default => $this->fail($message, $result->reason),
+        };
+    }
+
+    /** The channel may or may not have taken the message: kept as such, and never sent again by Ava on its own. */
+    public function unconfirm(Message $message, ?string $reason): void
+    {
+        $message->update(['status' => Message::UNCONFIRMED, 'failure_reason' => mb_substr($reason ?? 'No se pudo confirmar el envío.', 0, 255)]);
     }
 
     public function fail(Message $message, ?string $reason): void

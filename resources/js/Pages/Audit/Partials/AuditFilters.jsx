@@ -14,9 +14,9 @@ const withAll = (label, options) => [{ value: ALL, label }, ...options];
 
 /**
  * Filters of Auditoría. Everything except the search applies at once; the search waits for a pause in typing.
- * `onChange(partial)` runs the query; the server returns the filters it used, which are the source of truth.
+ * `saved` is the saved-filters bar shown above them. `onChange(partial)` runs the query; the server returns the filters it used, which are the source of truth.
  */
-export default function AuditFilters({ filters, options, scope, onChange, onClear, active }) {
+export default function AuditFilters({ filters, options, scope, onChange, onClear, active, saved }) {
     const [search, setSearch] = useState(filters.search);
     const first = useRef(true);
 
@@ -39,6 +39,7 @@ export default function AuditFilters({ filters, options, scope, onChange, onClea
 
     return (
         <Card className="p-5 sm:p-6">
+            <div className="mb-5 border-b border-line pb-5">{saved}</div>
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-6">
                 <div className="sm:col-span-2 lg:col-span-6">
                     <SearchInput value={search} onChange={setSearch} placeholder="Buscar por usuario, registro, descripción o IP" label="Buscar en la auditoría" />

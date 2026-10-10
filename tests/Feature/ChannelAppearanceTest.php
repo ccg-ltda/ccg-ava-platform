@@ -79,8 +79,8 @@ class ChannelAppearanceTest extends TestCase
     {
         return $overrides + [
             'enabled' => true, 'button_text' => '¿Necesitas ayuda?', 'header_title' => 'Soporte', 'welcome_message' => 'Hola, ¿en qué te ayudo?',
-            'icon' => 'channel', 'primary_color' => '#0f766e', 'text_color' => null, 'size' => 'lg', 'shape' => 'rounded',
-            'position' => 'bottom-left', 'shadow' => 'strong', 'widget_size' => 'lg', 'radius' => 24, 'open_behavior' => 'auto',
+            'icon' => 'channel', 'primary_color' => '#0f766e', 'text_color' => null, 'size' => 72, 'shape' => 30,
+            'position' => 'bottom-left', 'shadow' => 3, 'widget_size' => 420, 'radius' => 24, 'open_behavior' => 'auto',
         ];
     }
 
@@ -88,7 +88,7 @@ class ChannelAppearanceTest extends TestCase
     {
         return $overrides + [
             'enabled' => true, 'button_text' => 'Escríbenos', 'message' => 'Hola, quiero información', 'icon' => 'channel',
-            'primary_color' => '#128c7e', 'text_color' => null, 'size' => 'md', 'shape' => 'round', 'position' => 'bottom-right', 'shadow' => 'soft',
+            'primary_color' => '#128c7e', 'text_color' => null, 'size' => 60, 'shape' => 50, 'position' => 'bottom-right', 'shadow' => 2,
         ];
     }
 
@@ -128,11 +128,11 @@ class ChannelAppearanceTest extends TestCase
         $bot = $this->bot($workspace);
 
         $this->save($bot, 'web', $this->appearance())->assertSessionHasNoErrors();
-        $this->save($bot, 'web', $this->appearance(['size' => 'sm', 'button_text' => '']))->assertSessionHasNoErrors();
+        $this->save($bot, 'web', $this->appearance(['size' => 48, 'button_text' => '']))->assertSessionHasNoErrors();
 
         $this->assertSame(1, $bot->appearances()->count());
         $saved = $bot->appearances()->first()->settings;
-        $this->assertSame('sm', $saved['size']);
+        $this->assertSame(48, $saved['size']);
         $this->assertNull($saved['button_text']);
     }
 
@@ -162,7 +162,7 @@ class ChannelAppearanceTest extends TestCase
         $saved = fn (string $key) => collect($this->get("/chatbots/{$bot->id}")->viewData('page')['props']['appearance']['channels'])->firstWhere('key', $key)['saved'];
 
         $this->assertFalse($saved('web'));
-        $this->save($bot, 'web', $this->appearance(['size' => 'huge']))->assertSessionHasErrors('size')->assertSessionMissing('success');
+        $this->save($bot, 'web', $this->appearance(['size' => 200]))->assertSessionHasErrors('size')->assertSessionMissing('success');
         $this->assertFalse($saved('web'));
 
         $this->save($bot, 'web', $this->appearance())->assertSessionHas('success', 'Cambios guardados correctamente');
@@ -178,10 +178,25 @@ class ChannelAppearanceTest extends TestCase
 
         $web = collect($this->get("/chatbots/{$bot->id}")->viewData('page')['props']['appearance']['channels'])->firstWhere('key', 'web');
 
-        $this->assertSame('md', $web['values']['size']);
-        $this->assertSame('round', $web['values']['shape']);
+        $this->assertSame(60, $web['values']['size']);
+        $this->assertSame(50, $web['values']['shape']);
         $this->assertNull($web['values']['primary_color']);
         $this->assertSame($workspace->settingsOrDefault()->primary_color, $web['defaultPrimary']);
+    }
+
+    public function test_a_look_saved_with_the_old_named_choices_keeps_its_appearance_as_numbers(): void
+    {
+        $workspace = $this->workspace();
+        $this->actAs($workspace);
+        $bot = $this->bot($workspace);
+        $bot->appearances()->create([
+            'workspace_id' => $workspace->id, 'channel' => 'web',
+            'settings' => ['size' => 'lg', 'shape' => 'rounded', 'shadow' => 'strong', 'widget_size' => 'sm', 'radius' => 20],
+        ]);
+
+        $values = collect($this->get("/chatbots/{$bot->id}")->viewData('page')['props']['appearance']['channels'])->firstWhere('key', 'web')['values'];
+
+        $this->assertSame([72, 30, 3, 320, 20], [$values['size'], $values['shape'], $values['shadow'], $values['widget_size'], $values['radius']]);
     }
 
     // --- validation ------------------------------------------------------------------------------------------
@@ -195,11 +210,11 @@ class ChannelAppearanceTest extends TestCase
         $invalid = [
             'primary_color' => ['red', '#12345', '#GGGGGG', 'url(javascript:alert(1))', '#0f766e;position:fixed'],
             'text_color' => ['white', '#ffff'],
-            'size' => ['huge', ''],
-            'shape' => ['triangle'],
+            'size' => ['huge', '', 47, 50, 76, 44, 60.5],
+            'shape' => ['triangle', -5, 55, 12],
             'position' => ['top-left'],
-            'shadow' => ['glow'],
-            'widget_size' => ['full'],
+            'shadow' => ['glow', -1, 5, 1.5],
+            'widget_size' => ['full', 310, 430, 375],
             'open_behavior' => ['always'],
             'icon' => ['custom'],
             'radius' => [-1, 29, 'abc', 10.5],
@@ -339,12 +354,12 @@ class ChannelAppearanceTest extends TestCase
         $bot = $this->bot($workspace);
 
         $this->save($bot, 'web', $this->appearance())->assertSessionHasNoErrors();
-        $this->save($bot, 'web', $this->appearance(['size' => 'sm']))->assertSessionHasNoErrors();
+        $this->save($bot, 'web', $this->appearance(['size' => 48]))->assertSessionHasNoErrors();
 
         $log = AuditLog::where('resource_type', 'chatbot_channel_appearance')->where('action', 'updated')->firstOrFail();
         $this->assertSame('Tamaño del botón', $log->changes[0]['field']);
-        $this->assertSame('lg', $log->changes[0]['before']);
-        $this->assertSame('sm', $log->changes[0]['after']);
+        $this->assertSame('72', $log->changes[0]['before']);
+        $this->assertSame('48', $log->changes[0]['after']);
     }
 
     // --- channels offered --------------------------------------------------------------------------------------------
@@ -420,7 +435,7 @@ class ChannelAppearanceTest extends TestCase
             ->assertJsonPath('style.buttonText', '¿Necesitas ayuda?')
             ->assertJsonPath('style.headerTitle', 'Soporte')
             ->assertJsonPath('style.welcomeMessage', 'Hola, ¿en qué te ayudo?')
-            ->assertJsonPath('style.size', 'lg')
+            ->assertJsonPath('style.size', 72)
             ->assertJsonPath('style.position', 'bottom-left')
             ->assertJsonPath('style.radius', 24)
             ->assertJsonPath('style.openBehavior', 'auto');
@@ -438,10 +453,10 @@ class ChannelAppearanceTest extends TestCase
         $bot = $this->bot($workspace);
         $key = $this->activate($bot, 'web');
 
-        $this->getJson("/api/widget/{$key}/config")->assertJsonPath('style.size', 'md');
-        $this->save($bot, 'web', $this->appearance(['size' => 'sm']))->assertSessionHasNoErrors();
+        $this->getJson("/api/widget/{$key}/config")->assertJsonPath('style.size', 60);
+        $this->save($bot, 'web', $this->appearance(['size' => 48]))->assertSessionHasNoErrors();
 
-        $this->getJson("/api/widget/{$key}/config")->assertJsonPath('style.size', 'sm');
+        $this->getJson("/api/widget/{$key}/config")->assertJsonPath('style.size', 48);
     }
 
     public function test_the_look_of_one_chatbot_never_reaches_the_widget_of_another(): void

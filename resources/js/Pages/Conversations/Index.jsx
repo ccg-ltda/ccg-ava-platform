@@ -2,6 +2,7 @@ import { Head, Link, router } from '@inertiajs/react';
 import { ArrowLeft, MessagesSquare, Plug } from 'lucide-react';
 import Badge from '@/Components/Badge';
 import PageHeader from '@/Components/PageHeader';
+import SavedFilters from '@/Components/SavedFilters';
 import Select from '@/Components/Select';
 import Tabs from '@/Components/Tabs';
 import { ReadOnlyWorkspaceNotice } from '@/Components/WorkspaceViewSelector';
@@ -24,7 +25,7 @@ const ALL = { value: '', label: 'Todos' };
  * (AI, waiting for an agent, in attention, resolved) comes from the server, and so do the actions the user has on a
  * conversation; the page refreshes itself from the server while it is open, so nothing is guessed in the browser.
  */
-export default function Index({ chatbot, channel, conversations, counts, selected, agents, filters, options, demo, reportEndpoint, canConfigure, scope }) {
+export default function Index({ chatbot, channel, conversations, counts, selected, agents, filters, options, savedFilters, demo, reportEndpoint, canConfigure, scope }) {
     const [tab, selectTab] = useUrlTab(TAB_IDS);
     const workspaceId = scope.readOnly ? scope.workspace.id : undefined;
     const channelMode = Boolean(channel);
@@ -50,6 +51,22 @@ export default function Index({ chatbot, channel, conversations, counts, selecte
     const statusHref = (status) => `${baseUrl}${toQuery(query({ status, c: undefined }))}`;
     const listParams = query({ q: undefined, c: selected ? selected.id : undefined });
     const filter = (key) => (value) => router.get(baseUrl, query({ [key]: value || undefined, c: undefined }), { preserveState: true, preserveScroll: true, replace: true });
+
+    // The filters a user can save: what narrows the shared inbox (text, state, channel, assistant). Empty ones are left out.
+    const criteria = Object.fromEntries(
+        Object.entries({ q: filters.q, status: filters.status !== 'all' ? filters.status : null, channel: filters.channel, chatbot: filters.chatbot })
+            .filter(([, value]) => value !== null && value !== undefined && value !== '')
+            .map(([key, value]) => [key, String(value)]),
+    );
+
+    // A saved criteria is applied only if its channel and assistant are still there; nothing incomplete is searched.
+    const resolve = (saved) => {
+        const missing = [['channel', options?.channels, 'el canal'], ['chatbot', options?.chatbots, 'el asistente']].find(([key, list]) => saved[key] !== undefined && !list?.some((option) => String(option.value) === String(saved[key])));
+
+        return missing ? { error: `Este filtro ya no se puede aplicar: ${missing[2]} que guarda ya no está disponible. Elimínalo o guarda uno nuevo.` } : { criteria: saved };
+    };
+
+    const applySaved = (saved) => router.get(baseUrl, { ...(workspaceId ? { workspace: workspaceId } : {}), ...saved }, { preserveState: true, preserveScroll: true, replace: true });
 
     const Icon = channelMode ? channelIcon(channel.key) : MessagesSquare;
     const state = channelMode ? channelStates[channel.state] : null;
@@ -134,6 +151,8 @@ export default function Index({ chatbot, channel, conversations, counts, selecte
             </div>
 
             <ReadOnlyWorkspaceNotice scope={scope} what="las conversaciones" />
+
+            {savedFilters && <SavedFilters scope="conversations" saved={savedFilters} criteria={criteria} resolve={resolve} onApply={applySaved} />}
 
             {channelMode ? (
                 <Tabs

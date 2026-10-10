@@ -14,6 +14,12 @@ return [
     |
     */
 
+    /* Meta app that owns the WhatsApp numbers: the webhook is only served when both values are set (see WhatsAppWebhookController). */
+    'meta' => [
+        'app_secret' => env('META_APP_SECRET'),
+        'webhook_verify_token' => env('META_WEBHOOK_VERIFY_TOKEN'),
+    ],
+
     'postmark' => [
         'key' => env('POSTMARK_API_KEY'),
     ],

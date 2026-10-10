@@ -20,8 +20,11 @@ class Message extends Model
     /** Delivery states the automation may report. */
     public const STATUSES = ['sent', 'delivered', 'read', 'failed'];
 
-    /** An agent's message Ava has accepted but not yet handed to the channel (it is not a state n8n reports). */
+    /** A message Ava has accepted (an agent's, or the AI's) but not yet handed to the channel (it is not a state n8n reports). */
     public const PENDING = 'pending';
+
+    /** Handed to the channel, but the channel's answer was lost: it may or may not have been delivered. Never resent automatically. */
+    public const UNCONFIRMED = 'unconfirmed';
 
     protected function casts(): array
     {

@@ -49,7 +49,8 @@ class SaveChannelAppearanceRequest extends FormRequest
         return [
             'primary_color.regex' => 'El color principal debe tener el formato #RRGGBB.',
             'text_color.regex' => 'El color del texto debe tener el formato #RRGGBB.',
-            'radius.between' => 'El redondeo debe estar entre :min y :max.',
+            'between' => 'El valor debe estar entre :min y :max.',
+            'multiple_of' => 'Elige un valor de la barra.',
             'in' => 'Elige una opción de la lista.',
         ];
     }

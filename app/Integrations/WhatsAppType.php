@@ -132,7 +132,7 @@ class WhatsAppType implements ChannelIntegrationType, SendsMessages
      * and reading arrive later as statuses through n8n. Only fixed reasons are returned: neither the token nor Meta's
      * error text is echoed.
      */
-    public function send(Integration $integration, string $to, string $text): SendResult
+    public function send(Integration $integration, string $to, string $text, ?string $reference = null): SendResult
     {
         $id = $integration->config['phone_number_id'];
         $url = rtrim(config('integrations.whatsapp.graph_url'), '/').'/'.config('integrations.whatsapp.graph_version')."/{$id}/messages";
@@ -141,11 +141,17 @@ class WhatsAppType implements ChannelIntegrationType, SendsMessages
         try {
             $response = Http::withToken((string) ($integration->secrets['access_token'] ?? ''))
                 ->acceptJson()->asJson()->timeout($timeout)->connectTimeout(min($timeout, 10))->withoutRedirecting()
-                ->post($url, ['messaging_product' => 'whatsapp', 'recipient_type' => 'individual', 'to' => $to, 'type' => 'text', 'text' => ['body' => $text, 'preview_url' => false]]);
-        } catch (ConnectionException) {
-            return SendResult::failed('No se pudo conectar con Meta.');
+                ->post($url, ['messaging_product' => 'whatsapp', 'recipient_type' => 'individual', 'to' => $to, 'type' => 'text', 'text' => ['body' => $text, 'preview_url' => false]]
+                    // Meta echoes this string in the delivery states (`statuses`) of the message, so Ava can recognize it later.
+                    + ($reference !== null ? ['biz_opaque_callback_data' => $reference] : []));
+        } catch (ConnectionException $e) {
+            // Only a failure BEFORE the request could be processed (name, connection or certificate) proves nothing went out;
+            // a timeout or a dropped connection may have happened after Meta accepted the message.
+            return self::neverReached($e)
+                ? SendResult::failed('No se pudo conectar con Meta.')
+                : SendResult::uncertain('Meta no respondió a tiempo: el mensaje pudo haberse enviado. No se reintenta solo; verifica en WhatsApp antes de reenviarlo.');
         } catch (Throwable) {
-            return SendResult::failed('No se pudo completar la solicitud a Meta.');
+            return SendResult::uncertain('La solicitud a Meta terminó con un error inesperado: el mensaje pudo haberse enviado. No se reintenta solo; verifica en WhatsApp antes de reenviarlo.');
         }
 
         $status = $response->status();
@@ -157,9 +163,16 @@ class WhatsAppType implements ChannelIntegrationType, SendsMessages
             $status === 401 || $code === 190 => SendResult::failed('Meta rechazó el token de WhatsApp: es inválido o expiró.'),
             $code === 131047 => SendResult::failed('Pasaron más de 24 horas desde el último mensaje del contacto: WhatsApp solo permite enviarle una plantilla aprobada.'),
             $code === 131030 => SendResult::failed('El número del contacto no está autorizado en esta cuenta de WhatsApp.'),
-            $status === 200 => SendResult::failed('Meta respondió sin confirmar el mensaje.'),
+            $status === 200 => SendResult::uncertain('Meta respondió sin confirmar el mensaje: pudo haberse enviado. No se reintenta solo; verifica en WhatsApp antes de reenviarlo.'),
+            $status >= 500 => SendResult::uncertain("Meta respondió con un error del servidor (HTTP {$status}): el mensaje pudo haberse enviado. No se reintenta solo; verifica en WhatsApp antes de reenviarlo."),
             default => SendResult::failed("Meta no aceptó el mensaje (HTTP {$status})."),
         };
+    }
+
+    /** cURL errors that happen before the request is sent: could not resolve, could not connect, TLS / certificate problems. */
+    private static function neverReached(ConnectionException $e): bool
+    {
+        return preg_match('/cURL error (\d+)/', $e->getMessage(), $m) === 1 && in_array((int) $m[1], [5, 6, 7, 35, 51, 58, 59, 60, 77, 83, 90, 91], true);
     }
 
     public function auditValues(array $config, ?array $secrets): array

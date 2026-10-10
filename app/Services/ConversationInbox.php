@@ -132,7 +132,7 @@ class ConversationInbox
                 'mediaMime' => $message->media_mime,
                 'status' => $message->status,
                 'simulated' => $message->simulated,
-                'failureReason' => $message->status === 'failed' ? $message->failure_reason : null,
+                'failureReason' => in_array($message->status, ['failed', Message::UNCONFIRMED], true) ? $message->failure_reason : null,
                 'day' => $settings->formatDate($message->sent_at),
                 'time' => $settings->formatTime($message->sent_at),
             ])->all(),

@@ -12,6 +12,9 @@ export default function ConversationList({ conversations, selectedId, search, hr
     const [text, setText] = useState(search);
     const first = useRef(true);
 
+    // A search applied from outside (a saved filter) fills the box.
+    useEffect(() => setText(search), [search]);
+
     // The search runs on the server after a short pause, keeping the filters and the Workspace being looked at.
     useEffect(() => {
         if (first.current) {
@@ -19,6 +22,8 @@ export default function ConversationList({ conversations, selectedId, search, hr
 
             return undefined;
         }
+
+        if (text === search) return undefined;
 
         const timer = setTimeout(() => router.get(baseUrl, { ...baseParams, q: text || undefined }, { preserveState: true, preserveScroll: true, replace: true, only: ['conversations', 'filters', 'counts'] }), 300);
 
