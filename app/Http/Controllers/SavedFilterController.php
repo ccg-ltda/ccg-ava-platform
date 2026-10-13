@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\SavedFilterRequest;
+use App\Services\ModuleAccess;
 use App\Services\SavedFilters;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -48,7 +49,7 @@ class SavedFilterController extends Controller
 
     public function destroy(Request $request, string $scope, int $filter): RedirectResponse
     {
-        abort_unless($this->saved->allows($scope, $request->attributes->get('workspace_permissions', [])), 403);
+        abort_unless($this->saved->allows($scope, $request->attributes->get('workspace_permissions', []), app(ModuleAccess::class)->forRequest($request)), 403);
 
         $this->saved->owned($request->user(), $request->attributes->get('workspace'), $scope)->findOrFail($filter)->delete();
 

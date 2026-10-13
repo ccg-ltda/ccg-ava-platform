@@ -1,5 +1,6 @@
 import { Bot, X } from 'lucide-react';
 import { visibleNavigation } from '@/config/navigation';
+import useAccess from '@/Hooks/useAccess';
 import NavItem from './NavItem';
 
 /**
@@ -9,8 +10,8 @@ import NavItem from './NavItem';
  * The surface goes from light blue (top, navy text) through deep blue (navigation, white text)
  * to near white (bottom, navy text), so every zone keeps its own readable text color.
  */
-export default function Sidebar({ permissions, workspace, open, onClose }) {
-    const sections = visibleNavigation(permissions);
+export default function Sidebar({ workspace, open, onClose }) {
+    const sections = visibleNavigation(useAccess());
 
     return (
         <>

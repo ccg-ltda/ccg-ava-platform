@@ -8,7 +8,10 @@ use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DemoConversationController;
 use App\Http\Controllers\IntegrationController;
+use App\Http\Controllers\ModuleCategoryController;
+use App\Http\Controllers\ModuleController;
 use App\Http\Controllers\OrganizationController;
+use App\Http\Controllers\PlanController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RoleController;
@@ -18,6 +21,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\WorkspaceController;
 use App\Http\Controllers\WorkspaceLogoController;
 use App\Http\Controllers\WorkspaceMemberController;
+use App\Http\Controllers\WorkspacePlanController;
 use App\Http\Controllers\WorkspaceSearchController;
 use Illuminate\Support\Facades\Route;
 
@@ -27,8 +31,8 @@ Route::redirect('/', '/pre-login');
 // (re-validated on every request by EnsureWorkspaceContext).
 Route::middleware(['auth', 'verified', 'workspace'])->group(function () {
     // Dashboard: the executive and operational summary and the home page after login. Reportes: the detailed analytics.
-    Route::get('/dashboard', [DashboardController::class, 'index'])->middleware('workspace.permission:view-dashboard')->name('dashboard');
-    Route::get('/reports', [ReportController::class, 'index'])->middleware('workspace.permission:view-dashboard')->name('reports.index');
+    Route::get('/dashboard', [DashboardController::class, 'index'])->middleware(['workspace.module:dashboard', 'workspace.permission:view-dashboard'])->name('dashboard');
+    Route::get('/reports', [ReportController::class, 'index'])->middleware(['workspace.module:reports', 'workspace.permission:view-dashboard'])->name('reports.index');
 });
 
 Route::middleware(['auth', 'workspace'])->group(function () {
@@ -36,14 +40,14 @@ Route::middleware(['auth', 'workspace'])->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
 
     Route::get('/settings', [SettingsController::class, 'index'])
-        ->middleware('workspace.permission:manage-settings')->name('settings.index');
+        ->middleware(['workspace.module:settings', 'workspace.permission:manage-settings'])->name('settings.index');
     Route::post('/settings', [SettingsController::class, 'update'])
-        ->middleware('workspace.permission:manage-settings')->name('settings.update');
+        ->middleware(['workspace.module:settings', 'workspace.permission:manage-settings'])->name('settings.update');
     Route::get('/workspace/logo', WorkspaceLogoController::class)->name('workspace.logo');
     // Text search behind the Workspace selector (what it may find depends on the purpose; see the controller).
     Route::get('/workspaces/search', WorkspaceSearchController::class)->middleware('throttle:60,1')->name('workspaces.search');
     // Integrations belong to the active Workspace; `manage-settings` governs them like the rest of Configuraciones.
-    Route::middleware('workspace.permission:manage-settings')->prefix('integrations')->name('integrations.')->group(function () {
+    Route::middleware(['workspace.module:integrations', 'workspace.permission:manage-settings'])->prefix('integrations')->name('integrations.')->group(function () {
         Route::get('/', [IntegrationController::class, 'index'])->name('index');
         Route::post('/', [IntegrationController::class, 'store'])->name('store');
         Route::put('/n8n', [IntegrationController::class, 'updateN8n'])->name('n8n.update');
@@ -58,7 +62,7 @@ Route::middleware(['auth', 'workspace'])->group(function () {
 
     // Conversations hold what the contacts wrote: reading them is `view-conversations`; attending them (take, write, give
     // back to the AI, resolve) is `reply-conversations`; assigning them to another agent is `manage-conversations`.
-    Route::middleware('workspace.permission:view-conversations')->prefix('conversations')->name('conversations.')->group(function () {
+    Route::middleware(['workspace.module:conversations', 'workspace.permission:view-conversations'])->prefix('conversations')->name('conversations.')->group(function () {
         Route::get('/', [ConversationController::class, 'index'])->name('index');
         Route::middleware('workspace.permission:reply-conversations')->group(function () {
             Route::post('/{conversation}/take', [ConversationActionController::class, 'take'])->whereNumber('conversation')->name('take');
@@ -78,7 +82,7 @@ Route::middleware(['auth', 'workspace'])->group(function () {
     });
 
     // Chatbots belong to the active Workspace. Reading needs `view-chatbots`; changing anything needs `manage-chatbots`.
-    Route::prefix('chatbots')->name('chatbots.')->group(function () {
+    Route::middleware('workspace.module:assistants')->prefix('chatbots')->name('chatbots.')->group(function () {
         Route::middleware('workspace.permission:view-chatbots')->group(function () {
             Route::get('/', [ChatbotController::class, 'index'])->name('index');
             Route::get('/{chatbot}', [ChatbotController::class, 'show'])->whereNumber('chatbot')->name('show');
@@ -86,7 +90,7 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         });
         // The conversations of a channel hold what the contacts wrote: their own permission.
         Route::get('/{chatbot}/channels/{channel}/conversations', [ConversationController::class, 'index'])
-            ->whereNumber('chatbot')->where('channel', '[a-z_]+')->middleware('workspace.permission:view-conversations')->name('conversations');
+            ->whereNumber('chatbot')->where('channel', '[a-z_]+')->middleware(['workspace.module:conversations', 'workspace.permission:view-conversations'])->name('conversations');
         Route::middleware('workspace.permission:manage-chatbots')->group(function () {
             Route::post('/', [ChatbotController::class, 'store'])->name('store');
             // POST (not PUT) because the form may carry the avatar file.
@@ -101,7 +105,7 @@ Route::middleware(['auth', 'workspace'])->group(function () {
     });
 
     // Auditoría reads the change history of the active Workspace; `manage-settings` governs it like the other admin pages.
-    Route::middleware('workspace.permission:manage-settings')->prefix('audit')->name('audit.')->group(function () {
+    Route::middleware(['workspace.module:audit', 'workspace.permission:manage-settings'])->prefix('audit')->name('audit.')->group(function () {
         Route::get('/', [AuditController::class, 'index'])->name('index');
         Route::get('/export', [AuditController::class, 'export'])->middleware('throttle:10,1')->name('export');
     });
@@ -115,19 +119,19 @@ Route::middleware(['auth', 'workspace'])->group(function () {
     });
 
     Route::get('/users', [UserController::class, 'index'])
-        ->middleware('workspace.permission:manage-users')->name('users.index');
+        ->middleware(['workspace.module:users_roles', 'workspace.permission:manage-users'])->name('users.index');
     Route::post('/users', [UserController::class, 'store'])
-        ->middleware('workspace.permission:manage-users')->name('users.store');
+        ->middleware(['workspace.module:users_roles', 'workspace.permission:manage-users'])->name('users.store');
     Route::put('/users/{user}', [UserController::class, 'update'])
-        ->middleware('workspace.permission:manage-users')->name('users.update');
+        ->middleware(['workspace.module:users_roles', 'workspace.permission:manage-users'])->name('users.update');
     // Users are never deleted: they are deactivated (and can be reactivated) so history and ID stay.
     Route::post('/users/{user}/deactivate', [UserController::class, 'deactivate'])
-        ->middleware('workspace.permission:manage-users')->name('users.deactivate');
+        ->middleware(['workspace.module:users_roles', 'workspace.permission:manage-users'])->name('users.deactivate');
     Route::post('/users/{user}/activate', [UserController::class, 'activate'])
-        ->middleware('workspace.permission:manage-users')->name('users.activate');
+        ->middleware(['workspace.module:users_roles', 'workspace.permission:manage-users'])->name('users.activate');
 
     // Workspaces are listed inside /users. WorkspaceAdministration decides who may act on which one.
-    Route::middleware('workspace.permission:manage-users')->group(function () {
+    Route::middleware(['workspace.module:users_roles', 'workspace.permission:manage-users'])->group(function () {
         Route::post('/workspaces', [WorkspaceController::class, 'store'])->middleware('can:manage-workspaces')->name('workspaces.store');
         Route::put('/workspaces/{workspace}', [WorkspaceController::class, 'update'])->middleware('can:manage-workspaces')->name('workspaces.update');
         Route::post('/workspaces/{workspace}/deactivate', [WorkspaceController::class, 'deactivate'])->middleware('can:manage-workspaces')->name('workspaces.deactivate');
@@ -141,8 +145,35 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         Route::delete('/workspaces/{workspace}/members/{user}', [WorkspaceMemberController::class, 'destroy'])->name('workspaces.members.destroy');
     });
 
+    // Planes and the module catalog: CCG's commercial administration. Only superusers working inside the administrative
+    // Workspace whose role grants the permission of the area; a client Workspace can neither read nor change them, whatever
+    // its role or plan. `manage-plans` = plans and their assignment; `manage-modules` = modules and categories.
+    Route::get('/plans', [PlanController::class, 'index'])->middleware('workspace.platform:manage-plans,manage-modules')->name('plans.index');
+
+    Route::middleware('workspace.platform:manage-plans')->group(function () {
+        Route::post('/plans', [PlanController::class, 'store'])->name('plans.store');
+        Route::get('/plans/{plan}', [PlanController::class, 'show'])->whereNumber('plan')->name('plans.show');
+        Route::put('/plans/{plan}', [PlanController::class, 'update'])->whereNumber('plan')->name('plans.update');
+        Route::put('/plans/{plan}/modules', [PlanController::class, 'updateModules'])->whereNumber('plan')->name('plans.modules.update');
+        Route::post('/plans/{plan}/activate', [PlanController::class, 'activate'])->whereNumber('plan')->name('plans.activate');
+        Route::post('/plans/{plan}/deactivate', [PlanController::class, 'deactivate'])->whereNumber('plan')->name('plans.deactivate');
+        Route::put('/workspaces/{workspace}/plan', [WorkspacePlanController::class, 'update'])->whereNumber('workspace')->name('workspaces.plan.update');
+    });
+
+    Route::middleware('workspace.platform:manage-modules')->group(function () {
+        Route::post('/modules', [ModuleController::class, 'store'])->name('modules.store');
+        Route::put('/modules/{module}', [ModuleController::class, 'update'])->whereNumber('module')->name('modules.update');
+        Route::post('/modules/{module}/activate', [ModuleController::class, 'activate'])->whereNumber('module')->name('modules.activate');
+        Route::post('/modules/{module}/deactivate', [ModuleController::class, 'deactivate'])->whereNumber('module')->name('modules.deactivate');
+
+        Route::post('/module-categories', [ModuleCategoryController::class, 'store'])->name('module-categories.store');
+        Route::put('/module-categories/{category}', [ModuleCategoryController::class, 'update'])->whereNumber('category')->name('module-categories.update');
+        Route::post('/module-categories/{category}/activate', [ModuleCategoryController::class, 'activate'])->whereNumber('category')->name('module-categories.activate');
+        Route::post('/module-categories/{category}/deactivate', [ModuleCategoryController::class, 'deactivate'])->whereNumber('category')->name('module-categories.deactivate');
+    });
+
     // The role catalog is shared by every Workspace: superusers only.
-    Route::middleware(['workspace.permission:manage-users', 'can:manage-roles'])->group(function () {
+    Route::middleware(['workspace.module:users_roles', 'workspace.permission:manage-users', 'can:manage-roles'])->group(function () {
         Route::post('/roles', [RoleController::class, 'store'])->name('roles.store');
         Route::put('/roles/{role}', [RoleController::class, 'update'])->name('roles.update');
     });

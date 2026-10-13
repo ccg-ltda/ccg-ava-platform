@@ -259,11 +259,11 @@ class UserRoleManagementTest extends TestCase
     {
         $this->actAs('admin');
         $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('canManageRoles', false)->has('permissionNames', 9));
+            ->where('canManageRoles', false)->has('permissionNames', 11));
 
         $this->actAs('admin', superuser: true);
         $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('canManageRoles', true)->has('permissionNames', 9));
+            ->where('canManageRoles', true)->has('permissionNames', 11));
     }
 
     // --- isolation ----------------------------------------------------------------------------------------
@@ -370,7 +370,7 @@ class UserRoleManagementTest extends TestCase
         $this->actAs('admin');
 
         $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('permissionNames', 9)->where('canManageRoles', false));
+            ->has('permissionNames', 11)->where('canManageRoles', false));
         $this->post('/roles', ['name' => 'x', 'permissions' => ['manage-users']])->assertForbidden();
     }
 

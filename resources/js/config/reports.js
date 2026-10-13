@@ -19,16 +19,21 @@ export const seriesLabels = {
  * Sections of Reportes. `summary`, `conversations`, `interactions` and `trends` are built with real data from the
  * stored conversations and messages. `questions` and `surveys` have no source (Ava stores no question text and no
  * survey answers): they say so (`reason`) and draw nothing.
+ *
+ * `needs` lists the sources a section is built from (any one is enough): `conversations` (conversations and messages, module
+ * Conversaciones) and `team` (the people of the Workspace, module Usuarios y roles). The server sends `sources` with the ones
+ * the plan includes, and a section none of whose sources exists is not offered.
  */
 export const reportSections = [
-    { id: 'summary', label: 'Resumen', icon: LayoutDashboard },
-    { id: 'conversations', label: 'Conversaciones', icon: MessagesSquare },
-    { id: 'interactions', label: 'Interacciones', icon: MousePointerClick },
+    { id: 'summary', label: 'Resumen', icon: LayoutDashboard, needs: ['conversations', 'team'] },
+    { id: 'conversations', label: 'Conversaciones', icon: MessagesSquare, needs: ['conversations'] },
+    { id: 'interactions', label: 'Interacciones', icon: MousePointerClick, needs: ['conversations'] },
     {
         id: 'questions',
         label: 'Preguntas',
         icon: HelpCircle,
         metric: 'questions',
+        needs: ['conversations'],
         description: 'Qué preguntan las personas y qué temas se repiten más.',
         reason: 'Ava todavía no clasifica ni guarda las preguntas por tema, así que no hay de dónde calcular este reporte. No se muestran cifras inventadas.',
         charts: [
@@ -41,6 +46,7 @@ export const reportSections = [
         label: 'Encuestas',
         icon: ClipboardList,
         metric: 'surveys',
+        needs: ['conversations'],
         description: 'Respuestas y satisfacción de las encuestas que se envían tras una conversación.',
         reason: 'Ava todavía no envía encuestas ni guarda sus respuestas, así que no hay de dónde calcular este reporte. No se muestran cifras inventadas.',
         charts: [
@@ -48,5 +54,5 @@ export const reportSections = [
             { type: 'donut', title: 'Resultado de las encuestas', description: 'Distribución de las valoraciones.' },
         ],
     },
-    { id: 'trends', label: 'Tendencias', icon: LineChart },
+    { id: 'trends', label: 'Tendencias', icon: LineChart, needs: ['conversations'] },
 ];

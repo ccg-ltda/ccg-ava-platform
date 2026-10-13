@@ -56,7 +56,7 @@ Provienen de `reglas.md` y del encargo; se citan para que cualquier módulo se p
 - Laravel 13, PHP 8.4 en el contenedor, Inertia 3, React 19 en JSX, Vite 8, Tailwind 4, PostgreSQL 16, Redis, MinIO, Horizon, Reverb (`composer.json`, `package.json`, `reglas.md` §2). Todo corre en Docker.
 - Tenancy: `organizations`, `workspaces`, `workspace_user` con rol por Workspace (`database/migrations/2026_10_02_100200_create_workspace_tables.php`).
 - Contexto de Workspace: `EnsureWorkspaceContext` lo toma solo de la sesión y lo revalida en cada petición (`app/Http/Middleware/EnsureWorkspaceContext.php`).
-- Autorización: permisos Spatie por rol, comprobados con `workspace.permission:<permiso>` (`EnsureWorkspacePermission`). Permisos existentes: `manage-users`, `manage-settings`, `view-dashboard`, `view-users`, `view-chatbots`, `manage-chatbots`, `view-conversations`, `reply-conversations`, `manage-conversations`. Roles por defecto: `admin`, `supervisor`, `cliente`, `agente` (`database/seeders/RolesAndPermissionsSeeder.php`).
+- Autorización: permisos Spatie por rol, comprobados con `workspace.permission:<permiso>` (`EnsureWorkspacePermission`). Permisos existentes: `manage-users`, `manage-settings`, `view-dashboard`, `view-users`, `view-chatbots`, `manage-chatbots`, `view-conversations`, `reply-conversations`, `manage-conversations`, `manage-plans`, `manage-modules` (estos dos, de la administración comercial, solo operan dentro de `Desarrollo_DEV` y no se conceden por defecto; el rol `plataforma` los agrupa). Roles por defecto: `admin`, `supervisor`, `cliente`, `agente` (`database/seeders/RolesAndPermissionsSeeder.php`).
 - Workspace administrativo `DESARROLLO_DEV` y consulta de otros Workspaces en solo lectura para superusuarios que trabajan dentro de él (`WorkspaceScope`, `ViewsWorkspace`, pruebas en `WorkspaceSelectorTest`).
 - El sidebar muestra abajo el «Workspace activo» solo como información (`resources/js/Components/Sidebar.jsx`); el menú sale de `resources/js/config/navigation.js`, que filtra por permiso.
 
@@ -137,6 +137,10 @@ Todo lo que existe hoy son módulos generales. Por eso la Fase 1 no puede quitar
 ### 5.4. Relación con planes y límites
 
 Los planes comerciales (módulos y límites contratados) **no se diseñan en esta fase**: no hay precios, límites, reglas de prueba ni renovación aprobados (D-02, D-03). El HTML presenta Starter, Pro y Enterprise con precios y límites que se contradicen con sus propios datos, así que no se usan como definición. La Fase 1 debe dejar el punto central de capacidades listo para incorporar planes después sin reprogramar rutas.
+
+### 5.4b. Estado: infraestructura de planes y módulos implementada (2026-10-13)
+
+[Verificado] Se construyó la base configurable en lugar de una «solución» fija por Workspace: catálogo de módulos con clave estable (`config/modules.php` + tablas `module_categories`, `modules`), planes creados por CCG (`plans`, `module_plan`) y un plan por Workspace (`workspaces.plan_id`). Las cuatro áreas son **categorías organizativas** del catálogo (se pueden añadir más sin código) y no limitan la combinación de módulos. `ModuleAccess` es el punto central de capacidades descrito en 5.2 y se aplica con `workspace.module:<clave>` en las rutas web, en la API del agente, el widget, el webhook de Meta, las ejecuciones y el envío del agente; el menú solo lo refleja. Los Workspaces existentes recibieron el plan «Plataforma completa» (los ocho módulos); `Desarrollo_DEV` siempre tiene todo. El módulo administrativo «Planes» (solo superusuarios dentro de `Desarrollo_DEV`) gestiona planes, catálogo, categorías y asignación. Esto sustituye en la práctica a la «solución como dato del Workspace» y al `config/solutions.php` propuestos en 5.2: la solución comercial de un cliente es ahora su plan. Actualización posterior: Conversaciones puede contratarse sin Asistentes (plan de consulta); dependencia técnica `assistants` -> `conversations` (`config/modules.php`), Dashboard y Reportes limitados a los módulos contratados, permisos separados `manage-plans` / `manage-modules` y plan explícito en todo Workspace cliente nuevo. Siguen sin construirse los módulos específicos de las cuatro áreas, los límites contratados y los precios (D-02, D-03, D-05). Ver `reglas.md` §7 «Planes y módulos».
 
 ### 5.5. Criterios de aceptación de la Fase 1
 
@@ -523,7 +527,7 @@ Notas sobre el orden:
 - **D-32.** Si alguna necesidad del cliente de referencia exige adelantar Booker respecto al orden de fases.
 
 **Comercial**
-- **D-02.** Planes comerciales: nombres, módulos y capacidades. No se usan los del HTML de referencia.
+- **D-02.** Planes comerciales: nombres, módulos y capacidades. No se usan los del HTML de referencia. [La herramienta para crearlos ya existe (módulo Planes); falta definir los planes reales.]
 - **D-03.** Límites contratados (agentes, conversaciones u otros), qué cuenta como cada uno y si el límite es duro o blando.
 - **D-05.** Reglas de prueba (trial), renovación, cambio de plan, vencimiento y suspensión.
 - **D-06.** Si habrá excepciones por cliente sobre los módulos de su solución y quién las aprueba.

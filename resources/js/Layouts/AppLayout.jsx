@@ -33,7 +33,7 @@ export default function AppLayout({ children }) {
                     <Topbar user={user} role={role} onMenu={() => setMenuOpen(true)} />
 
                     <div className="flex min-h-0 flex-1">
-                        <Sidebar permissions={user?.permissions} workspace={props.workspace} open={menuOpen} onClose={() => setMenuOpen(false)} />
+                        <Sidebar workspace={props.workspace} open={menuOpen} onClose={() => setMenuOpen(false)} />
 
                         <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
                             <div key={url.split('?')[0]} className="mx-auto w-full max-w-screen-2xl space-y-6 motion-safe:animate-fade-in">

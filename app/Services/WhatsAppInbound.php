@@ -27,6 +27,7 @@ class WhatsAppInbound
     public function __construct(
         private readonly ConversationService $conversations,
         private readonly ChatbotExecutions $executions,
+        private readonly ModuleAccess $modules,
     ) {}
 
     /** @param  array<string, mixed>  $payload */
@@ -68,7 +69,8 @@ class WhatsAppInbound
         $channel = ChatbotChannel::with('chatbot.workspace.organization')->where('integration_id', $integrations->first()->id)->where('channel', 'whatsapp')->where('is_active', true)->first();
         $chatbot = $channel?->chatbot;
 
-        return $chatbot && $chatbot->is_active && $chatbot->workspace->is_active && $chatbot->workspace->organization->is_active ? $chatbot : null;
+        return $chatbot && $chatbot->is_active && $chatbot->workspace->is_active && $chatbot->workspace->organization->is_active
+            && $this->modules->allowsAll($chatbot->workspace, ModuleAccess::CHANNEL_MODULES) ? $chatbot : null;
     }
 
     /** @param  array<string, mixed>  $value */

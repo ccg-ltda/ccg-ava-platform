@@ -55,10 +55,21 @@ class LandingPageTest extends TestCase
     public function test_the_order_follows_the_menu(): void
     {
         $landing = new LandingPage;
+        $modules = array_keys(config('modules.implemented'));
 
-        $this->assertSame('chatbots.index', $landing->route(['manage-users', 'view-chatbots', 'view-conversations']));
-        $this->assertSame('settings.index', $landing->route(['manage-users', 'manage-settings']));
-        $this->assertSame('profile.edit', $landing->route([]));
+        $this->assertSame('chatbots.index', $landing->route(['manage-users', 'view-chatbots', 'view-conversations'], $modules));
+        $this->assertSame('settings.index', $landing->route(['manage-users', 'manage-settings'], $modules));
+        $this->assertSame('profile.edit', $landing->route([], $modules));
+    }
+
+    public function test_a_page_whose_module_the_plan_lacks_is_skipped(): void
+    {
+        $landing = new LandingPage;
+        $permissions = ['view-dashboard', 'view-chatbots', 'manage-users'];
+
+        $this->assertSame('chatbots.index', $landing->route($permissions, ['assistants', 'users_roles']));
+        $this->assertSame('users.index', $landing->route($permissions, ['users_roles']));
+        $this->assertSame('profile.edit', $landing->route($permissions, []));
     }
 
     /** @return array<string, array{string}> */

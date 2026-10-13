@@ -38,4 +38,5 @@ export const quickLinkHints = {
     'settings.index': 'Preferencias del Workspace',
     'integrations.index': 'Canales y conexiones',
     'users.index': 'Personas, roles y Workspaces',
+    'plans.index': 'Planes y catálogo de módulos',
 };

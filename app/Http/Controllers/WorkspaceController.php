@@ -27,7 +27,8 @@ class WorkspaceController extends Controller
             'name' => ['required', 'string', 'max:255'],
         ], ['code.regex' => self::CODE_FORMAT_MESSAGE]);
 
-        $workspace = Workspace::create($data);
+        // A new client Workspace starts on the default plan (Workspace::booted); CCG assigns another from Planes.
+        Workspace::create($data);
 
         return $this->back('Workspace creado correctamente');
     }

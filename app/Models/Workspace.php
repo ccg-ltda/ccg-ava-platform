@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\Audited;
+use App\Services\ModuleAccess;
 use Closure;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -12,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
-#[Fillable(['organization_id', 'code', 'name', 'is_active'])]
+#[Fillable(['organization_id', 'plan_id', 'code', 'name', 'is_active'])]
 class Workspace extends Model
 {
     use Audited;
@@ -20,6 +21,20 @@ class Workspace extends Model
     protected function casts(): array
     {
         return ['is_active' => 'boolean'];
+    }
+
+    /**
+     * Every new client Workspace gets an explicit plan (the default one unless a plan is given), whichever flow creates it.
+     * The column stays nullable and a Workspace without a plan still resolves to the default plan (ModuleAccess), so
+     * older rows keep working; the administrative Workspace takes no plan.
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (Workspace $workspace) {
+            if ($workspace->plan_id === null && ! $workspace->isAdministrative()) {
+                $workspace->plan_id = app(ModuleAccess::class)->defaultPlan()?->id;
+            }
+        });
     }
 
     public static function normalizeCode(string $code): string
@@ -76,12 +91,21 @@ class Workspace extends Model
 
     public function auditSnapshot(Closure $get): array
     {
-        return $this->auditBaseSnapshot($get) + ['Organización' => Organization::whereKey($get('organization_id'))->value('name')];
+        return $this->auditBaseSnapshot($get) + [
+            'Organización' => Organization::whereKey($get('organization_id'))->value('name'),
+            'Plan' => Plan::whereKey($get('plan_id'))->value('name'),
+        ];
     }
 
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);
+    }
+
+    /** The commercial plan (null = the default plan, see ModuleAccess). */
+    public function plan(): BelongsTo
+    {
+        return $this->belongsTo(Plan::class);
     }
 
     public function integrations(): HasMany

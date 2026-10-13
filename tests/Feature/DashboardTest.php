@@ -444,9 +444,9 @@ class DashboardTest extends TestCase
 
         $metrics = app(DashboardMetrics::class);
 
-        $this->assertSame(2, $metrics->kpis($workspace, $period)['messagesIn']);
-        $this->assertSame(9, $metrics->kpis($other, $period)['messagesIn']);
-        $this->assertSame(11, $metrics->kpis(null, $period)['messagesIn']);
+        $this->assertSame(2, $metrics->kpis($workspace, $period, ['conversations'])['messagesIn']);
+        $this->assertSame(9, $metrics->kpis($other, $period, ['conversations'])['messagesIn']);
+        $this->assertSame(11, $metrics->kpis(null, $period, ['conversations'])['messagesIn']);
     }
 
     public function test_a_role_with_assistants_but_not_conversations_only_gets_the_executions_signal(): void
@@ -471,7 +471,7 @@ class DashboardTest extends TestCase
         $this->conversation(Workspace::first(), '573001');
         $this->app->bind(DashboardMetrics::class, fn ($app) => new class($app->make(ChannelCatalog::class), $app->make(WorkspaceReport::class), $app->make(IntegrationRegistry::class)) extends DashboardMetrics
         {
-            public function kpis(?Workspace $target, ReportPeriod $period): array
+            public function kpis(?Workspace $target, ReportPeriod $period, array $modules): array
             {
                 throw new \RuntimeException('boom');
             }

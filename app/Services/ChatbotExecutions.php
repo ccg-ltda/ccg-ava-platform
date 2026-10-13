@@ -50,14 +50,16 @@ class ChatbotExecutions
         private readonly ConversationControl $control,
         private readonly ChannelDelivery $delivery,
         private readonly AuditLogger $audit,
+        private readonly ModuleAccess $modules,
     ) {}
 
-    /** Whether the chatbot is switched on and in an active Workspace and Organization. */
+    /** Whether the chatbot is switched on, in an active Workspace and Organization whose plan still includes the assistant and the inbox. */
     private function active(Chatbot $chatbot): bool
     {
         $chatbot->loadMissing('workspace.organization');
 
-        return $chatbot->is_active && ! $chatbot->is_demo && $chatbot->workspace->is_active && $chatbot->workspace->organization->is_active;
+        return $chatbot->is_active && ! $chatbot->is_demo && $chatbot->workspace->is_active && $chatbot->workspace->organization->is_active
+            && $this->modules->allowsAll($chatbot->workspace, ModuleAccess::CHANNEL_MODULES);
     }
 
     /**

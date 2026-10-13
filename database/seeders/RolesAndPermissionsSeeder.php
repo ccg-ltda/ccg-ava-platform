@@ -14,6 +14,9 @@ class RolesAndPermissionsSeeder extends Seeder
 {
     use WithoutModelEvents;
 
+    /** Permissions of the commercial administration: never given to `admin` or to anyone by this seeder. */
+    public const PLATFORM_PERMISSIONS = ['manage-plans', 'manage-modules'];
+
     /**
      * Seed the application's database.
      */
@@ -32,23 +35,35 @@ class RolesAndPermissionsSeeder extends Seeder
         Permission::firstOrCreate(['name' => 'view-conversations']);
         Permission::firstOrCreate(['name' => 'reply-conversations']);
         Permission::firstOrCreate(['name' => 'manage-conversations']);
+        // Commercial administration of Ava Platform: they only operate inside the administrative Workspace
+        // (EnsurePlatformAdministration) and are never granted automatically (see PLATFORM_PERMISSIONS below).
+        foreach (self::PLATFORM_PERMISSIONS as $name) {
+            Permission::firstOrCreate(['name' => $name]);
+        }
 
         // Create Roles
         $adminRole = Role::firstOrCreate(['name' => 'admin']);
         $supervisorRole = Role::firstOrCreate(['name' => 'supervisor']);
         $clienteRole = Role::firstOrCreate(['name' => 'cliente']);
         $agentRole = Role::firstOrCreate(['name' => 'agente']);
+        // Starting point for who administers the commercial side: a role with the two permissions, assigned to nobody.
+        $platformRole = Role::firstOrCreate(['name' => 'plataforma']);
 
         // `admin` always holds every permission (so a permission added later reaches it on the next run). The other
         // roles get their defaults only when they are created: an existing database keeps whatever a superuser
         // changed in the catalog, and the seeder can run again on it without undoing that.
-        $adminRole->syncPermissions(Permission::all());
+        // The commercial permissions are the exception: no role receives them here except `plataforma`, and `admin` never
+        // does, so a superuser decides explicitly who administers plans and the catalog (Usuarios y roles).
+        // `admin` is a protected role (it cannot be edited), so only an earlier version of this seeder could have granted them: take them back.
+        $adminRole->givePermissionTo(Permission::whereNotIn('name', self::PLATFORM_PERMISSIONS)->get());
+        $adminRole->revokePermissionTo(self::PLATFORM_PERMISSIONS);
 
         foreach ([
             [$supervisorRole, ['view-dashboard', 'view-users', 'view-chatbots']],
             [$clienteRole, ['view-dashboard']],
             // Attends conversations (read, take, write, give back to the AI, resolve) but cannot assign them to others.
             [$agentRole, ['view-dashboard', 'view-conversations', 'reply-conversations']],
+            [$platformRole, ['view-dashboard', ...self::PLATFORM_PERMISSIONS]],
         ] as [$role, $defaults]) {
             if ($role->wasRecentlyCreated) {
                 $role->syncPermissions($defaults);

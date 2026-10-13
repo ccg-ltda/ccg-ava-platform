@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\ModuleAccess;
 use App\Services\WorkspaceSettingsService;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -45,6 +46,14 @@ class HandleInertiaRequests extends Middleware
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),
                 'warning' => $request->session()->get('warning'),
+            ],
+            // Modules the plan of the active Workspace includes (navigation only; every route is also enforced by the server),
+            // and what this user administers of the platform (superuser inside the administrative Workspace with the permission).
+            'modules' => fn () => $request->attributes->has('workspace') ? app(ModuleAccess::class)->forRequest($request) : [],
+            'platform' => fn () => EnsurePlatformAdministration::allows($request),
+            'platformAccess' => fn () => [
+                'plans' => EnsurePlatformAdministration::allows($request, EnsurePlatformAdministration::PLANS),
+                'modules' => EnsurePlatformAdministration::allows($request, EnsurePlatformAdministration::MODULES),
             ],
             'workspace' => fn () => ($workspace = $request->attributes->get('workspace')) ? [
                 'code' => $workspace->code,

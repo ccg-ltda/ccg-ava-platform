@@ -1,7 +1,8 @@
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
 import { Link, router } from '@inertiajs/react';
 import { ChevronDown, LogOut, Menu as MenuIcon, User } from 'lucide-react';
-import { topTabs } from '@/config/navigation';
+import { isOffered, topTabs } from '@/config/navigation';
+import useAccess from '@/Hooks/useAccess';
 import { roleTone } from '@/config/roles';
 import Badge from './Badge';
 
@@ -15,6 +16,8 @@ const initials = (name = '') =>
 
 /** Navy top bar: brand, the single "General" tab, user menu and logout. Decoration stays behind the controls. */
 export default function Topbar({ user, role, onMenu }) {
+    const access = useAccess();
+
     return (
         <header className="brand-surface topbar-surface sticky top-0 z-30 flex h-16 items-center gap-3 px-4 text-white shadow-card sm:px-6">
             <button
@@ -29,7 +32,7 @@ export default function Topbar({ user, role, onMenu }) {
             <p className="text-sm font-extrabold tracking-[0.2em] uppercase">CCG Avachat</p>
 
             <nav className="ml-2 hidden items-center gap-1 sm:flex" aria-label="Secciones">
-                {topTabs.filter((tab) => !tab.permission || user?.permissions?.includes(tab.permission)).map((tab) => (
+                {topTabs.filter((tab) => isOffered(tab, access)).map((tab) => (
                     <Link
                         key={tab.label}
                         href={route(tab.route)}

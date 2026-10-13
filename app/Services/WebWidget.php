@@ -26,6 +26,7 @@ class WebWidget
         private readonly ChannelAppearanceService $look,
         private readonly ConversationService $conversations,
         private readonly ConversationControl $control,
+        private readonly ModuleAccess $modules,
     ) {}
 
     public function resolve(string $publicKey): ?ChatbotChannel
@@ -38,6 +39,7 @@ class WebWidget
             && $channel->chatbot->is_active
             && $channel->chatbot->workspace->is_active
             && $channel->chatbot->workspace->organization->is_active
+            && $this->modules->allowsAll($channel->chatbot->workspace, ModuleAccess::CHANNEL_MODULES)
             && $channel->integration?->is_active
             && $this->look->destination($channel->chatbot->workspace, $channel->channel)['ready']
             && $this->look->enabled($channel->chatbot, $channel->channel)

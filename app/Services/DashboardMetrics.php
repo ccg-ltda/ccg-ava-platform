@@ -38,28 +38,45 @@ class DashboardMetrics
      * Headline figures. Period figures come with those of the previous period of the same length (null change when
      * there is nothing to compare against); the others are the state right now.
      *
+     * Only the figures of the modules in `$modules` (the ones the scope's plan includes) are read: the conversation figures
+     * need `conversations`, the assistants `assistants` and the people `users_roles`. A figure of a module the Workspace does
+     * not have is neither computed nor returned.
+     *
+     * @param  list<string>  $modules
      * @return array<string, mixed>
      */
-    public function kpis(?Workspace $target, ReportPeriod $period): array
+    public function kpis(?Workspace $target, ReportPeriod $period, array $modules): array
     {
-        $days = (int) config("reports.periods.{$period->key}.days");
-        $now = $this->activity($target, $period->from, $period->to);
-        $before = $this->activity($target, $period->from->subDays($days), $period->from->subSecond());
+        $figures = [];
 
-        return [
-            'conversations' => $this->compare($now['conversations'], $before['conversations']),
-            'messages' => $this->compare($now['received'] + $now['sent'], $before['received'] + $before['sent']),
-            'messagesIn' => $now['received'],
-            'byAi' => $now['ai'],
-            'byAgents' => $now['agents'],
-            'open' => $this->conversations($target)->where('handling', '!=', Conversation::RESOLVED)->count(),
-            'pending' => $this->conversations($target)->where('handling', Conversation::PENDING)->count(),
-            'assistants' => [
+        if (in_array('conversations', $modules, true)) {
+            $days = (int) config("reports.periods.{$period->key}.days");
+            $now = $this->activity($target, $period->from, $period->to);
+            $before = $this->activity($target, $period->from->subDays($days), $period->from->subSecond());
+
+            $figures += [
+                'conversations' => $this->compare($now['conversations'], $before['conversations']),
+                'messages' => $this->compare($now['received'] + $now['sent'], $before['received'] + $before['sent']),
+                'messagesIn' => $now['received'],
+                'byAi' => $now['ai'],
+                'byAgents' => $now['agents'],
+                'open' => $this->conversations($target)->where('handling', '!=', Conversation::RESOLVED)->count(),
+                'pending' => $this->conversations($target)->where('handling', Conversation::PENDING)->count(),
+            ];
+        }
+
+        if (in_array('assistants', $modules, true)) {
+            $figures['assistants'] = [
                 'total' => $this->within(Chatbot::query(), $target)->count(),
                 'active' => $this->within(Chatbot::query(), $target)->where('is_active', true)->count(),
-            ],
-            'users' => $this->report->memberCount($target),
-        ];
+            ];
+        }
+
+        if (in_array('users_roles', $modules, true)) {
+            $figures['users'] = $this->report->memberCount($target);
+        }
+
+        return $figures;
     }
 
     /**

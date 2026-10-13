@@ -19,12 +19,16 @@ Route::prefix('webhooks')->name('webhooks.')->middleware('throttle:600,1')->grou
     Route::post('/whatsapp', [WhatsAppWebhookController::class, 'receive'])->name('whatsapp.receive');
 });
 
-Route::middleware(['throttle:agent', 'agent'])->prefix('agent')->name('agent.')->group(function () {
+// The token names a chatbot, so its Workspace's plan must include Asistentes; reporting or authorizing conversation traffic
+// also needs Conversaciones. (The public widget and the Meta webhook check the plan where they resolve the chatbot.)
+Route::middleware(['throttle:agent', 'agent', 'workspace.module:assistants'])->prefix('agent')->name('agent.')->group(function () {
     Route::get('/config', [AgentController::class, 'config'])->name('config');
-    Route::post('/messages', [AgentMessageController::class, 'store'])->name('messages.store');
-    Route::post('/messages/status', [AgentMessageController::class, 'status'])->name('messages.status');
-    Route::post('/conversations/authorize', [AgentMessageController::class, 'authorizeReply'])->name('conversations.authorize');
-    Route::post('/conversations/handoff', [AgentMessageController::class, 'handoff'])->name('conversations.handoff');
+    Route::middleware('workspace.module:conversations')->group(function () {
+        Route::post('/messages', [AgentMessageController::class, 'store'])->name('messages.store');
+        Route::post('/messages/status', [AgentMessageController::class, 'status'])->name('messages.status');
+        Route::post('/conversations/authorize', [AgentMessageController::class, 'authorizeReply'])->name('conversations.authorize');
+        Route::post('/conversations/handoff', [AgentMessageController::class, 'handoff'])->name('conversations.handoff');
+    });
 });
 
 Route::prefix('widget/{key}')->where(['key' => '[A-Za-z0-9]{32}'])->name('widget.')->group(function () {

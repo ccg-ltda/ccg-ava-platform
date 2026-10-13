@@ -23,7 +23,7 @@ class ChannelDelivery
 
     public const INTEGRATION = 'integration';
 
-    public function __construct(private readonly IntegrationRegistry $types) {}
+    public function __construct(private readonly IntegrationRegistry $types, private readonly ModuleAccess $modules) {}
 
     /**
      * Whether an agent's message can leave Ava on this conversation's channel right now.
@@ -38,7 +38,12 @@ class ChannelDelivery
 
         $label = config("chatbots.channels.{$conversation->channel}.label", $conversation->channel);
 
-        // Same switches as every other path (agent API, widget, webhook, executions): a deactivated chatbot or a channel that is off is silent.
+        // Same switches as every other path (agent API, widget, webhook, executions): a deactivated chatbot or a channel that is off is silent,
+        // and so is a Workspace whose plan no longer includes the assistant or the inbox (Conversaciones alone is a consultation plan).
+        if (! $this->modules->allowsAll($conversation->chatbot->workspace, ModuleAccess::CHANNEL_MODULES)) {
+            return ['ok' => false, 'message' => 'El plan de este Workspace no incluye Asistentes: las conversaciones son de consulta y no se pueden enviar respuestas.'];
+        }
+
         if (! $conversation->chatbot->is_active) {
             return ['ok' => false, 'message' => 'El chatbot está desactivado: actívalo para responder desde Ava.'];
         }

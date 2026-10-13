@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Services\ModuleAccess;
 use App\Services\SavedFilters;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -16,7 +17,7 @@ class SavedFilterRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return app(SavedFilters::class)->allows((string) $this->route('scope'), $this->attributes->get('workspace_permissions', []));
+        return app(SavedFilters::class)->allows((string) $this->route('scope'), $this->attributes->get('workspace_permissions', []), app(ModuleAccess::class)->forRequest($this));
     }
 
     /** @return array<string, mixed> */

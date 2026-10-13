@@ -22,10 +22,11 @@ const retry = () => router.reload({ preserveScroll: true });
  * Dashboard: the executive and operational summary of the Workspace (the detailed analytics are Reportes). Everything shown
  * is computed by the server from the stored data; the period and the Workspace (for platform administrators) are real
  * filters that reload it. Every section arrives on its own, so one that could not be read shows an error and never a zero,
- * and a real zero shows an explicit empty state.
+ * and a real zero shows an explicit empty state. What the plan of the Workspace does not include arrives as `null` (and
+ * `sources` says which sources exist), and the page draws nothing for it: not a zero, not an empty chart.
  */
-export default function Index({ filters, range, options, scope, can, kpis, activity, states, channels, attention, integrations, recentConversations, recentActivity, demo }) {
-    const { workspace, auth, errors } = usePage().props;
+export default function Index({ filters, range, options, scope, can, sources, kpis, activity, states, channels, attention, integrations, recentConversations, recentActivity, demo }) {
+    const { workspace, errors } = usePage().props;
     const [loading, setLoading] = useState(false);
 
     const workspaceParam = scope.mode === 'all' ? 'all' : scope.mode === 'workspace' ? String(scope.workspace.id) : undefined;
@@ -46,8 +47,9 @@ export default function Index({ filters, range, options, scope, can, kpis, activ
     const changeWorkspace = (option) => option && visit({ period: filters.period, workspace: option.id });
 
     const k = kpis.data;
-    const noActivity = activity.data && activity.data.total === 0;
-    const statesTotal = (states.data ?? []).reduce((sum, item) => sum + item.value, 0);
+    const noActivity = activity?.data && activity.data.total === 0;
+    const statesTotal = (states?.data ?? []).reduce((sum, item) => sum + item.value, 0);
+    const hasData = sources.conversations || sources.assistants || sources.users;
 
     return (
         <>
@@ -69,10 +71,12 @@ export default function Index({ filters, range, options, scope, can, kpis, activ
 
             {(errors?.period || errors?.workspace) && <Alert tone="warning">{errors.period ?? errors.workspace}</Alert>}
 
+            {!hasData && <Alert tone="info">El plan de este Workspace no incluye módulos con cifras para mostrar aquí. Puedes seguir usando los módulos que sí incluye desde el menú.</Alert>}
+
             {demo?.data > 0 && <Alert tone="info">Estas cifras incluyen {demo.data.toLocaleString('es')} conversaciones de demostración (simuladas), marcadas como tales en la bandeja.</Alert>}
 
             <div className={`space-y-6 transition-opacity duration-200 ${loading ? 'opacity-60' : ''}`} aria-busy={loading || undefined}>
-                {kpis.error ? (
+                {!hasData ? null : kpis.error ? (
                     <Alert tone="warning">
                         {kpis.error}{' '}
                         <button type="button" onClick={retry} className="font-semibold underline underline-offset-2">
@@ -81,54 +85,64 @@ export default function Index({ filters, range, options, scope, can, kpis, activ
                     </Alert>
                 ) : (
                     <section aria-label="Indicadores principales" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                        <KpiCard label="Conversaciones nuevas" value={k.conversations.value} change={k.conversations.change} previous={k.conversations.previous} icon={MessagesSquare} tone="blue" hint={`En el periodo (${range.days} días)`} href={can.conversations ? route('conversations.index') : undefined} />
-                        <KpiCard label="Mensajes" value={k.messages.value} change={k.messages.change} previous={k.messages.previous} icon={MessageSquareText} tone="violet" hint={`${k.messagesIn.toLocaleString('es')} recibidos de contactos`} delay={60} />
-                        <KpiCard
-                            label="Respuestas de la IA"
-                            value={k.byAi + k.byAgents > 0 ? Math.round((k.byAi / (k.byAi + k.byAgents)) * 100) : 0}
-                            format={(number) => `${number}%`}
-                            emptyLabel={k.byAi + k.byAgents === 0 ? 'Sin respuestas todavía' : undefined}
-                            icon={Sparkles}
-                            tone="green"
-                            hint={`${k.byAi.toLocaleString('es')} de ${(k.byAi + k.byAgents).toLocaleString('es')} respuestas de IA o agentes`}
-                            delay={90}
-                        />
-                        <KpiCard label="Conversaciones abiertas" value={k.open} icon={UserRoundCheck} tone="green" hint={`${k.pending.toLocaleString('es')} esperando a un agente`} href={can.conversations ? route('conversations.index') : undefined} delay={120} />
-                        <KpiCard label="Asistentes activos" value={k.assistants.active} icon={Bot} tone="blue" hint={`${k.assistants.total.toLocaleString('es')} en total`} href={can.assistants ? route('chatbots.index') : undefined} delay={180} />
-                        <KpiCard label="Usuarios" value={k.users} icon={Users} tone="amber" hint={scope.mode === 'all' ? 'En todos los Workspaces' : 'Con acceso al Workspace'} delay={240} />
+                        {sources.conversations && (
+                            <>
+                                <KpiCard label="Conversaciones nuevas" value={k.conversations.value} change={k.conversations.change} previous={k.conversations.previous} icon={MessagesSquare} tone="blue" hint={`En el periodo (${range.days} días)`} href={can.conversations ? route('conversations.index') : undefined} />
+                                <KpiCard label="Mensajes" value={k.messages.value} change={k.messages.change} previous={k.messages.previous} icon={MessageSquareText} tone="violet" hint={`${k.messagesIn.toLocaleString('es')} recibidos de contactos`} delay={60} />
+                                <KpiCard
+                                    label="Respuestas de la IA"
+                                    value={k.byAi + k.byAgents > 0 ? Math.round((k.byAi / (k.byAi + k.byAgents)) * 100) : 0}
+                                    format={(number) => `${number}%`}
+                                    emptyLabel={k.byAi + k.byAgents === 0 ? 'Sin respuestas todavía' : undefined}
+                                    icon={Sparkles}
+                                    tone="green"
+                                    hint={`${k.byAi.toLocaleString('es')} de ${(k.byAi + k.byAgents).toLocaleString('es')} respuestas de IA o agentes`}
+                                    delay={90}
+                                />
+                                <KpiCard label="Conversaciones abiertas" value={k.open} icon={UserRoundCheck} tone="green" hint={`${k.pending.toLocaleString('es')} esperando a un agente`} href={can.conversations ? route('conversations.index') : undefined} delay={120} />
+                            </>
+                        )}
+                        {sources.assistants && <KpiCard label="Asistentes activos" value={k.assistants.active} icon={Bot} tone="blue" hint={`${k.assistants.total.toLocaleString('es')} en total`} href={can.assistants ? route('chatbots.index') : undefined} delay={180} />}
+                        {sources.users && <KpiCard label="Usuarios" value={k.users} icon={Users} tone="amber" hint={scope.mode === 'all' ? 'En todos los Workspaces' : 'Con acceso al Workspace'} delay={240} />}
                     </section>
                 )}
 
-                <div className="grid gap-6 lg:grid-cols-3">
-                    <ChartCard className="lg:col-span-2" title="Actividad en el tiempo" description={`Por ${{ day: 'día', week: 'semana', month: 'mes' }[range.granularity]}. Pulsa una serie de la leyenda para ocultarla.`} loading={loading} error={activity.error} onRetry={retry} height={300}>
-                        {noActivity ? (
-                            <ChartEmpty type="line" title="Sin actividad en este periodo" description="No hubo conversaciones ni mensajes. Prueba con un periodo más largo." height={300} />
-                        ) : (
-                            <SeriesChart key={`${filters.period}-${workspaceParam}`} points={activity.data?.points ?? []} series={activitySeries} ariaLabel="Conversaciones nuevas, mensajes recibidos y respuestas enviadas a lo largo del periodo" />
+                {sources.conversations && (
+                    <div className="grid gap-6 lg:grid-cols-3">
+                        <ChartCard className="lg:col-span-2" title="Actividad en el tiempo" description={`Por ${{ day: 'día', week: 'semana', month: 'mes' }[range.granularity]}. Pulsa una serie de la leyenda para ocultarla.`} loading={loading} error={activity.error} onRetry={retry} height={300}>
+                            {noActivity ? (
+                                <ChartEmpty type="line" title="Sin actividad en este periodo" description="No hubo conversaciones ni mensajes. Prueba con un periodo más largo." height={300} />
+                            ) : (
+                                <SeriesChart key={`${filters.period}-${workspaceParam}`} points={activity.data?.points ?? []} series={activitySeries} ariaLabel="Conversaciones nuevas, mensajes recibidos y respuestas enviadas a lo largo del periodo" />
+                            )}
+                        </ChartCard>
+
+                        <ChartCard title="Estado de las conversaciones" description="Con actividad en el periodo, como están ahora." loading={loading} error={states.error} onRetry={retry} height={300}>
+                            {statesTotal === 0 ? (
+                                <ChartEmpty type="donut" title="Sin conversaciones con actividad" description="Cuando haya conversaciones en el periodo verás quién las atiende." height={300} />
+                            ) : (
+                                <DonutChart
+                                    items={(states.data ?? []).map((item) => ({ ...item, label: item.label, tone: stateTones[item.key] }))}
+                                    totalLabel="Total"
+                                    ariaLabel="Distribución de las conversaciones por quién las atiende"
+                                />
+                            )}
+                        </ChartCard>
+                    </div>
+                )}
+
+                {(sources.conversations || attention || integrations) && (
+                    <div className="grid gap-6 lg:grid-cols-3">
+                        {sources.conversations && (
+                            <ChartCard title="Canales" description="Conversaciones nuevas por canal." loading={loading} error={channels.error} onRetry={retry} height={140}>
+                                {(channels.data ?? []).length === 0 ? <ChartEmpty type="ranking" title="Sin conversaciones nuevas" description="Aquí verás desde qué canal escriben tus contactos." height={140} /> : <RankingList items={channels.data} share />}
+                            </ChartCard>
                         )}
-                    </ChartCard>
 
-                    <ChartCard title="Estado de las conversaciones" description="Con actividad en el periodo, como están ahora." loading={loading} error={states.error} onRetry={retry} height={300}>
-                        {statesTotal === 0 ? (
-                            <ChartEmpty type="donut" title="Sin conversaciones con actividad" description="Cuando haya conversaciones en el periodo verás quién las atiende." height={300} />
-                        ) : (
-                            <DonutChart
-                                items={(states.data ?? []).map((item) => ({ ...item, label: item.label, tone: stateTones[item.key] }))}
-                                totalLabel="Total"
-                                ariaLabel="Distribución de las conversaciones por quién las atiende"
-                            />
-                        )}
-                    </ChartCard>
-                </div>
-
-                <div className="grid gap-6 lg:grid-cols-3">
-                    <ChartCard title="Canales" description="Conversaciones nuevas por canal." loading={loading} error={channels.error} onRetry={retry} height={140}>
-                        {(channels.data ?? []).length === 0 ? <ChartEmpty type="ranking" title="Sin conversaciones nuevas" description="Aquí verás desde qué canal escriben tus contactos." height={140} /> : <RankingList items={channels.data} share />}
-                    </ChartCard>
-
-                    {attention && <AttentionPanel section={attention} loading={loading} />}
-                    {integrations && <IntegrationsPanel section={integrations} loading={loading} />}
-                </div>
+                        {attention && <AttentionPanel section={attention} loading={loading} />}
+                        {integrations && <IntegrationsPanel section={integrations} loading={loading} />}
+                    </div>
+                )}
 
                 {(recentConversations || recentActivity) && (
                     <div className="grid gap-6 lg:grid-cols-2">
@@ -137,7 +151,7 @@ export default function Index({ filters, range, options, scope, can, kpis, activ
                     </div>
                 )}
 
-                <QuickLinks permissions={auth.user?.permissions} />
+                <QuickLinks />
             </div>
         </>
     );

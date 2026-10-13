@@ -66,6 +66,11 @@ Permisos de Conversaciones: `view-conversations` (leer), `reply-conversations` (
 | Auditoría | Historial de cambios administrativos, de control de conversaciones y de procesos automáticos, con origen (persona o automático) y resultado, filtros en el servidor y exportación a PDF |
 | Configuraciones | Identidad, región, apariencia e impuestos del Workspace |
 | Usuarios y Roles | Cuentas, roles, permisos, Workspaces y Organizaciones |
+| Planes (solo CCG, desde `Desarrollo_DEV`) | Catálogo de módulos reutilizables y planes comerciales: qué módulos incluye cada plan y qué plan tiene cada Workspace. La disponibilidad del módulo depende del plan y de que esté implementado; los permisos del rol siguen mandando |
+
+### Planes y módulos
+
+CCG arma planes combinando módulos del catálogo (las áreas Salud, Delivery, eCommerce y Servicios y Reservas son categorías, no límites). Cada Workspace cliente tiene un plan; sin plan asignado usa el plan por defecto «Plataforma completa» (los ocho módulos compartidos), así que los Workspaces existentes siguen funcionando. Los Workspaces nuevos nacen con ese plan explícito. `Desarrollo_DEV` siempre tiene todos los módulos. Hay una dependencia técnica declarada: Asistentes necesita Conversaciones (un plan que los separe no se guarda y Asistentes no se ofrece sin ella). El Dashboard y Reportes solo muestran cifras de los módulos contratados. La administración comercial exige estar en `Desarrollo_DEV` y que el rol tenga el permiso `manage-plans` (planes y asignación) o `manage-modules` (catálogo y categorías); no hace falta ser superusuario ni nadie los recibe automáticamente (ni `admin`): el sembrado crea el rol `plataforma` sin asignar y un superusuario decide a quién dárselo. Conversaciones puede contratarse sin Asistentes (consulta: sin envío ni devolución a la IA). Tras actualizar, ejecutar `php artisan db:seed --class=RolesAndPermissionsSeeder`. Un módulo es «Implementado» solo si está declarado en `config/modules.php`; registrar uno nuevo desde Planes reserva su lugar pero no lo desarrolla. Para añadir un módulo real: declararlo en `config/modules.php`, proteger sus rutas con `workspace.module:<clave>`, ponerle `module` en `resources/js/config/navigation.js` y ejecutar `php artisan db:seed --class=ModuleCatalogSeeder`.
 
 ### Chatbots, canales y conversaciones
 
@@ -107,4 +112,5 @@ graphify update .                # actualiza el grafo de código (graphify-out/,
 - **La ejecución iniciada por Ava (webhook de Meta + n8n de la plataforma) solo se probó con simulaciones.** Falta un n8n con el workflow, una app de Meta con el webhook apuntando a Ava y verificar con n8n que su licencia permite este modelo de servicio antes del uso comercial. Meta no ofrece idempotencia al enviar: si el resultado de un envío es incierto, Ava no lo reenvía y depende de que Meta devuelva el estado con la etiqueta `ava:{id}` para completarlo.
 - Fuera de la ventana de 24 h de WhatsApp solo se pueden enviar plantillas aprobadas, que Ava no envía.
 - Reportes no tiene Preguntas ni Encuestas (Ava no guarda esa información) ni tiempos de respuesta; la «IA» del entorno DEMO es un texto fijo.
+- Planes: los módulos específicos de Salud, Delivery, eCommerce y Servicios y Reservas todavía no existen (sus categorías están vacías); no hay precios, límites ni renovación. La interfaz de Planes se revisó en navegador (móvil, tablet y escritorio) sin pruebas de frontend automáticas.
 - Más pendientes y decisiones abiertas en [`pendientes.md`](pendientes.md).

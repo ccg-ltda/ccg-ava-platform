@@ -13,7 +13,7 @@ import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import { TableWrap, Td, Th } from '@/Components/Table';
 import TextInput from '@/Components/TextInput';
-import { roleTone } from '@/config/roles';
+import { platformPermissions, roleTone } from '@/config/roles';
 import usePagedList from '@/Hooks/usePagedList';
 
 const VISIBLE_PERMISSIONS = 3;
@@ -27,9 +27,12 @@ function PermissionPicker({ permissions, selected, onChange, error }) {
             <legend className="text-sm font-medium text-ink">Permisos</legend>
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 {permissions.map((name) => (
-                    <label key={name} className="flex cursor-pointer items-center gap-2 rounded-lg border border-field px-3 py-2 text-sm text-ink transition-colors duration-150 hover:border-primary/40 has-checked:border-primary/50 has-checked:bg-primary-soft/40">
+                    <label key={name} className="flex cursor-pointer items-start gap-2 rounded-lg border border-field px-3 py-2 text-sm text-ink transition-colors duration-150 hover:border-primary/40 has-checked:border-primary/50 has-checked:bg-primary-soft/40">
                         <Checkbox checked={selected.includes(name)} onChange={() => toggle(name)} />
-                        {name}
+                        <span className="min-w-0">
+                            {name}
+                            {platformPermissions[name] && <span className="block text-xs text-ink-muted">{platformPermissions[name]}</span>}
+                        </span>
                     </label>
                 ))}
             </div>

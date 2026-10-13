@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Middleware\AuthenticateAgent;
+use App\Http\Middleware\EnsurePlatformAdministration;
 use App\Http\Middleware\EnsureWorkspaceContext;
+use App\Http\Middleware\EnsureWorkspaceModule;
 use App\Http\Middleware\EnsureWorkspacePermission;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Foundation\Application;
@@ -35,6 +37,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'agent' => AuthenticateAgent::class,
             'workspace' => EnsureWorkspaceContext::class,
             'workspace.permission' => EnsureWorkspacePermission::class,
+            'workspace.module' => EnsureWorkspaceModule::class,
+            'workspace.platform' => EnsurePlatformAdministration::class,
             'role' => RoleMiddleware::class,
             'permission' => PermissionMiddleware::class,
             'role_or_permission' => RoleOrPermissionMiddleware::class,

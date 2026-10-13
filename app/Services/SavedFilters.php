@@ -30,10 +30,17 @@ class SavedFilters
         return config("saved_filters.scopes.{$scope}.permission");
     }
 
-    /** Whether the module exists and the permissions given include the one that opens its page. */
-    public function allows(string $scope, array $permissions): bool
+    /**
+     * Whether the module exists, the permissions given include the one that opens its page and the Workspace's plan includes it.
+     *
+     * @param  list<string>  $permissions
+     * @param  list<string>  $modules
+     */
+    public function allows(string $scope, array $permissions, array $modules): bool
     {
-        return $this->known($scope) && in_array($this->permission($scope), $permissions, true);
+        return $this->known($scope)
+            && in_array($this->permission($scope), $permissions, true)
+            && in_array(config("saved_filters.scopes.{$scope}.module"), $modules, true);
     }
 
     /** @return Builder<SavedFilter> the filters of this user in this Workspace and module */

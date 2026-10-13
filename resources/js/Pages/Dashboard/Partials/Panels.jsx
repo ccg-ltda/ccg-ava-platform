@@ -6,6 +6,7 @@ import EmptyState from '@/Components/EmptyState';
 import { attentionItems, integrationStates, quickLinkHints } from '@/config/dashboard';
 import { handlingStates } from '@/config/conversations';
 import { visibleNavigation } from '@/config/navigation';
+import useAccess from '@/Hooks/useAccess';
 
 const retry = () => router.reload({ preserveScroll: true });
 
@@ -182,8 +183,8 @@ export function RecentActivity({ section, loading }) {
 }
 
 /** Links to the modules the user may open: the sidebar's own definition, so what the menu hides is not offered here either. */
-export function QuickLinks({ permissions }) {
-    const items = visibleNavigation(permissions).flatMap((section) => section.items).filter((item) => item.route !== 'dashboard');
+export function QuickLinks() {
+    const items = visibleNavigation(useAccess()).flatMap((section) => section.items).filter((item) => item.route !== 'dashboard');
 
     if (items.length === 0) return null;
 

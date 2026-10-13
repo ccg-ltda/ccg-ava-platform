@@ -25,7 +25,17 @@ class ConversationControl
     public function __construct(
         private readonly AuditLogger $audit,
         private readonly ConversationAgents $agents,
+        private readonly ModuleAccess $modules,
     ) {}
+
+    /**
+     * Whether the AI can have this conversation at all: the Workspace's plan includes Asistentes. A plan with Conversaciones
+     * only is a consultation plan: people can read, take, assign and resolve, but nothing can hand a conversation to the AI.
+     */
+    public function aiAvailable(Conversation $conversation): bool
+    {
+        return $this->modules->allows($conversation->chatbot->workspace, 'assistants');
+    }
 
     /** The automation (or a rule) asks for a person. Nothing happens when a person already has it or was already asked. */
     public function requestHuman(Conversation $conversation, ?string $reason = null): Conversation
@@ -84,6 +94,10 @@ class ConversationControl
     public function returnToAi(Conversation $conversation, User $actor, bool $manage): Conversation
     {
         return $this->change($conversation, function (Conversation $locked) use ($actor, $manage) {
+            if (! $this->aiAvailable($locked)) {
+                throw new ConversationStateException('El plan de este Workspace no incluye Asistentes: no hay IA a la que devolver la conversación.');
+            }
+
             if (! in_array($locked->handling, [Conversation::HUMAN, Conversation::PENDING], true)) {
                 throw new ConversationStateException('La conversación ya la atiende la IA o está resuelta.');
             }

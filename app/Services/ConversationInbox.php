@@ -158,7 +158,7 @@ class ConversationInbox
         return [
             'take' => $reply && in_array($handling, [Conversation::AI, Conversation::PENDING], true),
             'reply' => $reply && $handling === Conversation::HUMAN && $operator && $deliverable,
-            'release' => $reply && (($handling === Conversation::HUMAN && $operator) || $handling === Conversation::PENDING),
+            'release' => $reply && $this->control->aiAvailable($conversation) && (($handling === Conversation::HUMAN && $operator) || $handling === Conversation::PENDING),
             'resolve' => $reply && $handling !== Conversation::RESOLVED && ($handling !== Conversation::HUMAN || $operator),
             'assign' => $manage && $handling !== Conversation::RESOLVED,
         ];

@@ -1,0 +1,128 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Http\Middleware\EnsurePlatformAdministration;
+use App\Http\Requests\SavePlanModulesRequest;
+use App\Http\Requests\SavePlanRequest;
+use App\Models\Plan;
+use App\Models\Workspace;
+use App\Services\ListPagination;
+use App\Services\ModuleCatalog;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Inertia\Response;
+
+/**
+ * Planes: the commercial plans of CCG (the modules a Workspace may use). Only superusers inside the administrative
+ * Workspace reach it (`workspace.platform`): the page opens with `manage-plans` or `manage-modules` and shows only the part
+ * its permission allows. Plans are never deleted, only deactivated, and the rules live in ModuleCatalog.
+ */
+class PlanController extends Controller
+{
+    public function __construct(private readonly ModuleCatalog $catalog) {}
+
+    public function index(Request $request): Response
+    {
+        $search = trim((string) $request->query('search', ''));
+        $counts = $this->catalog->workspaceCounts();
+        $can = [
+            'plans' => EnsurePlatformAdministration::allows($request, EnsurePlatformAdministration::PLANS),
+            'modules' => EnsurePlatformAdministration::allows($request, EnsurePlatformAdministration::MODULES),
+        ];
+
+        return Inertia::render('Plans/Index', [
+            'can' => $can,
+            'plans' => ! $can['plans'] ? [] : Plan::query()->withCount('modules')
+                ->when($search !== '', function ($query) use ($search) {
+                    $like = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($search)).'%';
+                    $query->whereRaw("lower(name) like ? escape '!'", [$like]);
+                })
+                ->orderByDesc('is_active')->orderBy('name')->get()
+                ->map(fn (Plan $plan) => $this->summary($plan, $counts[$plan->id] ?? 0))->all(),
+            'catalog' => $this->catalog->grouped(),
+            'filters' => ['search' => $search],
+        ]);
+    }
+
+    public function show(Request $request, Plan $plan): Response
+    {
+        return Inertia::render('Plans/Show', [
+            'plan' => $this->summary($plan->loadCount('modules'), $this->catalog->workspacesOf($plan)->count())
+                + ['moduleIds' => $plan->modules()->pluck('modules.id')->all()],
+            'catalog' => $this->catalog->grouped(),
+            'workspaces' => fn () => $this->workspacesPage($request, $plan),
+            'perPageOptions' => ListPagination::OPTIONS,
+        ]);
+    }
+
+    public function store(SavePlanRequest $request): RedirectResponse
+    {
+        $plan = $this->catalog->createPlan($request->validated(), $request->moduleIds());
+
+        return redirect()->route('plans.show', $plan)->with('success', 'Plan creado correctamente');
+    }
+
+    public function update(SavePlanRequest $request, Plan $plan): RedirectResponse
+    {
+        $this->catalog->updatePlan($plan, $request->validated());
+
+        return back()->with('success', 'Plan actualizado correctamente');
+    }
+
+    public function updateModules(SavePlanModulesRequest $request, Plan $plan): RedirectResponse
+    {
+        $this->catalog->syncModules($plan, $request->moduleIds());
+
+        return back()->with('success', 'Módulos del plan actualizados correctamente');
+    }
+
+    public function activate(Plan $plan): RedirectResponse
+    {
+        $this->catalog->setPlanActive($plan, true);
+
+        return back()->with('success', 'Plan activado correctamente');
+    }
+
+    public function deactivate(Plan $plan): RedirectResponse
+    {
+        $this->catalog->setPlanActive($plan, false);
+
+        return back()->with('success', 'Plan desactivado correctamente');
+    }
+
+    /** @return array<string, mixed> */
+    private function summary(Plan $plan, int $workspacesCount): array
+    {
+        return [
+            'id' => $plan->id,
+            'name' => $plan->name,
+            'description' => $plan->description,
+            'isActive' => $plan->is_active,
+            'isDefault' => $plan->isDefault(),
+            'modulesCount' => $plan->modules_count,
+            'workspacesCount' => $workspacesCount,
+            // Modules of the plan that are NOT operative because a module they need is not in the plan.
+            'unmet' => $this->catalog->unmetDependencies($plan->modules()->pluck('modules.key')->all()),
+        ];
+    }
+
+    /** The Workspaces that use the plan (paginated on the server: there can be many). */
+    private function workspacesPage(Request $request, Plan $plan): array
+    {
+        $page = ListPagination::paginate($this->catalog->workspacesOf($plan)->orderBy('workspaces.name'), $request, 'workspaces');
+
+        return [
+            'data' => $page->getCollection()->map(fn (Workspace $workspace) => [
+                'id' => $workspace->id,
+                'code' => $workspace->code,
+                'name' => $workspace->name,
+                'organization' => $workspace->organization->name,
+                'isActive' => $workspace->is_active,
+                'explicit' => $workspace->plan_id !== null,
+            ])->values()->all(),
+            'meta' => ListPagination::meta($page),
+        ];
+    }
+}

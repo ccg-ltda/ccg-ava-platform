@@ -4,7 +4,7 @@ import Card from '@/Components/Card';
 import EmptyState from '@/Components/EmptyState';
 import Pagination from '@/Components/Pagination';
 import { TableWrap, Td, Th } from '@/Components/Table';
-import { roleTone } from '@/config/roles';
+import { platformPermissions, roleTone } from '@/config/roles';
 import usePagedList from '@/Hooks/usePagedList';
 
 /**
@@ -39,7 +39,10 @@ export default function PermissionsPanel({ roles, permissions, perPageOptions })
                     <tbody className="divide-y divide-line">
                         {permissions.data.map((permission) => (
                             <tr key={permission.name} className="transition-colors duration-150 hover:bg-canvas/70">
-                                <Td className="font-mono text-[13px] whitespace-nowrap text-ink">{permission.name}</Td>
+                                <Td className="font-mono text-[13px] whitespace-nowrap text-ink">
+                                    {permission.name}
+                                    {platformPermissions[permission.name] && <span className="mt-0.5 block font-sans text-xs whitespace-normal text-ink-muted">{platformPermissions[permission.name]}</span>}
+                                </Td>
                                 {roles.map((role) => {
                                     const granted = permission.roles.includes(role.name);
 

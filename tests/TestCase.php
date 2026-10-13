@@ -31,10 +31,12 @@ abstract class TestCase extends BaseTestCase
      */
     protected function seedRoleCatalog(): void
     {
-        $permissions = collect(['manage-users', 'manage-settings', 'view-dashboard', 'view-users', 'view-chatbots', 'manage-chatbots', 'view-conversations', 'reply-conversations', 'manage-conversations'])
+        $permissions = collect(['manage-users', 'manage-settings', 'view-dashboard', 'view-users', 'view-chatbots', 'manage-chatbots', 'view-conversations', 'reply-conversations', 'manage-conversations', 'manage-plans', 'manage-modules'])
             ->each(fn (string $name) => Permission::findOrCreate($name, 'web'));
 
-        Role::findOrCreate('admin', 'web')->syncPermissions($permissions->all());
+        // `admin` never holds the commercial permissions: only `plataforma` does (as in the seeder).
+        Role::findOrCreate('admin', 'web')->syncPermissions($permissions->reject(fn (string $permission) => in_array($permission, ['manage-plans', 'manage-modules']))->all());
+        Role::findOrCreate('plataforma', 'web')->syncPermissions(['view-dashboard', 'manage-plans', 'manage-modules']);
         Role::findOrCreate('supervisor', 'web')->syncPermissions(['view-dashboard', 'view-users', 'view-chatbots']);
         Role::findOrCreate('cliente', 'web')->syncPermissions(['view-dashboard']);
         Role::findOrCreate('agente', 'web')->syncPermissions(['view-dashboard', 'view-conversations', 'reply-conversations']);

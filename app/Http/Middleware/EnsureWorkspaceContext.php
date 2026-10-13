@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Workspace;
+use App\Services\ModuleAccess;
 use App\Services\RememberedAccess;
 use Closure;
 use Illuminate\Http\Request;
@@ -17,7 +18,7 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class EnsureWorkspaceContext
 {
-    public function __construct(private readonly RememberedAccess $remembered) {}
+    public function __construct(private readonly RememberedAccess $remembered, private readonly ModuleAccess $modules) {}
 
     public function handle(Request $request, Closure $next): Response
     {
@@ -59,6 +60,8 @@ class EnsureWorkspaceContext
         $request->attributes->set('workspace', $workspace);
         $request->attributes->set('workspace_role', $role);
         $request->attributes->set('workspace_permissions', $catalogRole->permissions->pluck('name')->all());
+        // What the plan of the Workspace includes (the permissions above still decide what this user may do in it).
+        $this->modules->forRequest($request);
 
         return $next($request);
     }

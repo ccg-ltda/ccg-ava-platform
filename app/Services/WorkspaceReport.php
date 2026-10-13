@@ -79,9 +79,11 @@ class WorkspaceReport
      * says whether it has a source; the figures of the connected ones come from `DashboardMetrics`, the same
      * calculations as the Dashboard) and the series of the people added to this Workspace.
      *
+     * The team series (`teamGrowth`) is read only with `$withTeam` (the Workspace has the users module).
+     *
      * @return array<string, mixed>
      */
-    public function analytics(Workspace $active, ReportPeriod $period, ?Workspace $target = null, bool $global = false): array
+    public function analytics(Workspace $active, ReportPeriod $period, ?Workspace $target = null, bool $global = false, bool $withTeam = true): array
     {
         $settings = $active->settingsOrDefault();
 
@@ -100,7 +102,7 @@ class WorkspaceReport
                 'section' => $metric['section'],
                 'connected' => $metric['source'] !== null,
             ])->values()->all(),
-            'teamGrowth' => $this->teamGrowth($active, $period, $target ?? $active, $global),
+            'teamGrowth' => $withTeam ? $this->teamGrowth($active, $period, $target ?? $active, $global) : null,
         ];
     }
 

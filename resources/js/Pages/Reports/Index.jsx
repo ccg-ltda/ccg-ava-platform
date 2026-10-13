@@ -22,7 +22,6 @@ import AppLayout from '@/Layouts/AppLayout';
 import SectionPreview from './Partials/SectionPreview';
 import TeamPanel from './Partials/TeamPanel';
 
-const SECTION_IDS = reportSections.map((section) => section.id);
 const GRANULARITY = { day: 'día', week: 'semana', month: 'mes' };
 
 const retry = () => router.reload({ preserveScroll: true });
@@ -49,9 +48,11 @@ function Variation({ change, previous }) {
  * server data. Every section arrives on its own: one that could not be read shows an error and never a zero, and a real
  * zero shows an explicit empty state. Questions and surveys have no data source and say so.
  */
-export default function Index({ stats, roleBreakdown, recentUsers, filters, range, options, metrics, teamGrowth, figures, activity, channels, states, chatHours, messageHours, scope }) {
+export default function Index({ stats, roleBreakdown, recentUsers, sources, filters, range, options, metrics, teamGrowth, figures, activity, channels, states, chatHours, messageHours, scope }) {
     const { workspace, errors } = usePage().props;
-    const [tab, selectTab] = useUrlTab(SECTION_IDS);
+    // Only the sections whose data the plan of the Workspace includes; the server sends nothing for the rest.
+    const sections = reportSections.filter((section) => section.needs.some((source) => sources[source]));
+    const [tab, selectTab] = useUrlTab(sections.map((section) => section.id));
     const [loading, setLoading] = useState(false);
 
     // What the administrative selector asked for, to keep it across period and grouping changes.
@@ -59,7 +60,7 @@ export default function Index({ stats, roleBreakdown, recentUsers, filters, rang
     const selectedWorkspace = scope.mode === 'all' ? ALL_WORKSPACES : scope.workspace;
 
     const visit = (params) =>
-        router.get(route('reports.index'), { ...params, tab: SECTION_IDS[tab] }, {
+        router.get(route('reports.index'), { ...params, tab: sections[tab]?.id }, {
             preserveState: true,
             preserveScroll: true,
             replace: true,
@@ -73,18 +74,18 @@ export default function Index({ stats, roleBreakdown, recentUsers, filters, rang
     const changeWorkspace = (option) => option && visit({ period: filters.period, workspace: option.id });
 
     const scopeLabel = scope.mode === 'all' ? 'todos los Workspaces' : (scope.workspace?.name ?? workspace?.name);
-    const noActivity = activity.data && activity.data.total === 0;
-    const statesTotal = (states.data ?? []).reduce((sum, item) => sum + item.value, 0);
+    const noActivity = activity?.data && activity.data.total === 0;
+    const statesTotal = (states?.data ?? []).reduce((sum, item) => sum + item.value, 0);
     const granularity = GRANULARITY[range.granularity ?? filters.granularity];
 
     const metricCard = (metric, index) => {
-        const figure = metric.connected ? figures.data?.[metric.key] : null;
+        const figure = metric.connected ? figures?.data?.[metric.key] : null;
 
         return (
             <MetricCard
                 key={metric.key}
                 label={metric.label}
-                hint={!metric.connected ? 'Sin fuente de datos' : figures.error ? 'No se pudo leer' : figure ? (figure.previous > 0 ? `Antes: ${figure.previous.toLocaleString('es')}` : metric.hint) : metric.hint}
+                hint={!metric.connected ? 'Sin fuente de datos' : figures?.error ? 'No se pudo leer' : figure ? (figure.previous > 0 ? `Antes: ${figure.previous.toLocaleString('es')}` : metric.hint) : metric.hint}
                 value={figure ? figure.value : null}
                 change={figure ? percent(figure.change) : undefined}
                 delay={index * 60}
@@ -104,11 +105,11 @@ export default function Index({ stats, roleBreakdown, recentUsers, filters, rang
         );
 
     const activityChart = (keys, title, description, ariaLabel) => (
-        <ChartCard className="lg:col-span-2" title={title} description={description} loading={loading} error={activity.error} onRetry={retry} height={300}>
+        <ChartCard className="lg:col-span-2" title={title} description={description} loading={loading} error={activity?.error} onRetry={retry} height={300}>
             {noActivity ? (
                 <ChartEmpty type="line" title="Sin actividad en este periodo" description="No hubo conversaciones ni mensajes. Prueba con un periodo más largo." height={300} />
             ) : (
-                <SeriesChart key={`${keys.join('-')}-${filters.period}-${filters.granularity}-${workspaceParam}`} points={activity.data?.points ?? []} series={keys.map((key) => seriesLabels[key])} ariaLabel={ariaLabel} />
+                <SeriesChart key={`${keys.join('-')}-${filters.period}-${filters.granularity}-${workspaceParam}`} points={activity?.data?.points ?? []} series={keys.map((key) => seriesLabels[key])} ariaLabel={ariaLabel} />
             )}
         </ChartCard>
     );
@@ -124,17 +125,17 @@ export default function Index({ stats, roleBreakdown, recentUsers, filters, rang
     );
 
     const channelsChart = (
-        <ChartCard title="Canales" description="Conversaciones nuevas por canal." loading={loading} error={channels.error} onRetry={retry} height={140}>
-            {(channels.data ?? []).length === 0 ? <ChartEmpty type="ranking" title="Sin conversaciones nuevas" description="Aquí verás desde qué canal escriben tus contactos." height={140} /> : <RankingList items={channels.data} share />}
+        <ChartCard title="Canales" description="Conversaciones nuevas por canal." loading={loading} error={channels?.error} onRetry={retry} height={140}>
+            {(channels?.data ?? []).length === 0 ? <ChartEmpty type="ranking" title="Sin conversaciones nuevas" description="Aquí verás desde qué canal escriben tus contactos." height={140} /> : <RankingList items={channels?.data} share />}
         </ChartCard>
     );
 
     const statesChart = (
-        <ChartCard title="Estado de las conversaciones" description="Con actividad en el periodo, como están ahora." loading={loading} error={states.error} onRetry={retry} height={300}>
+        <ChartCard title="Estado de las conversaciones" description="Con actividad en el periodo, como están ahora." loading={loading} error={states?.error} onRetry={retry} height={300}>
             {statesTotal === 0 ? (
                 <ChartEmpty type="donut" title="Sin conversaciones con actividad" description="Cuando haya conversaciones en el periodo verás quién las atiende." height={300} />
             ) : (
-                <DonutChart items={(states.data ?? []).map((item) => ({ ...item, tone: stateTones[item.key] }))} totalLabel="Total" ariaLabel="Distribución de las conversaciones por quién las atiende" />
+                <DonutChart items={(states?.data ?? []).map((item) => ({ ...item, tone: stateTones[item.key] }))} totalLabel="Total" ariaLabel="Distribución de las conversaciones por quién las atiende" />
             )}
         </ChartCard>
     );
@@ -147,15 +148,19 @@ export default function Index({ stats, roleBreakdown, recentUsers, filters, rang
             case 'summary':
                 return (
                     <div className="space-y-6">
-                        {errorAlert(figures)}
-                        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{metrics.map(metricCard)}</div>
+                        {sources.conversations && (
+                            <>
+                                {errorAlert(figures)}
+                                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{metrics.map(metricCard)}</div>
 
-                        <div className="grid gap-6 lg:grid-cols-3">
-                            {activityChart(['conversations', 'received', 'sent'], 'Actividad en el tiempo', `Por ${granularity}. Pulsa una serie de la leyenda para ocultarla.`, 'Conversaciones nuevas, mensajes recibidos y respuestas enviadas a lo largo del periodo')}
-                            {channelsChart}
-                        </div>
+                                <div className="grid gap-6 lg:grid-cols-3">
+                                    {activityChart(['conversations', 'received', 'sent'], 'Actividad en el tiempo', `Por ${granularity}. Pulsa una serie de la leyenda para ocultarla.`, 'Conversaciones nuevas, mensajes recibidos y respuestas enviadas a lo largo del periodo')}
+                                    {channelsChart}
+                                </div>
+                            </>
+                        )}
 
-                        <TeamPanel stats={stats} roleBreakdown={roleBreakdown} recentUsers={recentUsers} teamGrowth={teamGrowth} filters={filters} range={range} options={options} loading={loading} onGranularity={changeGranularity} global={scope.mode === 'all'} />
+                        {sources.team && <TeamPanel stats={stats} roleBreakdown={roleBreakdown} recentUsers={recentUsers} teamGrowth={teamGrowth} filters={filters} range={range} options={options} loading={loading} onGranularity={changeGranularity} global={scope.mode === 'all'} />}
                     </div>
                 );
             case 'conversations':
@@ -253,13 +258,17 @@ export default function Index({ stats, roleBreakdown, recentUsers, filters, rang
 
             {(errors?.period || errors?.granularity) && <Alert tone="warning">{errors.period ?? errors.granularity}</Alert>}
 
-            <Tabs tabs={reportSections.map(({ id, label, icon }) => ({ id, label, icon }))} selectedIndex={tab} onChange={selectTab}>
-                {reportSections.map((section) => (
-                    <div key={section.id} className={`space-y-6 transition-opacity duration-200 ${loading ? 'opacity-60' : ''}`} aria-busy={loading || undefined}>
-                        {sectionBody(section)}
-                    </div>
-                ))}
-            </Tabs>
+            {sections.length === 0 ? (
+                <Alert tone="info">El plan de este Workspace no incluye módulos con datos para analizar. Puedes seguir usando los módulos que sí incluye desde el menú.</Alert>
+            ) : (
+                <Tabs tabs={sections.map(({ id, label, icon }) => ({ id, label, icon }))} selectedIndex={tab} onChange={selectTab}>
+                    {sections.map((section) => (
+                        <div key={section.id} className={`space-y-6 transition-opacity duration-200 ${loading ? 'opacity-60' : ''}`} aria-busy={loading || undefined}>
+                            {sectionBody(section)}
+                        </div>
+                    ))}
+                </Tabs>
+            )}
         </>
     );
 }
