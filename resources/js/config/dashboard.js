@@ -39,4 +39,7 @@ export const quickLinkHints = {
     'integrations.index': 'Canales y conexiones',
     'users.index': 'Personas, roles y Workspaces',
     'plans.index': 'Planes y catálogo de módulos',
+    'bookings.index': 'Citas, clientes y reglas de reserva',
+    'services.index': 'Lo que ofreces para reservar',
+    'professionals.index': 'Quién atiende y cuándo trabaja',
 };

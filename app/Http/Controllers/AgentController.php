@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Integrations\ChannelIntegrationType;
 use App\Integrations\IntegrationRegistry;
+use App\Services\ModuleAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -14,7 +15,7 @@ use Illuminate\Http\Request;
  */
 class AgentController extends Controller
 {
-    public function config(Request $request, IntegrationRegistry $types): JsonResponse
+    public function config(Request $request, IntegrationRegistry $types, ModuleAccess $modules): JsonResponse
     {
         $chatbot = $request->attributes->get('chatbot');
         $workspace = $request->attributes->get('workspace');
@@ -37,6 +38,11 @@ class AgentController extends Controller
             ],
             'workspace' => ['code' => $workspace->code, 'name' => $workspace->name],
             'channels' => $channels->isEmpty() ? (object) [] : $channels,
+            // The booking tools exist only for a Workspace whose plan includes Servicios y Reservas: n8n discovers them here.
+            'booking' => $modules->allowsAll($workspace, ['service_catalog', 'professionals', 'bookings']) ? [
+                'available' => true,
+                'endpoints' => collect(['services', 'professionals', 'availability', 'appointments'])->mapWithKeys(fn (string $name) => [$name => url("/api/agent/booking/{$name}")])->all(),
+            ] : ['available' => false],
         ])->header('Cache-Control', 'no-store');
     }
 }

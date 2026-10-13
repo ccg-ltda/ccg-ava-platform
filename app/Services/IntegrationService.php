@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Audit\AuditLogger;
+use App\Integrations\CalendarProviderType;
 use App\Integrations\ChannelIntegrationType;
 use App\Integrations\IntegrationRegistry;
 use App\Integrations\TestResult;
@@ -99,6 +100,61 @@ class IntegrationService
                 ] : null,
             ];
         }, $this->channels->all());
+    }
+
+    /**
+     * The external agendas (Booker...) a Workspace may connect, shaped like a channel card so the page draws both the same way. Only
+     * for a Workspace whose plan includes `calendar_providers` (the controller decides). The credentials never leave: the form only
+     * says whether each secret is set.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function providers(Workspace $workspace): array
+    {
+        $when = $this->moment($workspace);
+        $keys = collect(config('bookings.providers'))->pluck('integration')->filter()->all();
+        $configured = $workspace->integrations()->whereIn('type', $keys)->get()->keyBy('type');
+
+        return collect($keys)->map(function (string $key) use ($configured, $when) {
+            $type = $this->types->get($key);
+            $integration = $configured->get($key);
+
+            if (! $type instanceof CalendarProviderType) {
+                return null;
+            }
+
+            return [
+                'key' => $key,
+                'label' => $type->label(),
+                'description' => $type->description(),
+                'available' => true,
+                'unavailable' => null,
+                'needsIntegration' => true,
+                'fields' => $type->fields(),
+                'notice' => $type->notice(),
+                'testable' => $type->supportsTest(),
+                'integration' => $integration ? [
+                    'id' => $integration->id,
+                    'isActive' => $integration->is_active,
+                    'summary' => $type->summary($integration),
+                    'updatedAt' => $when($integration->updated_at),
+                    'form' => $type->form($integration),
+                    'lastTest' => $integration->last_tested_at ? [
+                        'at' => $when($integration->last_tested_at),
+                        'ok' => (bool) $integration->last_test_ok,
+                        'message' => $integration->last_test_message,
+                    ] : null,
+                ] : null,
+            ];
+        })->filter()->values()->all();
+    }
+
+    /** Creates or updates the Workspace's own integration for an external agenda (one per provider and Workspace). @param  array<string, mixed>  $data */
+    public function saveProvider(Workspace $workspace, string $provider, array $data): Integration
+    {
+        $type = $this->types->get($provider);
+
+        return $this->saveSingle($workspace, $provider, $type->label(), $data);
     }
 
     /**

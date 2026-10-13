@@ -31,7 +31,7 @@ abstract class TestCase extends BaseTestCase
      */
     protected function seedRoleCatalog(): void
     {
-        $permissions = collect(['manage-users', 'manage-settings', 'view-dashboard', 'view-users', 'view-chatbots', 'manage-chatbots', 'view-conversations', 'reply-conversations', 'manage-conversations', 'manage-plans', 'manage-modules'])
+        $permissions = collect(['manage-users', 'manage-settings', 'view-dashboard', 'view-users', 'view-chatbots', 'manage-chatbots', 'view-conversations', 'reply-conversations', 'manage-conversations', 'view-bookings', 'manage-bookings', 'manage-services', 'manage-plans', 'manage-modules'])
             ->each(fn (string $name) => Permission::findOrCreate($name, 'web'));
 
         // `admin` never holds the commercial permissions: only `plataforma` does (as in the seeder).

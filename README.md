@@ -66,11 +66,22 @@ Permisos de Conversaciones: `view-conversations` (leer), `reply-conversations` (
 | Auditoría | Historial de cambios administrativos, de control de conversaciones y de procesos automáticos, con origen (persona o automático) y resultado, filtros en el servidor y exportación a PDF |
 | Configuraciones | Identidad, región, apariencia e impuestos del Workspace |
 | Usuarios y Roles | Cuentas, roles, permisos, Workspaces y Organizaciones |
+| Servicios y Reservas | Cuatro módulos reutilizables: Servicios, Profesionales y disponibilidad, Agenda y reservas (con página pública y herramientas de Ava Chat) y Proveedores de agenda (Booker). Agenda propia de Ava o agenda externa como fuente de verdad |
 | Planes (solo CCG, desde `Desarrollo_DEV`) | Catálogo de módulos reutilizables y planes comerciales: qué módulos incluye cada plan y qué plan tiene cada Workspace. La disponibilidad del módulo depende del plan y de que esté implementado; los permisos del rol siguen mandando |
 
 ### Planes y módulos
 
 CCG arma planes combinando módulos del catálogo (las áreas Salud, Delivery, eCommerce y Servicios y Reservas son categorías, no límites). Cada Workspace cliente tiene un plan; sin plan asignado usa el plan por defecto «Plataforma completa» (los ocho módulos compartidos), así que los Workspaces existentes siguen funcionando. Los Workspaces nuevos nacen con ese plan explícito. `Desarrollo_DEV` siempre tiene todos los módulos. Hay una dependencia técnica declarada: Asistentes necesita Conversaciones (un plan que los separe no se guarda y Asistentes no se ofrece sin ella). El Dashboard y Reportes solo muestran cifras de los módulos contratados. La administración comercial exige estar en `Desarrollo_DEV` y que el rol tenga el permiso `manage-plans` (planes y asignación) o `manage-modules` (catálogo y categorías); no hace falta ser superusuario ni nadie los recibe automáticamente (ni `admin`): el sembrado crea el rol `plataforma` sin asignar y un superusuario decide a quién dárselo. Conversaciones puede contratarse sin Asistentes (consulta: sin envío ni devolución a la IA). Tras actualizar, ejecutar `php artisan db:seed --class=RolesAndPermissionsSeeder`. Un módulo es «Implementado» solo si está declarado en `config/modules.php`; registrar uno nuevo desde Planes reserva su lugar pero no lo desarrolla. Para añadir un módulo real: declararlo en `config/modules.php`, proteger sus rutas con `workspace.module:<clave>`, ponerle `module` en `resources/js/config/navigation.js` y ejecutar `php artisan db:seed --class=ModuleCatalogSeeder`.
+
+### Servicios y Reservas
+
+Para negocios con citas (barbería, estética, y más adelante Salud). Se contratan como módulos de un plan (no están en el plan por defecto): `service_catalog` → `professionals` → `bookings`, y `calendar_providers` para una agenda externa. Permisos: `view-bookings`, `manage-bookings`, `manage-services` (tras actualizar: `php artisan migrate`, `db:seed --class=RolesAndPermissionsSeeder` y `db:seed --class=ModuleCatalogSeeder`).
+
+- **Agenda de Ava:** servicios (duración, precio opcional, tiempo entre citas), profesionales con horario semanal y descansos, recursos opcionales, días no laborables, citas (crear, confirmar, reprogramar, cancelar) y clientes (solo nombre y contacto). La disponibilidad la calcula un único servicio; PostgreSQL impide además por restricción que dos citas se solapen.
+- **Reserva en línea:** en Agenda y reservas → Configuración se activa la página pública y se copia su enlace (`/book/{clave}`); si se filtra o se abusa de él, «Regenerar enlace» lo reemplaza al instante. Las reglas (anticipación, cancelación, confirmar reservas, datos pedidos) son del Workspace.
+- **Ava Chat:** n8n usa `/api/agent/booking/*` con el token del chatbot (`/api/agent/config` anuncia las herramientas). Ava guarda la cita, la ata a la conversación, la audita y devuelve el estado real.
+- **Booker:** se configura en Integraciones → Agendas externas (solo con `calendar_providers`) y se elige en Agenda y reservas → Configuración. Hoy lee servicios y profesionales y lee/cancela citas; los horarios, reservar y reprogramar con Booker NO están implementados (falta verificarlos con un Sandbox) y Ava lo dice. Probado solo con respuestas simuladas.
+- **Ciclo de una cita:** crear → (confirmar) → reprogramar / cancelar con motivo → realizada / no asistió. Desactivar un servicio o profesional, o cerrar un día con citas ya hechas, avisa cuántas hay y no las cancela.
 
 ### Chatbots, canales y conversaciones
 
@@ -112,5 +123,5 @@ graphify update .                # actualiza el grafo de código (graphify-out/,
 - **La ejecución iniciada por Ava (webhook de Meta + n8n de la plataforma) solo se probó con simulaciones.** Falta un n8n con el workflow, una app de Meta con el webhook apuntando a Ava y verificar con n8n que su licencia permite este modelo de servicio antes del uso comercial. Meta no ofrece idempotencia al enviar: si el resultado de un envío es incierto, Ava no lo reenvía y depende de que Meta devuelva el estado con la etiqueta `ava:{id}` para completarlo.
 - Fuera de la ventana de 24 h de WhatsApp solo se pueden enviar plantillas aprobadas, que Ava no envía.
 - Reportes no tiene Preguntas ni Encuestas (Ava no guarda esa información) ni tiempos de respuesta; la «IA» del entorno DEMO es un texto fijo.
-- Planes: los módulos específicos de Salud, Delivery, eCommerce y Servicios y Reservas todavía no existen (sus categorías están vacías); no hay precios, límites ni renovación. La interfaz de Planes se revisó en navegador (móvil, tablet y escritorio) sin pruebas de frontend automáticas.
+- Planes: los módulos específicos de Salud, Delivery y eCommerce todavía no existen (sus categorías están vacías); no hay precios, límites ni renovación. La interfaz de Planes se revisó en navegador (móvil, tablet y escritorio) sin pruebas de frontend automáticas.
 - Más pendientes y decisiones abiertas en [`pendientes.md`](pendientes.md).

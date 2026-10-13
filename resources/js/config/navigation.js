@@ -1,4 +1,4 @@
-import { BarChart3, Bot, History, Layers, LayoutDashboard, MessagesSquare, Plug, Settings, Users } from 'lucide-react';
+import { BarChart3, Bot, CalendarDays, History, Layers, LayoutDashboard, MessagesSquare, Plug, Scissors, Settings, UserRound, Users } from 'lucide-react';
 
 /**
  * Single definition of the sidebar menu. A section without `label` is shown without a heading. Every `route` is a real Laravel route name;
@@ -15,6 +15,14 @@ export const navigation = [
             { label: 'Dashboard', route: 'dashboard', icon: LayoutDashboard, permission: 'view-dashboard', module: 'dashboard' },
             { label: 'Asistentes', route: 'chatbots.index', icon: Bot, permission: 'view-chatbots', module: 'assistants' },
             { label: 'Conversaciones', route: 'conversations.index', icon: MessagesSquare, permission: 'view-conversations', module: 'conversations' },
+        ],
+    },
+    {
+        label: 'Servicios y Reservas',
+        items: [
+            { label: 'Agenda', route: 'bookings.index', icon: CalendarDays, permission: 'view-bookings', module: 'bookings' },
+            { label: 'Servicios', route: 'services.index', icon: Scissors, permission: 'view-bookings', module: 'service_catalog' },
+            { label: 'Profesionales', route: 'professionals.index', icon: UserRound, permission: 'view-bookings', module: 'professionals' },
         ],
     },
     {

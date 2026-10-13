@@ -15,6 +15,9 @@ class LandingPage
         ['view-dashboard', 'dashboard', 'dashboard'],
         ['view-chatbots', 'assistants', 'chatbots.index'],
         ['view-conversations', 'conversations', 'conversations.index'],
+        ['view-bookings', 'bookings', 'bookings.index'],
+        ['view-bookings', 'service_catalog', 'services.index'],
+        ['view-bookings', 'professionals', 'professionals.index'],
         ['manage-settings', 'settings', 'settings.index'],
         ['manage-users', 'users_roles', 'users.index'],
     ];

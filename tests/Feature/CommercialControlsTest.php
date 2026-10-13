@@ -89,7 +89,12 @@ class CommercialControlsTest extends TestCase
     {
         $access = app(ModuleAccess::class);
 
-        $this->assertSame(['assistants' => ['conversations']], $access->dependencies());
+        $this->assertSame([
+            'assistants' => ['conversations'],
+            'professionals' => ['service_catalog'],
+            'bookings' => ['service_catalog', 'professionals'],
+            'calendar_providers' => ['bookings', 'integrations'],
+        ], $access->dependencies());
 
         $this->contract($this->client, ['assistants', 'dashboard']);
         $this->assertSame(['dashboard'], $access->keys($this->client->fresh()));
@@ -98,7 +103,7 @@ class CommercialControlsTest extends TestCase
         $this->assertEqualsCanonicalizing(['assistants', 'conversations'], $access->keys($this->client->fresh()));
 
         // Conversaciones, Reportes and the rest work on their own.
-        foreach (array_diff(array_keys(config('modules.implemented')), ['assistants']) as $key) {
+        foreach (array_diff(array_keys(config('modules.implemented')), array_keys($access->dependencies())) as $key) {
             $this->contract($this->client, [$key]);
             $this->assertSame([$key], $access->keys($this->client->fresh()), $key);
         }

@@ -14,6 +14,8 @@
  *  - A plan decides which modules a Workspace may use; roles and permissions still decide what each user may do in them.
  *  - The administrative Workspace (config `workspace.admin_code`) always has every implemented module.
  *
+ * `default_plan` modules: only those of the `shared` category (the plan every existing Workspace falls back to); the others are added to plans on purpose.
+ *
  * Routes that are NOT modules (a user's own profile, the Workspace logo and selector, login) are technical and stay outside.
  * Adding a module = one entry here + `workspace.module:<key>` on its routes + `module` on its entry in config/navigation.js.
  */
@@ -41,6 +43,14 @@ return [
      */
     'dependencies' => [
         'assistants' => ['conversations'],
+        /*
+         * Servicios y Reservas is built from reusable pieces. A professional performs services; an appointment needs both
+         * (availability is computed from the professional's schedule for a service). An external agenda is a way of running the
+         * bookings, and is configured as an integration.
+         */
+        'professionals' => ['service_catalog'],
+        'bookings' => ['service_catalog', 'professionals'],
+        'calendar_providers' => ['bookings', 'integrations'],
     ],
 
     'implemented' => [
@@ -52,5 +62,9 @@ return [
         'settings' => ['name' => 'Configuraciones', 'description' => 'Identidad, formatos regionales, apariencia e impuestos del Workspace.', 'category' => 'shared', 'route' => 'settings.index', 'permission' => 'manage-settings'],
         'integrations' => ['name' => 'Integraciones', 'description' => 'Conexiones del Workspace con servicios externos.', 'category' => 'shared', 'route' => 'integrations.index', 'permission' => 'manage-settings'],
         'users_roles' => ['name' => 'Usuarios y roles', 'description' => 'Cuentas, roles, permisos y membresías.', 'category' => 'shared', 'route' => 'users.index', 'permission' => 'manage-users'],
+        'service_catalog' => ['name' => 'Catálogo de servicios', 'description' => 'Servicios con duración, precio opcional y tiempo entre citas. Reutilizable por cualquier negocio con citas.', 'category' => 'services_bookings', 'route' => 'services.index', 'permission' => 'view-bookings'],
+        'professionals' => ['name' => 'Profesionales y disponibilidad', 'description' => 'Profesionales, recursos opcionales, horarios semanales, descansos y días no laborables.', 'category' => 'services_bookings', 'route' => 'professionals.index', 'permission' => 'view-bookings'],
+        'bookings' => ['name' => 'Agenda y reservas', 'description' => 'Agenda, citas (crear, confirmar, reprogramar, cancelar), clientes, reglas de reserva, reserva web y herramientas de Ava Chat.', 'category' => 'services_bookings', 'route' => 'bookings.index', 'permission' => 'view-bookings'],
+        'calendar_providers' => ['name' => 'Proveedores de agenda', 'description' => 'Conecta una agenda externa (Booker) como fuente de verdad en lugar de la agenda de Ava.', 'category' => 'services_bookings', 'route' => 'integrations.index', 'permission' => 'manage-settings'],
     ],
 ];

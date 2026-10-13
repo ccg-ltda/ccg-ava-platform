@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\AuditController;
+use App\Http\Controllers\BookableResourceController;
+use App\Http\Controllers\BookingController;
 use App\Http\Controllers\ChannelAppearanceController;
 use App\Http\Controllers\ChatbotController;
 use App\Http\Controllers\ConversationActionController;
@@ -12,10 +14,14 @@ use App\Http\Controllers\ModuleCategoryController;
 use App\Http\Controllers\ModuleController;
 use App\Http\Controllers\OrganizationController;
 use App\Http\Controllers\PlanController;
+use App\Http\Controllers\ProfessionalController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\PublicBookingController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SavedFilterController;
+use App\Http\Controllers\ScheduleExceptionController;
+use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WorkspaceController;
@@ -26,6 +32,9 @@ use App\Http\Controllers\WorkspaceSearchController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/pre-login');
+
+// The open booking page of a Workspace (no session): the key in the URL is the only thing the visitor chooses. Its data comes from /api/booking/{key}/....
+Route::get('/book/{key}', [PublicBookingController::class, 'page'])->where('key', '[A-Za-z0-9]{32}')->middleware('throttle:booking-config')->name('booking.public');
 
 // Everything below requires an authenticated user AND a valid Workspace context
 // (re-validated on every request by EnsureWorkspaceContext).
@@ -52,6 +61,7 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         Route::post('/', [IntegrationController::class, 'store'])->name('store');
         Route::put('/n8n', [IntegrationController::class, 'updateN8n'])->name('n8n.update');
         Route::delete('/n8n', [IntegrationController::class, 'disconnectN8n'])->name('n8n.destroy');
+        Route::put('/providers/{provider}', [IntegrationController::class, 'updateProvider'])->where('provider', '[a-z_]+')->middleware('workspace.module:calendar_providers')->name('providers.update');
         Route::put('/channels/{channel}', [IntegrationController::class, 'updateChannel'])->where('channel', '[a-z_]+')->name('channels.update');
         Route::put('/{integration}', [IntegrationController::class, 'update'])->whereNumber('integration')->name('update');
         Route::post('/{integration}/activate', [IntegrationController::class, 'activate'])->whereNumber('integration')->name('activate');
@@ -101,6 +111,49 @@ Route::middleware(['auth', 'workspace'])->group(function () {
             Route::delete('/{chatbot}/agent-token', [ChatbotController::class, 'revokeAgentToken'])->whereNumber('chatbot')->name('agent-token.revoke');
             Route::put('/{chatbot}/channels/{channel}', [ChatbotController::class, 'updateChannel'])->whereNumber('chatbot')->where('channel', '[a-z_]+')->name('channels.update');
             Route::put('/{chatbot}/channels/{channel}/appearance', [ChannelAppearanceController::class, 'update'])->whereNumber('chatbot')->where('channel', '[a-z_]+')->name('channels.appearance.update');
+        });
+    });
+
+    // Servicios y Reservas. Reading is `view-bookings`; configuring the catalog, professionals, schedules and rules is `manage-services`;
+    // operating appointments is `manage-bookings`. Each page also needs its own module in the plan of the Workspace.
+    Route::middleware(['workspace.module:service_catalog', 'workspace.permission:view-bookings'])->prefix('services')->name('services.')->group(function () {
+        Route::get('/', [ServiceController::class, 'index'])->name('index');
+        Route::middleware('workspace.permission:manage-services')->group(function () {
+            Route::post('/', [ServiceController::class, 'store'])->name('store');
+            Route::put('/{service}', [ServiceController::class, 'update'])->whereNumber('service')->name('update');
+            Route::post('/{service}/activate', [ServiceController::class, 'activate'])->whereNumber('service')->name('activate');
+            Route::post('/{service}/deactivate', [ServiceController::class, 'deactivate'])->whereNumber('service')->name('deactivate');
+        });
+    });
+
+    Route::middleware(['workspace.module:professionals', 'workspace.permission:view-bookings'])->prefix('professionals')->name('professionals.')->group(function () {
+        Route::get('/', [ProfessionalController::class, 'index'])->name('index');
+        Route::middleware('workspace.permission:manage-services')->group(function () {
+            Route::post('/', [ProfessionalController::class, 'store'])->name('store');
+            Route::put('/{professional}', [ProfessionalController::class, 'update'])->whereNumber('professional')->name('update');
+            Route::post('/{professional}/activate', [ProfessionalController::class, 'activate'])->whereNumber('professional')->name('activate');
+            Route::post('/{professional}/deactivate', [ProfessionalController::class, 'deactivate'])->whereNumber('professional')->name('deactivate');
+            Route::post('/resources', [BookableResourceController::class, 'store'])->name('resources.store');
+            Route::put('/resources/{resource}', [BookableResourceController::class, 'update'])->whereNumber('resource')->name('resources.update');
+            Route::post('/resources/{resource}/activate', [BookableResourceController::class, 'activate'])->whereNumber('resource')->name('resources.activate');
+            Route::post('/resources/{resource}/deactivate', [BookableResourceController::class, 'deactivate'])->whereNumber('resource')->name('resources.deactivate');
+            Route::post('/exceptions', [ScheduleExceptionController::class, 'store'])->name('exceptions.store');
+            Route::put('/exceptions/{exception}', [ScheduleExceptionController::class, 'update'])->whereNumber('exception')->name('exceptions.update');
+            Route::delete('/exceptions/{exception}', [ScheduleExceptionController::class, 'destroy'])->whereNumber('exception')->name('exceptions.destroy');
+        });
+    });
+
+    Route::middleware(['workspace.module:bookings', 'workspace.permission:view-bookings'])->prefix('bookings')->name('bookings.')->group(function () {
+        Route::get('/', [BookingController::class, 'index'])->name('index');
+        Route::get('/availability', [BookingController::class, 'availability'])->middleware('throttle:120,1')->name('availability');
+        Route::put('/settings', [BookingController::class, 'updateSettings'])->middleware('workspace.permission:manage-services')->name('settings.update');
+        Route::post('/settings/public-key', [BookingController::class, 'rotateKey'])->middleware(['workspace.permission:manage-services', 'throttle:10,1'])->name('settings.rotate-key');
+        Route::middleware('workspace.permission:manage-bookings')->group(function () {
+            Route::post('/', [BookingController::class, 'store'])->middleware('throttle:60,1')->name('store');
+            Route::post('/{appointment}/status', [BookingController::class, 'status'])->whereNumber('appointment')->name('status');
+            Route::post('/{appointment}/reschedule', [BookingController::class, 'reschedule'])->whereNumber('appointment')->name('reschedule');
+            Route::post('/{appointment}/cancel', [BookingController::class, 'cancel'])->whereNumber('appointment')->name('cancel');
+            Route::post('/{appointment}/refresh', [BookingController::class, 'refresh'])->whereNumber('appointment')->name('refresh');
         });
     });
 

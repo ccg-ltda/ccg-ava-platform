@@ -35,6 +35,10 @@ class RolesAndPermissionsSeeder extends Seeder
         Permission::firstOrCreate(['name' => 'view-conversations']);
         Permission::firstOrCreate(['name' => 'reply-conversations']);
         Permission::firstOrCreate(['name' => 'manage-conversations']);
+        // Servicios y Reservas: read the agenda, operate appointments and customers, and configure the catalog, schedules and rules.
+        Permission::firstOrCreate(['name' => 'view-bookings']);
+        Permission::firstOrCreate(['name' => 'manage-bookings']);
+        Permission::firstOrCreate(['name' => 'manage-services']);
         // Commercial administration of Ava Platform: they only operate inside the administrative Workspace
         // (EnsurePlatformAdministration) and are never granted automatically (see PLATFORM_PERMISSIONS below).
         foreach (self::PLATFORM_PERMISSIONS as $name) {

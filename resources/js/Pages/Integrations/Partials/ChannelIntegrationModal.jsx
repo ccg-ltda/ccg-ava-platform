@@ -3,6 +3,7 @@ import Alert from '@/Components/Alert';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import Modal from '@/Components/Modal';
+import Select from '@/Components/Select';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import Textarea from '@/Components/Textarea';
@@ -17,7 +18,9 @@ function Field({ field, data, setData, errors, stored, editing }) {
     return (
         <div>
             <InputLabel htmlFor={id} value={label} />
-            {field.kind === 'textarea' ? (
+            {field.kind === 'select' ? (
+                <Select id={id} className="mt-1" value={data[field.name]} onChange={(value) => setData(field.name, value)} options={field.options} placeholder="Elige una opción" invalid={Boolean(errors[field.name])} />
+            ) : field.kind === 'textarea' ? (
                 <Textarea id={id} className="mt-1" rows={3} value={data[field.name]} onChange={(e) => setData(field.name, e.target.value)} placeholder={field.placeholder} invalid={Boolean(errors[field.name])} spellCheck={false} />
             ) : (
                 <TextInput
@@ -42,9 +45,9 @@ function Field({ field, data, setData, errors, stored, editing }) {
 /**
  * Configures the account the ACTIVE Workspace uses for a channel. The form is whatever the channel's integration type
  * declares (`channel.fields`); secrets are write-only: a stored one is never sent here (only "is set"), and leaving
- * it blank while editing keeps it.
+ * it blank while editing keeps it. The same modal configures an external agenda (`routeName` of its own).
  */
-export default function ChannelIntegrationModal({ channel, onClose }) {
+export default function ChannelIntegrationModal({ channel, onClose, routeName = 'integrations.channels.update' }) {
     const editing = Boolean(channel.integration);
     const stored = channel.integration?.form;
     const form = useForm(Object.fromEntries(channel.fields.map(({ name }) => [name, stored?.[name] ?? ''])));
@@ -52,7 +55,7 @@ export default function ChannelIntegrationModal({ channel, onClose }) {
 
     const submit = (event) => {
         event.preventDefault();
-        form.put(route('integrations.channels.update', channel.key), { preserveScroll: true, onSuccess: onClose });
+        form.put(route(routeName, channel.key), { preserveScroll: true, onSuccess: onClose });
     };
 
     return (

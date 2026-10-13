@@ -18,11 +18,12 @@ import IntegrationFormModal from './Partials/IntegrationFormModal';
  * with what THIS Workspace has configured for each, and the Workspace's generic connections (HTTP/REST today). An
  * administrator of the platform can look (read only) at one other Workspace. Results arrive as the global toasts.
  */
-export default function Index({ channels, integrations, catalog, automation, newToken, scope }) {
+export default function Index({ channels, providers = [], integrations, catalog, automation, newToken, scope }) {
     const confirm = useConfirm();
     const readOnly = scope.readOnly;
     const [editing, setEditing] = useState(null); // null = closed, 'new' = creating, otherwise the integration
     const [configuring, setConfiguring] = useState(null); // the channel being configured
+    const [configuringProvider, setConfiguringProvider] = useState(null); // the external agenda being configured
     const [testingId, setTestingId] = useState(null);
 
     const toggle = async (integration) => {
@@ -116,6 +117,31 @@ export default function Index({ channels, integrations, catalog, automation, new
                 </div>
             </section>
 
+            {providers.length > 0 && (
+                <section aria-labelledby="agendas-heading" className="space-y-4">
+                    <div>
+                        <h2 id="agendas-heading" className="text-lg font-bold text-ink">
+                            Agendas externas
+                        </h2>
+                        <p className="text-sm text-ink-muted">Una agenda externa puede ser la fuente de verdad de tus citas en lugar de la agenda de Ava. Se elige en Agenda y reservas → Configuración.</p>
+                    </div>
+                    <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                        {providers.map((provider, index) => (
+                            <ChannelCard
+                                key={provider.key}
+                                channel={provider}
+                                delay={index * 50}
+                                readOnly={readOnly}
+                                testing={testingId === `channel-${provider.key}`}
+                                onTest={() => testChannel(provider)}
+                                onConfigure={() => setConfiguringProvider(provider)}
+                                onToggle={() => toggle({ id: provider.integration.id, name: provider.label, isActive: provider.integration.isActive })}
+                            />
+                        ))}
+                    </div>
+                </section>
+            )}
+
             <section aria-labelledby="connections-heading" className="space-y-4">
                 <div>
                     <h2 id="connections-heading" className="text-lg font-bold text-ink">
@@ -152,6 +178,7 @@ export default function Index({ channels, integrations, catalog, automation, new
             </section>
 
             {configuring && <ChannelIntegrationModal key={configuring.key} channel={configuring} onClose={() => setConfiguring(null)} />}
+            {configuringProvider && <ChannelIntegrationModal key={configuringProvider.key} channel={configuringProvider} routeName="integrations.providers.update" onClose={() => setConfiguringProvider(null)} />}
             {editing && <IntegrationFormModal key={editing === 'new' ? 'new' : editing.id} integration={editing === 'new' ? null : editing} catalog={catalog} onClose={() => setEditing(null)} />}
         </>
     );

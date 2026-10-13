@@ -5,10 +5,13 @@ namespace App\Http\Controllers;
 use App\Http\Requests\SaveChannelIntegrationRequest;
 use App\Http\Requests\SaveIntegrationRequest;
 use App\Http\Requests\SaveN8nIntegrationRequest;
+use App\Http\Requests\SaveProviderIntegrationRequest;
+use App\Integrations\CalendarProviderType;
 use App\Integrations\IntegrationRegistry;
 use App\Models\Integration;
 use App\Services\ChatbotService;
 use App\Services\IntegrationService;
+use App\Services\ModuleAccess;
 use App\Services\WorkspaceScope;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -29,6 +32,7 @@ class IntegrationController extends Controller
         private readonly IntegrationRegistry $types,
         private readonly ChatbotService $chatbots,
         private readonly WorkspaceScope $scope,
+        private readonly ModuleAccess $modules,
     ) {}
 
     public function index(Request $request): Response
@@ -39,6 +43,8 @@ class IntegrationController extends Controller
         return Inertia::render('Integrations/Index', [
             'channels' => $this->integrations->channels($viewing),
             'integrations' => $this->integrations->list($viewing),
+            // External agendas: only for a Workspace whose plan includes them (the routes enforce it too).
+            'providers' => $this->modules->allows($viewing, 'calendar_providers') ? $this->integrations->providers($viewing) : [],
             'automation' => $this->chatbots->automation($viewing) + ['connection' => $this->integrations->n8n($viewing)],
             // The token just generated for a chatbot (shown once, only to the Workspace that owns it).
             'newToken' => $viewing->is($active) && $request->session()->has('agent_token') ? ['chatbotId' => $request->session()->get('agent_token_chatbot'), 'token' => $request->session()->get('agent_token')] : null,
@@ -63,6 +69,13 @@ class IntegrationController extends Controller
         $this->integrations->disconnectN8n($request->attributes->get('workspace'));
 
         return $this->back('n8n desconectado. Ava ya no guarda su API Key.');
+    }
+
+    public function updateProvider(SaveProviderIntegrationRequest $request, string $provider): RedirectResponse
+    {
+        $this->integrations->saveProvider($request->attributes->get('workspace'), $provider, $request->validated());
+
+        return $this->back('Agenda configurada correctamente');
     }
 
     public function updateChannel(SaveChannelIntegrationRequest $request, string $channel): RedirectResponse
@@ -121,7 +134,13 @@ class IntegrationController extends Controller
     /** The integration of the ACTIVE Workspace, or a 404: other Workspaces' ids do not exist from here. */
     private function find(Request $request, int $id): Integration
     {
-        return $request->attributes->get('workspace')->integrations()->findOrFail($id);
+        $workspace = $request->attributes->get('workspace');
+        $integration = $workspace->integrations()->findOrFail($id);
+
+        // An external agenda is a commercial module: without it in the plan it cannot be tested, activated or used, whatever the role.
+        abort_if($this->types->get($integration->type) instanceof CalendarProviderType && ! $this->modules->allows($workspace, 'calendar_providers'), 403, 'Este módulo no está incluido en el plan de tu Workspace.');
+
+        return $integration;
     }
 
     private function back(string $message, string $tone = 'success'): RedirectResponse

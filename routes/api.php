@@ -1,7 +1,9 @@
 <?php
 
+use App\Http\Controllers\AgentBookingController;
 use App\Http\Controllers\AgentController;
 use App\Http\Controllers\AgentMessageController;
+use App\Http\Controllers\PublicBookingController;
 use App\Http\Controllers\WhatsAppWebhookController;
 use App\Http\Controllers\WidgetController;
 use Illuminate\Support\Facades\Route;
@@ -28,7 +30,31 @@ Route::middleware(['throttle:agent', 'agent', 'workspace.module:assistants'])->p
         Route::post('/messages/status', [AgentMessageController::class, 'status'])->name('messages.status');
         Route::post('/conversations/authorize', [AgentMessageController::class, 'authorizeReply'])->name('conversations.authorize');
         Route::post('/conversations/handoff', [AgentMessageController::class, 'handoff'])->name('conversations.handoff');
+
+        // Booking tools of Ava Chat: they also need the plan of the Workspace to include Servicios y Reservas (every module the booking page needs).
+        Route::middleware(['workspace.module:service_catalog', 'workspace.module:professionals', 'workspace.module:bookings'])->prefix('booking')->name('booking.')->group(function () {
+            Route::get('/services', [AgentBookingController::class, 'services'])->name('services');
+            Route::get('/professionals', [AgentBookingController::class, 'professionals'])->name('professionals');
+            Route::get('/availability', [AgentBookingController::class, 'availability'])->name('availability');
+            Route::get('/appointments', [AgentBookingController::class, 'index'])->name('appointments');
+            Route::post('/appointments', [AgentBookingController::class, 'book'])->name('book');
+            Route::post('/appointments/{appointment}/cancel', [AgentBookingController::class, 'cancel'])->whereNumber('appointment')->name('cancel');
+            Route::post('/appointments/{appointment}/reschedule', [AgentBookingController::class, 'reschedule'])->whereNumber('appointment')->name('reschedule');
+        });
     });
+});
+
+// The open booking page of a Workspace (Servicios y Reservas): no session, no CSRF. The key names the Workspace; creating, cancelling and
+// moving a booking are rate limited per visitor and key, and a booking is managed only with the link returned when it was made.
+Route::prefix('booking/{key}')->where(['key' => '[A-Za-z0-9]{32}'])->name('public-booking.')->group(function () {
+    Route::get('/config', [PublicBookingController::class, 'config'])->middleware('throttle:booking-config')->name('config');
+    Route::get('/services', [PublicBookingController::class, 'services'])->middleware('throttle:booking-config')->name('services');
+    Route::get('/professionals', [PublicBookingController::class, 'professionals'])->middleware('throttle:booking-config')->name('professionals');
+    Route::get('/availability', [PublicBookingController::class, 'availability'])->middleware('throttle:booking-availability')->name('availability');
+    Route::post('/appointments', [PublicBookingController::class, 'book'])->middleware('throttle:booking-write')->name('book');
+    Route::get('/appointments/{token}', [PublicBookingController::class, 'show'])->where('token', '[A-Za-z0-9]{40}')->middleware('throttle:booking-config')->name('show');
+    Route::post('/appointments/{token}/cancel', [PublicBookingController::class, 'cancel'])->where('token', '[A-Za-z0-9]{40}')->middleware('throttle:booking-write')->name('cancel');
+    Route::post('/appointments/{token}/reschedule', [PublicBookingController::class, 'reschedule'])->where('token', '[A-Za-z0-9]{40}')->middleware('throttle:booking-write')->name('reschedule');
 });
 
 Route::prefix('widget/{key}')->where(['key' => '[A-Za-z0-9]{32}'])->name('widget.')->group(function () {

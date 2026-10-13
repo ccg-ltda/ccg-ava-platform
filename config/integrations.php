@@ -1,5 +1,6 @@
 <?php
 
+use App\Integrations\BookerType;
 use App\Integrations\HttpApiType;
 use App\Integrations\N8nType;
 use App\Integrations\WebType;
@@ -17,13 +18,14 @@ return [
         'whatsapp' => WhatsAppType::class,
         'web' => WebType::class,
         'n8n' => N8nType::class,
+        'booker' => BookerType::class,
     ],
 
     /*
      * Types with their own card in Integraciones (not a generic connection and not a chatbot channel): they never
      * appear in the generic connection form or list.
      */
-    'dedicated' => ['n8n'],
+    'dedicated' => ['n8n', 'booker'],
 
     'http' => [
         'methods' => ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
@@ -45,6 +47,15 @@ return [
 
     /* n8n: seconds Ava waits for the n8n API when testing the connection. */
     'n8n' => ['timeout' => 10],
+
+    /*
+     * Booker (external agenda): API hosts by environment and the seconds Ava waits for it. The paths and the authentication come from
+     * Booker's open-source Ruby client, not from a Sandbox test: see App\Integrations\BookerClient.
+     */
+    'booker' => [
+        'timeout' => 15,
+        'urls' => ['staging' => 'https://api-staging.booker.com', 'production' => 'https://api.booker.com'],
+    ],
 
     /* WhatsApp Business (Meta Graph API): used only to verify a number with its token (read-only). */
     'whatsapp' => [

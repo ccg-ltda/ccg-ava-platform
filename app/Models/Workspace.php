@@ -123,6 +123,41 @@ class Workspace extends Model
         return $this->hasMany(Conversation::class);
     }
 
+    public function services(): HasMany
+    {
+        return $this->hasMany(Service::class);
+    }
+
+    public function professionals(): HasMany
+    {
+        return $this->hasMany(Professional::class);
+    }
+
+    public function bookableResources(): HasMany
+    {
+        return $this->hasMany(BookableResource::class);
+    }
+
+    public function scheduleExceptions(): HasMany
+    {
+        return $this->hasMany(ScheduleException::class);
+    }
+
+    public function bookingCustomers(): HasMany
+    {
+        return $this->hasMany(BookingCustomer::class);
+    }
+
+    public function appointments(): HasMany
+    {
+        return $this->hasMany(Appointment::class);
+    }
+
+    public function bookingSetting(): HasOne
+    {
+        return $this->hasOne(BookingSetting::class);
+    }
+
     public function settings(): HasOne
     {
         return $this->hasOne(WorkspaceSetting::class);

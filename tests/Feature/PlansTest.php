@@ -69,10 +69,10 @@ class PlansTest extends TestCase
 
     // --- initial data and compatibility ---------------------------------------------------------------------------
 
-    public function test_the_catalog_starts_with_the_eight_shared_modules_the_four_areas_and_a_default_plan(): void
+    public function test_the_catalog_starts_with_the_shared_and_the_booking_modules_the_four_areas_and_a_default_plan_of_the_shared_ones(): void
     {
         $this->assertEqualsCanonicalizing(
-            ['dashboard', 'assistants', 'conversations', 'reports', 'audit', 'settings', 'integrations', 'users_roles'],
+            ['dashboard', 'assistants', 'conversations', 'reports', 'audit', 'settings', 'integrations', 'users_roles', 'service_catalog', 'professionals', 'bookings', 'calendar_providers'],
             Module::pluck('key')->all(),
         );
         $this->assertEqualsCanonicalizing(['shared', 'health', 'delivery', 'ecommerce', 'services_bookings'], ModuleCategory::pluck('key')->all());
@@ -89,7 +89,8 @@ class PlansTest extends TestCase
         Workspace::whereKey($this->client->id)->update(['plan_id' => null]);
 
         $this->assertNull($this->client->fresh()->plan_id);
-        $this->assertEqualsCanonicalizing(array_keys(config('modules.implemented')), app(ModuleAccess::class)->keys($this->client->fresh()));
+        // The default plan holds the eight SHARED modules; the booking modules are added to plans on purpose.
+        $this->assertEqualsCanonicalizing(['dashboard', 'assistants', 'conversations', 'reports', 'audit', 'settings', 'integrations', 'users_roles'], app(ModuleAccess::class)->keys($this->client->fresh()));
     }
 
     public function test_the_migration_gives_existing_client_workspaces_the_default_plan_and_leaves_the_administrative_one_alone(): void
@@ -512,7 +513,7 @@ class PlansTest extends TestCase
         $this->get('/dashboard')->assertInertia(fn (AssertableInertia $page) => $page->where('platform', false));
 
         $this->platformAdmin();
-        $this->get('/dashboard')->assertInertia(fn (AssertableInertia $page) => $page->where('platform', true)->has('modules', 8));
+        $this->get('/dashboard')->assertInertia(fn (AssertableInertia $page) => $page->where('platform', true)->has('modules', 12));
     }
 
     // --- audit ---------------------------------------------------------------------------------------------------------------

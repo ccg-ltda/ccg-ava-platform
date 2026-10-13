@@ -47,7 +47,9 @@ class ModuleCatalog
         ]);
 
         if ($plan->wasRecentlyCreated) {
-            $plan->modules()->sync(Module::whereIn('key', $this->access->implemented())->pluck('id'));
+            // Only the shared modules: the rest of the catalog is added to a plan on purpose, never inherited by every Workspace.
+            $shared = collect(config('modules.implemented'))->filter(fn (array $module) => $module['category'] === 'shared')->keys();
+            $plan->modules()->sync(Module::whereIn('key', $shared)->pluck('id'));
         }
 
         return $plan;

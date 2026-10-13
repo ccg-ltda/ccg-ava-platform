@@ -42,6 +42,10 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('widget-poll', fn (Request $request) => Limit::perMinute((int) config('chatbots.widget.poll_per_minute'))->by($request->ip().'|'.$request->route('key')));
         RateLimiter::for('widget-messages', fn (Request $request) => Limit::perMinute((int) config('chatbots.widget.messages_per_minute'))->by($request->ip().'|'.$request->route('key')));
         RateLimiter::for('widget-config', fn (Request $request) => Limit::perMinute((int) config('chatbots.widget.config_per_minute'))->by($request->ip().'|'.$request->route('key')));
+        // The open booking page: reading is cheap, searching availability costs a calculation, and creating or changing a booking is what to protect.
+        RateLimiter::for('booking-config', fn (Request $request) => Limit::perMinute((int) config('bookings.public.config_per_minute'))->by($request->ip().'|'.$request->route('key')));
+        RateLimiter::for('booking-availability', fn (Request $request) => Limit::perMinute((int) config('bookings.public.availability_per_minute'))->by($request->ip().'|'.$request->route('key')));
+        RateLimiter::for('booking-write', fn (Request $request) => Limit::perMinute((int) config('bookings.public.write_per_minute'))->by($request->ip().'|'.$request->route('key')));
         // The automation of a chatbot reads its configuration on every conversation.
         RateLimiter::for('agent', fn (Request $request) => Limit::perMinute((int) config('chatbots.agent_per_minute'))->by(sha1((string) $request->bearerToken()).'|'.$request->ip()));
 

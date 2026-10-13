@@ -170,6 +170,8 @@ class AgentApiTest extends TestCase
                 ],
                 'workspace' => ['code' => $workspace->code, 'name' => $workspace->name],
                 'channels' => [],
+                // This Workspace's plan does not include Servicios y Reservas (see the default plan): the booking tools are not offered.
+                'booking' => ['available' => false],
             ]);
 
         // Editing in Ava changes what the automation reads: there is no second copy.
