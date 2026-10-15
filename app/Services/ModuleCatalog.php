@@ -240,6 +240,15 @@ class ModuleCatalog
             throw ValidationException::withMessages(['plan_id' => 'No se puede asignar un plan desactivado.']);
         }
 
+        // A plan saved before a dependency was declared can be incomplete: it is never applied to a Workspace like that, because the
+        // Workspace would be offered a module that does not work (ModuleAccess drops it silently). The server says which ones are missing.
+        $unmet = $this->unmetDependencies($plan->modules()->pluck('modules.key')->all());
+
+        if ($unmet !== []) {
+            $detail = collect($unmet)->map(fn (array $item) => "«{$item['name']}» necesita ".$this->namesOf($item['missing']))->implode('; ');
+            throw ValidationException::withMessages(['plan_id' => "El plan «{$plan->name}» está incompleto y no se puede asignar: {$detail}. Complétalo en Planes."]);
+        }
+
         $workspace->update(['plan_id' => $plan->id]);
     }
 
@@ -298,6 +307,7 @@ class ModuleCatalog
                     'name' => $module->name,
                     'description' => $module->description,
                     'categoryId' => $module->module_category_id,
+                    'group' => $this->groupMeta($this->access->groupOf($module->key, $category->key)),
                     'isActive' => $module->is_active,
                     'implemented' => $module->isImplemented(),
                     'route' => config("modules.implemented.{$module->key}.route"),
@@ -306,6 +316,12 @@ class ModuleCatalog
                         ->map(fn (string $key) => ['key' => $key, 'name' => $names[$key] ?? $key])->values()->all(),
                 ])->all(),
             ])->all();
+    }
+
+    /** @return array{key: string, name: string, sort: int} a conceptual group of config/modules.php, for the catalog screens */
+    private function groupMeta(string $key): array
+    {
+        return ['key' => $key, 'name' => config("modules.groups.{$key}.name", $key), 'sort' => (int) config("modules.groups.{$key}.sort", 99)];
     }
 
     /** @return array<int, int> plan id => client Workspaces using it (those without a plan count for the default one) */

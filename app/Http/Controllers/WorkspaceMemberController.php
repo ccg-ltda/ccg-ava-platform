@@ -38,6 +38,8 @@ class WorkspaceMemberController extends Controller
             throw ValidationException::withMessages(['email' => 'Este usuario ya pertenece al Workspace.']);
         }
 
+        $this->administration->assertMayReceive($workspace, $user, 'email');
+
         $workspace->users()->attach($user->id, ['role' => $data['role']]);
         $this->audit->record('created', 'membership', $user->id, $user->name, [
             AuditLogger::change('Workspace', null, $workspace->name),
@@ -55,9 +57,11 @@ class WorkspaceMemberController extends Controller
             'role' => ['required', 'string', Rule::in($this->assignable($request, $workspace))],
         ]);
 
-        if ($request->user()->is($user) && ! $user->is_superuser) {
+        if ($request->user()->is($user) && ! $request->user()->isPlatformSuperuser()) {
             throw ValidationException::withMessages(['role' => 'No puedes cambiar tu propio rol.']);
         }
+
+        $this->administration->assertMayReceive($workspace, $user, 'role');
 
         $previous = $workspace->users()->whereKey($user->id)->first()->pivot->role;
         $workspace->users()->updateExistingPivot($user->id, ['role' => $data['role']]);

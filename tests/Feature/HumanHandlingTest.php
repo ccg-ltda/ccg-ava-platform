@@ -10,6 +10,7 @@ use App\Models\ChatbotChannel;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\Organization;
+use App\Models\SupportAccess;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\AgentAccess;
@@ -583,6 +584,8 @@ class HumanHandlingTest extends TestCase
         $admin->forceFill(['is_superuser' => true])->save();
 
         $this->signIn($admin, $dev);
+        // Reading another Workspace's conversations needs a support access (see PrivacyTest); a live grant is enough here.
+        SupportAccess::create(['workspace_id' => $client->id, 'user_id' => $admin->id, 'data_type' => 'conversations', 'reason' => 'ticket de prueba de soporte', 'expires_at' => now()->addMinutes(30)]);
         $this->get("/conversations?workspace={$client->id}&c={$conversation->id}")->assertInertia(fn (AssertableInertia $page) => $page
             ->where('scope.readOnly', true)->where('selected.can', ['take' => false, 'reply' => false, 'release' => false, 'resolve' => false, 'assign' => false])->where('agents', []));
         $this->post("/conversations/{$conversation->id}/take")->assertNotFound();
@@ -613,10 +616,10 @@ class HumanHandlingTest extends TestCase
         $log = AuditLog::where('action', 'taken')->firstOrFail();
         $this->assertSame($agent->email, $log->user_email);
         $this->assertSame($workspace->id, $log->workspace_id);
-        $this->assertSame('María', $log->resource_label);
+        $this->assertSame('#'.$conversation->id, $log->resource_label, 'the audit log identifies a contact by id, never by name');
         $this->assertContains(['field' => 'Agente', 'before' => null, 'after' => $agent->name], $log->changes);
         $this->assertStringContainsString('Tomó la conversación', $log->description);
-        $this->assertSame('Devolvió a la IA la conversación María', AuditLog::where('action', 'returned')->firstOrFail()->description);
+        $this->assertSame('Devolvió a la IA la conversación #'.$conversation->id, AuditLog::where('action', 'returned')->firstOrFail()->description);
     }
 
     // --- a switched-off chatbot or channel is silent for the agent too --------------------------------------------

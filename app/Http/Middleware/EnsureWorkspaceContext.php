@@ -57,9 +57,18 @@ class EnsureWorkspaceContext
             $request->session()->put('workspace_id', $workspace->id);
         }
 
+        $user->actingIn($workspace);
         $request->attributes->set('workspace', $workspace);
         $request->attributes->set('workspace_role', $role);
-        $request->attributes->set('workspace_permissions', $catalogRole->permissions->pluck('name')->all());
+        $permissions = $catalogRole->permissions->pluck('name')->all();
+
+        // Superusers working inside the administrative Workspace administer the platform (plans and catalog), whatever their role:
+        // otherwise the only account able to grant the role could never open Planes. Never in a client Workspace.
+        if ($user->isPlatformSuperuser()) {
+            $permissions = array_values(array_unique([...$permissions, ...EnsurePlatformAdministration::PERMISSIONS]));
+        }
+
+        $request->attributes->set('workspace_permissions', $permissions);
         // What the plan of the Workspace includes (the permissions above still decide what this user may do in it).
         $this->modules->forRequest($request);
 

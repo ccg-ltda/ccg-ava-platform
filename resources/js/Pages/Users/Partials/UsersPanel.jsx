@@ -1,5 +1,5 @@
-import { router, useForm, usePage } from '@inertiajs/react';
-import { Lock, Pencil, Plus, Power, SearchX, Users } from 'lucide-react';
+import { router, useForm } from '@inertiajs/react';
+import { KeyRound, Lock, Pencil, Plus, Power, SearchX, Users } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import Alert from '@/Components/Alert';
 import Badge from '@/Components/Badge';
@@ -20,7 +20,9 @@ import TextInput from '@/Components/TextInput';
 import WorkspaceCombobox from '@/Components/WorkspaceCombobox';
 import { useToast } from '@/Components/Toast';
 import { roleTone } from '@/config/roles';
+import useAccess from '@/Hooks/useAccess';
 import usePagedList from '@/Hooks/usePagedList';
+import { groupPermissions } from '@/lib/permissions';
 
 const FIELD = 'mt-1';
 
@@ -128,10 +130,47 @@ function FormModal({ show, title, onClose, onSubmit, processing, submitLabel, ch
     );
 }
 
-/** Usuarios tab: server-side search and pagination, plus create / edit / deactivate / activate. */
-export default function UsersPanel({ users, filters, perPageOptions, createTargets }) {
-    const { auth } = usePage().props;
-    const canManageUsers = (auth?.user?.permissions || []).includes('manage-users');
+/** What a person can do in the Workspace: the permissions of their role, grouped by area (read-only). */
+function GrantsModal({ user, catalog, onClose }) {
+    const groups = user ? groupPermissions(catalog, user.grants) : [];
+
+    return (
+        <Modal show={Boolean(user)} onClose={onClose} maxWidth="md">
+            <div className="p-6">
+                <h2 className="text-lg font-bold text-ink">Permisos de {user?.name}</h2>
+                <p className="mt-1 text-sm text-ink-muted">
+                    Los da su rol <Badge tone={roleTone(user?.roles[0])}>{user?.roles[0] || 'Sin rol'}</Badge> en este Workspace. Se cambian en la pestaña Roles.
+                </p>
+                <div className="mt-4 space-y-4">
+                    {groups.length === 0 && <p className="text-sm text-ink-muted">Este rol no tiene permisos.</p>}
+                    {groups.map((group) => (
+                        <div key={group.id}>
+                            <p className="text-xs font-semibold tracking-wide text-ink-muted uppercase">{group.label}</p>
+                            <ul className="mt-1 space-y-1 text-sm text-ink">
+                                {group.items.map((item) => (
+                                    <li key={item.name}>{item.label}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    ))}
+                </div>
+                <div className="mt-6 flex justify-end">
+                    <SecondaryButton type="button" onClick={onClose}>
+                        Cerrar
+                    </SecondaryButton>
+                </div>
+            </div>
+        </Modal>
+    );
+}
+
+/** Usuarios tab: server-side search and pagination, plus create / edit / deactivate / activate, each offered only with its permission. */
+export default function UsersPanel({ users, filters, perPageOptions, createTargets, permissionCatalog }) {
+    const { permissions } = useAccess();
+    const canCreate = permissions.includes('create-users');
+    const canEdit = permissions.includes('edit-users') || permissions.includes('assign-roles');
+    const canToggle = permissions.includes('deactivate-users');
+    const [grantsOf, setGrantsOf] = useState(null);
 
     const create = useForm({ name: '', email: '', password: '', password_confirmation: '', workspace_id: '', workspace_option: null, role: '' });
     const edit = useForm({ name: '', email: '', password: '', password_confirmation: '', workspace_id: '', workspace_option: null, role: '' });
@@ -229,7 +268,7 @@ export default function UsersPanel({ users, filters, perPageOptions, createTarge
                         options={STATUS_OPTIONS}
                     />
                 </div>
-                {canManageUsers && createTargets.length > 0 && (
+                {canCreate && createTargets.length > 0 && (
                     <PrimaryButton type="button" onClick={openCreate} className="gap-2">
                         <Plus className="size-4" aria-hidden="true" />
                         Nuevo usuario
@@ -254,7 +293,7 @@ export default function UsersPanel({ users, filters, perPageOptions, createTarge
                             <Th>Rol</Th>
                             <Th>Estado</Th>
                             <Th>Creación</Th>
-                            {canManageUsers && <Th className="text-center">Acciones</Th>}
+                            <Th className="text-center">Acciones</Th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-line">
@@ -274,22 +313,21 @@ export default function UsersPanel({ users, filters, perPageOptions, createTarge
                                     <Badge tone={user.isActive ? 'green' : 'neutral'}>{user.isActive ? 'Activo' : 'Inactivo'}</Badge>
                                 </Td>
                                 <Td className="whitespace-nowrap text-ink-muted">{user.created_at}</Td>
-                                {canManageUsers && (
-                                    <Td>
-                                        <div className="flex items-center justify-center gap-1">
-                                            <IconButton icon={Pencil} label="Editar" context={user.name} onClick={() => openEdit(user)} />
-                                            {user.canToggleStatus && (
-                                                <IconButton
-                                                    icon={Power}
-                                                    label={user.isActive ? 'Desactivar' : 'Activar'}
-                                                    context={user.name}
-                                                    tone={user.isActive ? 'danger' : 'primary'}
-                                                    onClick={() => toggleStatus(user)}
-                                                />
-                                            )}
-                                        </div>
-                                    </Td>
-                                )}
+                                <Td>
+                                    <div className="flex items-center justify-center gap-1">
+                                        <IconButton icon={KeyRound} label="Ver permisos" context={user.name} onClick={() => setGrantsOf(user)} />
+                                        {canEdit && <IconButton icon={Pencil} label="Editar" context={user.name} onClick={() => openEdit(user)} />}
+                                        {canToggle && user.canToggleStatus && (
+                                            <IconButton
+                                                icon={Power}
+                                                label={user.isActive ? 'Desactivar' : 'Activar'}
+                                                context={user.name}
+                                                tone={user.isActive ? 'danger' : 'primary'}
+                                                onClick={() => toggleStatus(user)}
+                                            />
+                                        )}
+                                    </div>
+                                </Td>
                             </tr>
                         ))}
                     </tbody>
@@ -297,6 +335,8 @@ export default function UsersPanel({ users, filters, perPageOptions, createTarge
             )}
 
             <Pagination noun="usuarios" {...list.paginationProps} />
+
+            <GrantsModal user={grantsOf} catalog={permissionCatalog} onClose={() => setGrantsOf(null)} />
 
             <FormModal show={showCreate} title="Nuevo usuario" onClose={() => setShowCreate(false)} onSubmit={submitCreate} processing={create.processing} submitLabel={create.processing ? 'Guardando...' : 'Crear usuario'}>
                 <UserFields data={create.data} setData={create.setData} errors={create.errors} roles={rolesFor(create.data.workspace_option)} withPassword />

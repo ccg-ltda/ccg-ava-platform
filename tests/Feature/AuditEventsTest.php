@@ -280,11 +280,11 @@ class AuditEventsTest extends TestCase
 
         $names = fn (string $query) => collect($this->get("/audit?{$query}")->assertOk()->viewData('page')['props']['events']['data'])->pluck('record')->sort()->values()->all();
 
-        $this->assertSame(['API', 'Dos', 'Uno'], $names(''));
-        $this->assertSame(['Dos', 'Uno'], $names('actor=system'));
+        $this->assertSame(['#1', 'API', 'Dos'], $names(''));
+        $this->assertSame(['#1', 'Dos'], $names('actor=system'));
         $this->assertSame(['API'], $names('actor=user'));
         $this->assertSame(['Dos'], $names('outcome=failed'));
-        $this->assertSame(['API', 'Uno'], $names('outcome=success'));
+        $this->assertSame(['#1', 'API'], $names('outcome=success'));
         $this->assertSame(['Dos'], $names('actor=system&outcome=failed'));
         $this->get('/audit')->assertInertia(fn (AssertableInertia $page) => $page
             ->where('summary.total', 3)->where('summary.failed', 1)->where('summary.automatic', 2)
@@ -329,9 +329,9 @@ class AuditEventsTest extends TestCase
 
         config(['workspace.admin_code' => $a->code]);
         $records = fn (string $query) => collect($this->get("/audit?{$query}")->assertOk()->viewData('page')['props']['events']['data'])->pluck('record')->sort()->values()->all();
-        $this->assertSame(['En B'], $records("workspace={$b->id}&actor=system"));
-        $this->assertSame(['En A', 'En B'], $records('workspace=all&actor=system'));
-        $this->assertSame(['En A'], $records('actor=system'));
+        $this->assertSame(['#2'], $records("workspace={$b->id}&actor=system"));
+        $this->assertSame(['#1', '#2'], $records('workspace=all&actor=system'));
+        $this->assertSame(['#1'], $records('actor=system'));
     }
 
     public function test_an_automatic_event_belongs_to_the_workspace_of_its_conversation_only(): void

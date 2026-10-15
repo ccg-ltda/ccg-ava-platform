@@ -69,6 +69,15 @@ class AuditLogger
             : $this->system($action, $resource, $resourceId, $label, $changes, $workspace, $source, $outcome);
     }
 
+    /**
+     * What identifies a record in the audit log. Records of final contacts (config/privacy.php `private_audit_resources`) are
+     * identified by "#id", never by a name or a number: the audit log is read by administrators who may not see that person.
+     */
+    public static function safeLabel(string $resource, ?int $resourceId, string $label): string
+    {
+        return $resourceId !== null && in_array($resource, config('privacy.private_audit_resources', []), true) ? '#'.$resourceId : $label;
+    }
+
     /** One difference of a field. */
     public static function change(string $field, ?string $before, ?string $after): array
     {
@@ -78,6 +87,8 @@ class AuditLogger
     /** @param  list<array{field: string, before: ?string, after: ?string}>  $changes */
     private function write(Workspace $workspace, string $actor, ?int $userId, string $name, string $email, ?string $ip, string $action, string $resource, ?int $resourceId, string $label, array $changes, string $outcome): AuditLog
     {
+        $label = self::safeLabel($resource, $resourceId, $label);
+
         return AuditLog::create([
             'workspace_id' => $workspace->id,
             'workspace_code' => $workspace->code,

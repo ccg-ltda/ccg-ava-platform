@@ -319,7 +319,8 @@ class DashboardTest extends TestCase
         $this->assertSame(['workspace', 'OTHER_WS', 2, 4, 1], [$one['scope']['mode'], $one['scope']['workspace']['code'], $one['kpis']['data']['conversations']['value'], $one['kpis']['data']['messagesIn'], $one['kpis']['data']['pending']]);
         $this->assertSame(['active', 1], [$self['scope']['mode'], $self['kpis']['data']['conversations']['value']]);
         $this->assertSame(['all', null, 3], [$all['scope']['mode'], $all['scope']['workspace'], $all['kpis']['data']['conversations']['value']]);
-        $this->assertSame(['ajeno-1', 'ajeno-2'], collect($one['recentConversations']['data'])->pluck('contact')->sort()->values()->all());
+        // The contacts of another Workspace are never named from the Dashboard: only a masked identifier.
+        $this->assertSame(['••••no-1', '••••no-2'], collect($one['recentConversations']['data'])->pluck('contact')->sort()->values()->all());
         $this->assertNull($all['integrations']);
         $this->assertCount(3, $all['recentConversations']['data']);
         $this->assertTrue(collect($all['recentConversations']['data'])->every(fn ($row) => $row['workspace'] !== null));

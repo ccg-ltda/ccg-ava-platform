@@ -183,7 +183,7 @@ function MembersModal({ workspace, canAdd, listMeta, perPageOptions, onClose }) 
  * Nothing here deletes users or Workspaces; the server enforces every rule.
  */
 export default function WorkspacesPanel({ workspaces, perPageOptions }) {
-    const { list: workspaceList, organizationOptions, canManage, selected } = workspaces;
+    const { list: workspaceList, organizationOptions, canManage, canAssign, selected } = workspaces;
     const confirm = useConfirm();
     const toast = useToast();
 
@@ -316,7 +316,7 @@ export default function WorkspacesPanel({ workspaces, perPageOptions }) {
 
             <Pagination noun="Workspaces" {...paged.paginationProps} />
 
-            {selected && <MembersModal key={selected.id} workspace={selected} canAdd={canManage} listMeta={workspaceList.meta} perPageOptions={perPageOptions} onClose={closeMembers} />}
+            {selected && <MembersModal key={selected.id} workspace={selected} canAdd={canManage && canAssign} listMeta={workspaceList.meta} perPageOptions={perPageOptions} onClose={closeMembers} />}
 
             <FormModal show={creating} title="Nuevo Workspace" onClose={() => setCreating(false)} onSubmit={submitCreate} processing={create.processing} submitLabel="Crear Workspace">
                 <div>

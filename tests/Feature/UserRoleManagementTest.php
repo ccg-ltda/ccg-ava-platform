@@ -28,7 +28,7 @@ class UserRoleManagementTest extends TestCase
         if ($superuser) {
             $user->forceFill(['is_superuser' => true])->save();
         }
-        $this->actingAsWorkspaceMember($user, $role);
+        $this->actingAsWorkspaceMember($user, $role, administrative: (bool) $user->is_superuser);
 
         return $user;
     }
@@ -76,7 +76,7 @@ class UserRoleManagementTest extends TestCase
     public function test_a_role_with_permissions_the_actor_lacks_cannot_be_assigned(): void
     {
         // "manager" can manage users but not settings; "admin" has settings, so it is above it.
-        Role::findOrCreate('manager', 'web')->syncPermissions(['manage-users', 'view-dashboard']);
+        Role::findOrCreate('manager', 'web')->syncPermissions(['manage-users', 'create-users', 'view-dashboard']);
         $this->actAs('manager');
 
         $this->post('/users', $this->newUserPayload('admin'))->assertSessionHasErrors('role');
@@ -240,7 +240,7 @@ class UserRoleManagementTest extends TestCase
 
         $admin = Role::findByName('admin', 'web');
         $this->put('/roles/'.$admin->id, ['permissions' => []])->assertSessionHasErrors('permissions');
-        $this->assertCount(12, $admin->fresh()->permissions);
+        $this->assertCount(21, $admin->fresh()->permissions);
     }
 
     public function test_roles_cannot_be_deleted_even_by_superusers(): void
@@ -259,11 +259,11 @@ class UserRoleManagementTest extends TestCase
     {
         $this->actAs('admin');
         $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('canManageRoles', false)->has('permissionNames', 14));
+            ->where('canManageRoles', false)->has('permissionNames', 24));
 
         $this->actAs('admin', superuser: true);
         $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('canManageRoles', true)->has('permissionNames', 14));
+            ->where('canManageRoles', true)->has('permissionNames', 24));
     }
 
     // --- isolation ----------------------------------------------------------------------------------------
@@ -370,7 +370,7 @@ class UserRoleManagementTest extends TestCase
         $this->actAs('admin');
 
         $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('permissionNames', 14)->where('canManageRoles', false));
+            ->has('permissionNames', 24)->where('canManageRoles', false));
         $this->post('/roles', ['name' => 'x', 'permissions' => ['manage-users']])->assertForbidden();
     }
 

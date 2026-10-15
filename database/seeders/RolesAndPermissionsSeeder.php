@@ -17,6 +17,28 @@ class RolesAndPermissionsSeeder extends Seeder
     /** Permissions of the commercial administration: never given to `admin` or to anyone by this seeder. */
     public const PLATFORM_PERMISSIONS = ['manage-plans', 'manage-modules'];
 
+    /** Access to private data of ANOTHER Workspace (support): separate from the commercial administration, never given to `admin` or to a superuser by this seeder. */
+    public const PRIVATE_DATA_PERMISSIONS = ['access-private-data'];
+
+    /**
+     * Creates fine-grained permissions that split an existing broad one. When a permission is created now (first run after the
+     * split), every role that already had the broad permission receives it, so no existing role loses an ability; on later runs
+     * nothing is granted, so a superuser's choice to take one away is kept.
+     *
+     * @param  list<string>  $names
+     */
+    private function createPermissionsReplacing(string $broad, array $names): void
+    {
+        foreach ($names as $name) {
+            $permission = Permission::firstOrCreate(['name' => $name]);
+
+            if ($permission->wasRecentlyCreated) {
+                Role::whereHas('permissions', fn ($query) => $query->where('name', $broad))->get()
+                    ->each(fn (Role $role) => $role->givePermissionTo($permission));
+            }
+        }
+    }
+
     /**
      * Seed the application's database.
      */
@@ -27,7 +49,9 @@ class RolesAndPermissionsSeeder extends Seeder
 
         // Create Permissions
         Permission::firstOrCreate(['name' => 'manage-users']);
+        $this->createPermissionsReplacing('manage-users', ['create-users', 'edit-users', 'assign-roles', 'deactivate-users']);
         Permission::firstOrCreate(['name' => 'manage-settings']);
+        $this->createPermissionsReplacing('manage-settings', ['export-audit']);
         Permission::firstOrCreate(['name' => 'view-dashboard']);
         Permission::firstOrCreate(['name' => 'view-users']);
         Permission::firstOrCreate(['name' => 'view-chatbots']);
@@ -39,9 +63,18 @@ class RolesAndPermissionsSeeder extends Seeder
         Permission::firstOrCreate(['name' => 'view-bookings']);
         Permission::firstOrCreate(['name' => 'manage-bookings']);
         Permission::firstOrCreate(['name' => 'manage-services']);
+        // Clientes and Campañas: read, and manage. Only `admin` receives them by default; a superuser hands them to other roles.
+        Permission::firstOrCreate(['name' => 'view-customers']);
+        Permission::firstOrCreate(['name' => 'manage-customers']);
+        Permission::firstOrCreate(['name' => 'view-campaigns']);
+        Permission::firstOrCreate(['name' => 'manage-campaigns']);
         // Commercial administration of Ava Platform: they only operate inside the administrative Workspace
         // (EnsurePlatformAdministration) and are never granted automatically (see PLATFORM_PERMISSIONS below).
         foreach (self::PLATFORM_PERMISSIONS as $name) {
+            Permission::firstOrCreate(['name' => $name]);
+        }
+
+        foreach (self::PRIVATE_DATA_PERMISSIONS as $name) {
             Permission::firstOrCreate(['name' => $name]);
         }
 
@@ -52,6 +85,8 @@ class RolesAndPermissionsSeeder extends Seeder
         $agentRole = Role::firstOrCreate(['name' => 'agente']);
         // Starting point for who administers the commercial side: a role with the two permissions, assigned to nobody.
         $platformRole = Role::firstOrCreate(['name' => 'plataforma']);
+        // Starting point for who may open a justified, temporary support access to another Workspace's private data: assigned to nobody.
+        $supportRole = Role::firstOrCreate(['name' => 'soporte']);
 
         // `admin` always holds every permission (so a permission added later reaches it on the next run). The other
         // roles get their defaults only when they are created: an existing database keeps whatever a superuser
@@ -59,8 +94,8 @@ class RolesAndPermissionsSeeder extends Seeder
         // The commercial permissions are the exception: no role receives them here except `plataforma`, and `admin` never
         // does, so a superuser decides explicitly who administers plans and the catalog (Usuarios y roles).
         // `admin` is a protected role (it cannot be edited), so only an earlier version of this seeder could have granted them: take them back.
-        $adminRole->givePermissionTo(Permission::whereNotIn('name', self::PLATFORM_PERMISSIONS)->get());
-        $adminRole->revokePermissionTo(self::PLATFORM_PERMISSIONS);
+        $adminRole->givePermissionTo(Permission::whereNotIn('name', [...self::PLATFORM_PERMISSIONS, ...self::PRIVATE_DATA_PERMISSIONS])->get());
+        $adminRole->revokePermissionTo([...self::PLATFORM_PERMISSIONS, ...self::PRIVATE_DATA_PERMISSIONS]);
 
         foreach ([
             [$supervisorRole, ['view-dashboard', 'view-users', 'view-chatbots']],
@@ -68,6 +103,7 @@ class RolesAndPermissionsSeeder extends Seeder
             // Attends conversations (read, take, write, give back to the AI, resolve) but cannot assign them to others.
             [$agentRole, ['view-dashboard', 'view-conversations', 'reply-conversations']],
             [$platformRole, ['view-dashboard', ...self::PLATFORM_PERMISSIONS]],
+            [$supportRole, ['view-dashboard', 'view-conversations', ...self::PRIVATE_DATA_PERMISSIONS]],
         ] as [$role, $defaults]) {
             if ($role->wasRecentlyCreated) {
                 $role->syncPermissions($defaults);

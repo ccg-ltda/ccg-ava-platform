@@ -35,10 +35,11 @@ class AdminUserSeederTest extends TestCase
         $this->assertNotNull($admin->email_verified_at);
         $this->assertTrue($admin->is_superuser);
         $this->assertSame(
-            Permission::count(),
+            Permission::count() - 3,
             Role::findByName('admin', 'web')->permissions()->count(),
-            'The admin role has every permission.'
+            'The admin role has every permission except the platform and support ones.'
         );
+        $this->assertSame([], Role::findByName('admin', 'web')->permissions->pluck('name')->intersect(['manage-plans', 'manage-modules', 'access-private-data'])->all());
     }
 
     public function test_it_creates_the_role_when_it_does_not_exist(): void

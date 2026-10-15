@@ -33,6 +33,8 @@ class WorkspaceAdministrationTest extends TestCase
     {
         $user = User::factory()->create();
         $user->forceFill(['is_superuser' => $superuser])->save();
+        // A superuser carries platform privileges only inside the administrative Workspace: here, the active one.
+        config(['workspace.admin_code' => $superuser ? $this->a->code : 'DESARROLLO_DEV']);
         $this->a->users()->attach($user->id, ['role' => $role]);
 
         return tap($user, fn () => $this->actingAs($user)->withSession(['workspace_id' => $this->a->id]));
@@ -124,13 +126,14 @@ class WorkspaceAdministrationTest extends TestCase
     public function test_superuser_assigns_an_existing_user_and_changes_the_role(): void
     {
         $this->actAs('admin', superuser: true);
-        $user = $this->member($this->a);
+        $home = Workspace::create(['organization_id' => Organization::first()->id, 'code' => 'WS_C', 'name' => 'Gamma']);
+        $user = $this->member($home); // client staff: an internal account would be refused (PlatformBoundaryTest)
 
         $this->post("/workspaces/{$this->b->id}/members", ['email' => $user->email, 'role' => 'cliente'])->assertSessionHasNoErrors();
         $this->put("/workspaces/{$this->b->id}/members/{$user->id}", ['role' => 'supervisor'])->assertSessionHasNoErrors();
 
         $this->assertSame('supervisor', $this->b->users()->find($user->id)->pivot->role);
-        $this->assertSame('cliente', $this->a->users()->find($user->id)->pivot->role, 'Other memberships are untouched.');
+        $this->assertSame('cliente', $home->users()->find($user->id)->pivot->role, 'Other memberships are untouched.');
         $this->post("/workspaces/{$this->b->id}/members", ['email' => $user->email, 'role' => 'cliente'])->assertSessionHasErrors('email');
         $this->post("/workspaces/{$this->b->id}/members", ['email' => 'nobody@example.com', 'role' => 'cliente'])->assertSessionHasErrors('email');
     }
@@ -151,7 +154,7 @@ class WorkspaceAdministrationTest extends TestCase
     {
         $this->actAs('admin');
         $user = $this->member($this->a);
-        Role::findOrCreate('manager', 'web')->syncPermissions(['manage-users', 'view-dashboard']);
+        Role::findOrCreate('manager', 'web')->syncPermissions(['manage-users', 'create-users', 'edit-users', 'assign-roles', 'deactivate-users', 'view-dashboard']);
 
         $this->put("/workspaces/{$this->a->id}/members/{$user->id}", ['role' => 'manager'])->assertSessionHasNoErrors();
         $this->assertSame('manager', $this->a->users()->find($user->id)->pivot->role);

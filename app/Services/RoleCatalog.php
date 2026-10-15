@@ -40,7 +40,7 @@ class RoleCatalog
 
     /**
      * Roles the actor may assign: those whose permissions the actor already holds (no privilege
-     * escalation). Superusers may assign any role.
+     * escalation). Superusers acting inside the administrative Workspace may assign any role.
      *
      * @param  list<string>  $actorPermissions
      * @return Collection<int, Role>
@@ -49,7 +49,7 @@ class RoleCatalog
     {
         $roles = $this->all();
 
-        if ($actor->is_superuser) {
+        if ($actor->isPlatformSuperuser()) {
             return $roles;
         }
 

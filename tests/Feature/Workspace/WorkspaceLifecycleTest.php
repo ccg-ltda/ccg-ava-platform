@@ -34,6 +34,8 @@ class WorkspaceLifecycleTest extends TestCase
     {
         $user = User::factory()->create();
         $user->forceFill(['is_superuser' => $superuser])->save();
+        // A superuser carries platform privileges only inside the administrative Workspace: here, the active one.
+        config(['workspace.admin_code' => $superuser ? $this->a->code : 'DESARROLLO_DEV']);
         $this->a->users()->attach($user->id, ['role' => $role]);
         $this->actingAs($user)->withSession(['workspace_id' => $this->a->id]);
 
@@ -116,7 +118,7 @@ class WorkspaceLifecycleTest extends TestCase
     public function test_role_must_be_assignable_in_the_chosen_workspace(): void
     {
         $this->actAs('admin');
-        Role::findOrCreate('manager', 'web')->syncPermissions(['manage-users', 'view-dashboard']);
+        Role::findOrCreate('manager', 'web')->syncPermissions(['manage-users', 'create-users', 'edit-users', 'assign-roles', 'deactivate-users', 'view-dashboard']);
         $this->actAs('manager');
 
         $this->post('/users', $this->newUser($this->a, 'admin'))->assertSessionHasErrors('role');

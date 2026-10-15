@@ -10,14 +10,14 @@ use Illuminate\Support\Facades\DB;
 /**
  * name/email belong to the global account, not to a Workspace membership.
  * A Workspace admin may change them only for accounts that exist solely in the Workspace and are
- * not superusers; a superuser may always. Single source of the rule: it is enforced on update and
+ * not superusers; a superuser acting inside the administrative Workspace may always. Single source of the rule: it is enforced on update and
  * reported to the UI (so the user is warned before saving).
  */
 class UserIdentityGuard
 {
     public function canEdit(User $actor, User $target, Workspace $workspace): bool
     {
-        if ($actor->is_superuser) {
+        if ($actor->isPlatformSuperuser()) {
             return true;
         }
 
@@ -33,7 +33,7 @@ class UserIdentityGuard
      */
     public function lockedIds(User $actor, Collection $members, Workspace $workspace): array
     {
-        if ($actor->is_superuser) {
+        if ($actor->isPlatformSuperuser()) {
             return [];
         }
 

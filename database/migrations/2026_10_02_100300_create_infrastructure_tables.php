@@ -11,19 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Database cache store (CACHE_STORE=database: framework default and host `.env`; Docker uses Redis).
-        // `cache_locks` is the lock table of that same store.
-        Schema::create('cache', function (Blueprint $table) {
-            $table->string('key')->primary();
-            $table->mediumText('value');
-            $table->bigInteger('expiration')->index();
-        });
-
-        Schema::create('cache_locks', function (Blueprint $table) {
-            $table->string('key')->primary();
-            $table->string('owner');
-            $table->bigInteger('expiration')->index();
-        });
+        // The cache tables live in `create_authentication_tables`: the permission migration that runs right after it clears the
+        // cache store, so with CACHE_STORE=database the `cache` table must already exist by then.
 
         // Database queue (QUEUE_CONNECTION=database: framework default and host `.env`; Docker uses Redis + Horizon).
         Schema::create('jobs', function (Blueprint $table) {
@@ -57,7 +46,5 @@ return new class extends Migration
     {
         Schema::dropIfExists('failed_jobs');
         Schema::dropIfExists('jobs');
-        Schema::dropIfExists('cache_locks');
-        Schema::dropIfExists('cache');
     }
 };

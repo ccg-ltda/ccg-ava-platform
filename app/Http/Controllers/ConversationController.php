@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\ViewsWorkspace;
 use App\Models\Chatbot;
 use App\Models\Conversation;
+use App\Privacy\SupportAccess;
 use App\Services\ChannelCatalog;
 use App\Services\ChatbotService;
 use App\Services\ConversationInbox;
@@ -32,6 +33,7 @@ class ConversationController extends Controller
         private readonly ChannelCatalog $channels,
         private readonly DemoConversations $demo,
         private readonly SavedFilters $saved,
+        private readonly SupportAccess $support,
         WorkspaceScope $scope,
     ) {
         $this->scope = $scope;
@@ -49,23 +51,33 @@ class ConversationController extends Controller
         $filterChannel = $channel ?? $this->filterChannel($request);
         $scope = $this->inbox->scope($viewing, $filterBot, $filterChannel);
 
+        // What the contacts of ANOTHER Workspace wrote is private: it is shown only under a live, justified support access (SupportAccess),
+        // masked, never searchable and every read is audited. Without it only the aggregate counts of the Workspace are given.
+        $grant = $foreign ? $this->support->current($request->user(), $viewing, 'conversations') : null;
+        $locked = $foreign && $grant === null;
+        abort_if($locked && $request->query('c') !== null, 403);
+
         $settings = $viewing->settingsOrDefault();
         $permissions = $request->attributes->get('workspace_permissions', []);
         $selected = $request->query('c');
-        $conversation = is_string($selected) && ctype_digit($selected) ? $this->inbox->find($scope, (int) $selected) : null;
+        $conversation = ! $locked && is_string($selected) && ctype_digit($selected) ? $this->inbox->find($scope, (int) $selected) : null;
 
         // A malformed or foreign `c` is not "no selection": it does not exist.
         abort_if($selected !== null && $conversation === null, 404);
 
         $status = $this->status($request);
-        $search = $this->text($request->query('q'));
+        $search = $foreign ? '' : $this->text($request->query('q'));
+
+        if ($grant && ! $request->header('X-Inertia-Partial-Component')) {
+            $this->support->recordRead($grant, 'conversation', $conversation?->id, $conversation ? 'Conversación' : 'Bandeja de conversaciones');
+        }
 
         return Inertia::render('Conversations/Index', [
             'chatbot' => $bot ? ['id' => $bot->id, 'name' => $bot->name, 'isActive' => $bot->is_active, 'avatarUrl' => $this->chatbots->form($bot, $foreign)['avatarUrl']] : null,
             'channel' => $bot && $channel ? $this->channelProps($bot, $channel) : null,
-            'conversations' => $this->inbox->list($scope, $status, $search, $settings),
+            'conversations' => $locked ? [] : $this->inbox->list($scope, $status, $search, $settings, $foreign),
             'counts' => $this->inbox->counts($scope),
-            'selected' => $conversation ? $this->inbox->detail($conversation, $settings, $request->user(), $permissions, $foreign) : null,
+            'selected' => $conversation ? $this->inbox->detail($conversation, $settings, $request->user(), $permissions, $foreign, $foreign) : null,
             'agents' => $conversation ? $this->inbox->assignableAgents($viewing, $permissions, $foreign) : [],
             'filters' => ['q' => $search, 'status' => $status ?? 'all', 'channel' => $filterChannel, 'chatbot' => $filterBot?->id],
             'options' => $bot ? null : [
@@ -79,6 +91,15 @@ class ConversationController extends Controller
             'reportEndpoint' => url('/api/agent/messages'),
             'canConfigure' => ! $foreign && in_array('manage-settings', $permissions, true),
             'scope' => $this->scopeProps($request, $viewing, $foreign, 'manage-chatbots'),
+            // Only when looking at another Workspace: whether its private content is locked and how a platform administrator unlocks it.
+            'privateAccess' => $foreign ? [
+                'locked' => $locked,
+                'canRequest' => $this->support->canRequest($request),
+                'types' => $this->support->types(),
+                'minutes' => config('privacy.support_access.minutes'),
+                'reasonMin' => config('privacy.support_access.reason_min'),
+                'grant' => $grant ? ['id' => $grant->id, 'reason' => $grant->reason, 'expiresAt' => $grant->expires_at->toIso8601String()] : null,
+            ] : null,
         ]);
     }
 

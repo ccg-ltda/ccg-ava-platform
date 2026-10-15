@@ -4,14 +4,16 @@ import Card from '@/Components/Card';
 import EmptyState from '@/Components/EmptyState';
 import Pagination from '@/Components/Pagination';
 import { TableWrap, Td, Th } from '@/Components/Table';
-import { platformPermissions, roleTone } from '@/config/roles';
+import { roleTone } from '@/config/roles';
 import usePagedList from '@/Hooks/usePagedList';
 
 /**
  * Permisos tab: read-only matrix of the permissions the system defines and the roles that grant them.
  * Permissions live in code, so they cannot be created here; they are assigned to roles in the Roles tab.
  */
-export default function PermissionsPanel({ roles, permissions, perPageOptions }) {
+export default function PermissionsPanel({ roles, permissions, permissionCatalog, perPageOptions }) {
+    const describe = (name) => permissionCatalog.items.find((item) => item.name === name);
+
     const list = usePagedList({ tab: 'permisos', section: 'permissions', only: ['permissions'], meta: permissions.meta, perPageOptions });
 
     return (
@@ -39,9 +41,10 @@ export default function PermissionsPanel({ roles, permissions, perPageOptions })
                     <tbody className="divide-y divide-line">
                         {permissions.data.map((permission) => (
                             <tr key={permission.name} className="transition-colors duration-150 hover:bg-canvas/70">
-                                <Td className="font-mono text-[13px] whitespace-nowrap text-ink">
-                                    {permission.name}
-                                    {platformPermissions[permission.name] && <span className="mt-0.5 block font-sans text-xs whitespace-normal text-ink-muted">{platformPermissions[permission.name]}</span>}
+                                <Td className="text-ink">
+                                    <span className="block text-sm font-medium">{describe(permission.name)?.label ?? permission.name}</span>
+                                    <span className="block font-mono text-[11px] text-ink-muted">{permission.name}</span>
+                                    {describe(permission.name)?.description && <span className="mt-0.5 block max-w-md text-xs whitespace-normal text-ink-muted">{describe(permission.name).description}</span>}
                                 </Td>
                                 {roles.map((role) => {
                                     const granted = permission.roles.includes(role.name);

@@ -27,7 +27,7 @@ class UserStatusTest extends TestCase
         if ($superuser) {
             $user->forceFill(['is_superuser' => true])->save();
         }
-        $this->actingAsWorkspaceMember($user, $role);
+        $this->actingAsWorkspaceMember($user, $role, administrative: (bool) $user->is_superuser);
 
         return $user;
     }

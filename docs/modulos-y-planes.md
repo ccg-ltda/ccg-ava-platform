@@ -1,0 +1,100 @@
+# Módulos, soluciones, navegación, planes y permisos en Ava Platform
+
+Describe cómo encajan las cinco piezas que no deben confundirse y cómo se administran. Todo lo de aquí es **lo que el código hace hoy**, salvo lo marcado como propuesta. El detalle técnico vive en `reglas.md` (§7); este documento es el mapa.
+
+## 1. Las cinco piezas
+
+| # | Pieza | Qué es | Dónde vive | Quién la cambia | Qué NO es |
+|---|---|---|---|---|---|
+| 1 | **Módulo funcional** | Una capacidad implementada: tiene código, rutas, permisos y protección en el servidor. Identidad estable (`key`). | `config/modules.php` `implemented` + fila en `modules` | Un desarrollador (código) | No lo crea la interfaz: registrar un módulo desde Planes solo reserva su lugar y queda «Pendiente de implementación». |
+| 2 | **Categoría / solución** | Clasificación **abierta** para organizar el catálogo (Servicios y Reservas, eCommerce, Salud, lo que venga). | tabla `module_categories` (se crean desde Planes) | CCG, sin código | No limita qué módulos se combinan ni decide acceso. El código de acceso nunca nombra un tipo de negocio (lo verifica una prueba). |
+| 3 | **Grupo conceptual / de navegación** | Tres grupos de Ava (`groups`: Administración de la plataforma, Capacidades compartidas, Soluciones comerciales) y, aparte, las **secciones del sidebar**. | `config/modules.php` `groups` y `resources/js/config/navigation.js` | Desarrollador | No es código, tabla ni permiso. Un módulo sin grupo declarado toma el de su categoría y, si no, `default_group` (`solutions`). |
+| 4 | **Plan comercial** | Combinación configurable de módulos habilitados para un Workspace cliente. | tablas `plans`, `module_plan`, `workspaces.plan_id` | CCG desde `Desarrollo_DEV` | No da permisos: decide si el módulo **existe** para el Workspace. |
+| 5 | **Permiso del usuario** | Qué puede hacer una persona dentro de los módulos que el Workspace tiene (`view-customers`, `manage-bookings`...). | roles Spatie + `workspace_user.role` | Admins del Workspace (sin escalar) y superusuarios | No habilita un módulo que el plan no incluye. |
+
+**Regla de oro:** disponibilidad (plan) ≠ autorización (rol). El servidor exige las dos en cada ruta (`workspace.module:<clave>` y luego `workspace.permission:<permiso>`); el menú solo refleja lo que el servidor ya impone, y ocultar una opción nunca sustituye a la protección.
+
+### Sidebar: secciones, no módulos
+
+El sidebar tiene **secciones plegables** (todas las que tienen título). Una sección es presentación: reúne entradas relacionadas y desaparece si ninguna se ofrece. Su título de una solución comercial debe coincidir con el nombre de su categoría. Añadir una solución = una sección nueva en `navigation.js`, junto a los módulos que añade. El catálogo completo **no** se convierte en entradas permanentes: el menú muestra, por Workspace, solo los módulos implementados + incluidos en su plan + autorizados al rol. En `Desarrollo_DEV` (todos los módulos implementados) las secciones empiezan plegadas salvo la de la página actual, y el catálogo se explora en **Planes**, no en el menú.
+
+### Qué no es un módulo contratable (rutas «core»)
+
+Se declaran en `config/modules.php` `core_routes` y no aparecen en planes ni en el catálogo: perfil, cierre de sesión, verificación de correo y contraseña; el logo y el selector de Workspace; los filtros guardados (cada filtro comprueba el módulo de su `scope`); y la administración de plataforma (Planes, catálogo, acceso de soporte), ligada a `Desarrollo_DEV` por permiso. Una prueba (`ModuleArchitectureTest`) falla si una ruta con sesión no está detrás de `workspace.module` ni declarada ahí.
+
+**No confundir con el «plan por defecto».** «Plataforma completa» (`default_plan`) es un plan contratable que solo contiene los ocho módulos compartidos y es el que usan los Workspaces sin plan asignado; los módulos nuevos (Clientes, Campañas, Servicios y Reservas) no entran en él salvo decisión explícita. Hay un riesgo anotado en `pendientes.md`: nada impide un plan sin `users_roles` o `settings`, que dejaría al cliente sin poder administrarse.
+
+## 2. Mapa real de módulos y dependencias
+
+Dependencias **técnicas** declaradas (`config/modules.php` `dependencies`), comprobadas contra el código; las inversas no se declaran:
+
+| Módulo | Grupo | Necesita | Observación |
+|---|---|---|---|
+| `dashboard`, `reports` | Compartidas | — | Solo calculan lo que el plan incluye (`null`, no cero, para lo no contratado). |
+| `conversations` | Compartidas | — | Sirve sola como «plan de consulta» (leer, tomar, resolver; sin enviar ni devolver a la IA). |
+| `assistants` | Compartidas | `conversations` | La API del agente, el widget, el webhook y el envío necesitan ambos. |
+| `customers` | Compartidas | — | Ficha por Workspace; **independiente** de reservas y campañas. No es un CRM. |
+| `campaigns` | Compartidas | `customers` | Una campaña se dirige a clientes: sin ellos no existe. |
+| `service_catalog` | Soluciones | — | Reutilizable por cualquier negocio con citas (no menciona uñas ni salones). |
+| `professionals` | Soluciones | `service_catalog` | Quien presta servicios, horarios y días no laborables. |
+| `bookings` | Soluciones | `service_catalog`, `professionals` | Agenda, citas, página pública y herramientas de Ava Chat. Guarda su propio contacto mínimo (`booking_customers`): **no necesita `customers`** (comprobado: ningún flujo de reservas lo lee). |
+| `calendar_providers` | Soluciones | `bookings`, `integrations` | Agenda externa (Booker) como fuente de verdad. |
+| `users_roles`, `audit`, `settings`, `integrations` | Administración | — | Del propio Workspace (no confundir con la administración de CCG). |
+
+Clasificación según el código: **capacidades independientes** = `conversations`, `customers`, `dashboard`, `reports`, `service_catalog`; **compartidas** (las usan varias soluciones) = asistentes, conversaciones, clientes, campañas, panel, reportes y, por diseño, `service_catalog`/`professionals` para Salud y otros; **dependientes** = `assistants`, `campaigns`, `professionals`, `bookings`, `calendar_providers`.
+
+### Cómo se relacionan Clientes y Campañas con el resto (sin copiar datos)
+
+- **Clientes ↔ Conversaciones:** por los identificadores de canal que se guardan en la ficha (`customer_identities`, igual al `contact_id` de la conversación). Solo se muestra si el plan tiene `conversations` y el rol `view-conversations`.
+- **Clientes ↔ Reservas:** por el mismo teléfono o correo normalizado de `booking_customers`, o por una cita creada desde una conversación del cliente. Solo con `bookings` y `view-bookings`. No se guarda el vínculo ni se duplica el contacto.
+- **Clientes ↔ Campañas:** `campaign_recipients` (una fila por cliente de una campaña preparada). La ficha lista sus campañas solo con `campaigns` y `view-campaigns`.
+- **Si el plan no incluye Clientes:** `/customers` responde 403 y el menú no lo ofrece; **Campañas tampoco es operativa** (dependencia) aunque esté en el plan; reservas y conversaciones siguen funcionando igual (no dependen de Clientes).
+- **Si no incluye Campañas:** Clientes funciona y la ficha no muestra la sección de campañas (`null`). **Si no incluye Conversaciones o Reservas:** la ficha omite esas secciones, no falla.
+- Un plan guardado antes de declarar una dependencia puede quedar incompleto: aparece marcado «Dependencias incompletas», el módulo dependiente no se ofrece y **no se puede asignar** a un Workspace hasta completarlo.
+
+## 3. Cómo se administran los planes (flujo)
+
+Todo en **Planes** (`/plans`), solo dentro de `Desarrollo_DEV` y con `manage-plans` / `manage-modules` o siendo superusuario ahí. Un superusuario de un Workspace cliente no accede (ni siquiera puede entrar a un Workspace cliente sin membresía explícita). Un cliente no ve el catálogo comercial, no elige ni cambia su plan, ni se asigna módulos: lo comprueba el servidor en cada ruta y acción (`workspace.platform`), no solo el menú. Quién puede qué:
+
+| Acción | Quién | Dónde |
+|---|---|---|
+| Consultar planes y catálogo; crear, editar, activar/desactivar un plan y definir sus módulos; asignar un plan a un Workspace | `manage-plans` (o superusuario) | solo `Desarrollo_DEV` |
+| Registrar módulos y categorías | `manage-modules` (o superusuario) | solo `Desarrollo_DEV` |
+| Ver los módulos disponibles de su propio Workspace | cualquier usuario, solo a través del menú y de lo que su plan incluye | su Workspace |
+| Cambiar el plan, el catálogo o sus módulos | nadie en un Workspace cliente (403, aunque su rol traiga el permiso o sea superusuario) | — |
+
+Los planes deciden qué módulos EXISTEN para un Workspace; los permisos del rol deciden qué acciones hace cada usuario dentro de ellos; ninguno sustituye al otro.
+
+1. **Consultar el catálogo.** Pestaña «Catálogo de módulos»: todos los módulos registrados, con su categoría, su **grupo** y su estado (*Implementado* o *Pendiente de implementación*) y lo que requieren.
+2. **Organizar.** Crear categorías y registrar módulos futuros (reservan lugar; nunca habilitan nada). Nada se borra: se desactiva.
+3. **Crear un plan.** «Nuevo plan» o la ficha de un plan: casillas de módulos agrupadas por **grupo de Ava y categoría**, mezclando libremente categorías. Los módulos pendientes pueden incluirse (quedan reservados) pero se etiquetan.
+4. **Ver dependencias.** Cada módulo muestra «Requiere…»; un aviso explica qué falta y ofrece «Añadir». El servidor rechaza guardar un plan que incumple una dependencia.
+5. **Asignar a un Workspace.** Desde la ficha del plan (o el Workspace): un Workspace cliente tiene **un** plan. Se rechazan planes desactivados y, ahora también, **planes incompletos**. `Desarrollo_DEV` no admite plan.
+6. **Auditoría.** Todo cambio (plan, módulos del plan con antes y después, asignación, catálogo) queda en la auditoría.
+7. **Qué ve el cliente.** Solo lo que su plan incluye **y** está implementado **y** su rol permite; el resto responde 403 aunque conozca la URL.
+
+### Ejemplos ilustrativos (NO son planes reales ni se han creado)
+
+| Ejemplo | Módulos | Resultado |
+|---|---|---|
+| Consulta | `dashboard`, `conversations` | Leer y atender conversaciones; sin asistentes ni envío por IA. |
+| Atención con IA | `dashboard`, `assistants`, `conversations`, `reports` | Asistentes con WhatsApp/web y analítica. |
+| Agenda de servicios | `dashboard`, `service_catalog`, `professionals`, `bookings` | Reservas con agenda propia; sin Clientes ni Campañas. |
+| Agenda + base de clientes | los de «Agenda de servicios» + `customers` | La ficha de cliente muestra sus reservas; sin envíos masivos. |
+| Servicios con campañas | `dashboard`, `conversations`, `customers`, `campaigns`, `service_catalog`, `professionals`, `bookings` | Mezcla de tres categorías (compartida, comunicación, servicios); campañas con exclusión por consentimiento y simulación. |
+| Salud (futuro) | `service_catalog`, `professionals` + módulos de Salud aún no implementados | Los módulos de Salud, mientras estén «pendientes», no habilitan funcionalidad; solo lo implementado funciona. |
+
+## 4. Criterios de aceptación (verificados por prueba)
+
+- Un plan combina módulos de distintas categorías sin solución predeterminada (`ModuleArchitectureTest`).
+- Dependencias: se validan al crear/modificar el plan y al aplicarlo; los módulos no operativos se descartan y no son accesibles por URL.
+- Una categoría/módulo creados desde la interfaz no habilitan nada y caen en el grupo por defecto.
+- Ninguna decisión de acceso nombra un tipo de negocio.
+- Toda ruta con sesión está detrás de un módulo o declarada «core».
+- `Desarrollo_DEV` conserva todos los módulos implementados sin plan; un superusuario de un cliente no recibe privilegios de plataforma.
+- Sidebar: todas las secciones con título se pliegan, incluida la de la página actual; el título no cambia de alto ni el sidebar de ancho al plegar (`npm run test:js`: reglas de plegado `startsOpen`/`openAfterToggle`/`openAfterNavigation` y de maquetación, y revisión visual).
+- Un superusuario solo es administrador de plataforma dentro de `Desarrollo_DEV` y no entra a un Workspace cliente sin membresía (`PlatformBoundaryTest`, `WorkspaceAccessTest`).
+
+## 5. Permisos de usuario (qué puede hacer cada perfil)
+
+El rol de la membresía es la unidad: sus permisos salen de la tabla de roles (catálogo global, solo lo edita un superusuario de `Desarrollo_DEV`). El catálogo legible está en `config/permissions.php` y se muestra agrupado en **Usuarios y roles** (casillas del rol, matriz «Permisos» y «Ver permisos» de cada persona). Los de **Usuarios**: `manage-users` abre el módulo; `create-users`, `edit-users`, `assign-roles` y `deactivate-users` autorizan cada acción; `export-audit` separa exportar la Auditoría. Reglas que no se saltan: solo se asignan roles con permisos que el actor ya posee, nadie cambia su propio rol, nada cruza Workspaces, y todo cambio queda auditado. Los permisos de plataforma (`manage-plans`, `manage-modules`, `access-private-data`) no hacen nada fuera de `Desarrollo_DEV`. Los usuarios de un cliente conservan su perfil y su contraseña (rutas de perfil, sin permiso) y por defecto no reciben ninguno de estos permisos salvo `admin`.

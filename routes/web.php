@@ -3,13 +3,16 @@
 use App\Http\Controllers\AuditController;
 use App\Http\Controllers\BookableResourceController;
 use App\Http\Controllers\BookingController;
+use App\Http\Controllers\CampaignController;
 use App\Http\Controllers\ChannelAppearanceController;
 use App\Http\Controllers\ChatbotController;
 use App\Http\Controllers\ConversationActionController;
 use App\Http\Controllers\ConversationController;
+use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DemoConversationController;
 use App\Http\Controllers\IntegrationController;
+use App\Http\Controllers\MessageTemplateController;
 use App\Http\Controllers\ModuleCategoryController;
 use App\Http\Controllers\ModuleController;
 use App\Http\Controllers\OrganizationController;
@@ -23,6 +26,7 @@ use App\Http\Controllers\SavedFilterController;
 use App\Http\Controllers\ScheduleExceptionController;
 use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\SupportAccessController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WorkspaceController;
 use App\Http\Controllers\WorkspaceLogoController;
@@ -157,10 +161,40 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         });
     });
 
+    // Clientes: the customer records of the Workspace. Reading is `view-customers`; creating and editing is `manage-customers`.
+    Route::middleware(['workspace.module:customers', 'workspace.permission:view-customers'])->prefix('customers')->name('customers.')->group(function () {
+        Route::get('/', [CustomerController::class, 'index'])->name('index');
+        Route::get('/{customer}', [CustomerController::class, 'show'])->whereNumber('customer')->name('show');
+        Route::middleware('workspace.permission:manage-customers')->group(function () {
+            Route::post('/', [CustomerController::class, 'store'])->middleware('throttle:60,1')->name('store');
+            Route::put('/{customer}', [CustomerController::class, 'update'])->whereNumber('customer')->name('update');
+            Route::post('/{customer}/activate', [CustomerController::class, 'activate'])->whereNumber('customer')->name('activate');
+            Route::post('/{customer}/deactivate', [CustomerController::class, 'deactivate'])->whereNumber('customer')->name('deactivate');
+            Route::post('/{customer}/anonymize', [CustomerController::class, 'anonymize'])->whereNumber('customer')->middleware('throttle:20,1')->name('anonymize');
+        });
+    });
+
+    // Campañas: templates and campaigns. Reading is `view-campaigns`; everything that changes them is `manage-campaigns`. Nothing here sends a message.
+    Route::middleware(['workspace.module:campaigns', 'workspace.permission:view-campaigns'])->prefix('campaigns')->name('campaigns.')->group(function () {
+        Route::get('/', [CampaignController::class, 'index'])->name('index');
+        Route::get('/{campaign}', [CampaignController::class, 'show'])->whereNumber('campaign')->name('show');
+        Route::middleware('workspace.permission:manage-campaigns')->group(function () {
+            Route::post('/', [CampaignController::class, 'store'])->name('store');
+            Route::put('/{campaign}', [CampaignController::class, 'update'])->whereNumber('campaign')->name('update');
+            Route::post('/{campaign}/prepare', [CampaignController::class, 'prepare'])->whereNumber('campaign')->middleware('throttle:20,1')->name('prepare');
+            Route::post('/{campaign}/simulate', [CampaignController::class, 'simulate'])->whereNumber('campaign')->middleware('throttle:20,1')->name('simulate');
+            Route::post('/{campaign}/cancel', [CampaignController::class, 'cancel'])->whereNumber('campaign')->name('cancel');
+            Route::post('/templates', [MessageTemplateController::class, 'store'])->name('templates.store');
+            Route::put('/templates/{template}', [MessageTemplateController::class, 'update'])->whereNumber('template')->name('templates.update');
+            Route::post('/templates/{template}/activate', [MessageTemplateController::class, 'activate'])->whereNumber('template')->name('templates.activate');
+            Route::post('/templates/{template}/deactivate', [MessageTemplateController::class, 'deactivate'])->whereNumber('template')->name('templates.deactivate');
+        });
+    });
+
     // Auditoría reads the change history of the active Workspace; `manage-settings` governs it like the other admin pages.
     Route::middleware(['workspace.module:audit', 'workspace.permission:manage-settings'])->prefix('audit')->name('audit.')->group(function () {
         Route::get('/', [AuditController::class, 'index'])->name('index');
-        Route::get('/export', [AuditController::class, 'export'])->middleware('throttle:10,1')->name('export');
+        Route::get('/export', [AuditController::class, 'export'])->middleware(['workspace.permission:export-audit', 'throttle:10,1'])->name('export');
     });
 
     // Search filters a user saves per module. The module decides the permission; the filters are always the user's own in
@@ -171,17 +205,17 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         Route::delete('/{filter}', [SavedFilterController::class, 'destroy'])->whereNumber('filter')->name('destroy');
     });
 
-    Route::get('/users', [UserController::class, 'index'])
-        ->middleware(['workspace.module:users_roles', 'workspace.permission:manage-users'])->name('users.index');
-    Route::post('/users', [UserController::class, 'store'])
-        ->middleware(['workspace.module:users_roles', 'workspace.permission:manage-users'])->name('users.store');
-    Route::put('/users/{user}', [UserController::class, 'update'])
-        ->middleware(['workspace.module:users_roles', 'workspace.permission:manage-users'])->name('users.update');
-    // Users are never deleted: they are deactivated (and can be reactivated) so history and ID stay.
-    Route::post('/users/{user}/deactivate', [UserController::class, 'deactivate'])
-        ->middleware(['workspace.module:users_roles', 'workspace.permission:manage-users'])->name('users.deactivate');
-    Route::post('/users/{user}/activate', [UserController::class, 'activate'])
-        ->middleware(['workspace.module:users_roles', 'workspace.permission:manage-users'])->name('users.activate');
+    // Usuarios y roles: `manage-users` opens the module; each action also needs its own permission (create, edit, assign roles,
+    // activate / deactivate), so a role can be given exactly the ones it needs.
+    Route::middleware(['workspace.module:users_roles', 'workspace.permission:manage-users'])->group(function () {
+        Route::get('/users', [UserController::class, 'index'])->name('users.index');
+        Route::post('/users', [UserController::class, 'store'])->middleware('workspace.permission:create-users')->name('users.store');
+        // Editing the account needs `edit-users`; changing the role or the Workspace needs `assign-roles` (UserController checks which one applies).
+        Route::put('/users/{user}', [UserController::class, 'update'])->middleware('workspace.permission:edit-users,assign-roles')->name('users.update');
+        // Users are never deleted: they are deactivated (and can be reactivated) so history and ID stay.
+        Route::post('/users/{user}/deactivate', [UserController::class, 'deactivate'])->middleware('workspace.permission:deactivate-users')->name('users.deactivate');
+        Route::post('/users/{user}/activate', [UserController::class, 'activate'])->middleware('workspace.permission:deactivate-users')->name('users.activate');
+    });
 
     // Workspaces are listed inside /users. WorkspaceAdministration decides who may act on which one.
     Route::middleware(['workspace.module:users_roles', 'workspace.permission:manage-users'])->group(function () {
@@ -193,9 +227,9 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         Route::put('/organizations/{organization}', [OrganizationController::class, 'update'])->middleware('can:manage-workspaces')->name('organizations.update');
         Route::post('/organizations/{organization}/deactivate', [OrganizationController::class, 'deactivate'])->middleware('can:manage-workspaces')->name('organizations.deactivate');
         Route::post('/organizations/{organization}/activate', [OrganizationController::class, 'activate'])->middleware('can:manage-workspaces')->name('organizations.activate');
-        Route::post('/workspaces/{workspace}/members', [WorkspaceMemberController::class, 'store'])->middleware('can:manage-workspaces')->name('workspaces.members.store');
-        Route::put('/workspaces/{workspace}/members/{user}', [WorkspaceMemberController::class, 'update'])->name('workspaces.members.update');
-        Route::delete('/workspaces/{workspace}/members/{user}', [WorkspaceMemberController::class, 'destroy'])->name('workspaces.members.destroy');
+        Route::post('/workspaces/{workspace}/members', [WorkspaceMemberController::class, 'store'])->middleware(['can:manage-workspaces', 'workspace.permission:assign-roles'])->name('workspaces.members.store');
+        Route::put('/workspaces/{workspace}/members/{user}', [WorkspaceMemberController::class, 'update'])->middleware('workspace.permission:assign-roles')->name('workspaces.members.update');
+        Route::delete('/workspaces/{workspace}/members/{user}', [WorkspaceMemberController::class, 'destroy'])->middleware('workspace.permission:assign-roles')->name('workspaces.members.destroy');
     });
 
     // Planes and the module catalog: CCG's commercial administration. Only superusers working inside the administrative
@@ -223,6 +257,13 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         Route::put('/module-categories/{category}', [ModuleCategoryController::class, 'update'])->whereNumber('category')->name('module-categories.update');
         Route::post('/module-categories/{category}/activate', [ModuleCategoryController::class, 'activate'])->whereNumber('category')->name('module-categories.activate');
         Route::post('/module-categories/{category}/deactivate', [ModuleCategoryController::class, 'deactivate'])->whereNumber('category')->name('module-categories.deactivate');
+    });
+
+    // Temporary, justified access of a platform administrator to the private data of another Workspace. Being superuser is not enough:
+    // it needs `access-private-data` and to work inside the administrative Workspace (App\Privacy\SupportAccess).
+    Route::middleware('workspace.permission:access-private-data')->prefix('support-access')->name('support-access.')->group(function () {
+        Route::post('/', [SupportAccessController::class, 'store'])->middleware('throttle:20,1')->name('store');
+        Route::delete('/{grant}', [SupportAccessController::class, 'destroy'])->whereNumber('grant')->name('destroy');
     });
 
     // The role catalog is shared by every Workspace: superusers only.

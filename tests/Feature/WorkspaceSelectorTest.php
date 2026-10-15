@@ -14,11 +14,11 @@ class WorkspaceSelectorTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function actAs(string $role = 'admin', bool $superuser = false): User
+    private function actAs(string $role = 'admin', bool $superuser = false, ?bool $administrative = null): User
     {
         $user = User::factory()->create();
         $user->forceFill(['is_superuser' => $superuser])->save();
-        $this->actingAsWorkspaceMember($user, $role);
+        $this->actingAsWorkspaceMember($user, $role, administrative: $administrative ?? (bool) $user->is_superuser);
 
         return $user;
     }
@@ -51,9 +51,10 @@ class WorkspaceSelectorTest extends TestCase
 
     public function test_the_administrative_workspace_cannot_be_deactivated_renamed_by_code_or_lose_its_organization(): void
     {
-        config(['workspace.admin_code' => 'ADMIN_WS']);
         $this->actAs('admin', superuser: true);
+        config(['workspace.admin_code' => 'ADMIN_WS']);
         $admin = $this->workspace('ADMIN_WS', 'Admin', Organization::create(['name' => 'Org interna']));
+        $this->withSession(['workspace_id' => $admin->id]); // the superuser works inside the administrative Workspace
 
         $this->post("/workspaces/{$admin->id}/deactivate")->assertSessionHasErrors('status');
         $this->put("/workspaces/{$admin->id}", ['code' => 'OTHER_CODE', 'name' => 'Admin'])->assertSessionHasErrors('code');
@@ -74,7 +75,7 @@ class WorkspaceSelectorTest extends TestCase
         $this->actAs('admin');
         $this->getJson('/workspaces/search?purpose=view')->assertForbidden();
 
-        $this->actAs('admin', superuser: true);
+        $this->actAs('admin', superuser: true, administrative: false);
         $this->getJson('/workspaces/search?purpose=view')->assertForbidden();
 
         config(['workspace.admin_code' => 'TEST_WS']);

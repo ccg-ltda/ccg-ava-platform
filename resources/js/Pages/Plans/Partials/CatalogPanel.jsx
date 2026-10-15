@@ -159,6 +159,7 @@ export default function CatalogPanel({ catalog }) {
                                         <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-ink">
                                             {module.name}
                                             <ImplementationBadge implemented={module.implemented} />
+                                            <Badge tone="violet">{module.group.name}</Badge>
                                             {!module.isActive && <Badge tone="neutral">Inactivo</Badge>}
                                         </p>
                                         {module.description && <p className="mt-0.5 text-sm text-ink-muted">{module.description}</p>}

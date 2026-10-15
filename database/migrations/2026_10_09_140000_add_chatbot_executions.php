@@ -11,24 +11,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Which workflow of the platform's catalog (config/n8n.php) answers for a chatbot. The ONLY source of truth of the
-        // assignment: it is a column of the chatbot itself, so it can only ever belong to that chatbot's own Workspace, a
-        // chatbot has at most one, and it disappears with the chatbot. The key is checked against the catalog when it is
-        // written (and again when it is resolved), because a catalog that lives in code cannot be a foreign key. Not
-        // mass assignable: only App\Services\ChatbotWorkflows sets it.
-        Schema::table('chatbots', function (Blueprint $table) {
-            $table->string('workflow_key', 64)->nullable();
-        });
-
-        // Targets of the composite foreign keys of an execution: they make the database itself refuse an execution whose
-        // message is not in its conversation, or whose conversation is not of its chatbot, or any of them of another Workspace.
-        Schema::table('conversations', function (Blueprint $table) {
-            $table->unique(['id', 'chatbot_id', 'workspace_id']);
-        });
-        Schema::table('messages', function (Blueprint $table) {
-            $table->unique(['id', 'conversation_id', 'workspace_id']);
-        });
-
+        // `chatbots.workflow_key` and the unique keys that are targets of the composite foreign keys below live in the
+        // `create_chatbots_tables` and `create_conversations_tables` migrations (they are part of the initial schema).
+        // This file keeps its original name only because it already ran in the development database; it now just creates the table.
         // One run of a chatbot's workflow for ONE inbound message. `message_id` is unique, so a repeated event can never
         // create a second one, and every state change of an execution is a conditional update on this row. It holds no
         // message text and no secret: only identifiers, the workflow that ran, fixed codes and times. The AI's reply is an
@@ -75,14 +60,5 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('chatbot_executions');
-        Schema::table('messages', function (Blueprint $table) {
-            $table->dropUnique(['id', 'conversation_id', 'workspace_id']);
-        });
-        Schema::table('conversations', function (Blueprint $table) {
-            $table->dropUnique(['id', 'chatbot_id', 'workspace_id']);
-        });
-        Schema::table('chatbots', function (Blueprint $table) {
-            $table->dropColumn('workflow_key');
-        });
     }
 };

@@ -12,6 +12,7 @@ use App\Models\Integration;
 use App\Models\Message;
 use App\Models\Workspace;
 use App\Models\WorkspaceSetting;
+use App\Privacy\Mask;
 use App\Reports\ReportPeriod;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -249,13 +250,14 @@ class DashboardMetrics
      *
      * @return list<array<string, mixed>>
      */
-    public function recentConversations(?Workspace $target, WorkspaceSetting $settings, int $limit = 6): array
+    public function recentConversations(?Workspace $target, WorkspaceSetting $settings, int $limit = 6, bool $mask = false): array
     {
         return $this->conversations($target)->with('chatbot:id,name,workspace_id')->when(! $target, fn (Builder $query) => $query->with('chatbot.workspace:id,name'))
             ->whereNotNull('last_message_at')->orderByDesc('last_message_at')->orderByDesc('id')->limit($limit)->get()
             ->map(fn (Conversation $conversation) => [
                 'id' => $conversation->id,
-                'contact' => $conversation->contact_name ?: $conversation->contact_id,
+                // Another Workspace's contacts are never named from here (see config/privacy.php): only a masked identifier.
+                'contact' => $mask ? Mask::identifier($conversation->contact_id) : ($conversation->contact_name ?: $conversation->contact_id),
                 'channel' => config("chatbots.channels.{$conversation->channel}.label", $conversation->channel),
                 'handling' => $conversation->handling,
                 'assistant' => $conversation->chatbot->name,

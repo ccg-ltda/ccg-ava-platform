@@ -34,6 +34,8 @@ class UserEditTest extends TestCase
     {
         $user = User::factory()->create();
         $user->forceFill(['is_superuser' => $superuser])->save();
+        // A superuser carries platform privileges only inside the administrative Workspace: here, the active one.
+        config(['workspace.admin_code' => $superuser ? $this->a->code : 'DESARROLLO_DEV']);
         $this->a->users()->attach($user->id, ['role' => $role]);
         $this->actingAs($user)->withSession(['workspace_id' => $this->a->id]);
 
@@ -134,7 +136,7 @@ class UserEditTest extends TestCase
 
     public function test_the_password_of_a_user_with_a_higher_role_cannot_be_set(): void
     {
-        Role::findOrCreate('manager', 'web')->syncPermissions(['manage-users', 'view-dashboard']);
+        Role::findOrCreate('manager', 'web')->syncPermissions(['manage-users', 'create-users', 'edit-users', 'assign-roles', 'deactivate-users', 'view-dashboard']);
         $this->actAs('manager');
         $boss = $this->member('admin');
         $hash = $boss->password;
@@ -149,7 +151,10 @@ class UserEditTest extends TestCase
 
     public function test_moving_a_user_replaces_the_membership_and_keeps_the_account(): void
     {
-        $this->actAs('admin', superuser: true);
+        $actor = $this->actAs('admin', superuser: true);
+        // Here A is a plain client Workspace (an internal account would not be moved into B at all: see PlatformBoundaryTest).
+        config(['workspace.admin_code' => 'ELSEWHERE']);
+        $this->b->users()->attach($actor->id, ['role' => 'admin']);
         $user = $this->member();
         $other = Workspace::create(['organization_id' => Organization::first()->id, 'code' => 'WS_C', 'name' => 'Gamma']);
         $other->users()->attach($user->id, ['role' => 'supervisor']);
@@ -167,7 +172,7 @@ class UserEditTest extends TestCase
     public function test_the_role_must_be_valid_for_the_chosen_workspace(): void
     {
         $manager = $this->actAs('admin');
-        Role::findOrCreate('manager', 'web')->syncPermissions(['manage-users', 'view-dashboard']);
+        Role::findOrCreate('manager', 'web')->syncPermissions(['manage-users', 'create-users', 'edit-users', 'assign-roles', 'deactivate-users', 'view-dashboard']);
         // The actor is admin in A but only a manager in B: in B they cannot hand out "admin".
         $this->b->users()->attach($manager->id, ['role' => 'manager']);
         $user = $this->member();
@@ -213,7 +218,7 @@ class UserEditTest extends TestCase
 
         $this->put('/users/'.$admin->id, $this->payload($admin, ['workspace_id' => $this->b->id, 'role' => 'admin']))->assertSessionHasErrors('workspace_id');
 
-        Role::findOrCreate('manager', 'web')->syncPermissions(['manage-users', 'view-dashboard']);
+        Role::findOrCreate('manager', 'web')->syncPermissions(['manage-users', 'create-users', 'edit-users', 'assign-roles', 'deactivate-users', 'view-dashboard']);
         $manager = $this->actAs('manager');
         $this->b->users()->attach($manager->id, ['role' => 'manager']);
         $boss = $this->member('admin');

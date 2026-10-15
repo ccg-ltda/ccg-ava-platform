@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Campaigns\CampaignDispatcher;
+use App\Campaigns\UnavailableCampaignDispatcher;
 use App\Chatbots\ChatbotExecutor;
 use App\Chatbots\N8nExecutor;
 use App\Models\User;
@@ -22,6 +24,9 @@ class AppServiceProvider extends ServiceProvider
     {
         // What runs a chatbot's workflow (today the platform's n8n); the rest of Ava only knows the contract.
         $this->app->bind(ChatbotExecutor::class, N8nExecutor::class);
+
+        // How a campaign would really be delivered: no channel is connected yet, so the unavailable dispatcher says so and sends nothing.
+        $this->app->bind(CampaignDispatcher::class, UnavailableCampaignDispatcher::class);
     }
 
     /**
@@ -31,11 +36,12 @@ class AppServiceProvider extends ServiceProvider
     {
         Vite::prefetch(concurrency: 3);
 
-        // The role/permission catalog is global (shared by every Workspace), so only superusers manage it.
-        Gate::define('manage-roles', fn (User $user) => $user->is_superuser);
+        // The role/permission catalog is global (shared by every Workspace), so only superusers working inside the administrative
+        // Workspace manage it: a superuser acting inside a client Workspace has no platform privileges.
+        Gate::define('manage-roles', fn (User $user) => $user->isPlatformSuperuser());
 
-        // Creating or editing a Workspace is an Organization-level operation: superusers only.
-        Gate::define('manage-workspaces', fn (User $user) => $user->is_superuser);
+        // Creating or editing a Workspace or an Organization is a platform operation: same rule.
+        Gate::define('manage-workspaces', fn (User $user) => $user->isPlatformSuperuser());
 
         // The public widget is open to the whole internet: each visitor (IP) is limited per widget, since every message
         // reaches a workflow that may call a paid model.

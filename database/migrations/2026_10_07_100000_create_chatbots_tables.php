@@ -25,12 +25,18 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->text('instructions')->nullable();
             $table->boolean('is_active')->default(true);
+            $table->boolean('is_demo')->default(false); // the fictitious demo chatbot (no channels, no integrations)
             $table->string('avatar_path')->nullable();
             $table->timestamp('profile_saved_at')->nullable();
             $table->string('agent_token_hash', 64)->nullable()->unique();
             $table->string('agent_token_hint', 8)->nullable();
             $table->timestamp('agent_token_created_at')->nullable();
             $table->timestamp('agent_last_seen_at')->nullable();
+            // Which workflow of the platform's catalog (config/n8n.php) answers for this chatbot: the ONLY source of truth of
+            // the assignment. A column of the chatbot itself, so it can only belong to its own Workspace; checked against the
+            // catalog when written and when resolved (a catalog in code cannot be a foreign key). Not mass assignable: only
+            // App\Services\ChatbotWorkflows sets it.
+            $table->string('workflow_key', 64)->nullable();
             $table->timestamps();
 
             $table->unique(['workspace_id', 'name']);

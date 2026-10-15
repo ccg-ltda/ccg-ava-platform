@@ -143,6 +143,21 @@ class Workspace extends Model
         return $this->hasMany(ScheduleException::class);
     }
 
+    public function customers(): HasMany
+    {
+        return $this->hasMany(Customer::class);
+    }
+
+    public function messageTemplates(): HasMany
+    {
+        return $this->hasMany(MessageTemplate::class);
+    }
+
+    public function campaigns(): HasMany
+    {
+        return $this->hasMany(Campaign::class);
+    }
+
     public function bookingCustomers(): HasMany
     {
         return $this->hasMany(BookingCustomer::class);

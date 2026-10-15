@@ -47,11 +47,11 @@ class LoginRequest extends FormRequest
         $workspace = Workspace::available()->find($this->session()->get('pre_login_workspace_id'));
 
         // The user is only logged in if credentials match AND the user may enter the selected
-        // Workspace (member, or superuser). Same error for both failures to avoid leaking info.
+        // Workspace (member, or superuser entering the administrative Workspace). Same error for both failures to avoid leaking info.
         // Deactivated accounts fail with the same generic error.
         $credentials = $this->only('email', 'password') + ['is_active' => true] + [
             fn (Builder $query) => $query->where(fn (Builder $q) => $q
-                ->where('is_superuser', true)
+                ->when($workspace?->isAdministrative(), fn (Builder $admin) => $admin->where('is_superuser', true))
                 ->orWhereHas('workspaces', fn (Builder $w) => $w->whereKey($workspace?->getKey()))),
         ];
 

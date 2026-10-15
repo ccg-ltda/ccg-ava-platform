@@ -21,7 +21,7 @@ class ListPaginationTest extends TestCase
     {
         $user = User::factory()->create();
         $user->forceFill(['is_superuser' => true])->save();
-        $this->actingAsWorkspaceMember($user, 'admin');
+        $this->actingAsWorkspaceMember($user, 'admin', administrative: true);
 
         return $user;
     }
@@ -57,7 +57,7 @@ class ListPaginationTest extends TestCase
         }
 
         $this->get('/users?roles_per_page=100')->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('roles.data', 100)->where('roles.meta.total', 115)
+            ->has('roles.data', 100)->where('roles.meta.total', 116)
             // Other lists keep their own size: it is not shared.
             ->where('users.meta.per_page', 10)->where('permissions.meta.per_page', 10));
     }
@@ -66,9 +66,9 @@ class ListPaginationTest extends TestCase
     {
         $this->actAsSuperuser();
 
-        $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page
+        $this->get('/users?permissions_per_page=20')->assertInertia(fn (AssertableInertia $page) => $page
             ->where('permissions.data', fn ($rows) => collect($rows)->firstWhere('name', 'manage-users')['roles'] === ['admin'])
-            ->has('permissionRoles', 5)->has('permissionNames', 14));
+            ->has('permissionRoles', 6)->has('permissionNames', 24));
     }
 
     public function test_partial_reloads_only_resolve_the_requested_list(): void

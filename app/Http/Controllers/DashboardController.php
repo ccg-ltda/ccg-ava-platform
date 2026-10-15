@@ -66,7 +66,7 @@ class DashboardController extends Controller
                 : null,
             // The state of the connections of ONE Workspace (the "all" view has no single list to show).
             'integrations' => $can['settings'] && $has('integrations') && $target ? $this->section('integrations', fn () => $metrics->integrations($target, $settings)) : null,
-            'recentConversations' => $can['conversations'] ? $this->section('recentConversations', fn () => $metrics->recentConversations($target, $settings)) : null,
+            'recentConversations' => $can['conversations'] ? $this->section('recentConversations', fn () => $metrics->recentConversations($target, $settings, mask: ! $target?->is($active))) : null,
             'recentActivity' => $can['settings'] && $has('audit') ? $this->section('recentActivity', fn () => $metrics->recentActivity($target, $settings)) : null,
             'demo' => $has('conversations') ? $this->section('demo', fn () => $metrics->demoConversations($target)) : null,
         ]);

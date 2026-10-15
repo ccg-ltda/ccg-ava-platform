@@ -25,7 +25,7 @@ class AuditTest extends TestCase
 
     private const PASSWORD = 'Pa55word-Secreta-9876!';
 
-    private function actAs(string $role = 'admin', bool $superuser = false, string $name = 'Ana Admin'): User
+    private function actAs(string $role = 'admin', bool $superuser = false, string $name = 'Ana Admin', bool $administrative = false): User
     {
         $user = User::factory()->create(['name' => $name]);
 
@@ -33,7 +33,7 @@ class AuditTest extends TestCase
             $user->forceFill(['is_superuser' => true])->save();
         }
 
-        $this->actingAsWorkspaceMember($user, $role);
+        $this->actingAsWorkspaceMember($user, $role, $administrative);
 
         return $user;
     }
@@ -161,7 +161,7 @@ class AuditTest extends TestCase
 
     public function test_removing_a_member_is_audited_as_deleted_in_that_workspace(): void
     {
-        $actor = $this->actAs('admin', superuser: true);
+        $actor = $this->actAs('admin', superuser: true, administrative: true);
         $other = $this->otherWorkspace();
         $member = User::factory()->create(['name' => 'Pedro']);
         $other->users()->attach($member->id, ['role' => 'cliente']);
@@ -177,7 +177,7 @@ class AuditTest extends TestCase
 
     public function test_roles_record_the_permissions_added_and_removed(): void
     {
-        $this->actAs('admin', superuser: true);
+        $this->actAs('admin', superuser: true, administrative: true);
 
         $this->post('/roles', ['name' => 'auditor', 'permissions' => ['view-dashboard']])->assertSessionHasNoErrors()->assertSessionMissing('errors');
         $role = Role::findByName('auditor', 'web');
@@ -192,7 +192,7 @@ class AuditTest extends TestCase
 
     public function test_workspaces_and_organizations_are_audited(): void
     {
-        $this->actAs('admin', superuser: true);
+        $this->actAs('admin', superuser: true, administrative: true);
         $organization = Organization::first();
 
         $this->put("/organizations/{$organization->id}", ['name' => 'Nueva Org'])->assertSessionHasNoErrors()->assertSessionMissing('errors');

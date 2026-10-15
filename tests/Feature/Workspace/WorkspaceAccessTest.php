@@ -176,20 +176,39 @@ class WorkspaceAccessTest extends TestCase
         $this->assertGuest();
     }
 
-    public function test_superuser_can_enter_multiple_workspaces(): void
+    public function test_superuser_enters_the_administrative_workspace_without_a_membership(): void
+    {
+        $super = User::factory()->create();
+        $super->forceFill(['is_superuser' => true])->save();
+
+        $this->loginTo($super, 'DESARROLLO_DEV')->assertRedirect('/dashboard');
+        $this->get('/dashboard')->assertOk();
+        $this->assertSame($this->dev->id, session('workspace_id'));
+    }
+
+    public function test_superuser_cannot_enter_a_client_workspace_without_an_explicit_membership(): void
     {
         $super = User::factory()->create();
         $super->forceFill(['is_superuser' => true])->save();
         $this->dev->users()->attach($super->id, ['role' => 'admin']);
 
-        $this->loginTo($super, 'DESARROLLO_DEV')->assertRedirect('/dashboard');
-        $this->get('/dashboard')->assertOk();
-        $this->post('/logout');
+        // Being a superuser does not open a client's Workspace (and its private data): only a membership does.
+        $this->loginTo($super, 'OPERACION_PRD')->assertSessionHasErrors('email');
+        $this->assertGuest();
 
-        // No explicit membership in prd: superuser still enters, acting as admin.
+        $this->prd->users()->attach($super->id, ['role' => 'cliente']);
         $this->loginTo($super, 'OPERACION_PRD')->assertRedirect('/dashboard');
-        $this->get('/dashboard')->assertOk();
         $this->assertSame($this->prd->id, session('workspace_id'));
+        $this->assertSame('cliente', $super->roleInWorkspace($this->prd), 'Inside a client Workspace the membership role is all they have.');
+    }
+
+    public function test_a_session_bound_to_a_client_workspace_without_membership_is_closed_even_for_a_superuser(): void
+    {
+        $super = User::factory()->create();
+        $super->forceFill(['is_superuser' => true])->save();
+
+        $this->actingAs($super)->withSession(['workspace_id' => $this->prd->id])->get('/dashboard')->assertRedirect('/pre-login');
+        $this->assertGuest();
     }
 
     public function test_non_superuser_with_two_memberships_can_enter_both(): void

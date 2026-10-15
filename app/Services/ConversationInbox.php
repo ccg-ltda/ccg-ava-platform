@@ -8,6 +8,7 @@ use App\Models\Message;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceSetting;
+use App\Privacy\Mask;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
@@ -65,7 +66,7 @@ class ConversationInbox
      *
      * @return list<array<string, mixed>>
      */
-    public function list(Builder $scope, ?string $handling, string $search, WorkspaceSetting $settings): array
+    public function list(Builder $scope, ?string $handling, string $search, WorkspaceSetting $settings, bool $mask = false): array
     {
         $query = (clone $scope)->with(['chatbot:id,name', 'assignedUser:id,name'])
             ->when(in_array($handling, Conversation::HANDLING, true), fn (Builder $q) => $q->where('conversations.handling', $handling))
@@ -82,8 +83,8 @@ class ConversationInbox
 
         return $conversations->map(fn (Conversation $conversation) => [
             'id' => $conversation->id,
-            'contactId' => $conversation->contact_id,
-            'contactName' => $conversation->contact_name,
+            'contactId' => $mask ? Mask::identifier($conversation->contact_id) : $conversation->contact_id,
+            'contactName' => $mask ? null : $conversation->contact_name,
             'channel' => $this->channel($conversation),
             'chatbot' => ['id' => $conversation->chatbot->id, 'name' => $conversation->chatbot->name],
             'handling' => $conversation->handling,
@@ -101,15 +102,15 @@ class ConversationInbox
      * @param  list<string>  $permissions  the permissions of the user in the ACTIVE Workspace
      * @return array<string, mixed>
      */
-    public function detail(Conversation $conversation, WorkspaceSetting $settings, User $user, array $permissions, bool $foreign): array
+    public function detail(Conversation $conversation, WorkspaceSetting $settings, User $user, array $permissions, bool $foreign, bool $mask = false): array
     {
         $newest = $conversation->messages()->with('senderUser:id,name')->orderByDesc('sent_at')->orderByDesc('id')->limit(self::MESSAGE_LIMIT + 1)->get();
         $delivery = $this->delivery->availability($conversation);
 
         return [
             'id' => $conversation->id,
-            'contactId' => $conversation->contact_id,
-            'contactName' => $conversation->contact_name,
+            'contactId' => $mask ? Mask::identifier($conversation->contact_id) : $conversation->contact_id,
+            'contactName' => $mask ? null : $conversation->contact_name,
             'channel' => $this->channel($conversation),
             'chatbot' => ['id' => $conversation->chatbot->id, 'name' => $conversation->chatbot->name],
             'handling' => $conversation->handling,

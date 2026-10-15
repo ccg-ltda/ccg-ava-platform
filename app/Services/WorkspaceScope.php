@@ -18,7 +18,7 @@ class WorkspaceScope
 
     public function canChoose(User $user, Workspace $active): bool
     {
-        return $user->is_superuser && $active->isAdministrative();
+        return $user->isSuperuserIn($active);
     }
 
     /**

@@ -54,6 +54,17 @@ class ModuleAccess
         return array_values(array_diff($this->dependencies()[$key] ?? [], $available));
     }
 
+    /**
+     * The conceptual group of a module (config/modules.php `groups`): the one its code declares, otherwise the one of its category,
+     * otherwise `default_group`. It only organizes the catalog and the menu; it grants and requires nothing.
+     */
+    public function groupOf(string $moduleKey, ?string $categoryKey): string
+    {
+        return config("modules.implemented.{$moduleKey}.group")
+            ?? config("modules.categories.{$categoryKey}.group")
+            ?? config('modules.default_group');
+    }
+
     public function defaultPlan(): ?Plan
     {
         return Plan::where('key', config('modules.default_plan'))->first();

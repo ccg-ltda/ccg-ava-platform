@@ -5,16 +5,18 @@ namespace App\Services;
 use App\Models\Organization;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Privacy\Mask;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Validation\ValidationException;
 use Spatie\Permission\Models\Role;
 
 /**
  * Who may administer which Workspace (Organization -> Workspaces -> memberships).
  *
- * - Superusers administer every Workspace and are the only ones who create/edit Workspaces or
- *   add existing accounts to them.
+ * - Superusers acting inside the administrative Workspace administer every Workspace and are the only ones who create/edit
+ *   Workspaces or add existing accounts to them. Inside a client Workspace a superuser is limited like anyone else.
  * - Anyone else administers the Workspaces where their membership role grants `manage-users`.
  *
  * Removing a member only deletes the `workspace_user` row; the global account is never touched.
@@ -30,7 +32,7 @@ class WorkspaceAdministration
     {
         $query = Workspace::query();
 
-        if ($actor->is_superuser) {
+        if ($actor->isPlatformSuperuser()) {
             return $query;
         }
 
@@ -52,6 +54,28 @@ class WorkspaceAdministration
     public function assignableTargets(User $actor): Collection
     {
         return $this->assignable($actor)->orderBy('name')->get();
+    }
+
+    /**
+     * An internal account of CCG (a superuser, or anyone who belongs to the administrative Workspace) never receives a membership or a
+     * new role in a CLIENT Workspace through the administration screens: a membership gives the full role of the client, so it would
+     * bypass the temporary, justified and audited support access. Applies to everyone, to themselves and to colleagues alike.
+     */
+    public function assertMayReceive(Workspace $target, User $member, string $field): void
+    {
+        if ($target->isAdministrative() || ! $this->isInternalAccount($member)) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            $field => 'Las cuentas internas de la plataforma no se añaden a un Workspace de cliente. Para consultar datos privados usa el acceso de soporte.',
+        ]);
+    }
+
+    public function isInternalAccount(User $user): bool
+    {
+        return $user->is_superuser
+            || $user->workspaces()->get()->contains(fn (Workspace $workspace) => $workspace->isAdministrative());
     }
 
     /** @return Builder<Workspace> the enabled Workspaces the actor may assign people to (see assignableTargets) */
@@ -89,7 +113,7 @@ class WorkspaceAdministration
      */
     public function canManageMember(User $actor, Workspace $workspace, string $memberRole, ?User $member = null): bool
     {
-        if ($member?->is_superuser && ! $actor->is_superuser) {
+        if ($member?->is_superuser && ! $actor->isPlatformSuperuser()) {
             return false;
         }
 
@@ -126,10 +150,12 @@ class WorkspaceAdministration
                 'meta' => ListPagination::meta($page),
             ],
             // Light list for the "new Workspace" form (not paginated: it is a choice list, not a table).
-            'organizationOptions' => $actor->is_superuser
+            'organizationOptions' => $actor->isPlatformSuperuser()
                 ? Organization::orderBy('name')->get(['id', 'name'])
                 : [],
-            'canManage' => (bool) $actor->is_superuser,
+            'canManage' => $actor->isPlatformSuperuser(),
+            // Changing or removing a membership needs `assign-roles` in the Workspace the actor is working in.
+            'canAssign' => in_array('assign-roles', $request->attributes->get('workspace_permissions', []), true),
             'selected' => $selected ? $this->detail($actor, $selected, $request) : null,
         ];
     }
@@ -141,7 +167,7 @@ class WorkspaceAdministration
      */
     public function organizations(User $actor, Request $request): ?array
     {
-        if (! $actor->is_superuser) {
+        if (! $actor->isPlatformSuperuser()) {
             return null;
         }
 
@@ -162,6 +188,8 @@ class WorkspaceAdministration
     private function detail(User $actor, Workspace $workspace, Request $request): array
     {
         $assignable = $this->assignableRoles($actor, $workspace);
+        // The platform administrator who looks at another Workspace team needs to tell members apart, not to read their addresses.
+        $maskEmails = $actor->isPlatformSuperuser() && ! $workspace->is($request->attributes->get('workspace'));
         $page = ListPagination::paginate($workspace->users()->orderBy('users.name'), $request, 'members');
 
         return [
@@ -172,11 +200,12 @@ class WorkspaceAdministration
                 'data' => $page->getCollection()->map(fn (User $member) => [
                     'id' => $member->id,
                     'name' => $member->name,
-                    'email' => $member->email,
+                    'email' => $maskEmails ? Mask::email($member->email) : $member->email,
                     'role' => $member->pivot->role,
                     'isActive' => $member->is_active,
                     'isSelf' => $actor->is($member),
-                    'canManage' => $this->canManageMember($actor, $workspace, $member->pivot->role, $member),
+                    'canManage' => in_array('assign-roles', $request->attributes->get('workspace_permissions', []), true)
+                        && $this->canManageMember($actor, $workspace, $member->pivot->role, $member),
                 ])->values(),
                 'meta' => ListPagination::meta($page),
             ],

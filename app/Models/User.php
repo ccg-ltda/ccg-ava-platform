@@ -24,6 +24,9 @@ class User extends Authenticatable
     /** Mirrors the column default so models built in memory are active too. */
     protected $attributes = ['is_active' => true];
 
+    /** The Workspace this user is acting in during the current request (set by EnsureWorkspaceContext; never stored). */
+    private ?Workspace $actingWorkspace = null;
+
     protected static function booted(): void
     {
         static::creating(function ($user) {
@@ -76,23 +79,47 @@ class User extends Authenticatable
         return $this->belongsToMany(Workspace::class, 'workspace_user')->withPivot('role')->withTimestamps();
     }
 
+    public function actingIn(Workspace $workspace): static
+    {
+        $this->actingWorkspace = $workspace;
+
+        return $this;
+    }
+
     /**
-     * Membership is the authorization source. Superusers may enter any Workspace.
+     * Whether this user is a superuser acting inside the given Workspace with platform privileges: only inside the administrative
+     * Workspace (Desarrollo_DEV). Being superuser lets the account ENTER any Workspace, but inside a client Workspace it carries no
+     * platform privilege (role catalog, Workspaces, Organizations, cross-Workspace administration). Single definition of that rule.
+     */
+    public function isSuperuserIn(Workspace $workspace): bool
+    {
+        return $this->is_superuser && $workspace->isAdministrative();
+    }
+
+    /** The same rule for the Workspace of the current request (false before EnsureWorkspaceContext has bound one). */
+    public function isPlatformSuperuser(): bool
+    {
+        return $this->actingWorkspace !== null && $this->isSuperuserIn($this->actingWorkspace);
+    }
+
+    /**
+     * Membership is the authorization source. A superuser may enter the administrative Workspace without one; a client Workspace
+     * only through an explicit membership (audited in that Workspace), so being a superuser never opens a client's private data.
      */
     public function canAccessWorkspace(Workspace $workspace): bool
     {
-        return $this->is_superuser
+        return $this->isSuperuserIn($workspace)
             || $this->workspaces()->whereKey($workspace->getKey())->exists();
     }
 
     /**
      * Role of the user inside the given Workspace (null when none).
-     * A superuser without an explicit membership acts as admin.
+     * A superuser without an explicit membership acts as admin in the administrative Workspace only.
      */
     public function roleInWorkspace(Workspace $workspace): ?string
     {
         $role = $this->workspaces()->whereKey($workspace->getKey())->first()?->pivot->role;
 
-        return $role ?? ($this->is_superuser ? 'admin' : null);
+        return $role ?? ($this->isSuperuserIn($workspace) ? 'admin' : null);
     }
 }

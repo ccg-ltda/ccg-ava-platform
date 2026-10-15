@@ -14,6 +14,7 @@ import ChatPanel from './Partials/ChatPanel';
 import ConnectionPanel from './Partials/ConnectionPanel';
 import ConversationList from './Partials/ConversationList';
 import { DemoPanel } from './Partials/DemoTools';
+import { ActiveAccessNotice, PrivateAccessPanel } from './Partials/PrivateAccessPanel';
 import StatusFilter from './Partials/StatusFilter';
 
 const TAB_IDS = ['conversaciones', 'conexion'];
@@ -25,7 +26,7 @@ const ALL = { value: '', label: 'Todos' };
  * (AI, waiting for an agent, in attention, resolved) comes from the server, and so do the actions the user has on a
  * conversation; the page refreshes itself from the server while it is open, so nothing is guessed in the browser.
  */
-export default function Index({ chatbot, channel, conversations, counts, selected, agents, filters, options, savedFilters, demo, reportEndpoint, canConfigure, scope }) {
+export default function Index({ chatbot, channel, conversations, counts, selected, agents, filters, options, savedFilters, demo, reportEndpoint, canConfigure, scope, privateAccess }) {
     const [tab, selectTab] = useUrlTab(TAB_IDS);
     const workspaceId = scope.readOnly ? scope.workspace.id : undefined;
     const channelMode = Boolean(channel);
@@ -108,6 +109,8 @@ export default function Index({ chatbot, channel, conversations, counts, selecte
         </div>
     );
 
+    const content = privateAccess?.locked ? <PrivateAccessPanel access={privateAccess} workspace={scope.workspace} counts={counts} /> : inbox;
+
     return (
         <>
             <Head title={channelMode ? `${channel.label} · ${chatbot.name}` : 'Conversaciones'} />
@@ -151,6 +154,7 @@ export default function Index({ chatbot, channel, conversations, counts, selecte
             </div>
 
             <ReadOnlyWorkspaceNotice scope={scope} what="las conversaciones" />
+            {privateAccess?.grant && <ActiveAccessNotice access={privateAccess} />}
 
             {savedFilters && <SavedFilters scope="conversations" saved={savedFilters} criteria={criteria} resolve={resolve} onApply={applySaved} />}
 
@@ -163,11 +167,11 @@ export default function Index({ chatbot, channel, conversations, counts, selecte
                     selectedIndex={tab}
                     onChange={selectTab}
                 >
-                    {inbox}
+                    {content}
                     <ConnectionPanel channel={channel} chatbot={chatbot} reportEndpoint={reportEndpoint} canConfigure={canConfigure} workspaceId={workspaceId} />
                 </Tabs>
             ) : (
-                inbox
+                content
             )}
         </>
     );

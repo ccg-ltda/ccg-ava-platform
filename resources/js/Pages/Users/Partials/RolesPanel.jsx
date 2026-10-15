@@ -13,29 +13,36 @@ import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import { TableWrap, Td, Th } from '@/Components/Table';
 import TextInput from '@/Components/TextInput';
-import { platformPermissions, roleTone } from '@/config/roles';
+import { roleTone } from '@/config/roles';
 import usePagedList from '@/Hooks/usePagedList';
+import { groupPermissions, permissionLabel } from '@/lib/permissions';
 
 const VISIBLE_PERMISSIONS = 3;
 
-/** Checkbox list of the permission catalog (permissions are defined by the system, never created here). */
-function PermissionPicker({ permissions, selected, onChange, error }) {
+/** Checkbox list of the permission catalog grouped by area (permissions are defined by the system, never created here). */
+function PermissionPicker({ catalog, selected, onChange, error }) {
     const toggle = (name) => onChange(selected.includes(name) ? selected.filter((item) => item !== name) : [...selected, name]);
 
     return (
-        <fieldset>
+        <fieldset className="space-y-4">
             <legend className="text-sm font-medium text-ink">Permisos</legend>
-            <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                {permissions.map((name) => (
-                    <label key={name} className="flex cursor-pointer items-start gap-2 rounded-lg border border-field px-3 py-2 text-sm text-ink transition-colors duration-150 hover:border-primary/40 has-checked:border-primary/50 has-checked:bg-primary-soft/40">
-                        <Checkbox checked={selected.includes(name)} onChange={() => toggle(name)} />
-                        <span className="min-w-0">
-                            {name}
-                            {platformPermissions[name] && <span className="block text-xs text-ink-muted">{platformPermissions[name]}</span>}
-                        </span>
-                    </label>
-                ))}
-            </div>
+            {groupPermissions(catalog).map((group) => (
+                <div key={group.id}>
+                    <p className="text-xs font-semibold tracking-wide text-ink-muted uppercase">{group.label}</p>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                        {group.items.map((item) => (
+                            <label key={item.name} className="flex cursor-pointer items-start gap-2 rounded-lg border border-field px-3 py-2 text-sm text-ink transition-colors duration-150 hover:border-primary/40 has-checked:border-primary/50 has-checked:bg-primary-soft/40">
+                                <Checkbox checked={selected.includes(item.name)} onChange={() => toggle(item.name)} />
+                                <span className="min-w-0">
+                                    {item.label}
+                                    {item.description && <span className="block text-xs text-ink-muted">{item.description}</span>}
+                                    <span className="block font-mono text-[11px] text-ink-muted">{item.name}</span>
+                                </span>
+                            </label>
+                        ))}
+                    </div>
+                </div>
+            ))}
             <InputError message={error} className="mt-1" />
         </fieldset>
     );
@@ -43,7 +50,7 @@ function PermissionPicker({ permissions, selected, onChange, error }) {
 
 function RoleModal({ show, title, onClose, onSubmit, processing, children }) {
     return (
-        <Modal show={show} onClose={onClose} maxWidth="md">
+        <Modal show={show} onClose={onClose} maxWidth="2xl">
             <form onSubmit={onSubmit} className="p-6">
                 <h2 className="text-lg font-bold text-ink">{title}</h2>
                 <div className="mt-4 space-y-4">{children}</div>
@@ -65,7 +72,7 @@ function RoleModal({ show, title, onClose, onSubmit, processing, children }) {
  * (`canManage`) can create roles or change their permissions (roles are never deleted), because the catalog
  * is shared by every Workspace. The server enforces all of it.
  */
-export default function RolesPanel({ roles, permissionNames, perPageOptions, canManage }) {
+export default function RolesPanel({ roles, permissionCatalog, perPageOptions, canManage }) {
     const [creating, setCreating] = useState(false);
     const [editing, setEditing] = useState(null);
 
@@ -132,8 +139,8 @@ export default function RolesPanel({ roles, permissionNames, perPageOptions, can
                                 <div className="flex flex-wrap gap-1.5">
                                     {role.permissions.length === 0 && <span className="text-xs text-ink-muted">Sin permisos</span>}
                                     {role.permissions.slice(0, VISIBLE_PERMISSIONS).map((permission) => (
-                                        <Badge key={permission} className="normal-case tracking-normal">
-                                            {permission}
+                                        <Badge key={permission} className="normal-case tracking-normal" title={permission}>
+                                            {permissionLabel(permissionCatalog, permission)}
                                         </Badge>
                                     ))}
                                     {role.permissions.length > VISIBLE_PERMISSIONS && (
@@ -168,11 +175,11 @@ export default function RolesPanel({ roles, permissionNames, perPageOptions, can
                     <TextInput id="role_name" className="mt-1" value={create.data.name} onChange={(e) => create.setData('name', e.target.value)} placeholder="ejemplo: coordinador" invalid={Boolean(create.errors.name)} required />
                     <InputError message={create.errors.name} className="mt-1" />
                 </div>
-                <PermissionPicker permissions={permissionNames} selected={create.data.permissions} onChange={(value) => create.setData('permissions', value)} error={create.errors.permissions} />
+                <PermissionPicker catalog={permissionCatalog} selected={create.data.permissions} onChange={(value) => create.setData('permissions', value)} error={create.errors.permissions} />
             </RoleModal>
 
             <RoleModal show={Boolean(editing)} title={`Permisos de ${editing?.name ?? ''}`} onClose={() => setEditing(null)} onSubmit={submitEdit} processing={edit.processing}>
-                <PermissionPicker permissions={permissionNames} selected={edit.data.permissions} onChange={(value) => edit.setData('permissions', value)} error={edit.errors.permissions} />
+                <PermissionPicker catalog={permissionCatalog} selected={edit.data.permissions} onChange={(value) => edit.setData('permissions', value)} error={edit.errors.permissions} />
             </RoleModal>
         </Card>
     );

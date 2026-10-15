@@ -23,12 +23,32 @@ export function unmetRequirements(catalog, selected) {
 }
 
 /**
- * Modules to pick for a plan, grouped by category. Controlled: `selected` is a list of module ids, `onChange(ids)`.
+ * The catalog regrouped as [{ group, categories: [{ ...category, modules }] }]: first the conceptual group of Ava (platform, shared
+ * capabilities, commercial solutions) and inside it the organizational category. A group or category without modules is dropped.
+ */
+export function groupedCatalog(catalog) {
+    const byGroup = new Map();
+
+    catalog.forEach((category) =>
+        category.modules.forEach((module) => {
+            const entry = byGroup.get(module.group.key) ?? { group: module.group, categories: new Map() };
+            const inCategory = entry.categories.get(category.id) ?? { ...category, modules: [] };
+            inCategory.modules.push(module);
+            entry.categories.set(category.id, inCategory);
+            byGroup.set(module.group.key, entry);
+        }),
+    );
+
+    return [...byGroup.values()].sort((a, b) => a.group.sort - b.group.sort).map((entry) => ({ group: entry.group, categories: [...entry.categories.values()] }));
+}
+
+/**
+ * Modules to pick for a plan, grouped by Ava's conceptual groups and then by category. Controlled: `selected` is a list of module ids, `onChange(ids)`.
  * Pending modules can be included (they are reserved for the future) but are labelled as not working yet. A module that
  * was switched off can stay where it already is but cannot be added.
  */
 export default function ModuleChecklist({ catalog, selected, onChange, error, disabled = false, idPrefix = 'module' }) {
-    const groups = catalog.filter((category) => category.modules.length > 0);
+    const groups = groupedCatalog(catalog);
 
     const toggle = (id) => onChange(selected.includes(id) ? selected.filter((value) => value !== id) : [...selected, id]);
 
@@ -47,7 +67,7 @@ export default function ModuleChecklist({ catalog, selected, onChange, error, di
                         {unmet.map(({ module, missing }) => (
                             <li key={module.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
                                 <span>
-                                    «{module.name}» necesita {missing.map((required) => `«${required.name}»`).join(', ')} para recibir y gestionar mensajes.
+                                    «{module.name}» necesita {missing.map((required) => `«${required.name}»`).join(', ')} para funcionar.
                                 </span>
                                 {!disabled && (
                                     <button type="button" onClick={() => onChange([...selected, ...missing.map((required) => required.id).filter((id) => id && !selected.includes(id))])} className="font-semibold underline underline-offset-2">
@@ -59,7 +79,10 @@ export default function ModuleChecklist({ catalog, selected, onChange, error, di
                     </ul>
                 </Alert>
             )}
-            {groups.map((category) => (
+            {groups.map(({ group, categories }) => (
+                <section key={group.key} className="space-y-4" aria-label={group.name}>
+                    <h3 className="border-b border-line pb-1 text-sm font-bold text-ink">{group.name}</h3>
+                    {categories.map((category) => (
                 <fieldset key={category.id} className="min-w-0">
                     <legend className="text-xs font-semibold tracking-wider text-ink-muted uppercase">{category.name}</legend>
                     <ul className="mt-2 grid gap-2 lg:grid-cols-2">
@@ -95,6 +118,8 @@ export default function ModuleChecklist({ catalog, selected, onChange, error, di
                         })}
                     </ul>
                 </fieldset>
+                    ))}
+                </section>
             ))}
             <InputError message={error} />
         </div>

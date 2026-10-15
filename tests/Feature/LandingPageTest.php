@@ -96,6 +96,7 @@ class LandingPageTest extends TestCase
     {
         $this->seedRoleCatalog();
         $workspace = Workspace::create(['organization_id' => Organization::create(['name' => 'Org'])->id, 'code' => 'SU_WS', 'name' => 'Su']);
+        config(['workspace.admin_code' => 'SU_WS']); // a superuser enters without a membership only in the administrative Workspace
         $user = User::factory()->create(['password' => 'password']);
         $user->forceFill(['is_superuser' => true])->save();
 

@@ -6,6 +6,7 @@ use App\Models\Chatbot;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\Organization;
+use App\Models\SupportAccess;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\AgentAccess;
@@ -426,12 +427,18 @@ class ConversationsTest extends TestCase
         [$botOther] = $this->liveBot($other, 'Bot XYZ');
         $conversation = $this->seedConversation($botClient, '573001000001', [['in', 'text', 'hola ABC', now()]]);
         $this->seedConversation($botOther, '573002000002', [['in', 'text', 'hola XYZ', now()]]);
-        $this->actAs('admin', superuser: true, in: $dev);
+        $admin = $this->actAs('admin', superuser: true, in: $dev);
 
+        // Without a support access the content of another Workspace is locked (only counts are given); see PrivacyTest.
+        $this->get($this->url($botClient, query: "?workspace={$client->id}"))->assertInertia(fn (AssertableInertia $p) => $p
+            ->where('privateAccess.locked', true)->has('conversations', 0)->where('selected', null));
+        $this->get($this->url($botClient, query: "?workspace={$client->id}&c={$conversation->id}"))->assertForbidden();
+
+        SupportAccess::create(['workspace_id' => $client->id, 'user_id' => $admin->id, 'data_type' => 'conversations', 'reason' => 'ticket de prueba de soporte', 'expires_at' => now()->addMinutes(30)]);
         $page = $this->get($this->url($botClient, query: "?workspace={$client->id}&c={$conversation->id}"));
         $page->assertInertia(fn (AssertableInertia $p) => $p
             ->where('scope.readOnly', true)->where('scope.workspace.code', 'EMPRESA_ABC')->where('canConfigure', false)
-            ->where('selected.items.0.body', 'hola ABC')->has('conversations', 1));
+            ->where('selected.items.0.body', 'hola ABC')->where('selected.contactId', '••••0001')->has('conversations', 1));
         $this->assertStringNotContainsString('hola XYZ', $page->getContent());
 
         // The chatbot of ABC does not exist in the Workspace being looked at when the parameter names another one.

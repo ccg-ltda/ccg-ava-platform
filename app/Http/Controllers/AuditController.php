@@ -35,7 +35,7 @@ class AuditController extends Controller
         $filters = $request->filters();
         // Refuses (403) a Workspace parameter from anyone who may not choose a scope, before anything is read.
         $chosen = $this->scope->resolve($viewer, $workspace, $filters['workspace']);
-        $present = new AuditPresenter($workspace->settingsOrDefault());
+        $present = new AuditPresenter($workspace->settingsOrDefault(), $workspace->id);
 
         $page = $this->report->ordered($this->report->query($workspace, $viewer, $filters))
             ->paginate($request->perPage(), ['*'], 'page')
@@ -69,7 +69,7 @@ class AuditController extends Controller
         $filters = $request->filters();
         $chosen = $this->scope->resolve($viewer, $workspace, $filters['workspace']);
         $settings = $workspace->settingsOrDefault();
-        $present = new AuditPresenter($settings);
+        $present = new AuditPresenter($settings, $workspace->id);
         $limit = (int) config('audit.pdf_max_events');
 
         $query = $this->report->query($workspace, $viewer, $filters);

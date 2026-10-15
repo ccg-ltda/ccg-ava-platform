@@ -53,11 +53,32 @@ class UserController extends Controller
             'permissions' => fn () => $this->permissionsPage($request),
             // The role editor offers every permission, whatever page of the permissions list is showing.
             'permissionNames' => fn () => Permission::orderBy('name')->pluck('name'),
+            // What each permission means and the area it belongs to (config/permissions.php), to show them grouped and in plain words.
+            'permissionCatalog' => fn () => $this->permissionCatalog(),
             'permissionRoles' => fn () => $this->catalog->all()->map(fn ($role) => ['id' => $role->id, 'name' => $role->name])->values(),
             'canManageRoles' => $actor->can('manage-roles'),
             'workspaces' => fn () => $this->workspaces->overview($actor, $request),
             'organizations' => fn () => $this->workspaces->organizations($actor, $request),
         ]);
+    }
+
+    /** @return array{groups: array<string, string>, items: list<array<string, mixed>>} */
+    private function permissionCatalog(): array
+    {
+        $described = config('permissions.permissions');
+
+        return [
+            'groups' => config('permissions.groups'),
+            // A permission the catalog does not describe is still listed (by its name) so nothing assignable is hidden.
+            'items' => Permission::where('guard_name', 'web')->orderBy('name')->pluck('name')
+                ->map(fn (string $name) => [
+                    'name' => $name,
+                    'label' => $described[$name]['label'] ?? $name,
+                    'description' => $described[$name]['description'] ?? null,
+                    'group' => $described[$name]['group'] ?? 'general',
+                    'platform' => (bool) ($described[$name]['platform'] ?? false),
+                ])->values()->all(),
+        ];
     }
 
     /** @return list<array<string, mixed>> */
@@ -97,6 +118,8 @@ class UserController extends Controller
         );
 
         $locked = $this->identity->lockedIds($actor, $page->getCollection(), $workspace);
+        // What each role allows, so the list can show a person's effective permissions (one query for the whole page).
+        $grants = $this->catalog->all()->mapWithKeys(fn ($role) => [$role->name => $role->permissions->pluck('name')->sort()->values()->all()]);
 
         return [
             'data' => $page->getCollection()->map(fn (User $user) => [
@@ -104,6 +127,7 @@ class UserController extends Controller
                 'name' => $user->name,
                 'email' => $user->email,
                 'roles' => [$user->pivot->role],
+                'grants' => $grants[$user->pivot->role] ?? [],
                 'created_at' => $workspace->settingsOrDefault()->formatDate($user->created_at),
                 'identityLocked' => in_array($user->id, $locked, true),
                 'isActive' => $user->is_active,
@@ -207,7 +231,12 @@ class UserController extends Controller
         $currentRole = $current->users()->whereKey($user->id)->first()->pivot->role;
         $changingPassword = filled($data['password'] ?? null);
 
-        if ($actor->is($user) && ! $user->is_superuser) {
+        // The route lets in either permission; each kind of change needs its own.
+        $permissions = $request->attributes->get('workspace_permissions', []);
+        abort_if(($this->identityChanged($data, $user) || $changingPassword) && ! in_array('edit-users', $permissions, true), 403);
+        abort_if(($moving || $data['role'] !== $currentRole) && ! in_array('assign-roles', $permissions, true), 403);
+
+        if ($actor->is($user) && ! $actor->isPlatformSuperuser()) {
             if ($data['role'] !== $currentRole) {
                 throw ValidationException::withMessages(['role' => 'No puedes cambiar tu propio rol.']);
             }
@@ -228,6 +257,10 @@ class UserController extends Controller
             throw ValidationException::withMessages([
                 'email' => 'Esta cuenta tiene acceso a otros Workspaces; solo un superusuario puede modificar su nombre, correo o contraseña.',
             ]);
+        }
+
+        if ($moving || $data['role'] !== $currentRole) {
+            $this->workspaces->assertMayReceive($target, $user, 'workspace_id');
         }
 
         if ($moving && $target->users()->whereKey($user->id)->exists()) {

@@ -8,13 +8,13 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Requires a permission granted by the user's role inside the active Workspace
- * (workspace_user.role -> Spatie role -> permissions). Must run after EnsureWorkspaceContext.
+ * (workspace_user.role -> Spatie role -> permissions). Several permissions mean "any of them". Must run after EnsureWorkspaceContext.
  */
 class EnsureWorkspacePermission
 {
-    public function handle(Request $request, Closure $next, string $permission): Response
+    public function handle(Request $request, Closure $next, string ...$permissions): Response
     {
-        abort_unless(in_array($permission, $request->attributes->get('workspace_permissions', []), true), 403);
+        abort_unless(array_intersect($permissions, $request->attributes->get('workspace_permissions', [])) !== [], 403);
 
         return $next($request);
     }

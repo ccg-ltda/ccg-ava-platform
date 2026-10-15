@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Workspace;
+use App\Privacy\Mask;
 use App\Reports\ReportPeriod;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -56,7 +57,8 @@ class WorkspaceReport
                 ->map(fn ($user) => [
                     'id' => $user->id,
                     'name' => $user->name,
-                    'email' => $user->email,
+                    // The accounts of another Workspace's team are seen without their full email.
+                    'email' => $global || ! $target->is($active) ? Mask::email($user->email) : $user->email,
                     'role' => $user->role,
                     'workspace' => $global ? $user->workspace : null,
                     'createdAt' => $settings->formatDate(CarbonImmutable::parse($user->created_at, 'UTC')),

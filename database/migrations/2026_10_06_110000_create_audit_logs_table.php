@@ -22,6 +22,10 @@ return new class extends Migration
             $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
             $table->string('user_name', 255);
             $table->string('user_email', 255);
+            // Who did it: a person (`user`) or an automatic process of Ava (`system`: no `user_id`, the source is named in `user_name`).
+            $table->string('actor', 8)->default('user');
+            // Whether the operation succeeded or failed (a connection test that did not pass, an execution that failed).
+            $table->string('outcome', 8)->default('success');
             $table->string('action', 16);
             $table->string('resource_type', 32);
             $table->unsignedBigInteger('resource_id')->nullable();
@@ -34,6 +38,8 @@ return new class extends Migration
             $table->index(['workspace_id', 'created_at']);
             $table->index(['workspace_id', 'resource_type']);
             $table->index(['workspace_id', 'user_id']);
+            $table->index(['workspace_id', 'actor']);
+            $table->index(['workspace_id', 'outcome']);
             $table->index('created_at');
         });
     }

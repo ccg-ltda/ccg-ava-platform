@@ -15,6 +15,7 @@ use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\ModuleCatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Inertia\Testing\AssertableInertia;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -94,6 +95,7 @@ class CommercialControlsTest extends TestCase
             'professionals' => ['service_catalog'],
             'bookings' => ['service_catalog', 'professionals'],
             'calendar_providers' => ['bookings', 'integrations'],
+            'campaigns' => ['customers'],
         ], $access->dependencies());
 
         $this->contract($this->client, ['assistants', 'dashboard']);
@@ -316,15 +318,20 @@ class CommercialControlsTest extends TestCase
         }
     }
 
-    public function test_being_superuser_is_neither_required_nor_enough_in_the_administrative_workspace(): void
+    public function test_the_permission_comes_from_the_role_or_from_being_superuser_inside_the_administrative_workspace(): void
     {
-        // A superuser or admin of the administrative Workspace without the permission: refused.
-        foreach ([true, false] as $superuser) {
-            $this->actIn($this->dev, 'admin', $superuser);
-            $this->get('/plans')->assertForbidden();
-            $this->post('/plans', ['name' => 'X'])->assertForbidden();
-            $this->post('/module-categories', ['name' => 'X'])->assertForbidden();
-        }
+        // An admin of the administrative Workspace without the permission and without being superuser: refused.
+        $this->actIn($this->dev, 'admin', false);
+        $this->get('/plans')->assertForbidden();
+        $this->post('/plans', ['name' => 'X'])->assertForbidden();
+        $this->post('/module-categories', ['name' => 'X'])->assertForbidden();
+
+        // A superuser working inside the administrative Workspace always administers plans and the catalog, whatever their role
+        // (otherwise the account that assigns roles could never open Planes).
+        $this->actIn($this->dev, 'admin', true);
+        $this->get('/plans')->assertOk();
+        $this->post('/plans', ['name' => 'Por superusuario'])->assertSessionHasNoErrors();
+        $this->get('/dashboard')->assertInertia(fn (AssertableInertia $page) => $page->where('platform', true));
 
         // With the permission, a plain user (not superuser) is enough.
         $user = $this->actIn($this->dev, 'plataforma');

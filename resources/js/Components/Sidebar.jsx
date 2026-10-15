@@ -1,7 +1,7 @@
 import { Bot, X } from 'lucide-react';
 import { visibleNavigation } from '@/config/navigation';
 import useAccess from '@/Hooks/useAccess';
-import NavItem from './NavItem';
+import NavSection from './NavSection';
 
 /**
  * Left navigation. Desktop: full width. Tablet: collapsed to icons. Mobile: sliding panel
@@ -24,7 +24,7 @@ export default function Sidebar({ workspace, open, onClose }) {
             />
 
             <aside
-                className={`brand-surface sidebar-surface fixed inset-y-0 left-0 z-50 flex w-64 flex-col text-white transition-transform duration-300 ease-out md:sticky md:top-16 md:z-auto md:h-[calc(100dvh-4rem)] md:w-16 md:translate-x-0 md:self-start lg:w-64 ${
+                className={`brand-surface sidebar-surface fixed inset-y-0 left-0 z-50 flex w-64 flex-col text-white transition-transform duration-300 ease-out md:sticky md:top-16 md:z-auto md:h-[calc(100dvh-4rem)] md:w-16 md:translate-x-0 md:self-start lg:w-64 shrink-0 ${
                     open ? 'translate-x-0' : '-translate-x-full'
                 }`}
                 aria-label="Navegación principal"
@@ -49,19 +49,9 @@ export default function Sidebar({ workspace, open, onClose }) {
                     </button>
                 </div>
 
-                <nav className="mt-6 flex-1 space-y-5 overflow-y-auto px-3 py-4">
+                <nav className="mt-6 min-h-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto px-3 py-4 [scrollbar-gutter:stable]">
                     {sections.map((section) => (
-                        <div key={section.label ?? section.items[0].route} className="space-y-1">
-                            {section.label && (
-                                <p className="px-3 pb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-white/70 md:hidden lg:block">
-                                    {section.label}
-                                </p>
-                            )}
-                            <div className="hidden h-px bg-white/20 md:block lg:hidden" />
-                            {section.items.map((item) => (
-                                <NavItem key={item.route} item={item} active={route().current(item.route)} onNavigate={onClose} />
-                            ))}
-                        </div>
+                        <NavSection key={section.label ?? section.items[0].route} section={section} onNavigate={onClose} />
                     ))}
                 </nav>
 

@@ -28,7 +28,7 @@ class RolesSeederTest extends TestCase
             Permission::whereIn('name', ['view-conversations', 'reply-conversations', 'manage-conversations'])->pluck('name')->sort()->values()->all(),
         );
         $this->assertSame(['reply-conversations', 'view-conversations', 'view-dashboard'], $this->names('agente'));
-        $this->assertSame(Permission::count() - 2, count($this->names('admin')), 'admin never receives the commercial permissions');
+        $this->assertSame(Permission::count() - 3, count($this->names('admin')), 'admin never receives the commercial or the private-data permissions');
         $this->assertSame(['manage-modules', 'manage-plans', 'view-dashboard'], $this->names('plataforma'));
     }
 

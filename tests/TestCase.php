@@ -31,12 +31,13 @@ abstract class TestCase extends BaseTestCase
      */
     protected function seedRoleCatalog(): void
     {
-        $permissions = collect(['manage-users', 'manage-settings', 'view-dashboard', 'view-users', 'view-chatbots', 'manage-chatbots', 'view-conversations', 'reply-conversations', 'manage-conversations', 'view-bookings', 'manage-bookings', 'manage-services', 'manage-plans', 'manage-modules'])
+        $permissions = collect(['manage-users', 'create-users', 'edit-users', 'assign-roles', 'deactivate-users', 'manage-settings', 'export-audit', 'view-dashboard', 'view-users', 'view-chatbots', 'manage-chatbots', 'view-conversations', 'reply-conversations', 'manage-conversations', 'view-bookings', 'manage-bookings', 'manage-services', 'view-customers', 'manage-customers', 'view-campaigns', 'manage-campaigns', 'manage-plans', 'manage-modules', 'access-private-data'])
             ->each(fn (string $name) => Permission::findOrCreate($name, 'web'));
 
         // `admin` never holds the commercial permissions: only `plataforma` does (as in the seeder).
-        Role::findOrCreate('admin', 'web')->syncPermissions($permissions->reject(fn (string $permission) => in_array($permission, ['manage-plans', 'manage-modules']))->all());
+        Role::findOrCreate('admin', 'web')->syncPermissions($permissions->reject(fn (string $permission) => in_array($permission, ['manage-plans', 'manage-modules', 'access-private-data']))->all());
         Role::findOrCreate('plataforma', 'web')->syncPermissions(['view-dashboard', 'manage-plans', 'manage-modules']);
+        Role::findOrCreate('soporte', 'web')->syncPermissions(['view-dashboard', 'view-conversations', 'access-private-data']);
         Role::findOrCreate('supervisor', 'web')->syncPermissions(['view-dashboard', 'view-users', 'view-chatbots']);
         Role::findOrCreate('cliente', 'web')->syncPermissions(['view-dashboard']);
         Role::findOrCreate('agente', 'web')->syncPermissions(['view-dashboard', 'view-conversations', 'reply-conversations']);
@@ -46,7 +47,7 @@ abstract class TestCase extends BaseTestCase
      * Act as a user who is a member of a Workspace and has it selected in the session,
      * i.e. the state the app expects after a successful login.
      */
-    protected function actingAsWorkspaceMember(User $user, string $role = 'cliente'): static
+    protected function actingAsWorkspaceMember(User $user, string $role = 'cliente', bool $administrative = false): static
     {
         $this->seedRoleCatalog();
         Role::findOrCreate($role, 'web');
@@ -57,6 +58,12 @@ abstract class TestCase extends BaseTestCase
             'name' => 'Test Workspace',
         ]);
         $workspace->users()->syncWithoutDetaching([$user->id => ['role' => $role]]);
+
+        // A superuser carries platform privileges only inside the administrative Workspace: a test that needs them passes
+        // `$administrative = true`, which makes this Workspace the administrative one; otherwise it is a plain client Workspace.
+        if ($user->is_superuser && $administrative) {
+            config(['workspace.admin_code' => $workspace->code]);
+        }
 
         return $this->actingAs($user)->withSession(['workspace_id' => $workspace->id]);
     }
