@@ -292,6 +292,7 @@ class ModuleCatalog
     public function grouped(): array
     {
         $names = Module::pluck('name', 'key');
+        $categoryNames = ModuleCategory::pluck('name', 'key');
 
         return ModuleCategory::with(['modules' => fn ($q) => $q->withCount('plans')->orderBy('name')])
             ->orderBy('sort_order')->orderBy('name')->get()
@@ -310,6 +311,10 @@ class ModuleCatalog
                     'group' => $this->groupMeta($this->access->groupOf($module->key, $category->key)),
                     'isActive' => $module->is_active,
                     'implemented' => $module->isImplemented(),
+                    // Other solutions that reuse this very module (config `also_for`): a label only, it enables nothing.
+                    'alsoFor' => collect(config("modules.implemented.{$module->key}.also_for", []))
+                        ->filter(fn (string $key) => $key !== $category->key && isset($categoryNames[$key]))
+                        ->map(fn (string $key) => ['key' => $key, 'name' => $categoryNames[$key]])->values()->all(),
                     'route' => config("modules.implemented.{$module->key}.route"),
                     'plansCount' => $module->plans_count,
                     'requires' => collect($this->access->dependencies()[$module->key] ?? [])

@@ -39,5 +39,14 @@ return [
     ],
 
     'max_selected' => 2000,
-    'body_max' => 1000,
+
+    /*
+     * Length of a message body, in Unicode characters (code points: an emoji or an accented letter is ONE, a line break is ONE, and the
+     * {{variable}} markers count as written, not as the value they will be replaced by). 1024 is the limit of the BODY component of a
+     * WhatsApp Business Platform template (Meta, "Template components"; verified 2026-10). Header (60), footer (60) and buttons are components
+     * Ava's templates do not have, so they have no limit here: add them together with the component. Meta's own way of counting (code
+     * points vs UTF-16 units) is not documented; the count here is the stricter one for text without astral characters and the same
+     * one used by the server (`MessageTemplates::length`) and the editor (`resources/js/config/messageLimits.js`).
+     */
+    'body_max' => 1024,
 ];

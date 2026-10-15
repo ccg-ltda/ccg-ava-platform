@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Rules\InternationalPhone;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -23,11 +24,12 @@ class SaveProfessionalRequest extends FormRequest
     public function rules(): array
     {
         $workspace = $this->attributes->get('workspace');
+        $stored = $this->route('professional') ? $workspace->professionals()->whereKey($this->route('professional'))->value('phone') : null;
 
         return [
             'name' => ['required', 'string', 'max:120', Rule::unique('professionals', 'name')->where('workspace_id', $workspace->id)->ignore($this->route('professional'))],
             'specialty' => ['nullable', 'string', 'max:120'],
-            'phone' => ['nullable', 'string', 'max:32'],
+            'phone' => ['nullable', 'string', 'max:32', new InternationalPhone($stored)],
             'service_ids' => ['nullable', 'array'],
             'service_ids.*' => ['integer', Rule::exists('services', 'id')->where('workspace_id', $workspace->id)],
             'schedule' => ['nullable', 'array', 'max:56'],

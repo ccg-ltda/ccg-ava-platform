@@ -16,7 +16,6 @@ import SecondaryButton from '@/Components/SecondaryButton';
 import Select from '@/Components/Select';
 import Tabs from '@/Components/Tabs';
 import { TableWrap, Td, Th } from '@/Components/Table';
-import Textarea from '@/Components/Textarea';
 import TextInput from '@/Components/TextInput';
 import useAccess from '@/Hooks/useAccess';
 import useFormatDateTime from '@/Hooks/useFormatDateTime';
@@ -24,6 +23,7 @@ import usePagedList from '@/Hooks/usePagedList';
 import useUrlTab from '@/Hooks/useUrlTab';
 import AppLayout from '@/Layouts/AppLayout';
 import StatusBadge from './Partials/StatusBadge';
+import LimitedTextarea from './Partials/LimitedTextarea';
 import TemplateModal from './Partials/TemplateModal';
 
 /** A new campaign starts as a draft with a name and a channel; audience and message are completed on its own page. */
@@ -65,7 +65,7 @@ function NewCampaignModal({ channels, templates, bodyMax, onClose }) {
                     </div>
                     <div>
                         <InputLabel htmlFor="campaign_body" value="Mensaje inicial" />
-                        <Textarea id="campaign_body" className="mt-1" value={data.body} maxLength={bodyMax} onChange={(e) => setData('body', e.target.value)} invalid={Boolean(errors.body)} />
+                        <LimitedTextarea id="campaign_body" value={data.body} onChange={(value) => setData('body', value)} max={bodyMax} minRows={6} invalid={Boolean(errors.body)} />
                         <p className="mt-1 text-xs text-ink-muted">Podrás ajustarlo y previsualizarlo con variables en la página de la campaña.</p>
                         <InputError message={errors.body} className="mt-1" />
                     </div>

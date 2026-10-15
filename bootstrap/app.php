@@ -6,11 +6,22 @@ use App\Http\Middleware\EnsureWorkspaceContext;
 use App\Http\Middleware\EnsureWorkspaceModule;
 use App\Http\Middleware\EnsureWorkspacePermission;
 use App\Http\Middleware\HandleInertiaRequests;
+use Illuminate\Auth\Middleware\Authorize;
+use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
+use Illuminate\Contracts\Session\Middleware\AuthenticatesSessions;
+use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
+use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Foundation\Http\Middleware\HandlePrecognitiveRequests;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Middleware\SubstituteBindings;
+use Illuminate\Routing\Middleware\ThrottleRequests;
+use Illuminate\Routing\Middleware\ThrottleRequestsWithRedis;
+use Illuminate\Session\Middleware\StartSession;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Spatie\Permission\Middleware\PermissionMiddleware;
 use Spatie\Permission\Middleware\RoleMiddleware;
 use Spatie\Permission\Middleware\RoleOrPermissionMiddleware;
@@ -32,6 +43,29 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->trustProxies(
             at: env('TRUSTED_PROXIES') === '*' ? '*' : array_filter(explode(',', (string) env('TRUSTED_PROXIES'))),
         );
+
+        // Authorization runs BEFORE route-model binding. Otherwise a person who may not use a route still learns whether an id exists
+        // (404 for a missing record, 403 for an existing one). None of these middleware reads a bound model, and `can:` is only used with
+        // model-less gates (routes/web.php), so this changes the status code of a refused request and nothing else. This is Laravel's own
+        // priority list (Illuminate\Foundation\Http\Kernel) with Authorize and Ava's four checks moved in front of SubstituteBindings.
+        $middleware->priority([
+            HandlePrecognitiveRequests::class,
+            EncryptCookies::class,
+            AddQueuedCookiesToResponse::class,
+            StartSession::class,
+            ShareErrorsFromSession::class,
+            AuthenticatesRequests::class,
+            ThrottleRequests::class,
+            ThrottleRequestsWithRedis::class,
+            AuthenticatesSessions::class,
+            AuthenticateAgent::class, // sets the Workspace of the agent API that EnsureWorkspaceModule reads
+            EnsureWorkspaceContext::class,
+            EnsurePlatformAdministration::class,
+            EnsureWorkspaceModule::class,
+            EnsureWorkspacePermission::class,
+            Authorize::class,
+            SubstituteBindings::class,
+        ]);
 
         $middleware->alias([
             'agent' => AuthenticateAgent::class,

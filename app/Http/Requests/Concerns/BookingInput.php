@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests\Concerns;
 
+use App\Rules\InternationalPhone;
+use App\Support\PhoneNumber;
 use Carbon\CarbonImmutable;
 
 /**
@@ -20,7 +22,7 @@ trait BookingInput
         return [
             'customer' => ['required', 'array'],
             'customer.name' => ['required', 'string', 'min:2', 'max:120'],
-            'customer.phone' => ['nullable', 'string', 'max:32', 'regex:/^[0-9+()\\-.\\s]{6,32}$/'],
+            'customer.phone' => ['nullable', 'string', 'max:32', new InternationalPhone(null, $this->verifiedContactDigits())],
             'customer.email' => ['nullable', 'email:rfc', 'max:160'],
             'notes' => ['nullable', 'string', 'max:500'],
         ];
@@ -41,10 +43,32 @@ trait BookingInput
         return CarbonImmutable::parse($this->validated('starts_at'), 'UTC')->utc();
     }
 
+    /**
+     * Only for the automation of a chatbot (agent API): the id of a WhatsApp conversation is a full international number that Meta
+     * writes without the "+", so a phone equal to THAT conversation's id is international even without it. Anyone else (staff, the
+     * public page) must type the "+": nothing here infers a country.
+     */
+    private function verifiedContactDigits(): ?string
+    {
+        if (! $this->attributes->has('chatbot')) {
+            return null;
+        }
+
+        $execution = $this->attributes->get('execution');
+        $channel = $execution ? $execution->conversation->channel : $this->input('channel');
+        $contact = $execution ? $execution->conversation->contact_id : $this->input('contact_id');
+
+        return $channel === 'whatsapp' && is_string($contact) && PhoneNumber::e164('+'.$contact) !== null ? $contact : null;
+    }
+
     /** @return array{name: string, phone: ?string, email: ?string} */
     public function customer(): array
     {
         $customer = $this->validated('customer');
+
+        if (filled($customer['phone'] ?? null) && trim($customer['phone']) === $this->verifiedContactDigits()) {
+            $customer['phone'] = '+'.trim($customer['phone']);
+        }
 
         return ['name' => trim($customer['name']), 'phone' => filled($customer['phone'] ?? null) ? trim($customer['phone']) : null, 'email' => filled($customer['email'] ?? null) ? trim($customer['email']) : null];
     }

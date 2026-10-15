@@ -12,6 +12,7 @@ use App\Models\Customer;
 use App\Models\Workspace;
 use App\Services\ListPagination;
 use App\Services\ModuleAccess;
+use App\Support\PhoneNumber;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -157,8 +158,12 @@ class CustomerController extends Controller
         }
 
         // The same normalized phone or email as the person who booked, or a booking made from one of this customer's own conversations.
-        $ids = $customer->phone_normalized === null && $customer->email_normalized === null ? collect() : $workspace->bookingCustomers()->where(function ($query) use ($customer) {
-            $query->when($customer->phone_normalized, fn ($q, $phone) => $q->orWhere('phone', $phone))
+        // A booking stores the digits of the number it was made with. They match when they are the SAME digits as the customer's number: its
+        // verified international digits when it has them (plus the same number written with the "00" call prefix, which is explicit), else
+        // its historical digits. A local number without a country prefix never matches an international one: the country is unknown.
+        $phones = $customer->phone_e164 ? [PhoneNumber::digits($customer->phone_e164), '00'.PhoneNumber::digits($customer->phone_e164)] : array_filter([$customer->phone_normalized]);
+        $ids = $customer->phone_normalized === null && $customer->email_normalized === null ? collect() : $workspace->bookingCustomers()->where(function ($query) use ($customer, $phones) {
+            $query->when($phones, fn ($q, $values) => $q->orWhereIn('phone', $values))
                 ->when($customer->email_normalized, fn ($q, $email) => $q->orWhereRaw('lower(email) = ?', [$email]));
         })->pluck('id');
         $conversationIds = $this->conversationIds($workspace, $customer);

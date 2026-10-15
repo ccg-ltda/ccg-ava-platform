@@ -2,8 +2,8 @@
 
 namespace App\Http\Requests;
 
-use App\Campaigns\MessageTemplates;
 use App\Customers\CustomerSearch;
+use App\Http\Requests\Concerns\ValidatesMessageBody;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -15,6 +15,8 @@ use Illuminate\Validation\Validator;
  */
 class SaveCampaignRequest extends FormRequest
 {
+    use ValidatesMessageBody;
+
     public function authorize(): bool
     {
         return true;
@@ -28,7 +30,7 @@ class SaveCampaignRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:120'],
             'message_template_id' => ['nullable', 'integer', Rule::exists('message_templates', 'id')->where('workspace_id', $workspace->id)->where('is_active', true)],
-            'body' => ['required', 'string', 'max:'.config('campaigns.body_max')],
+            'body' => ['required', 'string'],
             'channel' => ['required', Rule::in(array_keys(config('campaigns.channels')))],
             'audience' => ['required', Rule::in(['all', 'selected'])],
             'filters' => ['nullable', 'array'],
@@ -45,11 +47,7 @@ class SaveCampaignRequest extends FormRequest
     public function after(): array
     {
         return [function (Validator $validator) {
-            $unknown = app(MessageTemplates::class)->unknown((string) $this->input('body'));
-
-            if ($unknown !== []) {
-                $validator->errors()->add('body', 'Variables que no existen: '.collect($unknown)->map(fn ($v) => '{{'.$v.'}}')->implode(', ').'.');
-            }
+            $this->validateMessageBody($validator);
         }];
     }
 

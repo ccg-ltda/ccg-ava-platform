@@ -39,7 +39,7 @@ class CustomersTest extends TestCase
 
     private function customer(Workspace $workspace, array $attributes = []): Customer
     {
-        return $workspace->customers()->create($attributes + ['first_name' => 'Ana', 'phone' => '3001112233', 'source' => 'manual', 'marketing_consent' => 'unknown'])->fresh();
+        return $workspace->customers()->create($attributes + ['first_name' => 'Ana', 'phone' => '+573001112233', 'source' => 'manual', 'marketing_consent' => 'unknown'])->fresh();
     }
 
     public function test_a_customer_is_created_with_normalized_identifiers_tags_and_identities(): void
@@ -91,9 +91,9 @@ class CustomersTest extends TestCase
         $existing->identities()->create(['workspace_id' => $this->workspace->id, 'channel' => 'whatsapp', 'external_id' => '573001112233']);
 
         // The same number written differently, the same email in other case, the same channel id.
-        $this->post('/customers', $this->payload(['phone' => '(57) 300-111-2233', 'email' => 'otra@example.com']))->assertSessionHasErrors('phone');
-        $this->post('/customers', $this->payload(['phone' => '3999999999', 'email' => 'ANA@EXAMPLE.COM']))->assertSessionHasErrors('email');
-        $this->post('/customers', $this->payload(['phone' => '3999999999', 'email' => 'x@example.com', 'identities' => [['channel' => 'whatsapp', 'external_id' => '+573001112233']]]))->assertSessionHasErrors('identities.0.external_id');
+        $this->post('/customers', $this->payload(['phone' => '+57 (300) 111-2233', 'email' => 'otra@example.com']))->assertSessionHasErrors('phone');
+        $this->post('/customers', $this->payload(['phone' => '+573999999999', 'email' => 'ANA@EXAMPLE.COM']))->assertSessionHasErrors('email');
+        $this->post('/customers', $this->payload(['phone' => '+573999999999', 'email' => 'x@example.com', 'identities' => [['channel' => 'whatsapp', 'external_id' => '+573001112233']]]))->assertSessionHasErrors('identities.0.external_id');
 
         $this->assertSame(1, Customer::count());
         $this->assertSame('Ana', $existing->fresh()->first_name);
@@ -101,10 +101,10 @@ class CustomersTest extends TestCase
 
     public function test_data_that_points_to_two_different_customers_is_ambiguous_and_refused(): void
     {
-        $this->customer($this->workspace, ['first_name' => 'Ana', 'phone' => '3001112233']);
-        $this->customer($this->workspace, ['first_name' => 'Beto', 'phone' => '3005556677', 'email' => 'beto@example.com']);
+        $this->customer($this->workspace, ['first_name' => 'Ana', 'phone' => '+573001112233']);
+        $this->customer($this->workspace, ['first_name' => 'Beto', 'phone' => '+573005556677', 'email' => 'beto@example.com']);
 
-        $response = $this->post('/customers', $this->payload(['phone' => '3001112233', 'email' => 'beto@example.com']));
+        $response = $this->post('/customers', $this->payload(['phone' => '+573001112233', 'email' => 'beto@example.com']));
 
         $response->assertSessionHasErrors(['phone', 'email']);
         $this->assertStringContainsString('Ana', session('errors')->first('phone'));
@@ -114,48 +114,48 @@ class CustomersTest extends TestCase
 
     public function test_editing_a_customer_does_not_collide_with_itself_but_does_with_others(): void
     {
-        $ana = $this->customer($this->workspace, ['first_name' => 'Ana', 'phone' => '3001112233']);
-        $beto = $this->customer($this->workspace, ['first_name' => 'Beto', 'phone' => '3005556677']);
+        $ana = $this->customer($this->workspace, ['first_name' => 'Ana', 'phone' => '+573001112233']);
+        $beto = $this->customer($this->workspace, ['first_name' => 'Beto', 'phone' => '+573005556677']);
 
-        $this->put("/customers/{$ana->id}", $this->payload(['first_name' => 'Ana María', 'phone' => '300 111 2233', 'email' => null]))->assertSessionHasNoErrors();
+        $this->put("/customers/{$ana->id}", $this->payload(['first_name' => 'Ana María', 'phone' => '+57 300 111 2233', 'email' => null]))->assertSessionHasNoErrors();
         $this->assertSame('Ana María', $ana->fresh()->first_name);
 
-        $this->put("/customers/{$ana->id}", $this->payload(['phone' => '300 555 6677']))->assertSessionHasErrors('phone');
-        $this->assertSame('3001112233', $ana->fresh()->phone_normalized);
-        $this->assertSame('3005556677', $beto->fresh()->phone_normalized);
+        $this->put("/customers/{$ana->id}", $this->payload(['phone' => '+57 300 555 6677']))->assertSessionHasErrors('phone');
+        $this->assertSame('573001112233', $ana->fresh()->phone_normalized);
+        $this->assertSame('573005556677', $beto->fresh()->phone_normalized);
     }
 
     public function test_the_same_phone_in_another_workspace_is_a_different_customer(): void
     {
-        $this->customer($this->other, ['first_name' => 'Ana', 'phone' => '3001112233']);
+        $this->customer($this->other, ['first_name' => 'Ana', 'phone' => '+573001112233']);
 
-        $this->post('/customers', $this->payload(['phone' => '3001112233']))->assertSessionHasNoErrors();
+        $this->post('/customers', $this->payload(['phone' => '+573001112233']))->assertSessionHasNoErrors();
         $this->assertSame(1, $this->workspace->customers()->count());
         $this->assertSame(1, $this->other->customers()->count());
     }
 
     public function test_customers_of_another_workspace_are_never_reachable_listed_or_changed(): void
     {
-        $foreign = $this->customer($this->other, ['first_name' => 'Ajena', 'phone' => '3009998888']);
-        $mine = $this->customer($this->workspace, ['first_name' => 'Mía', 'phone' => '3001110000']);
+        $foreign = $this->customer($this->other, ['first_name' => 'Ajena', 'phone' => '+573009998888']);
+        $mine = $this->customer($this->workspace, ['first_name' => 'Mía', 'phone' => '+573001110000']);
 
         $this->get("/customers/{$foreign->id}")->assertNotFound();
-        $this->put("/customers/{$foreign->id}", $this->payload(['phone' => '3009998888']))->assertNotFound();
+        $this->put("/customers/{$foreign->id}", $this->payload(['phone' => '+573009998888']))->assertNotFound();
         $this->post("/customers/{$foreign->id}/deactivate")->assertNotFound();
         $this->assertTrue($foreign->fresh()->is_active);
 
         $this->get('/customers')->assertInertia(fn (AssertableInertia $page) => $page->where('customers.meta.total', 1)->where('customers.data.0.id', $mine->id));
         // A workspace_id sent by the client is ignored.
-        $this->post('/customers', $this->payload(['phone' => '3112223344', 'email' => 'z@z.co', 'workspace_id' => $this->other->id]));
-        $this->assertSame(0, $this->other->customers()->where('phone_normalized', '3112223344')->count());
+        $this->post('/customers', $this->payload(['phone' => '+573112223344', 'email' => 'z@z.co', 'workspace_id' => $this->other->id]));
+        $this->assertSame(0, $this->other->customers()->where('phone_normalized', '573112223344')->count());
     }
 
     public function test_search_and_filters_work_inside_the_workspace(): void
     {
-        $ana = $this->customer($this->workspace, ['first_name' => 'Ana', 'last_name' => 'Gómez', 'phone' => '3001112233', 'email' => 'ana@x.co', 'source' => 'booking', 'marketing_consent' => 'granted', 'consent_note' => 'ok']);
+        $ana = $this->customer($this->workspace, ['first_name' => 'Ana', 'last_name' => 'Gómez', 'phone' => '+573001112233', 'email' => 'ana@x.co', 'source' => 'booking', 'marketing_consent' => 'granted', 'consent_note' => 'ok']);
         $ana->tags()->create(['workspace_id' => $this->workspace->id, 'tag' => 'vip']);
         $ana->identities()->create(['workspace_id' => $this->workspace->id, 'channel' => 'web', 'external_id' => 'visitor-9']);
-        $this->customer($this->workspace, ['first_name' => 'Beto', 'phone' => '3005556677']);
+        $this->customer($this->workspace, ['first_name' => 'Beto', 'phone' => '+573005556677']);
 
         $ids = fn (string $query) => collect($this->get('/customers?'.$query)->viewData('page')['props']['customers']['data'])->pluck('id')->all();
 
@@ -175,7 +175,7 @@ class CustomersTest extends TestCase
         $this->post('/customers', $this->payload(['notes' => 'Prefiere la tarde']));
         $customer = Customer::firstOrFail();
 
-        $this->put("/customers/{$customer->id}", $this->payload(['first_name' => 'Laura Sofía', 'phone' => '3207778899', 'notes' => 'Otra nota']))->assertSessionHasNoErrors();
+        $this->put("/customers/{$customer->id}", $this->payload(['first_name' => 'Laura Sofía', 'phone' => '+573207778899', 'notes' => 'Otra nota']))->assertSessionHasNoErrors();
         $this->post("/customers/{$customer->id}/deactivate")->assertSessionHas('success');
         $this->assertFalse($customer->fresh()->is_active);
         $this->post("/customers/{$customer->id}/activate");
@@ -231,7 +231,7 @@ class CustomersTest extends TestCase
         $service = $this->makeService($this->workspace);
         $professional = $this->makeProfessional($this->workspace, [$service]);
         $this->appointments()->book($this->workspace, $service, $professional->id, CarbonImmutable::parse('2026-10-13 10:00:00', 'UTC'), ['name' => 'Laura Pérez', 'phone' => '+57 300 111 2233', 'email' => 'otro@example.com'], 'admin');
-        $this->appointments()->book($this->workspace, $service, $professional->id, CarbonImmutable::parse('2026-10-13 12:00:00', 'UTC'), ['name' => 'Desconocida', 'phone' => '3150000000', 'email' => 'nadie@example.com'], 'admin');
+        $this->appointments()->book($this->workspace, $service, $professional->id, CarbonImmutable::parse('2026-10-13 12:00:00', 'UTC'), ['name' => 'Desconocida', 'phone' => '+573150000000', 'email' => 'nadie@example.com'], 'admin');
 
         $this->get("/customers/{$customer->id}")->assertInertia(fn (AssertableInertia $page) => $page->has('conversations', 1)->has('appointments', 1));
 
@@ -242,7 +242,7 @@ class CustomersTest extends TestCase
 
     public function test_the_conversations_of_another_workspace_with_the_same_channel_id_are_not_shown(): void
     {
-        $customer = $this->customer($this->workspace, ['first_name' => 'Laura', 'phone' => '3001112233']);
+        $customer = $this->customer($this->workspace, ['first_name' => 'Laura', 'phone' => '+573001112233']);
         $customer->identities()->create(['workspace_id' => $this->workspace->id, 'channel' => 'whatsapp', 'external_id' => '573001112233']);
         $this->contractModules($this->workspace, ['dashboard', 'customers', 'conversations']);
 

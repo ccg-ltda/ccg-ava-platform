@@ -160,6 +160,7 @@ export default function CatalogPanel({ catalog }) {
                                             {module.name}
                                             <ImplementationBadge implemented={module.implemented} />
                                             <Badge tone="violet">{module.group.name}</Badge>
+                                            {module.alsoFor.length > 0 && <Badge tone="blue">También en {module.alsoFor.map((solution) => solution.name).join(', ')}</Badge>}
                                             {!module.isActive && <Badge tone="neutral">Inactivo</Badge>}
                                         </p>
                                         {module.description && <p className="mt-0.5 text-sm text-ink-muted">{module.description}</p>}

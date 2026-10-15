@@ -12,6 +12,7 @@ use App\Models\Workspace;
 use App\Services\AgentAccess;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
@@ -235,10 +236,10 @@ class ConversationsTest extends TestCase
             fn () => $conversationB->messages()->create(['workspace_id' => $a->id, 'direction' => 'in', 'type' => 'text', 'sent_at' => now()]),
         ] as $write) {
             try {
-                $write();
+                DB::transaction($write);
                 $this->fail('The database accepted a row across Workspaces.');
             } catch (QueryException $exception) {
-                $this->assertStringContainsString('FOREIGN KEY constraint failed', $exception->getMessage());
+                $this->assertStringContainsStringIgnoringCase('foreign key', $exception->getMessage());
             }
         }
 

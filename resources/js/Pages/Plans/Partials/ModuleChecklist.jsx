@@ -104,6 +104,7 @@ export default function ModuleChecklist({ catalog, selected, onChange, error, di
                                             <span className="mt-2 flex flex-wrap gap-1.5">
                                                 <ImplementationBadge implemented={module.implemented} />
                                                 {!module.isActive && <Badge tone="neutral">Desactivado</Badge>}
+                                                {module.alsoFor.length > 0 && <Badge tone="violet">También en {module.alsoFor.map((solution) => solution.name).join(', ')}</Badge>}
                                                 {module.requires.length > 0 && (
                                                     <Badge tone="blue">
                                                         <Link2 className="me-1 size-3" aria-hidden="true" />

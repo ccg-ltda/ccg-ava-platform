@@ -193,7 +193,7 @@ class E2eFixturesTest extends TestCase
         $this->fixtures->setup();
 
         $this->artisan('e2e:cleanup --dry-run')
-            ->expectsOutputToContain('Database: sqlite')
+            ->expectsOutputToContain('Database: '.DB::getDriverName())
             ->assertSuccessful();
         $this->assertSame(2, User::where('email', 'like', '%@e2e.ccg.test')->count(), 'Dry run removes nothing.');
 

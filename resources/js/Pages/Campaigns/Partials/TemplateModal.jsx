@@ -22,7 +22,7 @@ export default function TemplateModal({ template, variables, availability, sampl
     };
 
     return (
-        <Modal show onClose={onClose} maxWidth="lg" scrollable>
+        <Modal show onClose={onClose} maxWidth="3xl" scrollable>
             <form onSubmit={submit} noValidate className="flex min-h-0 flex-1 flex-col">
                 <header className="border-b border-line px-5 py-4 sm:px-8">
                     <h2 className="text-lg font-bold text-ink">{editing ? 'Editar plantilla' : 'Nueva plantilla'}</h2>

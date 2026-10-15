@@ -87,7 +87,7 @@ class CampaignsTest extends TestCase
         $this->post('/campaigns/templates', ['name' => 'Mala', 'body' => 'Hola {{nombre}} {{saldo}}'])->assertSessionHasErrors('body');
         $this->assertStringContainsString('{{saldo}}', session('errors')->first('body'));
         $this->post('/campaigns/templates', ['name' => 'Vacía', 'body' => ''])->assertSessionHasErrors('body');
-        $this->post('/campaigns/templates', ['name' => 'Larga', 'body' => str_repeat('a', 1001)])->assertSessionHasErrors('body');
+        $this->post('/campaigns/templates', ['name' => 'Larga', 'body' => str_repeat('a', 1025)])->assertSessionHasErrors('body');
 
         $this->post('/campaigns/templates', ['name' => 'Una', 'body' => 'Hola']);
         $this->post('/campaigns/templates', ['name' => 'Una', 'body' => 'Hola otra vez'])->assertSessionHasErrors('name');

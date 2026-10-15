@@ -159,8 +159,8 @@ class PublicBookingTest extends TestCase
     {
         $this->postJson($this->api('/appointments'), $this->payload())->assertCreated();
 
-        $this->postJson($this->api('/appointments'), $this->payload(['customer' => ['name' => 'Otra', 'phone' => '3009998877']]))->assertStatus(409)->assertJsonPath('reason', 'slot_unavailable');
-        $this->postJson($this->api('/appointments'), $this->payload(['starts_at' => '2026-10-13T03:00:00Z', 'customer' => ['name' => 'Otra', 'phone' => '3009998877']]))->assertStatus(409);
+        $this->postJson($this->api('/appointments'), $this->payload(['customer' => ['name' => 'Otra', 'phone' => '+573009998877']]))->assertStatus(409)->assertJsonPath('reason', 'slot_unavailable');
+        $this->postJson($this->api('/appointments'), $this->payload(['starts_at' => '2026-10-13T03:00:00Z', 'customer' => ['name' => 'Otra', 'phone' => '+573009998877']]))->assertStatus(409);
         $this->assertSame(1, Appointment::count());
     }
 
@@ -168,7 +168,7 @@ class PublicBookingTest extends TestCase
     {
         $this->postJson($this->api('/appointments'), $this->payload(['customer' => ['name' => '']]))->assertStatus(422)->assertJsonValidationErrors('customer.name');
         $this->postJson($this->api('/appointments'), $this->payload(['customer' => ['name' => 'Laura', 'phone' => 'abc']]))->assertStatus(422)->assertJsonValidationErrors('customer.phone');
-        $this->postJson($this->api('/appointments'), $this->payload(['customer' => ['name' => 'Laura', 'phone' => '3001112233', 'email' => 'no-es-correo']]))->assertStatus(422)->assertJsonValidationErrors('customer.email');
+        $this->postJson($this->api('/appointments'), $this->payload(['customer' => ['name' => 'Laura', 'phone' => '+573001112233', 'email' => 'no-es-correo']]))->assertStatus(422)->assertJsonValidationErrors('customer.email');
         $this->postJson($this->api('/appointments'), $this->payload(['starts_at' => 'mañana']))->assertStatus(422)->assertJsonValidationErrors('starts_at');
         $this->postJson($this->api('/appointments'), $this->payload(['notes' => str_repeat('x', 501)]))->assertStatus(422)->assertJsonValidationErrors('notes');
         $this->postJson($this->api('/appointments'), ['service_id' => $this->service->id])->assertStatus(422);
@@ -179,7 +179,7 @@ class PublicBookingTest extends TestCase
     {
         $this->enablePublic($this->workspace, ['require_email' => true, 'require_phone' => true]);
 
-        $response = $this->postJson($this->api('/appointments'), $this->payload(['customer' => ['name' => 'Laura', 'phone' => '3001112233']]))->assertStatus(422);
+        $response = $this->postJson($this->api('/appointments'), $this->payload(['customer' => ['name' => 'Laura', 'phone' => '+573001112233']]))->assertStatus(422);
         $this->assertSame('invalid', $response->json('reason'));
 
         $this->enablePublic($this->workspace, ['require_email' => false, 'require_phone' => false]);
@@ -294,13 +294,13 @@ class PublicBookingTest extends TestCase
         $this->postJson($this->api('/appointments'), $this->payload(['service_id' => 'S1', 'professional_id' => 'P1']))->assertCreated()->assertJsonPath('appointment.status', 'confirmed')->assertJsonPath('token', null);
 
         $simulated->failWith['book'] = 'auth';
-        $response = $this->postJson($this->api('/appointments'), $this->payload(['service_id' => 'S1', 'starts_at' => '2026-10-14T10:00:00Z', 'customer' => ['name' => 'Otra', 'phone' => '3009998877']]))->assertStatus(502);
+        $response = $this->postJson($this->api('/appointments'), $this->payload(['service_id' => 'S1', 'starts_at' => '2026-10-14T10:00:00Z', 'customer' => ['name' => 'Otra', 'phone' => '+573009998877']]))->assertStatus(502);
         $this->assertSame('provider', $response->json('reason'));
         $this->assertSame(['confirmed', 'failed'], Appointment::orderBy('id')->pluck('status')->all());
 
         // A lost answer is unknown, and asking again from the page is refused until the business verifies it.
         $simulated->failWith['book'] = 'timeout';
-        $third = $this->payload(['service_id' => 'S1', 'starts_at' => '2026-10-15T10:00:00Z', 'customer' => ['name' => 'Tercera', 'phone' => '3005550000']]);
+        $third = $this->payload(['service_id' => 'S1', 'starts_at' => '2026-10-15T10:00:00Z', 'customer' => ['name' => 'Tercera', 'phone' => '+573005550000']]);
         $this->postJson($this->api('/appointments'), $third)->assertStatus(409)->assertJsonPath('reason', 'uncertain');
         $simulated->failWith = [];
         $this->postJson($this->api('/appointments'), $third)->assertStatus(409)->assertJsonPath('reason', 'uncertain');

@@ -146,7 +146,8 @@ export default function AppointmentDialog({ appointment, options, today, onClose
                                 </div>
                                 <div>
                                     <InputLabel htmlFor="appt_phone" value="Teléfono" />
-                                    <TextInput id="appt_phone" type="tel" className="mt-1" value={customer.phone} maxLength={32} onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} invalid={Boolean(errors['customer.phone'])} />
+                                    <TextInput id="appt_phone" type="tel" className="mt-1" placeholder="+573001112233" value={customer.phone} maxLength={32} onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} invalid={Boolean(errors['customer.phone'])} />
+                                    <p className="mt-1 text-xs text-ink-muted">Con el prefijo del país, por ejemplo +573001112233.</p>
                                     <InputError message={errors['customer.phone']} className="mt-1" />
                                 </div>
                                 <div className="sm:col-span-2">

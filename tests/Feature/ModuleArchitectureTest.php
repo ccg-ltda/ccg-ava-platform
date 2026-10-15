@@ -180,7 +180,7 @@ class ModuleArchitectureTest extends TestCase
         $this->contractModules($this->client, ['dashboard', 'customers']);
         $user = $this->member($this->client, 'admin');
         $this->actingAs($user)->withSession(['workspace_id' => $this->client->id]);
-        $customer = $this->client->customers()->create(['first_name' => 'Ana', 'phone' => '3001112233', 'source' => 'manual', 'marketing_consent' => 'unknown']);
+        $customer = $this->client->customers()->create(['first_name' => 'Ana', 'phone' => '+573001112233', 'source' => 'manual', 'marketing_consent' => 'unknown']);
 
         $this->get("/customers/{$customer->id}")->assertOk()->assertInertia(fn (AssertableInertia $page) => $page
             ->where('conversations', null)->where('appointments', null)->where('campaigns', null));

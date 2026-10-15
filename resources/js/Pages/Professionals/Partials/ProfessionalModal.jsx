@@ -48,7 +48,8 @@ export default function ProfessionalModal({ professional, services, days, onClos
                         </div>
                         <div>
                             <InputLabel htmlFor="pro_phone" value="Teléfono (opcional)" />
-                            <TextInput id="pro_phone" className="mt-1" value={data.phone} maxLength={32} onChange={(e) => setData('phone', e.target.value)} />
+                            <TextInput id="pro_phone" className="mt-1" placeholder="+573001112233" value={data.phone} maxLength={32} onChange={(e) => setData('phone', e.target.value)} invalid={Boolean(errors.phone)} />
+                            <InputError message={errors.phone} className="mt-1" />
                         </div>
                     </div>
 

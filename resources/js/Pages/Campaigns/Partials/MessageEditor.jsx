@@ -2,7 +2,8 @@ import { useState } from 'react';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import Select from '@/Components/Select';
-import Textarea from '@/Components/Textarea';
+import { applyChange, hasMalformedMarkers } from '@/config/messageLimits';
+import LimitedTextarea from './LimitedTextarea';
 
 const PATTERN = /\{\{\s*([A-Za-z_]+)\s*\}\}/g;
 
@@ -18,6 +19,16 @@ export default function MessageEditor({ id = 'message_body', label = 'Mensaje', 
     const known = new Set(variables.map((variable) => variable.key));
     const used = usedIn(value);
     const unknown = used.filter((name) => !known.has(name));
+    const malformed = hasMalformedMarkers(value);
+    const [insertNotice, setInsertNotice] = useState(null);
+
+    const insert = (name) => {
+        const result = applyChange(value, `${value}${value && !value.endsWith(' ') ? ' ' : ''}{{${name}}}`, max);
+
+        setInsertNotice(result.rejected);
+
+        if (result.value !== value) onChange(result.value);
+    };
 
     const preview = value.split(PATTERN).map((part, index) => {
         if (index % 2 === 0) return part;
@@ -32,13 +43,13 @@ export default function MessageEditor({ id = 'message_body', label = 'Mensaje', 
         <div className="space-y-3">
             <div>
                 <InputLabel htmlFor={id} value={label} />
-                <Textarea id={id} className="mt-1" rows={5} value={value} maxLength={max} disabled={disabled} onChange={(e) => onChange(e.target.value)} invalid={Boolean(error)} />
-                <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
-                    <InputError message={error} />
-                    <span className="ms-auto text-xs text-ink-muted">
-                        {value.length}/{max}
-                    </span>
-                </div>
+                <LimitedTextarea id={id} value={value} onChange={onChange} max={max} disabled={disabled} invalid={Boolean(error)} />
+                <InputError message={error} className="mt-1" />
+                {insertNotice && (
+                    <p role="status" className="mt-1 text-xs text-accent-amber">
+                        {insertNotice}
+                    </p>
+                )}
             </div>
 
             {!disabled && (
@@ -47,7 +58,7 @@ export default function MessageEditor({ id = 'message_body', label = 'Mensaje', 
                         <button
                             key={variable.key}
                             type="button"
-                            onClick={() => onChange(`${value}${value && !value.endsWith(' ') ? ' ' : ''}{{${variable.key}}}`)}
+                            onClick={() => insert(variable.key)}
                             className="rounded-full border border-line bg-canvas px-3 py-1 text-xs font-semibold text-ink-muted hover:border-primary/40 hover:text-primary focus-visible:outline-2 focus-visible:outline-primary"
                         >
                             {`{{${variable.key}}}`}
@@ -65,8 +76,9 @@ export default function MessageEditor({ id = 'message_body', label = 'Mensaje', 
                 {sample.length === 0 && <p className="mt-2 text-xs text-ink-muted">Aún no hay clientes para probar el mensaje: las variables se mostrarán sin datos.</p>}
             </div>
 
-            {used.length > 0 && (
+            {(used.length > 0 || malformed) && (
                 <ul className="space-y-1 text-xs" aria-label="Datos disponibles de las variables">
+                    {malformed && <li className="text-danger">Revisa las llaves dobles: una variable se escribe como {'{{nombre}}'}; no se admiten variables numeradas como {'{{1}}'} ni llaves sueltas.</li>}
                     {unknown.map((name) => (
                         <li key={name} className="text-danger">{`{{${name}}}`}: esta variable no existe.</li>
                     ))}

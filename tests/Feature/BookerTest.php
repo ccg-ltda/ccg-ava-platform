@@ -287,7 +287,7 @@ class BookerTest extends TestCase
 
     private function bookerAppointment(array $overrides = []): Appointment
     {
-        $customer = $this->workspace->bookingCustomers()->first() ?? $this->workspace->bookingCustomers()->create(['name' => 'Laura', 'phone' => '3001112233']);
+        $customer = $this->workspace->bookingCustomers()->first() ?? $this->workspace->bookingCustomers()->create(['name' => 'Laura', 'phone' => '+573001112233']);
 
         return $this->workspace->appointments()->create($overrides + [
             'customer_id' => $customer->id, 'service_name' => 'Servicio 1', 'starts_at' => '2026-10-20 10:00:00', 'ends_at' => '2026-10-20 10:30:00', 'blocks_until' => '2026-10-20 10:30:00',
@@ -472,7 +472,7 @@ class BookerTest extends TestCase
         $this->post('/services', ['name' => 'Nuevo', 'duration_minutes' => 30])->assertSessionHas('error');
         $this->put("/services/{$own->id}", ['name' => 'Cambiado', 'duration_minutes' => 30])->assertSessionHas('error');
         $this->post('/professionals', ['name' => 'Nueva'])->assertSessionHas('error');
-        $this->post('/bookings', ['service_id' => '1', 'starts_at' => '2026-10-13T10:00:00Z', 'customer' => ['name' => 'Laura', 'phone' => '3001112233']])->assertSessionHas('error');
+        $this->post('/bookings', ['service_id' => '1', 'starts_at' => '2026-10-13T10:00:00Z', 'customer' => ['name' => 'Laura', 'phone' => '+573001112233']])->assertSessionHas('error');
 
         $this->assertSame('De Ava', $own->fresh()->name);
         $this->assertSame(0, Appointment::count());

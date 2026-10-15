@@ -85,7 +85,7 @@ class PlatformRunTest extends TestCase
 
     private function book(array $overrides = []): array
     {
-        return $overrides + ['service_id' => $this->service->id, 'starts_at' => '2026-10-13T10:00:00Z', 'customer' => ['name' => 'Laura Pérez', 'phone' => '573001112233']];
+        return $overrides + ['service_id' => $this->service->id, 'starts_at' => '2026-10-13T10:00:00Z', 'customer' => ['name' => 'Laura Pérez', 'phone' => '+573001112233']];
     }
 
     private function tool(string $method, string $path, string $token, array $data = [])

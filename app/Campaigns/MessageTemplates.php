@@ -13,6 +13,40 @@ class MessageTemplates
 {
     private const PATTERN = '/\{\{\s*([A-Za-z_]+)\s*\}\}/';
 
+    /** The text as it is stored and counted: every line break is a single LF (a browser may send CR+LF) and the ends are trimmed. */
+    public function normalize(?string $body): string
+    {
+        return trim(str_replace(["\r\n", "\r"], "\n", (string) $body));
+    }
+
+    /** Characters of the body, counted in Unicode code points. The same rule as the editor's counter. */
+    public function length(string $body): int
+    {
+        return mb_strlen($body, 'UTF-8');
+    }
+
+    /** A clear message when the body is longer than WhatsApp accepts, with the excess; null when it fits. */
+    public function lengthError(string $body, ?int $max = null): ?string
+    {
+        $max ??= (int) config('campaigns.body_max');
+        $length = $this->length($body);
+
+        return $length > $max
+            ? 'El mensaje tiene '.number_format($length, 0, ',', '.').' caracteres y el máximo del cuerpo de una plantilla de WhatsApp es '.number_format($max, 0, ',', '.').': sobran '.number_format($length - $max, 0, ',', '.').'. Acórtalo; Ava no lo recorta por ti.'
+            : null;
+    }
+
+    /**
+     * Double braces that are not a variable of the right shape ({{nombre}}): a lone "{{", "}}", an empty "{{ }}" or a numbered "{{1}}", which is the
+     * form Meta uses for positional parameters and Ava does not fill in. Single braces are plain text.
+     */
+    public function hasMalformedMarkers(string $body): bool
+    {
+        $rest = preg_replace(self::PATTERN, '', $body);
+
+        return str_contains($rest, '{{') || str_contains($rest, '}}');
+    }
+
     /** @return list<string> variable names used by the body, once each, in order */
     public function used(string $body): array
     {

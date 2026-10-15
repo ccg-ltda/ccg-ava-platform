@@ -67,7 +67,7 @@ class BookingLifecycleTest extends TestCase
         return $this->workspace->chatbots()->first()->conversations()->create(['workspace_id' => $this->workspace->id, 'channel' => 'whatsapp', 'contact_id' => $contact, 'contact_name' => 'Laura']);
     }
 
-    private function customer(string $phone = '3001112233'): array
+    private function customer(string $phone = '+573001112233'): array
     {
         return ['name' => 'Laura Pérez', 'phone' => $phone];
     }
@@ -131,7 +131,7 @@ class BookingLifecycleTest extends TestCase
     public function test_the_time_an_appointment_holds_counts_as_free_for_moving_it_and_only_for_it(): void
     {
         $token = $this->postJson($this->web('/appointments'), ['service_id' => $this->service->id, 'starts_at' => '2026-10-13T10:00:00Z', 'customer' => $this->customer()])->assertCreated()->json('token');
-        $this->postJson($this->web('/appointments'), ['service_id' => $this->service->id, 'starts_at' => '2026-10-13T14:00:00Z', 'customer' => $this->customer('3009998877')])->assertCreated();
+        $this->postJson($this->web('/appointments'), ['service_id' => $this->service->id, 'starts_at' => '2026-10-13T14:00:00Z', 'customer' => $this->customer('+573009998877')])->assertCreated();
         $query = "service_id={$this->service->id}&from=2026-10-13&days=1";
         $starts = fn ($response) => array_column($response->json('slots'), 'startsAt');
 
@@ -159,7 +159,7 @@ class BookingLifecycleTest extends TestCase
         $this->getJson("/bookings/availability?service_id={$this->service->id}&from=2026-10-13&days=1&ignore_appointment={$mine}")->assertOk()->assertJsonFragment(['startsAt' => '2026-10-13T10:30:00Z']);
         $this->getJson("/bookings/availability?service_id={$this->service->id}&from=2026-10-13&days=1")->assertOk()->assertJsonMissing(['startsAt' => '2026-10-13T10:30:00Z']);
         $other = $this->bookingWorkspace('OTRO');
-        $foreign = $this->appointments()->book($other, $this->makeService($other), $this->makeProfessional($other, [$other->services()->first()])->id, CarbonImmutable::parse('2026-10-13 10:00:00', 'UTC'), $this->customer('3005550000') + ['email' => null], 'admin')['appointment'];
+        $foreign = $this->appointments()->book($other, $this->makeService($other), $this->makeProfessional($other, [$other->services()->first()])->id, CarbonImmutable::parse('2026-10-13 10:00:00', 'UTC'), $this->customer('+573005550000') + ['email' => null], 'admin')['appointment'];
         $this->getJson("/bookings/availability?service_id={$this->service->id}&ignore_appointment={$foreign->id}")->assertNotFound();
     }
 
@@ -191,7 +191,7 @@ class BookingLifecycleTest extends TestCase
         $this->get('/bookings?from=2026-10-13&days=1&status=cancelled')->assertInertia(fn (AssertableInertia $page) => $page->has('appointments', 1)->where('appointments.0.cancelReason', 'No hay cupo'));
 
         // The freed 11:00 is bookable again, and a closed day later the staff can close what happened.
-        $this->postJson($this->web('/appointments'), ['service_id' => $this->service->id, 'starts_at' => '2026-10-13T11:00:00Z', 'customer' => $this->customer('3007776655')])->assertCreated();
+        $this->postJson($this->web('/appointments'), ['service_id' => $this->service->id, 'starts_at' => '2026-10-13T11:00:00Z', 'customer' => $this->customer('+573007776655')])->assertCreated();
         $this->post("/bookings/{$web->id}/status", ['status' => 'confirmed'])->assertSessionHas('success');
         $this->travelTo(CarbonImmutable::parse('2026-10-14 12:00:00', 'UTC'));
         $this->post("/bookings/{$web->id}/status", ['status' => 'no_show'])->assertSessionHas('success');
@@ -224,7 +224,7 @@ class BookingLifecycleTest extends TestCase
     {
         $this->actAsMember($this->workspace);
         $this->appointments()->book($this->workspace, $this->service, $this->professional->id, CarbonImmutable::parse('2026-10-13 10:00:00', 'UTC'), $this->customer() + ['email' => null], 'admin');
-        $this->appointments()->book($this->workspace, $this->service, $this->professional->id, CarbonImmutable::parse('2026-10-13 15:00:00', 'UTC'), $this->customer('3009998877') + ['email' => null], 'admin');
+        $this->appointments()->book($this->workspace, $this->service, $this->professional->id, CarbonImmutable::parse('2026-10-13 15:00:00', 'UTC'), $this->customer('+573009998877') + ['email' => null], 'admin');
 
         $this->post('/professionals/exceptions', ['date_from' => '2026-10-13', 'date_to' => '2026-10-13', 'starts_at' => '14:00', 'ends_at' => '16:00'])->assertSessionHas('warning', fn ($message) => str_contains($message, '1 cita'));
         $this->post('/professionals/exceptions', ['date_from' => '2026-10-13', 'date_to' => '2026-10-14', 'reason' => 'Festivo'])->assertSessionHas('warning', fn ($message) => str_contains($message, '2 cita'));

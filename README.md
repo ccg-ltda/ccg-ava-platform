@@ -20,7 +20,7 @@ Organization → Workspace → membresía (workspace_user.role) → usuarios
 
 PHP 8.4 (contenedor) · Laravel 13 · Inertia 3 · React 19 (JSX) · Vite 8 · Tailwind CSS 4 · PostgreSQL 16 · Redis 7 · Horizon · Reverb · MinIO/S3 · `spatie/laravel-permission`. Los tests usan SQLite en memoria.
 
-Requisitos: Docker con Compose. Para ejecutar PHPUnit, Pint o `npm` en el anfitrión, además PHP 8.4+, Composer y Node 20+.
+Requisitos: Docker con Compose. Los contenedores usan PHP 8.4 (`Dockerfile`), Node 22 y PostgreSQL 16. Para ejecutar PHPUnit, Pint o `npm` en el anfitrión, además PHP 8.4+ (`composer.json` declara `^8.3`, pero el `composer.lock` exige 8.4.1 o superior), Composer y Node 20+.
 
 ## Puesta en marcha con Docker
 
@@ -37,10 +37,15 @@ docker compose exec app php artisan db:seed
 - Si Vite (`node`) no ve cambios de archivos en Windows: `docker compose restart node`.
 - `make fresh` borra la base de desarrollo; úsalo solo ahí.
 
-| URL | Qué |
-|---|---|
-| http://localhost:8000 | App (redirige a `/pre-login`) |
-| http://localhost:5173 | Vite |
+| Puerto en el anfitrión | Servicio | Variable |
+|---|---|---|
+| http://localhost:8000 | App (redirige a `/pre-login`) | `APP_PORT` |
+| http://localhost:5173 | Vite | `VITE_PORT` |
+| 8080 | Reverb (WebSockets) | `REVERB_PORT` |
+| 5433 | PostgreSQL (`5432` dentro de Docker) | `DB_FORWARD_PORT` |
+| 9000 | MinIO (S3) | `MINIO_PORT` |
+
+Además corren `worker` (Horizon), `scheduler` y `redis` sin puerto publicado. Los puertos salen de `docker-compose.yml`; la infraestructura completa y la de producción están en [`INFRASTRUCTURE.md`](INFRASTRUCTURE.md).
 
 ### Variables de entorno
 
@@ -67,14 +72,16 @@ Permisos de Conversaciones: `view-conversations` (leer), `reply-conversations` (
 | Configuraciones | Identidad, región, apariencia e impuestos del Workspace |
 | Usuarios y Roles | Cuentas, roles, permisos, Workspaces y Organizaciones |
 | Servicios y Reservas | Cuatro módulos reutilizables: Servicios, Profesionales y disponibilidad, Agenda y reservas (con página pública y herramientas de Ava Chat) y Proveedores de agenda (Booker). Agenda propia de Ava o agenda externa como fuente de verdad |
-| Clientes | Ficha de cliente por Workspace (contacto, canales, origen, etiquetas, consentimiento) con deduplicación segura; relaciona conversaciones y reservas sin copiarlas. Módulo `customers`, fuera del plan por defecto |
-| Campañas | Plantillas con variables y campañas con selección de destinatarios, exclusión por consentimiento, preparación y simulación. NO envía mensajes: el envío real no está conectado. Módulo `campaigns` (necesita `customers`) |
+| Clientes | Ficha de cliente por Workspace (contacto, canales, origen, etiquetas, consentimiento) con deduplicación segura; relaciona conversaciones y reservas sin copiarlas. El teléfono nuevo se escribe en formato internacional (`+573001112233`, sin asumir país); los históricos no se reescriben (ver «Teléfonos internacionales»). Módulo `customers`, fuera del plan por defecto |
+| Campañas | Plantillas con variables y campañas con selección de destinatarios, exclusión por consentimiento, preparación y simulación. Las plantillas son borradores locales: NO hay integración con Meta y NO envía mensajes. El cuerpo se limita a 1.024 caracteres (límite del cuerpo de una plantilla de WhatsApp; contador visible, se rechaza el exceso, nunca se recorta). Módulo `campaigns` (necesita `customers`) |
 | Privacidad | Los datos privados de los contactos de un cliente no se ven desde otro Workspace ni siquiera como superusuario: solo con un acceso temporal justificado (permiso `access-private-data`, motivo obligatorio, contactos enmascarados, auditado en el Workspace consultado). Propuesta de política en `docs/privacidad.md` |
 | Planes (solo CCG, desde `Desarrollo_DEV`) | Catálogo de módulos reutilizables y planes comerciales: qué módulos incluye cada plan y qué plan tiene cada Workspace. La disponibilidad del módulo depende del plan y de que esté implementado; los permisos del rol siguen mandando |
 
 ### Planes y módulos
 
 Mapa completo (módulo, categoría, grupo, plan y permiso; dependencias reales; cómo se administran los planes con ejemplos): `docs/modulos-y-planes.md`. Privacidad y acceso administrativo a datos: `docs/privacidad.md`. Integraciones reales, contrato del workflow de n8n, despliegue, pruebas reales, diagnóstico y riesgos: `RECOMENDACIONES.md`.
+
+**Salud:** hoy NO existe ningún módulo propio de Salud (su categoría está vacía). Una clínica o consultorio contrata en un plan los mismos módulos de Servicios y Reservas (y, si quiere, Clientes); el catálogo los marca «También en Salud» (`also_for` en `config/modules.php`), una etiqueta que no concede nada. El flujo de citas (servicio → profesional con horario → reglas → disponibilidad → reserva → ficha de Cliente) está probado de punta a punta con rutas reales (`HealthAppointmentsFlowTest`); no hay historia clínica ni datos de pacientes, y sedes, precios y datos clínicos esperan decisiones del negocio (`RECOMENDACIONES.md` §6.2).
 
 Los módulos se agrupan conceptualmente en **Administración de la plataforma**, **Capacidades compartidas** (Asistentes, Conversaciones, Clientes, Campañas, Dashboard y Reportes) y **Soluciones comerciales** (Servicios y Reservas hoy; Salud, eCommerce y otras combinaciones después). Es solo organización del catálogo, del constructor de planes y del menú: cada módulo es una sola implementación reutilizable que cualquier plan puede incluir.
 
@@ -89,6 +96,10 @@ Para negocios con citas (barbería, estética, y más adelante Salud). Se contra
 - **Ava Chat:** n8n usa `/api/agent/booking/*` con el token del chatbot (`/api/agent/config` anuncia las herramientas). Ava guarda la cita, la ata a la conversación, la audita y devuelve el estado real.
 - **Booker:** se configura en Integraciones → Agendas externas (solo con `calendar_providers`) y se elige en Agenda y reservas → Configuración. Hoy lee servicios y profesionales y lee/cancela citas; los horarios, reservar y reprogramar con Booker NO están implementados (falta verificarlos con un Sandbox) y Ava lo dice. Probado solo con respuestas simuladas.
 - **Ciclo de una cita:** crear → (confirmar) → reprogramar / cancelar con motivo → realizada / no asistió. Desactivar un servicio o profesional, o cerrar un día con citas ya hechas, avisa cuántas hay y no las cancela.
+
+### Teléfonos internacionales
+
+Todo teléfono NUEVO o modificado (ficha de Cliente, profesional y reservas del personal, de la página pública y de Ava Chat) debe tener la forma `+` + prefijo de país + número (ITU-T E.164: código de país real, 7 a 15 dígitos; `+1` y `+7` exigen 11). Ava no asume el país del Workspace ni del usuario. Solo valida la forma, no el plan de numeración de cada país. Los números históricos no se tocan: `customers.phone` y `phone_normalized` no se reescriben, y reenviar un teléfono antiguo sin cambios al editar no se rechaza. `customers.phone_e164` (migración aditiva) existe solo para números comprobadamente internacionales, y el comando `php artisan customers:review-phones` (simulación por defecto; `--apply` y `--revert` exigen `--workspace=ID`) puede rellenarlo para históricos que traen `+` o `00`. En la API del asistente, un teléfono igual al id de WhatsApp de su conversación se acepta sin `+`. Un número local sin país nunca se vincula a uno internacional.
 
 ### Chatbots, canales y conversaciones
 
@@ -115,14 +126,30 @@ También desde el panel DEMO de la bandeja (requiere `manage-conversations`). Lo
 ## Calidad
 
 ```bash
-php artisan test                 # PHPUnit (o: make test, con SQLite en memoria)
-npm run build                    # compila el frontend
-vendor/bin/pint --test           # estilo (o: make pint)
-make e2e-setup / make e2e-cleanup   # datos aislados para validar en navegador
-graphify update .                # actualiza el grafo de código (graphify-out/, no se versiona)
+make test                                                     # PHPUnit dentro de Docker, SQLite en memoria (o: docker compose exec app php artisan test)
+php -d memory_limit=1G vendor/phpunit/phpunit/phpunit         # PHPUnit en el anfitrión
+npm run test:js                                               # pruebas de JavaScript (ejecutor de Node, sin dependencias)
+vendor/bin/pint --test                                        # estilo (o: make pint)
+npm run build                                                 # compila el frontend
+make e2e-setup / make e2e-cleanup                             # datos aislados para validar en navegador
+graphify update .                                             # actualiza el grafo de código (graphify-out/, no se versiona)
 ```
 
-`tests/TestCase.php` se niega a ejecutar tests contra la base de desarrollo. No hay ESLint, Prettier ni tests de frontend todavía.
+- **En el anfitrión usa PHPUnit directo:** `php artisan test` lanza un proceso hijo que ignora `-d memory_limit` y con el límite de 128 MB del PHP de Windows se queda sin memoria (`Allowed memory size of 134217728 bytes exhausted`).
+- **Última validación (2026-10-17):** PHPUnit 1137/1137 en SQLite (≈170 s) y 1137/1137 en PostgreSQL 16 (≈570 s); `npm run test:js` 21/21; Pint y `npm run build` correctos.
+- **Contra PostgreSQL:** crea una base desechable cuyo nombre acabe en `_test` (`TestDatabaseGuard` se niega a usar cualquier otra) y ejecuta PHPUnit con `DB_CONNECTION=pgsql DB_HOST=127.0.0.1 DB_PORT=5433 DB_DATABASE=<nombre>_test DB_USERNAME=... DB_PASSWORD=...`. Nunca apuntes las pruebas a `ccg_ava`.
+- `tests/TestCase.php` se niega a ejecutar tests contra la base de desarrollo. No hay ESLint ni Prettier; las pruebas de JavaScript cubren la definición del menú, los permisos y las reglas del editor de mensajes, y la interfaz solo se revisa a mano con Playwright (no hay pruebas de navegador automáticas).
+
+## Estado de integraciones y módulos
+
+| Parte | Implementado | Validación |
+|---|---|---|
+| Servicios y Reservas (agenda de Ava, página pública, Ava Chat) | Sí | Pruebas automáticas y navegador; concurrencia en PostgreSQL a mano |
+| Clientes, Campañas (borradores y simulación), Planes, permisos, aislamiento, privacidad | Sí | Pruebas automáticas (SQLite y PostgreSQL) |
+| WhatsApp (Meta), n8n de la plataforma, n8n por Workspace | Sí | **Solo simulado**: faltan cuentas, workflow y licencia reales |
+| Booker | Parcial: conexión, servicios, profesionales, leer y cancelar | **Solo simulado**; horarios, reservar y reprogramar NO existen |
+| Envío de Campañas y plantillas de Meta | **No** | No hay integración ni envío |
+| Módulos propios de Salud, Delivery y eCommerce | **No** | Categorías vacías |
 
 ## Limitaciones conocidas
 
@@ -130,5 +157,6 @@ graphify update .                # actualiza el grafo de código (graphify-out/,
 - **La ejecución iniciada por Ava (webhook de Meta + n8n de la plataforma) solo se probó con simulaciones.** Falta un n8n con el workflow, una app de Meta con el webhook apuntando a Ava y verificar con n8n que su licencia permite este modelo de servicio antes del uso comercial. Meta no ofrece idempotencia al enviar: si el resultado de un envío es incierto, Ava no lo reenvía y depende de que Meta devuelva el estado con la etiqueta `ava:{id}` para completarlo.
 - Fuera de la ventana de 24 h de WhatsApp solo se pueden enviar plantillas aprobadas, que Ava no envía.
 - Reportes no tiene Preguntas ni Encuestas (Ava no guarda esa información) ni tiempos de respuesta; la «IA» del entorno DEMO es un texto fijo.
-- Planes: los módulos específicos de Salud, Delivery y eCommerce todavía no existen (sus categorías están vacías); no hay precios, límites ni renovación. La interfaz de Planes se revisó en navegador (móvil, tablet y escritorio) sin pruebas de frontend automáticas.
+- Planes: los módulos específicos de Salud, Delivery y eCommerce todavía no existen (sus categorías están vacías; Salud puede usar los de Servicios y Reservas); no hay precios, límites ni renovación. La interfaz de Planes se revisó en navegador (móvil, tablet y escritorio) sin pruebas de frontend automáticas.
+- Los modales de Clientes y de Plantillas (diseño por filas, contador de caracteres) se comprobaron con una maqueta estática y las pruebas de JavaScript, no dentro de la aplicación con sesión.
 - Más pendientes y decisiones abiertas en [`pendientes.md`](pendientes.md).

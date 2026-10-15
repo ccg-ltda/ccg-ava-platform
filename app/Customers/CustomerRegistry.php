@@ -6,6 +6,7 @@ use App\Audit\AuditLogger;
 use App\Models\Customer;
 use App\Models\CustomerIdentity;
 use App\Models\Workspace;
+use App\Support\PhoneNumber;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -34,7 +35,7 @@ class CustomerRegistry
         $email = Customer::normalizeEmail($data['email'] ?? null);
         $identities = $this->normalizedIdentities($identities);
 
-        $this->assertNoDuplicate($workspace, $phone, $email, $identities, $customer);
+        $this->assertNoDuplicate($workspace, $phone, PhoneNumber::e164($data['phone'] ?? null), $email, $identities, $customer);
 
         try {
             return $this->persist($workspace, $data, $tags, $identities, $customer);
@@ -145,10 +146,10 @@ class CustomerRegistry
     }
 
     /** @param  list<array{channel: string, external_id: string}>  $identities */
-    private function assertNoDuplicate(Workspace $workspace, ?string $phone, ?string $email, array $identities, ?Customer $self): void
+    private function assertNoDuplicate(Workspace $workspace, ?string $phone, ?string $e164, ?string $email, array $identities, ?Customer $self): void
     {
         $others = fn () => $workspace->customers()->when($self, fn ($query) => $query->whereKeyNot($self->id));
-        $byPhone = $phone ? $others()->where('phone_normalized', $phone)->first() : null;
+        $byPhone = $phone ? $others()->where(fn ($query) => $query->where('phone_normalized', $phone)->when($e164, fn ($q) => $q->orWhere('phone_e164', $e164)))->first() : null;
         $byEmail = $email ? $others()->where('email_normalized', $email)->first() : null;
 
         if ($byPhone && $byEmail && $byPhone->id !== $byEmail->id) {

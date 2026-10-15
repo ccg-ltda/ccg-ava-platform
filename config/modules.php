@@ -17,6 +17,9 @@
  * `default_plan` modules: only those of the `shared` category (the plan every existing Workspace falls back to); the others are added to plans on purpose.
  *
  * Routes that are NOT modules (a user's own profile, the Workspace logo and selector, login) are technical and stay outside.
+ * `also_for` (optional) lists the categories whose solutions may ALSO build their plans from the module. It is a label for the catalog and
+ * the plan builder only: it grants nothing, changes no data and no plan (the module stays one implementation, and each Workspace keeps its
+ * own records and booking rules). Add it only after checking that the module's data and operations fit the other solution.
  * Adding a module = one entry here + `workspace.module:<key>` on its routes + `module` on its entry in config/navigation.js.
  */
 return [
@@ -100,9 +103,9 @@ return [
         'settings' => ['name' => 'Configuraciones', 'description' => 'Identidad, formatos regionales, apariencia e impuestos del Workspace.', 'group' => 'platform', 'category' => 'shared', 'route' => 'settings.index', 'permission' => 'manage-settings'],
         'integrations' => ['name' => 'Integraciones', 'description' => 'Conexiones del Workspace con servicios externos.', 'group' => 'platform', 'category' => 'shared', 'route' => 'integrations.index', 'permission' => 'manage-settings'],
         'users_roles' => ['name' => 'Usuarios y roles', 'description' => 'Cuentas, roles, permisos y membresías.', 'group' => 'platform', 'category' => 'shared', 'route' => 'users.index', 'permission' => 'manage-users'],
-        'service_catalog' => ['name' => 'Catálogo de servicios', 'description' => 'Servicios con duración, precio opcional y tiempo entre citas. Reutilizable por cualquier negocio con citas.', 'group' => 'solutions', 'category' => 'services_bookings', 'route' => 'services.index', 'permission' => 'view-bookings'],
-        'professionals' => ['name' => 'Profesionales y disponibilidad', 'description' => 'Profesionales, recursos opcionales, horarios semanales, descansos y días no laborables.', 'group' => 'solutions', 'category' => 'services_bookings', 'route' => 'professionals.index', 'permission' => 'view-bookings'],
-        'bookings' => ['name' => 'Agenda y reservas', 'description' => 'Agenda, citas (crear, confirmar, reprogramar, cancelar), clientes, reglas de reserva, reserva web y herramientas de Ava Chat.', 'group' => 'solutions', 'category' => 'services_bookings', 'route' => 'bookings.index', 'permission' => 'view-bookings'],
+        'service_catalog' => ['name' => 'Catálogo de servicios', 'description' => 'Servicios con duración, precio opcional y tiempo entre citas. Reutilizable por cualquier negocio con citas.', 'group' => 'solutions', 'category' => 'services_bookings', 'also_for' => ['health'], 'route' => 'services.index', 'permission' => 'view-bookings'],
+        'professionals' => ['name' => 'Profesionales y disponibilidad', 'description' => 'Profesionales, recursos opcionales, horarios semanales, descansos y días no laborables.', 'group' => 'solutions', 'category' => 'services_bookings', 'also_for' => ['health'], 'route' => 'professionals.index', 'permission' => 'view-bookings'],
+        'bookings' => ['name' => 'Agenda y reservas', 'description' => 'Agenda, citas (crear, confirmar, reprogramar, cancelar), clientes, reglas de reserva, reserva web y herramientas de Ava Chat.', 'group' => 'solutions', 'category' => 'services_bookings', 'also_for' => ['health'], 'route' => 'bookings.index', 'permission' => 'view-bookings'],
         'calendar_providers' => ['name' => 'Proveedores de agenda', 'description' => 'Conecta una agenda externa (Booker) como fuente de verdad en lugar de la agenda de Ava.', 'group' => 'solutions', 'category' => 'services_bookings', 'route' => 'integrations.index', 'permission' => 'manage-settings'],
         'customers' => ['name' => 'Clientes', 'description' => 'Ficha de cliente por Workspace: contacto, canales, origen, etiquetas, consentimiento y relación con conversaciones y reservas.', 'group' => 'shared', 'category' => 'communication', 'route' => 'customers.index', 'permission' => 'view-customers'],
         'campaigns' => ['name' => 'Campañas', 'description' => 'Plantillas de mensaje y campañas con selección de destinatarios, exclusiones por consentimiento y trazabilidad (sin envío real todavía).', 'group' => 'shared', 'category' => 'communication', 'route' => 'campaigns.index', 'permission' => 'view-campaigns'],

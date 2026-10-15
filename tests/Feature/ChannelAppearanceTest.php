@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
@@ -337,9 +338,9 @@ class ChannelAppearanceTest extends TestCase
         $bot = $this->bot($mine);
 
         try {
-            $bot->appearances()->create(['workspace_id' => $other->id, 'channel' => 'web', 'settings' => []]);
+            DB::transaction(fn () => $bot->appearances()->create(['workspace_id' => $other->id, 'channel' => 'web', 'settings' => []]));
         } catch (QueryException $exception) {
-            $this->assertStringContainsString('FOREIGN KEY constraint failed', $exception->getMessage());
+            $this->assertStringContainsStringIgnoringCase('foreign key', $exception->getMessage());
 
             return;
         }

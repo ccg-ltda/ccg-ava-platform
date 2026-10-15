@@ -47,7 +47,7 @@ class CalendarProviderTest extends TestCase
 
     private function booking(array $overrides = []): array
     {
-        return $overrides + ['service_id' => 'S1', 'professional_id' => 'P1', 'starts_at' => CarbonImmutable::parse('2026-10-13 10:00:00', 'UTC'), 'customer' => ['name' => 'Laura', 'phone' => '3001112233', 'email' => null]];
+        return $overrides + ['service_id' => 'S1', 'professional_id' => 'P1', 'starts_at' => CarbonImmutable::parse('2026-10-13 10:00:00', 'UTC'), 'customer' => ['name' => 'Laura', 'phone' => '+573001112233', 'email' => null]];
     }
 
     /** @return array<string, array{string}> */
@@ -104,7 +104,7 @@ class CalendarProviderTest extends TestCase
         $this->assertSame('UTC', $slot['starts_at']->timezoneName);
         $this->assertTrue($slot['ends_at'] > $slot['starts_at']);
 
-        $result = $agenda->book(new BookingRequest($service['id'], $slot['professional_id'], $slot['starts_at'], ['name' => 'Laura', 'phone' => '3001112233', 'email' => null]));
+        $result = $agenda->book(new BookingRequest($service['id'], $slot['professional_id'], $slot['starts_at'], ['name' => 'Laura', 'phone' => '+573001112233', 'email' => null]));
 
         $this->assertContains($result->status, [Appointment::CONFIRMED, Appointment::REQUESTED]);
         $this->assertNotSame('', $result->externalId);
@@ -156,7 +156,7 @@ class CalendarProviderTest extends TestCase
         $this->useBookerSetting($this->workspace);
 
         try {
-            $this->manager()->request($this->workspace, ['service_id' => $service->id, 'professional_id' => $professional->id, 'starts_at' => CarbonImmutable::parse('2026-10-13 10:00:00', 'UTC'), 'customer' => ['name' => 'Laura', 'phone' => '3001112233', 'email' => null]], 'web');
+            $this->manager()->request($this->workspace, ['service_id' => $service->id, 'professional_id' => $professional->id, 'starts_at' => CarbonImmutable::parse('2026-10-13 10:00:00', 'UTC'), 'customer' => ['name' => 'Laura', 'phone' => '+573001112233', 'email' => null]], 'web');
             $this->fail('It must be refused.');
         } catch (BookingException $exception) {
             $this->assertSame(BookingException::UNSUPPORTED, $exception->reason);
@@ -317,7 +317,7 @@ class CalendarProviderTest extends TestCase
     {
         $service = $this->makeService($this->workspace);
         $professional = $this->makeProfessional($this->workspace, [$service]);
-        $internal = $this->appointments()->book($this->workspace, $service, $professional->id, CarbonImmutable::parse('2026-10-13 10:00:00', 'UTC'), ['name' => 'Laura', 'phone' => '3001112233', 'email' => null], 'admin')['appointment'];
+        $internal = $this->appointments()->book($this->workspace, $service, $professional->id, CarbonImmutable::parse('2026-10-13 10:00:00', 'UTC'), ['name' => 'Laura', 'phone' => '+573001112233', 'email' => null], 'admin')['appointment'];
         $simulated = $this->external();
 
         $this->manager()->cancel($internal, null, 'admin');

@@ -11,6 +11,7 @@ use App\Models\Workspace;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia;
 use Spatie\Permission\Models\Role;
@@ -54,9 +55,9 @@ class ChatbotsTest extends TestCase
     private function assertForeignKeyRefuses(callable $write): void
     {
         try {
-            $write();
+            DB::transaction($write);
         } catch (QueryException $exception) {
-            $this->assertStringContainsString('FOREIGN KEY constraint failed', $exception->getMessage());
+            $this->assertStringContainsStringIgnoringCase('foreign key', $exception->getMessage());
 
             return;
         }

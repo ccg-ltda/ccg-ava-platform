@@ -289,7 +289,8 @@ export default function Public({ publicKey: key, business, primaryColor }) {
                                         </div>
                                         <div>
                                             <InputLabel htmlFor="pub_phone" value={config.requirePhone ? 'Teléfono' : 'Teléfono (opcional)'} />
-                                            <TextInput id="pub_phone" type="tel" className="mt-1" autoComplete="tel" value={customer.phone} maxLength={32} onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} />
+                                            <TextInput id="pub_phone" type="tel" className="mt-1" autoComplete="tel" placeholder="+573001112233" aria-describedby="pub_phone_hint" value={customer.phone} maxLength={32} onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} />
+                                            <p id="pub_phone_hint" className="mt-1 text-xs text-ink-muted">Con el prefijo de tu país, por ejemplo +573001112233.</p>
                                         </div>
                                         <div>
                                             <InputLabel htmlFor="pub_email" value={config.requireEmail ? 'Correo' : 'Correo (opcional)'} />

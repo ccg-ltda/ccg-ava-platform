@@ -251,9 +251,9 @@ class PrivacyTest extends TestCase
     {
         $actor = $this->member($this->client, 'admin');
         $this->actingAs($actor)->withSession(['workspace_id' => $this->client->id]);
-        $this->post('/customers', ['first_name' => 'Laura', 'last_name' => 'Pérez', 'phone' => '3001112233', 'source' => 'manual', 'marketing_consent' => 'unknown'])->assertSessionHasNoErrors();
+        $this->post('/customers', ['first_name' => 'Laura', 'last_name' => 'Pérez', 'phone' => '+573001112233', 'source' => 'manual', 'marketing_consent' => 'unknown'])->assertSessionHasNoErrors();
         $customer = Customer::firstOrFail();
-        $this->put("/customers/{$customer->id}", ['first_name' => 'Laura Sofía', 'phone' => '3001112233', 'source' => 'manual', 'marketing_consent' => 'unknown'])->assertSessionHasNoErrors();
+        $this->put("/customers/{$customer->id}", ['first_name' => 'Laura Sofía', 'phone' => '+573001112233', 'source' => 'manual', 'marketing_consent' => 'unknown'])->assertSessionHasNoErrors();
         $this->assertNotNull(AuditLog::where('workspace_id', $this->client->id)->whereNotNull('ip_address')->first(), 'the owner Workspace keeps the IP');
 
         $this->signInDev('admin', true);
@@ -302,7 +302,7 @@ class PrivacyTest extends TestCase
 
     public function test_a_platform_administrator_never_reaches_the_customers_or_campaigns_of_a_client_workspace(): void
     {
-        $theirs = $this->client->customers()->create(['first_name' => 'Ajena', 'phone' => '3009998888', 'source' => 'manual', 'marketing_consent' => 'granted', 'consent_note' => 'ok']);
+        $theirs = $this->client->customers()->create(['first_name' => 'Ajena', 'phone' => '+573009998888', 'source' => 'manual', 'marketing_consent' => 'granted', 'consent_note' => 'ok']);
         $campaign = $this->client->campaigns()->create(['name' => 'Ajena', 'body' => 'Hola', 'channel' => 'whatsapp', 'audience' => 'all']);
         $dev = $this->signInDev('admin', true);
         $this->contractModules($this->dev, ['customers', 'campaigns']);
@@ -313,7 +313,7 @@ class PrivacyTest extends TestCase
         // The parameter that other pages accept is ignored here: customers and campaigns only ever belong to the session's Workspace.
         $this->get("/customers?workspace={$this->client->id}")->assertInertia(fn (AssertableInertia $page) => $page->where('customers.meta.total', 0));
         $this->get("/customers/{$theirs->id}")->assertNotFound();
-        $this->put("/customers/{$theirs->id}", ['first_name' => 'X', 'phone' => '3009998888', 'source' => 'manual', 'marketing_consent' => 'unknown'])->assertNotFound();
+        $this->put("/customers/{$theirs->id}", ['first_name' => 'X', 'phone' => '+573009998888', 'source' => 'manual', 'marketing_consent' => 'unknown'])->assertNotFound();
         $this->post("/customers/{$theirs->id}/anonymize")->assertNotFound();
         $this->get("/campaigns?workspace={$this->client->id}")->assertInertia(fn (AssertableInertia $page) => $page->where('campaigns.meta.total', 0));
         $this->get("/campaigns/{$campaign->id}")->assertNotFound();
@@ -325,10 +325,10 @@ class PrivacyTest extends TestCase
     {
         $me = $this->member($this->client, 'admin');
         $this->actingAs($me)->withSession(['workspace_id' => $this->client->id]);
-        $mine = $this->client->customers()->create(['first_name' => 'Mía', 'phone' => '3001110000', 'source' => 'manual', 'marketing_consent' => 'granted', 'consent_note' => 'ok']);
+        $mine = $this->client->customers()->create(['first_name' => 'Mía', 'phone' => '+573001110000', 'source' => 'manual', 'marketing_consent' => 'granted', 'consent_note' => 'ok']);
         $this->client->customers()->first()->identities()->create(['workspace_id' => $this->client->id, 'channel' => 'whatsapp', 'external_id' => '573009998888']);
         $foreignConversation = $this->conversationOf($this->other, '573009998888', 'Ajena', 'mensaje del otro cliente');
-        $this->other->customers()->create(['first_name' => 'Ajena', 'phone' => '3009998888', 'source' => 'manual', 'marketing_consent' => 'granted', 'consent_note' => 'ok']);
+        $this->other->customers()->create(['first_name' => 'Ajena', 'phone' => '+573009998888', 'source' => 'manual', 'marketing_consent' => 'granted', 'consent_note' => 'ok']);
 
         // Same channel id in another Workspace: not linked to my customer.
         $this->contractModules($this->client, ['dashboard', 'conversations', 'customers', 'campaigns']);
@@ -348,7 +348,7 @@ class PrivacyTest extends TestCase
     {
         $me = $this->member($this->client, 'admin');
         $this->actingAs($me)->withSession(['workspace_id' => $this->client->id]);
-        $customer = $this->client->customers()->create(['first_name' => 'Laura', 'last_name' => 'Pérez', 'phone' => '3001112233', 'email' => 'laura@example.com', 'notes' => 'nota privada', 'source' => 'manual', 'marketing_consent' => 'granted', 'consent_note' => 'formulario']);
+        $customer = $this->client->customers()->create(['first_name' => 'Laura', 'last_name' => 'Pérez', 'phone' => '+573001112233', 'email' => 'laura@example.com', 'notes' => 'nota privada', 'source' => 'manual', 'marketing_consent' => 'granted', 'consent_note' => 'formulario']);
         $customer->identities()->create(['workspace_id' => $this->client->id, 'channel' => 'whatsapp', 'external_id' => '573001112233']);
         $customer->tags()->create(['workspace_id' => $this->client->id, 'tag' => 'vip']);
 
@@ -363,12 +363,12 @@ class PrivacyTest extends TestCase
         $this->assertSame('Pérez', 'Pérez'); // the conversation of that person is not touched by anonymizing the record
         $this->assertTrue(Conversation::where('id', $this->conversation->id)->exists());
 
-        $this->put("/customers/{$customer->id}", ['first_name' => 'Otra vez', 'phone' => '3001112233', 'source' => 'manual', 'marketing_consent' => 'unknown'])->assertSessionHasErrors('customer');
+        $this->put("/customers/{$customer->id}", ['first_name' => 'Otra vez', 'phone' => '+573001112233', 'source' => 'manual', 'marketing_consent' => 'unknown'])->assertSessionHasErrors('customer');
         $this->post("/customers/{$customer->id}/activate")->assertSessionHasErrors('customer');
         $this->post("/customers/{$customer->id}/anonymize")->assertSessionHasErrors('customer');
 
         // The number is free again: a new, different record can use it.
-        $this->post('/customers', ['first_name' => 'Nueva', 'phone' => '3001112233', 'source' => 'manual', 'marketing_consent' => 'unknown'])->assertSessionHasNoErrors();
+        $this->post('/customers', ['first_name' => 'Nueva', 'phone' => '+573001112233', 'source' => 'manual', 'marketing_consent' => 'unknown'])->assertSessionHasNoErrors();
 
         $logs = AuditLog::where('resource_type', 'customer')->get();
         $this->assertTrue($logs->contains('action', 'anonymized'));
@@ -382,8 +382,8 @@ class PrivacyTest extends TestCase
     {
         $me = $this->member($this->client, 'admin');
         $this->actingAs($me)->withSession(['workspace_id' => $this->client->id]);
-        $customer = $this->client->customers()->create(['first_name' => 'Laura', 'phone' => '3001112233', 'source' => 'manual', 'marketing_consent' => 'granted', 'consent_note' => 'ok']);
-        $ok = $this->client->customers()->create(['first_name' => 'Ok', 'phone' => '3005556677', 'source' => 'manual', 'marketing_consent' => 'granted', 'consent_note' => 'ok']);
+        $customer = $this->client->customers()->create(['first_name' => 'Laura', 'phone' => '+573001112233', 'source' => 'manual', 'marketing_consent' => 'granted', 'consent_note' => 'ok']);
+        $ok = $this->client->customers()->create(['first_name' => 'Ok', 'phone' => '+573005556677', 'source' => 'manual', 'marketing_consent' => 'granted', 'consent_note' => 'ok']);
         $this->post("/customers/{$customer->id}/anonymize");
         $campaign = $this->client->campaigns()->create(['name' => 'X', 'body' => 'Hola', 'channel' => 'whatsapp', 'audience' => 'all']);
 

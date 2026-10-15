@@ -11,6 +11,25 @@ import TextInput from '@/Components/TextInput';
 
 const optionsOf = (map) => Object.entries(map).map(([value, label]) => ({ value, label }));
 
+/**
+ * One field = label row, control row and message row. Inside a form grid the three rows are shared with the neighbour (subgrid): a label that
+ * wraps to two lines lowers BOTH inputs equally, and an error under one field only grows the message row, never the neighbour's control.
+ */
+function Field({ id, label, error, hint, className = '', children }) {
+    return (
+        <div className={`row-span-3 grid min-w-0 grid-rows-subgrid gap-y-1 ${className}`}>
+            <InputLabel htmlFor={id} value={label} className="self-end leading-snug" />
+            <div className="min-w-0">{children}</div>
+            <div className="min-w-0 space-y-0.5">
+                {hint && <p className="text-xs text-ink-muted">{hint}</p>}
+                <InputError message={error} />
+            </div>
+        </div>
+    );
+}
+
+const GRID = 'grid gap-x-5 gap-y-4 sm:grid-cols-2';
+
 /** Create / edit form of a customer. Required: first name and one way to reach or recognise them; the rest is optional. */
 export default function CustomerFormModal({ customer, options, onClose }) {
     const editing = Boolean(customer?.id);
@@ -45,24 +64,22 @@ export default function CustomerFormModal({ customer, options, onClose }) {
     };
 
     const field = (name, label, props = {}) => (
-        <div>
-            <InputLabel htmlFor={`customer_${name}`} value={label} />
-            <TextInput id={`customer_${name}`} className="mt-1" value={data[name]} onChange={(e) => setData(name, e.target.value)} invalid={Boolean(errors[name])} {...props} />
-            <InputError message={errors[name]} className="mt-1" />
-        </div>
+        <Field id={`customer_${name}`} label={label} error={errors[name]} className={props.wide ? 'sm:col-span-2' : ''}>
+            <TextInput id={`customer_${name}`} value={data[name]} onChange={(e) => setData(name, e.target.value)} invalid={Boolean(errors[name])} {...Object.fromEntries(Object.entries(props).filter(([key]) => key !== 'wide'))} />
+        </Field>
     );
 
     return (
-        <Modal show onClose={onClose} maxWidth="lg" scrollable>
+        <Modal show onClose={onClose} maxWidth="2xl" scrollable>
             <form onSubmit={submit} noValidate className="flex min-h-0 flex-1 flex-col">
                 <header className="border-b border-line px-5 py-4 sm:px-8">
                     <h2 className="text-lg font-bold text-ink">{editing ? 'Editar cliente' : 'Nuevo cliente'}</h2>
                 </header>
-                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5 sm:px-8">
-                    <div className="grid gap-4 sm:grid-cols-2">
+                <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5 sm:px-8">
+                    <div className={GRID}>
                         {field('first_name', 'Nombre', { maxLength: 100 })}
                         {field('last_name', 'Apellidos (opcional)', { maxLength: 100 })}
-                        {field('phone', 'Teléfono (opcional)', { maxLength: 32, inputMode: 'tel' })}
+                        {field('phone', 'Teléfono internacional (opcional)', { maxLength: 32, inputMode: 'tel', placeholder: '+573001112233' })}
                         {field('email', 'Correo (opcional)', { type: 'email', maxLength: 160 })}
                     </div>
                     <p className="text-xs text-ink-muted">
@@ -102,39 +119,26 @@ export default function CustomerFormModal({ customer, options, onClose }) {
                         <InputError message={errors.identities} />
                     </fieldset>
 
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <div>
-                            <InputLabel htmlFor="customer_source" value="Origen del contacto" />
-                            <Select id="customer_source" className="mt-1" value={data.source} onChange={(value) => setData('source', value)} options={optionsOf(options.sources)} />
-                            <InputError message={errors.source} className="mt-1" />
-                        </div>
-                        <div>
-                            <InputLabel htmlFor="customer_preferred" value="Canal preferido (opcional)" />
+                    <div className={GRID}>
+                        <Field id="customer_source" label="Origen del contacto" error={errors.source}>
+                            <Select id="customer_source" value={data.source} onChange={(value) => setData('source', value)} options={optionsOf(options.sources)} />
+                        </Field>
+                        <Field id="customer_preferred" label="Canal preferido (opcional)" error={errors.preferred_channel}>
                             <Select
                                 id="customer_preferred"
-                                className="mt-1"
                                 value={data.preferred_channel}
                                 onChange={(value) => setData('preferred_channel', value)}
                                 options={[{ value: '', label: 'Sin preferencia' }, ...optionsOf(options.channels)]}
                             />
-                            <InputError message={errors.preferred_channel} className="mt-1" />
-                        </div>
-                    </div>
-
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <div>
-                            <InputLabel htmlFor="customer_consent" value="Consentimiento para mensajes comerciales" />
-                            <Select id="customer_consent" className="mt-1" value={data.marketing_consent} onChange={(value) => setData('marketing_consent', value)} options={optionsOf(options.consents)} />
-                            <InputError message={errors.marketing_consent} className="mt-1" />
-                        </div>
+                        </Field>
+                        <Field id="customer_consent" label="Consentimiento para mensajes comerciales" error={errors.marketing_consent}>
+                            <Select id="customer_consent" value={data.marketing_consent} onChange={(value) => setData('marketing_consent', value)} options={optionsOf(options.consents)} />
+                        </Field>
                         {field('consent_note', data.marketing_consent === 'granted' ? 'Cómo se obtuvo (obligatorio)' : 'Constancia (opcional)', { maxLength: 255 })}
-                    </div>
-
-                    {field('tags', 'Etiquetas (separadas por comas)', { placeholder: 'vip, mayorista' })}
-                    <div>
-                        <InputLabel htmlFor="customer_notes" value="Notas (opcional)" />
-                        <Textarea id="customer_notes" className="mt-1" value={data.notes} maxLength={2000} onChange={(e) => setData('notes', e.target.value)} />
-                        <InputError message={errors.notes} className="mt-1" />
+                        {field('tags', 'Etiquetas (separadas por comas)', { placeholder: 'vip, mayorista', wide: true })}
+                        <Field id="customer_notes" label="Notas (opcional)" error={errors.notes} className="sm:col-span-2">
+                            <Textarea id="customer_notes" rows={4} value={data.notes} maxLength={2000} onChange={(e) => setData('notes', e.target.value)} invalid={Boolean(errors.notes)} />
+                        </Field>
                     </div>
                 </div>
                 <div className="flex justify-end gap-3 border-t border-line bg-card px-5 py-4 sm:px-8">

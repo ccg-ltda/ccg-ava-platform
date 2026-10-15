@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\Audited;
+use App\Support\PhoneNumber;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -33,6 +34,12 @@ class Customer extends Model
     {
         static::saving(function (Customer $customer) {
             $customer->phone_normalized = static::normalizePhone($customer->phone);
+
+            // The international form exists only for a number typed (or changed) as international. A historical row that is saved for
+            // another reason keeps whatever it had: the review command is the only way a historical number gains it.
+            if (! $customer->exists || $customer->isDirty('phone')) {
+                $customer->phone_e164 = PhoneNumber::e164($customer->phone);
+            }
             $customer->email_normalized = static::normalizeEmail($customer->email);
 
             if ($customer->isDirty('marketing_consent')) {

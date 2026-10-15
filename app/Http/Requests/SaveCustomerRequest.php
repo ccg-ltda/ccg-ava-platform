@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\Customer;
+use App\Rules\InternationalPhone;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -23,10 +24,13 @@ class SaveCustomerRequest extends FormRequest
     /** @return array<string, ValidationRule|array<mixed>|string> */
     public function rules(): array
     {
+        // Editing: the phone the customer already has may come back unchanged (a historical number is not rewritten by editing the notes).
+        $stored = $this->route('customer') ? $this->attributes->get('workspace')?->customers()->whereKey($this->route('customer'))->value('phone') : null;
+
         return [
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['nullable', 'string', 'max:100'],
-            'phone' => ['nullable', 'string', 'max:32', 'regex:/^\+?[0-9\s().-]+$/'],
+            'phone' => ['nullable', 'string', 'max:32', new InternationalPhone($stored)],
             'email' => ['nullable', 'email:rfc', 'max:160'],
             'source' => ['required', Rule::in(array_keys(config('customers.sources')))],
             'notes' => ['nullable', 'string', 'max:2000'],
@@ -45,10 +49,6 @@ class SaveCustomerRequest extends FormRequest
     {
         return [function (Validator $validator) {
             $phone = Customer::normalizePhone($this->input('phone'));
-
-            if ($phone !== null && (strlen($phone) < 7 || strlen($phone) > 15)) {
-                $validator->errors()->add('phone', 'El teléfono debe tener entre 7 y 15 dígitos.');
-            }
 
             if (! $validator->errors()->any() && $phone === null && blank($this->input('email')) && $this->identities() === []) {
                 $validator->errors()->add('phone', 'Indica al menos un teléfono, un correo o un identificador de canal.');

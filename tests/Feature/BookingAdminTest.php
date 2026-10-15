@@ -84,7 +84,7 @@ class BookingAdminTest extends TestCase
         $service = $this->makeService($this->workspace);
 
         $this->post('/professionals', [
-            'name' => 'Ana', 'specialty' => 'Manicurista', 'phone' => '3001112233', 'service_ids' => [$service->id],
+            'name' => 'Ana', 'specialty' => 'Manicurista', 'phone' => '+573001112233', 'service_ids' => [$service->id],
             'schedule' => [
                 ['weekday' => 1, 'starts_at' => '09:00', 'ends_at' => '13:00'],
                 ['weekday' => 1, 'starts_at' => '14:00', 'ends_at' => '18:00'],
@@ -195,7 +195,7 @@ class BookingAdminTest extends TestCase
     {
         $service = $this->makeService($this->workspace);
         $professional = $this->makeProfessional($this->workspace, [$service]);
-        $payload = ['service_id' => $service->id, 'professional_id' => $professional->id, 'starts_at' => '2026-10-13T10:00:00Z', 'customer' => ['name' => 'Laura', 'phone' => '3001112233']];
+        $payload = ['service_id' => $service->id, 'professional_id' => $professional->id, 'starts_at' => '2026-10-13T10:00:00Z', 'customer' => ['name' => 'Laura', 'phone' => '+573001112233']];
 
         $this->post('/bookings', $payload)->assertSessionHas('success');
         $this->post('/bookings', $payload)->assertSessionHas('error');
@@ -221,7 +221,7 @@ class BookingAdminTest extends TestCase
         $this->post("/bookings/{$appointment->id}/status", ['status' => 'completed'])->assertSessionHas('success');
         $this->assertSame('completed', $appointment->fresh()->status);
 
-        $other = $this->appointment(['name' => 'Otra', 'phone' => '3009998877'], '2026-10-16 10:00:00');
+        $other = $this->appointment(['name' => 'Otra', 'phone' => '+573009998877'], '2026-10-16 10:00:00');
         $this->post("/bookings/{$other->id}/cancel", ['reason' => 'No puede asistir'])->assertSessionHas('success');
         $this->assertSame(['cancelled', 'No puede asistir'], [$other->fresh()->status, $other->fresh()->cancel_reason]);
         $this->post("/bookings/{$other->id}/cancel")->assertSessionHas('error'); // already closed
@@ -231,7 +231,7 @@ class BookingAdminTest extends TestCase
     public function test_rescheduling_to_a_taken_time_changes_nothing(): void
     {
         $first = $this->appointment();
-        $second = $this->appointment(['name' => 'Otra', 'phone' => '3009998877'], '2026-10-13 12:00:00');
+        $second = $this->appointment(['name' => 'Otra', 'phone' => '+573009998877'], '2026-10-13 12:00:00');
 
         $this->post("/bookings/{$second->id}/reschedule", ['starts_at' => '2026-10-13T10:00:00Z'])->assertSessionHas('error');
 
@@ -267,7 +267,7 @@ class BookingAdminTest extends TestCase
         $service = $this->makeService($this->workspace);
         $professional = $this->makeProfessional($this->workspace, [$service]);
         $appointment = $this->appointment();
-        $book = ['service_id' => $service->id, 'professional_id' => $professional->id, 'starts_at' => '2026-10-13T14:00:00Z', 'customer' => ['name' => 'X Y', 'phone' => '3001112233']];
+        $book = ['service_id' => $service->id, 'professional_id' => $professional->id, 'starts_at' => '2026-10-13T14:00:00Z', 'customer' => ['name' => 'X Y', 'phone' => '+573001112233']];
 
         $this->actAsMember($this->workspace, 'lector');
         $this->get('/bookings')->assertOk();
@@ -325,7 +325,7 @@ class BookingAdminTest extends TestCase
         $other = $this->bookingWorkspace('OTRO');
         $otherService = $this->makeService($other, ['name' => 'Ajeno']);
         $otherPro = $this->makeProfessional($other, [$otherService], 'Ajena');
-        $foreign = $this->appointments()->book($other, $otherService, $otherPro->id, CarbonImmutable::parse('2026-10-13 10:00:00', 'UTC'), ['name' => 'Otro', 'phone' => '3005550000', 'email' => null], 'admin')['appointment'];
+        $foreign = $this->appointments()->book($other, $otherService, $otherPro->id, CarbonImmutable::parse('2026-10-13 10:00:00', 'UTC'), ['name' => 'Otro', 'phone' => '+573005550000', 'email' => null], 'admin')['appointment'];
         $service = $this->makeService($this->workspace);
 
         $this->put("/services/{$otherService->id}", ['name' => 'Hackeado', 'duration_minutes' => 30])->assertNotFound();
@@ -335,7 +335,7 @@ class BookingAdminTest extends TestCase
         $this->post("/bookings/{$foreign->id}/reschedule", ['starts_at' => '2026-10-14T10:00:00Z'])->assertNotFound();
         $this->post('/professionals', ['name' => 'Mía', 'service_ids' => [$otherService->id]])->assertSessionHasErrors('service_ids.0');
         $this->put("/services/{$service->id}", ['name' => 'Mío', 'duration_minutes' => 30, 'resource_ids' => [$other->bookableResources()->create(['name' => 'R'])->id]])->assertSessionHasErrors('resource_ids.0');
-        $this->post('/bookings', ['service_id' => $otherService->id, 'starts_at' => '2026-10-13T12:00:00Z', 'customer' => ['name' => 'Laura', 'phone' => '3001112233']])->assertSessionHas('error');
+        $this->post('/bookings', ['service_id' => $otherService->id, 'starts_at' => '2026-10-13T12:00:00Z', 'customer' => ['name' => 'Laura', 'phone' => '+573001112233']])->assertSessionHas('error');
 
         $this->get('/bookings?from=2026-10-13&days=7')->assertInertia(fn (AssertableInertia $page) => $page->has('appointments', 0)->has('customers.data', 0)->has('options.services', 1));
         $this->assertSame('Ajeno', $otherService->fresh()->name);

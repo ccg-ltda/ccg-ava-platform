@@ -45,7 +45,7 @@ class AvailabilityTest extends TestCase
     {
         $workspace ??= $this->workspace;
 
-        return $this->appointments()->book($workspace, $service, $professional->id, CarbonImmutable::parse($start, 'UTC'), ['name' => 'Cliente', 'phone' => '3001112233', 'email' => null], 'admin')['appointment'];
+        return $this->appointments()->book($workspace, $service, $professional->id, CarbonImmutable::parse($start, 'UTC'), ['name' => 'Cliente', 'phone' => '+573001112233', 'email' => null], 'admin')['appointment'];
     }
 
     public function test_it_offers_every_start_inside_the_weekly_schedule_that_fits_the_service(): void
@@ -245,7 +245,7 @@ class AvailabilityTest extends TestCase
         $ana = $this->makeProfessional($this->workspace, [$service], 'Ana');
         $beto = $this->makeProfessional($this->workspace, [$service], 'Beto');
         $start = CarbonImmutable::parse('2026-10-13 10:00:00', 'UTC');
-        $customer = ['name' => 'Cliente', 'phone' => '3001112233', 'email' => null];
+        $customer = ['name' => 'Cliente', 'phone' => '+573001112233', 'email' => null];
 
         $this->appointments()->book($this->workspace, $service, $ana->id, $start, $customer, 'admin');
 
@@ -256,7 +256,7 @@ class AvailabilityTest extends TestCase
             $this->assertSame(BookingException::SLOT_UNAVAILABLE, $exception->reason);
         }
 
-        $auto = $this->appointments()->book($this->workspace, $service, null, $start, ['name' => 'Otra', 'phone' => '3002223344', 'email' => null], 'admin')['appointment'];
+        $auto = $this->appointments()->book($this->workspace, $service, null, $start, ['name' => 'Otra', 'phone' => '+573002223344', 'email' => null], 'admin')['appointment'];
 
         $this->assertSame($beto->id, $auto->professional_id);
         $this->assertSame(2, Appointment::where('workspace_id', $this->workspace->id)->count());
@@ -269,7 +269,7 @@ class AvailabilityTest extends TestCase
 
         foreach (['2026-10-13 03:00:00', '2026-10-13 09:07:00', '2026-10-17 10:00:00'] as $start) { // night, off the step, Saturday
             try {
-                $this->appointments()->book($this->workspace, $service, $ana->id, CarbonImmutable::parse($start, 'UTC'), ['name' => 'Cliente', 'phone' => '3001112233', 'email' => null], 'web');
+                $this->appointments()->book($this->workspace, $service, $ana->id, CarbonImmutable::parse($start, 'UTC'), ['name' => 'Cliente', 'phone' => '+573001112233', 'email' => null], 'web');
                 $this->fail("{$start} must be refused");
             } catch (BookingException $exception) {
                 $this->assertSame(BookingException::SLOT_UNAVAILABLE, $exception->reason, $start);

@@ -59,6 +59,14 @@ class PlansTest extends TestCase
         return Module::where('key', $key)->firstOrFail()->id;
     }
 
+    /** The provider names ids that only exist on SQLite (sequences restart per test); the denial must not depend on the resource existing. */
+    private function realIds(string $uri): string
+    {
+        $ids = ['plans' => Plan::query()->value('id'), 'modules' => Module::query()->value('id'), 'module-categories' => ModuleCategory::query()->value('id'), 'workspaces' => $this->client->id];
+
+        return preg_replace_callback('#^/(plans|modules|module-categories|workspaces)/\d+#', fn (array $match) => "/{$match[1]}/{$ids[$match[1]]}", $uri);
+    }
+
     private function plan(string $name, array $keys = [], bool $active = true): Plan
     {
         $plan = Plan::create(['name' => $name, 'is_active' => $active]);
@@ -479,7 +487,7 @@ class PlansTest extends TestCase
         $this->actIn($this->client, 'admin');
         $plan = $this->plan('Propio', ['dashboard']);
 
-        $this->{$method}($uri, ['name' => 'X', 'plan_id' => $plan->id, 'module_category_id' => 1])->assertForbidden();
+        $this->{$method}($this->realIds($uri), ['name' => 'X', 'plan_id' => $plan->id, 'module_category_id' => 1])->assertForbidden();
         $this->assertSame(0, Plan::where('name', 'X')->count());
         $this->assertSame(Plan::where('key', 'full_platform')->value('id'), $this->client->fresh()->plan_id);
     }
@@ -489,7 +497,7 @@ class PlansTest extends TestCase
     {
         $this->actIn($this->client, 'admin', superuser: true);
 
-        $this->{$method}($uri, ['name' => 'X'])->assertForbidden();
+        $this->{$method}($this->realIds($uri), ['name' => 'X'])->assertForbidden();
     }
 
     #[DataProvider('adminRoutes')]
@@ -497,7 +505,7 @@ class PlansTest extends TestCase
     {
         $this->actIn($this->dev, 'admin');
 
-        $this->{$method}($uri, ['name' => 'X'])->assertForbidden();
+        $this->{$method}($this->realIds($uri), ['name' => 'X'])->assertForbidden();
     }
 
     public function test_guests_are_sent_to_login(): void

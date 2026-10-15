@@ -104,7 +104,7 @@ class ChatbotExecutionTest extends TestCase
 
                 return Http::response(['execution_id' => $request->header('X-Ava-Execution')[0], 'reply' => $reply] + $extra);
             },
-            self::GRAPH => Http::response(['messages' => [['id' => 'wamid.OUT'.++$this->sequence]]]),
+            self::GRAPH => fn () => Http::response(['messages' => [['id' => 'wamid.OUT'.++$this->sequence]]]),
         ]);
     }
 
@@ -1250,7 +1250,7 @@ class ChatbotExecutionTest extends TestCase
 
         foreach ($cases as $name => $override) {
             try {
-                $insert($override + $good);
+                DB::transaction(fn () => $insert($override + $good));
                 $this->fail("The database accepted {$name}.");
             } catch (QueryException) {
                 $this->assertTrue(true);

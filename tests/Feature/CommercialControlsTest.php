@@ -348,7 +348,7 @@ class CommercialControlsTest extends TestCase
         foreach (['/users', '/settings', '/integrations', '/chatbots', '/conversations', '/audit'] as $url) {
             $this->get($url)->assertForbidden();
         }
-        $this->put("/workspaces/{$this->client->id}/members/1", ['role' => 'admin'])->assertForbidden();
+        $this->put("/workspaces/{$this->client->id}/members/".User::query()->value('id'), ['role' => 'admin'])->assertForbidden();
         $this->post('/roles', ['name' => 'x'])->assertForbidden();
     }
 
