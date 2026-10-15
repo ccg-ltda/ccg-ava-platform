@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Services\AgentAccess;
+use App\Services\ExecutionAccess;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,11 +17,17 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class AuthenticateAgent
 {
-    public function __construct(private readonly AgentAccess $access) {}
+    public function __construct(private readonly AgentAccess $access, private readonly ExecutionAccess $runs) {}
 
     public function handle(Request $request, Closure $next): Response
     {
         $token = $request->bearerToken();
+
+        // The run-scoped token Ava gives a workflow it starts: only the booking tools, only for the conversation of that execution.
+        if ($token && str_starts_with($token, ExecutionAccess::PREFIX)) {
+            return $this->handleRun($request, $next, $token);
+        }
+
         $chatbot = $token ? $this->access->find($token) : null;
 
         abort_unless($chatbot, 401, 'Token inválido.');
@@ -34,6 +41,22 @@ class AuthenticateAgent
 
         $request->attributes->set('chatbot', $chatbot);
         $request->attributes->set('workspace', $chatbot->workspace);
+
+        return $next($request);
+    }
+
+    private function handleRun(Request $request, Closure $next, string $token): Response
+    {
+        $execution = $this->runs->resolve($token);
+        $chatbot = $execution?->chatbot;
+
+        abort_unless($execution, 401, 'Token inválido o vencido.');
+        abort_unless(str_starts_with((string) $request->route()?->getName(), 'agent.booking.'), 403, 'Este token solo sirve para las herramientas de reservas de su ejecución.');
+        abort_unless($chatbot->is_active && $chatbot->workspace->is_active && $chatbot->workspace->organization->is_active, 403, 'El chatbot, su Workspace o su organización están desactivados.');
+
+        $request->attributes->set('chatbot', $chatbot);
+        $request->attributes->set('workspace', $chatbot->workspace);
+        $request->attributes->set('execution', $execution);
 
         return $next($request);
     }

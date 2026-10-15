@@ -42,6 +42,16 @@ class ProviderException extends RuntimeException
         parent::__construct(self::MESSAGES[$codeName] ?? self::MESSAGES[self::UNKNOWN]);
     }
 
+    /**
+     * Whether the request MAY have been processed although the answer was lost or broken (a timeout, a server error, an unknown
+     * failure). Writing again after such a failure could duplicate the operation, so it is recorded as uncertain and verified first;
+     * an authentication, validation, conflict or rate-limit refusal is certain: nothing was done.
+     */
+    public function uncertain(): bool
+    {
+        return in_array($this->codeName, [self::TIMEOUT, self::UNAVAILABLE, self::UNKNOWN], true);
+    }
+
     public static function auth(): self
     {
         return new self(self::AUTH);

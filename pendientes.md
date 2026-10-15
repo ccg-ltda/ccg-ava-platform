@@ -115,6 +115,25 @@ Propuesta completa en `docs/privacidad.md` (no es asesoría legal; los puntos ma
 - [x] **Revisión visual completada (2026-10-16, Playwright, datos E2E ya limpiados):** Usuarios, Roles, «Ver permisos», sidebar plegable (las secciones, también la de la página actual, se pliegan sin cambiar alto ni ancho), Planes (lista, nuevo plan con dependencias y validación del navegador, tabla con scroll propio) y la vista bloqueada de Conversaciones de otro Workspace («Contenido privado»: solo conteos y el aviso de que el rol no puede abrir un acceso) en 1440, 820 y 390 px, sin desbordes de página. Como admin de un cliente, `/plans`, `/plans/{id}`, `/conversations?workspace=` y `/customers?workspace=` dan 403 sin datos. Defecto corregido: las páginas de error salían en inglés («Forbidden»); `lang/es.json` las traduce. NO se vio el formulario de apertura de un acceso de soporte (exige un rol con `access-private-data`, que ningún rol tiene asignado a propósito): solo está cubierto por `PrivacyTest`.
 - [x] **Auditoría del sembrado (2026-10-16):** roles en desarrollo tras sembrar: `admin` 21 (todos menos los 3 de plataforma/soporte), `plataforma` 3, `soporte` 3, `supervisor` 3, `agente` 3, `cliente` 1; los permisos granulares solo los tiene `admin`. Corregido un exceso real: `AdminUserSeeder` volvía a dar a `admin` `manage-plans`, `manage-modules` y `access-private-data` en instalaciones limpias. `PlatformBoundaryTest` fija la matriz de permisos de cada rol.
 
+### Reservas y pruebas reales de extremo a extremo (2026-10-16)
+
+Ver `RECOMENDACIONES.md` (§2.3 a §2.6 y §3). Hecho: token de ejecución para las herramientas de reservas, canal web sobre las ejecuciones de la plataforma, `executions:list`, variables de integración reenviadas en `docker-compose.prod.yml`, menú General/Operación/Administración. Falta, y depende de la empresa o de una decisión:
+- [ ] **Decisión D-IA:** quién decide responder directo o delegar en n8n. Hoy el workflow es el asistente (opción A); una IA propia de Ava (opción B) sería un módulo nuevo y requiere proveedor, costes y privacidad.
+- [ ] **Adaptar el workflow existente de la empresa** (lista de 7 puntos en el documento): verificar la firma, responder el contrato, dejar de enviar por WhatsApp desde n8n, usar `memory_key` y el token de ejecución, tratar los reintentos (las reservas no son idempotentes por ejecución).
+- [ ] **Canal web:** la integración `web` sigue exigiendo una URL de webhook aunque, con workflow asignado, no se llame; cuando el negocio confirme el camino de la plataforma para la web, conviene hacerla opcional. El widget con y sin workflow SÍ se probó en navegador (Chromium, entorno desechable, n8n de pruebas local): respuesta, lentitud, fallo, espera prolongada, reserva con token, recarga y aislamiento (`RECOMENDACIONES.md` §7.2). Sigue sin mostrar el historial tras recargar y sin probarse en móvil real ni otros navegadores.
+- [x] **Idempotencia de reservas (2026-10-16):** por clave natural (conversación + servicio + instante) sin columna nueva; una escritura incierta a una agenda externa se marca `uncertain` y exige verificación antes de repetirse. Límite: otra clave natural (mismo contacto que pide dos servicios distintos en el mismo instante) cuenta como reservas distintas solo en la agenda de Ava (con una agenda externa se compara por conversación + instante).
+- [ ] **Recuperación manual de una cita `uncertain`:** el personal la ve en la Agenda y puede cancelarla tras verificar en la agenda externa; no hay aún una acción «confirmar que sí existe» (pegar el id externo) ni aviso/alerta; hasta que exista un proveedor que reserve (Booker no reserva) solo está probado con la agenda simulada.
+- [ ] **Booker:** sin horarios, reserva ni reprogramación hasta tener el Sandbox.
+- [ ] **Entorno real:** credenciales, HTTPS, worker y scheduler; ninguna prueba real ejecutada.
+
+### Primera integración real — lo que falta (2026-10-16)
+
+Ver `RECOMENDACIONES.md` (análisis §2.1, requisitos externos §6.1 y los 9 pasos §3.2). Hecho en el repositorio: estados de entrega monótonos, `integrations:diagnose`, pruebas simuladas (`IntegrationReadinessTest`). Falta, y depende del proveedor o de una decisión:
+- [ ] **Credenciales y datos reales:** App Secret, token permanente y `phone_number_id` de Meta; instancia de n8n por HTTPS; un workflow que cumpla el contrato (§4 del documento) registrado en `config/n8n.php`; verificar la licencia de n8n.
+- [ ] **Pruebas reales (ninguna ejecutada):** «Probar conexión», un mensaje entrante firmado por Meta, la respuesta de n8n, el envío, los estados y los fallos a propósito (paso 7 y 8 del documento).
+- [ ] **Sin decidir:** Meta por Workspace con su propio secreto; mensajes que no son texto; interfaz para ver ejecuciones; qué hace Ava con una ejecución que falla definitivamente; límite del webhook (600/min por IP, estimado); plantillas aprobadas fuera de la ventana de 24 h.
+- [ ] **Booker:** sigue sin horarios, reserva ni reprogramación; necesita el Sandbox.
+
 ## En curso
 
 - [ ] TODO: nada en curso.

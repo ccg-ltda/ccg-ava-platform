@@ -154,6 +154,18 @@ Los planes comerciales (módulos y límites contratados) **no se diseñan en est
 
 [Verificado] (1) Las cuentas internas de CCG ya no reciben membresía ni rol en un Workspace cliente por las pantallas de administración (cierra la vía indirecta que esquivaba el acceso de soporte; el acceso de soporte sigue sin aprobar: D-P1). (2) La instalación limpia con `CACHE_STORE=database` funciona: `cache`/`cache_locks` se crean en la primera migración; probado en PostgreSQL con sesión y cola en `database`, esquema idéntico al de desarrollo. (3) La consolidación de migraciones se revisó: sin pendientes, sin duplicados; las filas huérfanas de `migrations` en desarrollo son inofensivas y no se editaron. (4) Auditoría del sembrado: se corrigió que `AdminUserSeeder` diera a `admin` permisos de plataforma y de acceso privado en instalaciones limpias; los permisos nuevos solo los tiene `admin`. (5) Revisión visual parcial en navegador (ver `pendientes.md`). Nada se probó con Meta, n8n ni Booker reales.
 
+### 5.4f. Estado: preparación de la primera integración real (2026-10-16)
+
+[Verificado] La ruta con más infraestructura lista es Meta WhatsApp con el n8n de la plataforma (webhook firmado, ejecuciones idempotentes, envío con un solo intento, recuperación, auditoría); se documenta en `RECOMENDACIONES.md` (§2.1, §3.1, §6.1 y §3.2) con el contrato del workflow, los requisitos externos y los pasos exactos. Cambios: estados de entrega que no retroceden, herramienta `integrations:diagnose` y pruebas simuladas nuevas. [No verificado] Nada se probó contra Meta, n8n o Booker reales; la prueba real y la licencia de n8n siguen pendientes.
+
+### 5.4g. Estado: reservas de extremo a extremo y menú por función (2026-10-16)
+
+[Verificado] Se auditó el flujo mensaje → Ava → workflow → respuesta → canal y se completó lo que faltaba para una prueba real: herramientas de reservas utilizables por el workflow con un token de ejecución de vida corta, canal web sobre el mismo camino de ejecuciones que WhatsApp, diagnóstico de ejecuciones por consola y variables de integración en el compose de producción (sin ellas el webhook habría respondido 404). El menú pasa a tres grupos plegables por función (General, Operación, Administración) con cada módulo reutilizable una sola vez; las soluciones comerciales siguen siendo categorías y planes. [No existe] un decisor de Ava entre responder directo y delegar en n8n: el workflow es el asistente; la alternativa (IA propia) es la decisión D-IA. Nada se probó con Meta, n8n ni Booker reales. Ver `RECOMENDACIONES.md` (§2.3 a §2.6 y §3).
+
+### 5.4h. Estado: validación final previa a las pruebas reales (2026-10-16)
+
+[Verificado] Auditoría de los riesgos que obligarían a reimplementar: el token de ejecución ahora muere al cambiar el control de la conversación; las reservas son idempotentes por clave natural y las escrituras inciertas a una agenda externa quedan `uncertain` y exigen verificación; el widget sabe cuándo dejar de esperar; el compose de producción reenvía todas las variables de integración (una prueba lo vigila); el diagnóstico comprueba scheduler, Horizon y cola. El canal web se probó en navegador con y sin workflow contra un entorno desechable y un n8n de PRUEBAS local (no el de la empresa). [No verificado] Meta, n8n y Booker reales; la decisión D-IA, el workflow empresarial por adaptar y las decisiones de privacidad siguen pendientes. Ver `RECOMENDACIONES.md` §7.1 y §7.2.
+
 ### 5.5. Criterios de aceptación de la Fase 1
 
 1. Con todos los Workspaces actuales, ningún test existente cambia de resultado.

@@ -51,6 +51,7 @@ class ChatbotExecutions
         private readonly ChannelDelivery $delivery,
         private readonly AuditLogger $audit,
         private readonly ModuleAccess $modules,
+        private readonly ExecutionAccess $access,
     ) {}
 
     /** Whether the chatbot is switched on, in an active Workspace and Organization whose plan still includes the assistant and the inbox. */
@@ -60,6 +61,16 @@ class ChatbotExecutions
 
         return $chatbot->is_active && ! $chatbot->is_demo && $chatbot->workspace->is_active && $chatbot->workspace->organization->is_active
             && $this->modules->allowsAll($chatbot->workspace, ModuleAccess::CHANNEL_MODULES);
+    }
+
+    /**
+     * Whether this chatbot answers through the platform's workflow: it has an authorized workflow and the platform n8n is configured.
+     * The channels (WhatsApp, web) use it to choose between this path (Ava starts and controls every execution) and the older one
+     * (the Workspace's own n8n webhook, web only).
+     */
+    public function available(Chatbot $chatbot): bool
+    {
+        return filled(config('n8n.execution_url')) && filled(config('n8n.secret')) && $this->active($chatbot) && $this->workflows->for($chatbot) !== null;
     }
 
     /**
@@ -234,7 +245,7 @@ class ChatbotExecutions
 
     /**
      * What the workflow may know: the chatbot's instructions, the message and a short history of THIS conversation. No
-     * contact number, Workspace data or credential. `memory_key` is an opaque key that is different for every Workspace,
+     * contact number or Workspace data; the only credential is the run-scoped token of `ava` (ExecutionAccess). `memory_key` is an opaque key that is different for every Workspace,
      * chatbot and conversation: the only thing a workflow should use to keep conversational memory.
      *
      * @return array<string, mixed>
@@ -259,6 +270,14 @@ class ChatbotExecutions
             ],
             'message' => ['id' => $execution->message_id, 'text' => $execution->message->body],
             'history' => $history,
+            // How the workflow reaches Ava's tools for THIS conversation: a run-scoped token (booking tools only, valid while this
+            // execution runs) and which tools the Workspace plan includes. The workflow never needs a long-lived chatbot token.
+            'ava' => [
+                'api_url' => url('/api/agent'),
+                'token' => $this->access->issue($execution),
+                'token_expires_at' => now()->addSeconds((int) config('n8n.run_token_ttl'))->toIso8601String(),
+                'tools' => ['booking' => $this->modules->allowsAll($chatbot->workspace, ModuleAccess::BOOKING_MODULES)],
+            ],
         ];
     }
 

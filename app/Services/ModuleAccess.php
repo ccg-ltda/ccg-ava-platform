@@ -110,6 +110,9 @@ class ModuleAccess
     }
 
     /** @param  list<string>  $modules */
+    /** Modules the booking tools of the agent API need (see routes/api.php). */
+    public const BOOKING_MODULES = ['assistants', 'conversations', 'service_catalog', 'professionals', 'bookings'];
+
     public function allowsAll(Workspace $workspace, array $modules): bool
     {
         return array_diff($modules, $this->keys($workspace)) === [];

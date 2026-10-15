@@ -88,6 +88,7 @@ export default function AgendaPanel({ appointments, filters, options, capabiliti
                                             {appointment.notes && <p className="mt-0.5 text-xs text-ink-muted">Nota: {appointment.notes}</p>}
                                             {appointment.status === 'cancelled' && appointment.cancelReason && <p className="mt-0.5 text-xs text-ink-muted">Motivo: {appointment.cancelReason}</p>}
                                             {appointment.syncStatus === 'failed' && <p className="mt-0.5 text-xs text-danger">{syncErrors[appointment.syncError] ?? syncLabels.failed}</p>}
+                                            {appointment.syncStatus === 'uncertain' && <p className="mt-0.5 text-xs text-accent-amber">{syncLabels.uncertain}. {syncErrors[appointment.syncError] ?? ''}</p>}
                                             {appointment.external && appointment.syncStatus === 'pending' && <p className="mt-0.5 text-xs text-ink-muted">{syncLabels.pending}</p>}
                                         </div>
                                         <div className="flex flex-wrap items-center gap-2">

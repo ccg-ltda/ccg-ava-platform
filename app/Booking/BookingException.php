@@ -24,9 +24,17 @@ class BookingException extends RuntimeException
 
     public const PROVIDER = 'provider';
 
-    public function __construct(public readonly string $reason, string $message)
+    /** A write to an external agenda whose outcome is unknown: it may already exist there. Never repeated before somebody verifies it. */
+    public const UNCERTAIN = 'uncertain';
+
+    public function __construct(public readonly string $reason, string $message, public readonly ?int $appointmentId = null)
     {
         parent::__construct($message);
+    }
+
+    public static function uncertain(int $appointmentId): self
+    {
+        return new self(self::UNCERTAIN, 'No pudimos confirmar si la agenda externa recibió la solicitud. No la repitas: el negocio la verificará.', $appointmentId);
     }
 
     public static function slotUnavailable(): self
@@ -58,7 +66,7 @@ class BookingException extends RuntimeException
     public function status(): int
     {
         return match ($this->reason) {
-            self::SLOT_UNAVAILABLE, self::STATE => 409,
+            self::SLOT_UNAVAILABLE, self::STATE, self::UNCERTAIN => 409,
             self::NOT_FOUND => 404,
             self::UNSUPPORTED => 422,
             self::PROVIDER => 502,

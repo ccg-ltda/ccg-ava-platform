@@ -50,12 +50,18 @@ class AgentBookingController extends Controller
     {
         $data = $this->contact($request);
 
-        return $this->run(function (Workspace $workspace) use ($request, $data) {
+        $status = 201;
+
+        return $this->run(function (Workspace $workspace) use ($request, $data, &$status) {
             $conversation = $this->conversation($request, $data);
             $result = $this->bookings->request($workspace, $request->booking(), 'chat', $conversation->id);
+            // The same request again returns the booking Ava already has (200), not a second one.
+            $status = ($result['replayed'] ?? false) ? 200 : 201;
 
-            return ['appointment' => $this->answer($result['appointment']), 'confirmed' => $result['appointment']->status === Appointment::CONFIRMED];
-        }, 201);
+            return ['appointment' => $this->answer($result['appointment']), 'confirmed' => $result['appointment']->status === Appointment::CONFIRMED, 'replayed' => $result['replayed'] ?? false];
+        }, function () use (&$status) {
+            return $status;
+        });
     }
 
     /** The active appointments made from this conversation. */
@@ -95,6 +101,15 @@ class AgentBookingController extends Controller
     /** @return array{channel: string, contact_id: string} who the automation is talking to: validated, never trusted as an id of ours */
     private function contact(Request $request): array
     {
+        // A run-scoped token already says whose conversation this is: the caller cannot name another one.
+        if ($execution = $request->attributes->get('execution')) {
+            $conversation = $execution->conversation;
+            abort_if(($request->input('channel') !== null && $request->input('channel') !== $conversation->channel)
+                || ($request->input('contact_id') !== null && (string) $request->input('contact_id') !== $conversation->contact_id), 403, 'Este token solo puede actuar en la conversación de su ejecución.');
+
+            return ['channel' => $conversation->channel, 'contact_id' => $conversation->contact_id];
+        }
+
         return $request->validate(['channel' => ['required', 'string', 'max:32'], 'contact_id' => ['required', 'string', 'max:64']]);
     }
 
@@ -119,12 +134,14 @@ class AgentBookingController extends Controller
         return array_intersect_key($this->present->appointment($appointment), array_flip(['id', 'service', 'professional', 'startsAt', 'dateLabel', 'timeLabel', 'status', 'statusLabel', 'syncStatus']));
     }
 
-    private function run(callable $action, int $status = 200): JsonResponse
+    private function run(callable $action, int|\Closure $status = 200): JsonResponse
     {
         try {
-            return response()->json($action(request()->attributes->get('workspace')), $status)->header('Cache-Control', 'no-store');
+            $body = $action(request()->attributes->get('workspace'));
+
+            return response()->json($body, is_int($status) ? $status : $status())->header('Cache-Control', 'no-store');
         } catch (BookingException $exception) {
-            return response()->json(['message' => $exception->getMessage(), 'reason' => $exception->reason], $exception->status());
+            return response()->json(['message' => $exception->getMessage(), 'reason' => $exception->reason] + ($exception->appointmentId ? ['appointment_id' => $exception->appointmentId] : []), $exception->status());
         }
     }
 }

@@ -16,7 +16,15 @@ Describe cómo encajan las cinco piezas que no deben confundirse y cómo se admi
 
 ### Sidebar: secciones, no módulos
 
-El sidebar tiene **secciones plegables** (todas las que tienen título). Una sección es presentación: reúne entradas relacionadas y desaparece si ninguna se ofrece. Su título de una solución comercial debe coincidir con el nombre de su categoría. Añadir una solución = una sección nueva en `navigation.js`, junto a los módulos que añade. El catálogo completo **no** se convierte en entradas permanentes: el menú muestra, por Workspace, solo los módulos implementados + incluidos en su plan + autorizados al rol. En `Desarrollo_DEV` (todos los módulos implementados) las secciones empiezan plegadas salvo la de la página actual, y el catálogo se explora en **Planes**, no en el menú.
+El sidebar tiene **tres grupos plegables por función** y todos se pliegan por separado, también el de la página actual:
+
+| Grupo | Entradas | Qué es |
+|---|---|---|
+| **General** | Dashboard, Asistentes, Conversaciones | Lo cotidiano del Workspace. |
+| **Operación** | Reportes, Servicios, Profesionales, Agenda, Clientes, Campañas | Los módulos funcionales reutilizables, sea cual sea la solución comercial que los ofrezca. Proveedores de agenda se configura en Integraciones y no tiene entrada propia. |
+| **Administración** | Usuarios y Roles, Auditoría, Configuraciones, Integraciones, Planes (solo administración de plataforma; incluye el catálogo de módulos) | Administración interna. |
+
+Una sección es presentación: reúne entradas relacionadas y desaparece si ninguna se ofrece. **Las soluciones comerciales no son secciones del menú** (son categorías del catálogo y planes): un módulo existe una sola vez y lo comparten todas las soluciones. Un módulo reutilizable nuevo = una entrada en Operación; una solución nueva (Salud, Delivery, eCommerce) = una categoría y planes, sin tocar el menú. No confundir estos grupos del MENÚ (por función) con los grupos conceptuales del CATÁLOGO (`config/modules.php` `groups`: administración, capacidades compartidas, soluciones comerciales), que organizan el constructor de planes. El catálogo completo **no** se convierte en entradas permanentes: el menú muestra, por Workspace, solo los módulos implementados + incluidos en su plan + autorizados al rol. En `Desarrollo_DEV` (todos los módulos implementados) los grupos empiezan plegados salvo el de la página actual, y el catálogo se explora en **Planes**, no en el menú. Cuatro piezas siguen separadas: el catálogo de capacidades implementadas (`config/modules.php implemented`), las soluciones o categorías comerciales (abiertas, creadas desde Planes), los planes que combinan módulos, y los permisos de cada usuario; la disponibilidad de un módulo para un Workspace sale solo de su plan. Los módulos que faltan para Salud, Delivery y eCommerce NO existen todavía: sus categorías están vacías a propósito y se incorporarán siguiendo este mismo modelo (entrada en `implemented` + `workspace.module` + menú en Operación + sembrado).
 
 ### Qué no es un módulo contratable (rutas «core»)
 

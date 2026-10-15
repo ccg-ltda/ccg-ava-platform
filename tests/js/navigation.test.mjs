@@ -8,19 +8,38 @@ import { isCurrentRoute, isFolded, navigation, openAfterNavigation, openAfterTog
 const source = (path) => readFileSync(fileURLToPath(new URL(`../../resources/js/${path}`, import.meta.url)), 'utf8');
 const everything = { permissions: navigation.flatMap((s) => s.items).map((i) => i.permission).filter(Boolean), modules: navigation.flatMap((s) => s.items).map((i) => i.module).filter(Boolean), platform: true };
 
-test('every section with a heading can be folded: no section opts out and no heading is missing', () => {
-    const labelled = navigation.filter((section) => section.label);
-
-    assert.ok(labelled.length >= 4, 'Servicios y Reservas, Clientes y comunicación, Analytics and Sistemas');
-    assert.deepEqual(['Servicios y Reservas', 'Clientes y comunicación', 'Analytics', 'Sistemas'].filter((l) => !labelled.some((s) => s.label === l)), []);
-    assert.equal(navigation.filter((section) => !section.label).length, 1, 'only the first section has no heading and is always open');
-    assert.equal(navigation[0].label, null);
+test('the menu has three groups by function and every one of them can be folded', () => {
+    assert.deepEqual(navigation.map((section) => section.label), ['General', 'Operación', 'Administración']);
+    navigation.forEach((section) => assert.ok(section.label, 'no section is left without a heading, so none is fixed outside a group'));
     navigation.forEach((section) => assert.equal('collapsible' in section, false, 'foldability is not an opt-in flag'));
+    assert.equal(startsOpen(navigation[0], false), false, 'General is a group like the others: it folds even when it is the first one');
 
     const component = source('Components/NavSection.jsx');
     assert.match(component, /foldable = Boolean\(section\.label\)/);
     assert.doesNotMatch(component, /hasActive\)\s*$/m, 'the section of the current page must stay foldable');
     assert.doesNotMatch(component, /!open && !hasActive/);
+});
+
+test('General, Operación and Administración hold exactly the agreed modules, each once', () => {
+    const labels = (name) => navigation.find((section) => section.label === name).items.map((item) => item.label);
+
+    assert.deepEqual(labels('General'), ['Dashboard', 'Asistentes', 'Conversaciones']);
+    assert.deepEqual(labels('Operación'), ['Reportes', 'Servicios', 'Profesionales', 'Agenda', 'Clientes', 'Campañas']);
+    assert.deepEqual(labels('Administración'), ['Usuarios y Roles', 'Auditoría', 'Configuraciones', 'Integraciones', 'Planes']);
+
+    const modules = navigation.flatMap((section) => section.items).map((item) => item.module).filter(Boolean);
+    assert.equal(new Set(modules).size, modules.length, 'a reusable module is listed once, not once per solution');
+    // Calendar providers are configured inside Integraciones: they have no menu entry of their own.
+    assert.equal(modules.includes('calendar_providers'), false);
+});
+
+test('every menu module is an implemented one of the catalog and every implemented page is in the menu', () => {
+    const catalog = source('../../config/modules.php');
+    const implemented = [...catalog.slice(catalog.indexOf("'implemented' => [")).matchAll(/^\s{8}'([a-z_]+)' => \['name'/gm)].map((match) => match[1]);
+    const menu = navigation.flatMap((section) => section.items).map((item) => item.module).filter(Boolean);
+
+    assert.deepEqual(menu.filter((key) => !implemented.includes(key)), [], 'the menu never lists a module the catalog does not implement');
+    assert.deepEqual(implemented.filter((key) => !menu.includes(key) && key !== 'calendar_providers'), [], 'an implemented module with its own page must be reachable');
 });
 
 test('headings and routes are unique', () => {
@@ -59,7 +78,7 @@ test('a workspace only sees what its plan includes and its role allows', () => {
 
     // Sections without visible items disappear instead of leaving an empty heading.
     const sections = visibleNavigation({ permissions: ['view-customers'], modules: ['customers'], platform: false });
-    assert.deepEqual(sections.map((s) => s.label), ['Clientes y comunicación']);
+    assert.deepEqual(sections.map((s) => s.label), ['Operación']);
 });
 
 test('the module catalog is not turned into permanent menu entries: only implemented modules appear, once', () => {
@@ -71,34 +90,38 @@ test('the module catalog is not turned into permanent menu entries: only impleme
 test('the current page keeps its section and item active on the pages of a module', () => {
     // Ziggy's route().current(pattern) accepts the "*" wildcard: this stands in for it.
     const page = (name) => (pattern) => new RegExp('^' + pattern.split('.').join('\.').split('*').join('.*') + '$').test(name);
-    const customers = navigation.find((s) => s.label === 'Clientes y comunicación');
+    const customers = navigation.find((s) => s.label === 'Operación');
 
     assert.equal(isCurrentRoute('customers.index', page('customers.show')), true);
     assert.equal(isCurrentRoute('customers.index', page('customers.index')), true);
     assert.equal(isCurrentRoute('dashboard', page('customers.show')), false);
     assert.equal(isCurrentRoute('customers.index', page('campaigns.show')), false);
     assert.equal(sectionHasRoute(customers, page('campaigns.show')), true);
-    assert.equal(sectionHasRoute(customers, page('reports.index')), false);
+    assert.equal(sectionHasRoute(customers, page('dashboard')), false);
 });
 
-test('a headed section folds and unfolds, also the one that holds the current page; the first one never folds', () => {
-    const first = navigation[0];
-    const headed = navigation.find((section) => section.label);
+test('every group folds and unfolds, also the one that holds the current page', () => {
+    for (const section of navigation) {
+        // A group starts folded unless it holds the current page...
+        assert.equal(startsOpen(section, false), false, section.label);
+        assert.equal(startsOpen(section, true), true, section.label);
 
-    // The section without heading is always open and cannot be folded.
-    assert.equal(startsOpen(first, false), true);
-    assert.equal(isFolded(first, false), false);
+        // ...and the user can fold the group of the current page and unfold it again.
+        let open = startsOpen(section, true);
+        open = openAfterToggle(open);
+        assert.equal(isFolded(section, open), true, section.label);
+        open = openAfterToggle(open);
+        assert.equal(isFolded(section, open), false, section.label);
+    }
+});
 
-    // A headed section starts folded unless it holds the current page.
-    assert.equal(startsOpen(headed, false), false);
-    assert.equal(startsOpen(headed, true), true);
+test('groups fold independently: folding one never changes another', () => {
+    const states = Object.fromEntries(navigation.map((section) => [section.label, startsOpen(section, section.label === 'Operación')]));
+    states.General = openAfterToggle(states.General);
 
-    // The user can fold the section of the current page and unfold it again.
-    let open = startsOpen(headed, true);
-    open = openAfterToggle(open);
-    assert.equal(isFolded(headed, open), true);
-    open = openAfterToggle(open);
-    assert.equal(isFolded(headed, open), false);
+    assert.equal(states.General, true);
+    assert.equal(states.Operación, true, 'the active group stays as it was');
+    assert.equal(states.Administración, false);
 });
 
 test('navigation unfolds the section it arrives at but never folds the one the user left open', () => {

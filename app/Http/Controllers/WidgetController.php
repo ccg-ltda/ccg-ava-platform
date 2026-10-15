@@ -53,7 +53,7 @@ class WidgetController extends Controller
     /** The visitor's answer: just `reply` while the AI is the one answering (the original contract), plus `handling` when a person is. */
     private function answer(array $result): array
     {
-        return ['reply' => $result['reply']] + ($result['handling'] === 'ai' ? [] : ['handling' => $result['handling']]);
+        return ['reply' => $result['reply']] + ($result['handling'] === 'ai' ? [] : ['handling' => $result['handling']]) + (($result['pending'] ?? false) ? ['pending' => true] : []);
     }
 
     /** What a human agent wrote to this visitor since the last time it asked, and who is answering now. */

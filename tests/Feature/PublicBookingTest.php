@@ -293,9 +293,17 @@ class PublicBookingTest extends TestCase
 
         $this->postJson($this->api('/appointments'), $this->payload(['service_id' => 'S1', 'professional_id' => 'P1']))->assertCreated()->assertJsonPath('appointment.status', 'confirmed')->assertJsonPath('token', null);
 
-        $simulated->failWith['book'] = 'timeout';
+        $simulated->failWith['book'] = 'auth';
         $response = $this->postJson($this->api('/appointments'), $this->payload(['service_id' => 'S1', 'starts_at' => '2026-10-14T10:00:00Z', 'customer' => ['name' => 'Otra', 'phone' => '3009998877']]))->assertStatus(502);
         $this->assertSame('provider', $response->json('reason'));
         $this->assertSame(['confirmed', 'failed'], Appointment::orderBy('id')->pluck('status')->all());
+
+        // A lost answer is unknown, and asking again from the page is refused until the business verifies it.
+        $simulated->failWith['book'] = 'timeout';
+        $third = $this->payload(['service_id' => 'S1', 'starts_at' => '2026-10-15T10:00:00Z', 'customer' => ['name' => 'Tercera', 'phone' => '3005550000']]);
+        $this->postJson($this->api('/appointments'), $third)->assertStatus(409)->assertJsonPath('reason', 'uncertain');
+        $simulated->failWith = [];
+        $this->postJson($this->api('/appointments'), $third)->assertStatus(409)->assertJsonPath('reason', 'uncertain');
+        $this->assertSame(1, Appointment::where('sync_status', 'uncertain')->count());
     }
 }

@@ -80,7 +80,11 @@ class ConversationService
             ->whereHas('conversation', fn ($q) => $q->where('chatbot_id', $chatbot->id)->where('channel', $channel)->where('contact_id', $contactId))
             ->first();
 
-        $message?->update(['status' => $status]);
+        // Conditional update: a repeated or out-of-order event (see Message::replaceableBy) never moves the state backwards.
+        $allowed = Message::replaceableBy($status);
+        $message?->newQuery()->whereKey($message->getKey())
+            ->where(fn ($q) => $q->whereIn('status', array_filter($allowed))->when(in_array(null, $allowed, true), fn ($q) => $q->orWhereNull('status')))
+            ->update(['status' => $status]);
 
         return $message !== null;
     }

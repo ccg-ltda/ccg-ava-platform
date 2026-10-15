@@ -276,10 +276,10 @@ class ModuleAvailabilityTest extends TestCase
     {
         $user = User::factory()->create(['password' => 'password']);
         $this->client->users()->attach($user->id, ['role' => 'admin']);
-        $this->contract($this->client, ['users_roles', 'settings']);
+        $this->contract($this->client, ['audit', 'settings']);
 
         $this->post('/pre-login', ['workspace_code' => 'CLIENTE_UNO']);
-        $this->post('/login', ['email' => $user->email, 'password' => 'password'])->assertRedirect(route('settings.index', absolute: false));
+        $this->post('/login', ['email' => $user->email, 'password' => 'password'])->assertRedirect(route('audit.index', absolute: false));
     }
 
     public function test_technical_routes_do_not_depend_on_the_plan(): void

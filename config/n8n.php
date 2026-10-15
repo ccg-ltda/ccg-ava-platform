@@ -36,6 +36,9 @@ return [
     'history_messages' => 10,
     'max_reply' => 4000,
 
+    /* Seconds the run-scoped token given to a workflow (see App\Services\ExecutionAccess) stays valid; it also dies when the execution ends. */
+    'run_token_ttl' => 600,
+
     /* Longest instructions text sent to the workflow, in characters. */
     'max_instructions' => 8000,
 ];

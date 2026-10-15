@@ -15,13 +15,15 @@ class LandingPage
         ['view-dashboard', 'dashboard', 'dashboard'],
         ['view-chatbots', 'assistants', 'chatbots.index'],
         ['view-conversations', 'conversations', 'conversations.index'],
-        ['view-bookings', 'bookings', 'bookings.index'],
         ['view-bookings', 'service_catalog', 'services.index'],
         ['view-bookings', 'professionals', 'professionals.index'],
+        ['view-bookings', 'bookings', 'bookings.index'],
         ['view-customers', 'customers', 'customers.index'],
         ['view-campaigns', 'campaigns', 'campaigns.index'],
-        ['manage-settings', 'settings', 'settings.index'],
         ['manage-users', 'users_roles', 'users.index'],
+        ['manage-settings', 'audit', 'audit.index'],
+        ['manage-settings', 'settings', 'settings.index'],
+        ['manage-settings', 'integrations', 'integrations.index'],
     ];
 
     /**

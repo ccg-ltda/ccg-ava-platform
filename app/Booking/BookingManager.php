@@ -100,6 +100,24 @@ class BookingManager
     {
         $provider = $this->provider($workspace);
 
+        // The same request again (a retried workflow, a message delivered twice): one conversation asking for the same service at the same
+        // moment is ONE booking. Ava returns the one it already has instead of writing again; if its outcome in the external agenda is
+        // still unknown it is refused until somebody verifies it (never a second write on a guess).
+        if ($conversationId !== null && ($existing = $this->existing($workspace, $provider, $data, $conversationId))) {
+            if ($existing->sync_status === 'uncertain') {
+                throw BookingException::uncertain($existing->id);
+            }
+
+            return ['appointment' => $existing, 'token' => null, 'replayed' => true];
+        }
+
+        // Without a conversation (the public page) a repeated request is not merged (the visitor needs the link of a NEW booking), but one
+        // whose outcome in the external agenda is unknown is still not written again: same customer, same moment, same agenda.
+        if ($conversationId === null && ! $this->providers->isInternal($provider)
+            && ($pending = $this->uncertainFor($workspace, $provider, $data))) {
+            throw BookingException::uncertain($pending->id);
+        }
+
         if ($this->providers->isInternal($provider)) {
             $service = $this->internalId($data['service_id']) ? $workspace->services()->find($data['service_id']) : null;
             $service ?? throw BookingException::invalid('Ese servicio no está disponible.');
@@ -117,6 +135,20 @@ class BookingManager
         }
 
         return ['appointment' => $this->bookExternally($workspace, $provider, $data, $channel, $conversationId), 'token' => null];
+    }
+
+    private function uncertainFor(Workspace $workspace, CalendarProvider $provider, array $data): ?Appointment
+    {
+        return $workspace->appointments()->where('customer_id', $this->appointments->customer($workspace, $data['customer'])->id)->where('starts_at', $data['starts_at']->utc())
+            ->where('provider', $provider->key())->where('sync_status', 'uncertain')->latest('id')->first();
+    }
+
+    private function existing(Workspace $workspace, CalendarProvider $provider, array $data, int $conversationId): ?Appointment
+    {
+        $query = $workspace->appointments()->where('conversation_id', $conversationId)->where('starts_at', $data['starts_at']->utc())
+            ->where('provider', $provider->key())->whereIn('status', Appointment::BLOCKING);
+
+        return ($this->providers->isInternal($provider) ? $query->where('service_id', $data['service_id']) : $query)->latest('id')->first();
     }
 
     public function reschedule(Appointment $appointment, CarbonImmutable $startsAt, int|string|null $professionalId, string $channel): Appointment
@@ -160,6 +192,13 @@ class BookingManager
         }
 
         $this->appointments->assertOpen($appointment);
+
+        // A request whose outcome was never known has no id in the other agenda: staff, after checking there, may close it here.
+        if ($channel === 'admin' && $appointment->sync_status === 'uncertain' && $appointment->external_id === null) {
+            $appointment->forceFill(['status' => Appointment::CANCELLED, 'cancelled_at' => now(), 'cancel_reason' => $reason ? mb_substr(trim($reason), 0, 255) : 'Verificada sin registro en la agenda externa.', 'sync_status' => 'failed', 'sync_error' => 'not_found'])->save();
+
+            return $appointment;
+        }
 
         try {
             $this->providers->for($appointment->workspace, $appointment->provider)->cancel($appointment);
@@ -241,6 +280,14 @@ class BookingManager
         try {
             $result = $provider->book(new BookingRequest($data['service_id'], $data['professional_id'] ?? null, $startsAt, $data['customer'], $data['notes'] ?? null, $channel, $conversationId));
         } catch (ProviderException $exception) {
+            if ($exception->uncertain()) {
+                // It may exist in the other agenda: kept as a request whose outcome is unknown (never `failed`, never repeated by itself).
+                $appointment->forceFill(['status' => Appointment::REQUESTED, 'sync_status' => 'uncertain', 'sync_error' => $exception->codeName])->save();
+                $this->auditSync($appointment, $exception->codeName, $channel, 'Sin confirmar');
+
+                throw BookingException::uncertain($appointment->id);
+            }
+
             $appointment->forceFill(['status' => Appointment::FAILED, 'sync_status' => 'failed', 'sync_error' => $exception->codeName])->save();
             $this->auditSync($appointment, $exception->codeName, $channel);
 
@@ -272,12 +319,13 @@ class BookingManager
 
     private function markSyncFailure(Appointment $appointment, ProviderException $exception): void
     {
-        $appointment->forceFill(['sync_status' => 'failed', 'sync_error' => $exception->codeName])->save();
+        // A lost answer to a change (cancel, reschedule) leaves it unknown: `refresh` asks the agenda; a certain refusal is a failure.
+        $appointment->forceFill(['sync_status' => $exception->uncertain() ? 'uncertain' : 'failed', 'sync_error' => $exception->codeName])->save();
     }
 
-    private function auditSync(Appointment $appointment, string $code, string $channel): void
+    private function auditSync(Appointment $appointment, string $code, string $channel, string $outcome = 'Falló'): void
     {
-        $this->audit->recordForActor('updated', 'appointment', $appointment->id, $appointment->auditLabel(), [AuditLogger::change('Sincronización', null, "Falló ({$code})")], $appointment->workspace, $channel === 'chat' ? 'Asistente (automático)' : 'Reserva en línea (automático)', AuditLogger::FAILED);
+        $this->audit->recordForActor('updated', 'appointment', $appointment->id, $appointment->auditLabel(), [AuditLogger::change('Sincronización', null, "{$outcome} ({$code})")], $appointment->workspace, $channel === 'chat' ? 'Asistente (automático)' : 'Reserva en línea (automático)', AuditLogger::FAILED);
     }
 
     private function translate(ProviderException $exception): BookingException

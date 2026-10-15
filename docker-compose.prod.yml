@@ -65,6 +65,21 @@ x-php: &php
     REVERB_SERVER_HOST: 0.0.0.0
     REVERB_SERVER_PORT: 8080
     REVERB_SCALING_ENABLED: "true"
+    # Integrations. Every container reads ONLY what is listed here (there is no .env in the image), so a variable that is not forwarded
+    # does not exist in production: without META_* the webhook answers 404; without N8N_* no workflow runs. Empty = not configured.
+    WORKSPACE_ADMIN_CODE: ${WORKSPACE_ADMIN_CODE:-DESARROLLO_DEV}
+    INTEGRATIONS_ALLOW_PRIVATE_HOSTS: "false"
+    META_APP_SECRET: ${META_APP_SECRET:-}
+    META_WEBHOOK_VERIFY_TOKEN: ${META_WEBHOOK_VERIFY_TOKEN:-}
+    WHATSAPP_GRAPH_URL: ${WHATSAPP_GRAPH_URL:-https://graph.facebook.com}
+    WHATSAPP_GRAPH_VERSION: ${WHATSAPP_GRAPH_VERSION:-v25.0}
+    N8N_EXECUTION_URL: ${N8N_EXECUTION_URL:-}
+    N8N_EXECUTION_SECRET: ${N8N_EXECUTION_SECRET:-}
+    N8N_EXECUTION_TIMEOUT: ${N8N_EXECUTION_TIMEOUT:-25}
+    # First administrator (php artisan db:seed --class=AdminUserSeeder); set them only for that command.
+    ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+    ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    ADMIN_NAME: ${ADMIN_NAME:-Administrador}
 
 services:
   # Public entry point and load balancer: round-robins the `app` replicas (Docker DNS) and forwards websockets to reverb.

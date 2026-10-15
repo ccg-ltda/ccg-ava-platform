@@ -183,11 +183,19 @@ class AgentBookingTest extends TestCase
         $this->useBookerSetting($this->workspace);
         $this->conversation();
 
-        $response = $this->agentCall('POST', '/appointments', $this->book(['service_id' => 'S1']))->assertStatus(502);
+        // A lost answer may have been processed: unknown, and never repeated by itself (see PlatformRunTest for the full recovery).
+        $response = $this->agentCall('POST', '/appointments', $this->book(['service_id' => 'S1']))->assertStatus(409);
 
-        $this->assertSame('provider', $response->json('reason'));
+        $this->assertSame('uncertain', $response->json('reason'));
         $this->assertArrayNotHasKey('confirmed', $response->json());
-        $this->assertSame(['failed', 'unavailable'], [Appointment::sole()->status, Appointment::sole()->sync_error]);
+        $this->assertSame(['requested', 'uncertain', 'unavailable'], [Appointment::sole()->status, Appointment::sole()->sync_status, Appointment::sole()->sync_error]);
+
+        // A certain refusal (credentials) is a failure and the contact may try again.
+        Appointment::query()->delete();
+        $simulated->failWith['book'] = 'auth';
+        $refused = $this->agentCall('POST', '/appointments', $this->book(['service_id' => 'S1']))->assertStatus(502);
+        $this->assertSame('provider', $refused->json('reason'));
+        $this->assertSame(['failed', 'auth'], [Appointment::sole()->status, Appointment::sole()->sync_error]);
 
         $simulated->failWith = [];
         $ok = $this->agentCall('POST', '/appointments', $this->book(['service_id' => 'S1']))->assertCreated();

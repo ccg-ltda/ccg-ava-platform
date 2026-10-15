@@ -74,7 +74,7 @@ Permisos de Conversaciones: `view-conversations` (leer), `reply-conversations` (
 
 ### Planes y módulos
 
-Mapa completo (módulo, categoría, grupo, plan y permiso; dependencias reales; cómo se administran los planes con ejemplos): `docs/modulos-y-planes.md`. Privacidad y acceso administrativo a datos: `docs/privacidad.md`.
+Mapa completo (módulo, categoría, grupo, plan y permiso; dependencias reales; cómo se administran los planes con ejemplos): `docs/modulos-y-planes.md`. Privacidad y acceso administrativo a datos: `docs/privacidad.md`. Integraciones reales, contrato del workflow de n8n, despliegue, pruebas reales, diagnóstico y riesgos: `RECOMENDACIONES.md`.
 
 Los módulos se agrupan conceptualmente en **Administración de la plataforma**, **Capacidades compartidas** (Asistentes, Conversaciones, Clientes, Campañas, Dashboard y Reportes) y **Soluciones comerciales** (Servicios y Reservas hoy; Salud, eCommerce y otras combinaciones después). Es solo organización del catálogo, del constructor de planes y del menú: cada módulo es una sola implementación reutilizable que cualquier plan puede incluir.
 

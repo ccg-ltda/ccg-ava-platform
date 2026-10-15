@@ -2,7 +2,7 @@
 export const statusTones = { requested: 'amber', confirmed: 'green', completed: 'blue', no_show: 'neutral', cancelled: 'neutral', failed: 'red' };
 
 /** Sync state of an appointment of an external agenda (what that agenda has accepted). */
-export const syncLabels = { pending: 'Enviando a la agenda', synced: 'Sincronizada', failed: 'Error de sincronización' };
+export const syncLabels = { pending: 'Enviando a la agenda', synced: 'Sincronizada', failed: 'Error de sincronización', uncertain: 'Sin confirmar: verifica en la agenda externa antes de repetirla' };
 
 export const syncErrors = {
     auth: 'La agenda externa rechazó las credenciales.',

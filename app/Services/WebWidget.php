@@ -7,6 +7,7 @@ use App\Integrations\UnsafeTarget;
 use App\Integrations\WebType;
 use App\Models\Chatbot;
 use App\Models\ChatbotChannel;
+use App\Models\ChatbotExecution;
 use App\Models\Conversation;
 use App\Models\Message;
 use Illuminate\Http\Client\ConnectionException;
@@ -27,6 +28,7 @@ class WebWidget
         private readonly ConversationService $conversations,
         private readonly ConversationControl $control,
         private readonly ModuleAccess $modules,
+        private readonly ChatbotExecutions $executions,
     ) {}
 
     public function resolve(string $publicKey): ?ChatbotChannel
@@ -82,17 +84,26 @@ class WebWidget
      * and returns the reply it gives back. While a person has the conversation (or asked for one) n8n is not called and
      * there is no reply: the agent answers through `collect`. A reply prepared before control changed is dropped.
      *
-     * @return array{status: int, reply?: ?string, handling?: string, message?: string}
+     * @return array{status: int, reply?: ?string, handling?: string, pending?: bool, message?: string}
      */
     public function relay(ChatbotChannel $channel, string $sessionId, string $message): array
     {
         $chatbot = $channel->chatbot;
-        $conversation = $this->conversations->record($chatbot, 'web', [
+        $recorded = $this->conversations->record($chatbot, 'web', [
             'contact_id' => $sessionId, 'direction' => 'in', 'type' => 'text', 'body' => $message, 'sent_at' => now(),
-        ])['conversation'];
+        ]);
+        $conversation = $recorded['conversation'];
 
         if (! $conversation->aiMayReply()) {
             return ['status' => 200, 'reply' => null, 'handling' => $conversation->handling];
+        }
+
+        // The chatbot has an authorized platform workflow: the same path as WhatsApp (an execution Ava controls, with retries, memory and
+        // diagnostics). The answer is not in this response: the widget collects it (`collect`) when the execution delivers it.
+        if ($this->executions->available($chatbot)) {
+            $this->executions->schedule($conversation->load('chatbot.workspace.organization'), $recorded['message']);
+
+            return ['status' => 200, 'reply' => null, 'handling' => $conversation->handling, 'pending' => true];
         }
 
         $answer = $this->askAutomation($channel, $sessionId, $message);
@@ -115,26 +126,32 @@ class WebWidget
      * What the visitor has not received yet: the messages a human agent wrote (each is marked delivered once handed over)
      * and who is answering now. The session id is the visitor's only key, so only that conversation is read.
      *
-     * @return array{messages: list<array{id: int, text: string}>, handling: string}
+     * @return array{messages: list<array{id: int, text: string, sender: string}>, handling: string, answering: bool}
      */
     public function collect(ChatbotChannel $channel, string $sessionId): array
     {
         $conversation = $channel->chatbot->conversations()->where('channel', 'web')->where('contact_id', $sessionId)->first();
 
         if (! $conversation) {
-            return ['messages' => [], 'handling' => Conversation::AI];
+            return ['messages' => [], 'handling' => Conversation::AI, 'answering' => false];
         }
 
         $messages = DB::transaction(function () use ($conversation) {
-            $waiting = $conversation->messages()->where('direction', 'out')->where('sender', 'agent')->where('status', 'sent')->orderBy('id')->get();
+            // What a person wrote, and what the platform workflow answered (the legacy path answers in the response and is stored delivered).
+            $waiting = $conversation->messages()->where('direction', 'out')->whereIn('sender', ['agent', 'ai'])->where('status', 'sent')->orderBy('id')->get();
             $conversation->messages()->whereIn('id', $waiting->pluck('id'))->update(['status' => 'delivered']);
 
             return $waiting;
         });
 
         return [
-            'messages' => $messages->map(fn (Message $message) => ['id' => $message->id, 'text' => (string) $message->body])->all(),
+            'messages' => $messages->map(fn (Message $message) => ['id' => $message->id, 'text' => (string) $message->body, 'sender' => (string) $message->sender])->all(),
             'handling' => $conversation->handling,
+            // Whether the platform workflow is still working on (or handing over) an answer for this visitor: the widget keeps waiting only
+            // while this is true, so a failed or discarded execution does not leave it "typing" for a minute and a half.
+            'answering' => ChatbotExecution::where('conversation_id', $conversation->id)
+                ->where(fn ($q) => $q->whereIn('status', [ChatbotExecution::PENDING, ChatbotExecution::RUNNING])->orWhere(fn ($q) => $q->where('status', ChatbotExecution::SUCCEEDED)->where('delivery', ChatbotExecution::DELIVERY_PENDING)))
+                ->exists(),
         ];
     }
 
@@ -188,7 +205,7 @@ class WebWidget
             }
 
             $this->conversations->record($chatbot, 'web', [
-                'contact_id' => $current->contact_id, 'direction' => 'out', 'type' => 'text', 'body' => $reply, 'status' => 'sent', 'sent_at' => now(),
+                'contact_id' => $current->contact_id, 'direction' => 'out', 'type' => 'text', 'body' => $reply, 'status' => 'delivered', 'sent_at' => now(),
             ]);
 
             return true;

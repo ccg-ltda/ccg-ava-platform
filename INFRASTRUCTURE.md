@@ -104,6 +104,7 @@ El bucket de MinIO es **privado** (`MINIO_DEFAULT_BUCKETS` sin `:public`): los a
    Repite `--scale` en cada `up`; si no, Compose vuelve a 1 réplica. `scheduler` debe quedarse en 1.
 4. TLS: pon un DigitalOcean Load Balancer (o Caddy/Traefik) delante del servicio `proxy` y deja `TRUSTED_PROXIES=*`. El `proxy` conserva `X-Forwarded-Proto`.
 5. Tras cada despliegue: `docker compose ... exec worker php artisan horizon:terminate` para que Horizon cargue el código nuevo.
+6. Integraciones reales: el compose reenvía `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN`, `N8N_EXECUTION_URL`, `N8N_EXECUTION_SECRET` (y `N8N_EXECUTION_TIMEOUT`, `WHATSAPP_GRAPH_URL`, `WHATSAPP_GRAPH_VERSION`, `WORKSPACE_ADMIN_CODE`, `ADMIN_*`) desde tu archivo de variables; la imagen no trae `.env`, así que una variable que no esté ahí no existe en producción. El scheduler escribe un latido cada minuto: `integrations:diagnose` lo lee (y consulta Horizon y la cola), y en producción lo bloquea si falta. Siembra roles y catálogo (`db:seed --class=RolesAndPermissionsSeeder`, `--class=ModuleCatalogSeeder`) y comprueba con `exec app php artisan integrations:diagnose`. Ejecuciones fallidas: `exec app php artisan executions:list --failed`. Detalle y pasos en `RECOMENDACIONES.md` (§3.2 y §4).
 
 ### Horizon
 

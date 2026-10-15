@@ -216,7 +216,9 @@ class CalendarProviderTest extends TestCase
         }
 
         $appointment = Appointment::sole();
-        $this->assertSame(['failed', 'failed', $code, 'booker'], [$appointment->status, $appointment->sync_status, $appointment->sync_error, $appointment->provider]);
+        // A refusal is certain: failed. A lost answer (timeout, unavailable) may have been processed: kept as a request of unknown outcome.
+        $uncertain = (new ProviderException($code))->uncertain();
+        $this->assertSame([$uncertain ? 'requested' : 'failed', $uncertain ? 'uncertain' : 'failed', $code, 'booker'], [$appointment->status, $appointment->sync_status, $appointment->sync_error, $appointment->provider]);
         $this->assertNull($appointment->external_id);
     }
 
@@ -224,10 +226,10 @@ class CalendarProviderTest extends TestCase
     public static function failures(): array
     {
         return [
-            'timeout' => [ProviderException::TIMEOUT, BookingException::PROVIDER],
+            'timeout' => [ProviderException::TIMEOUT, BookingException::UNCERTAIN],
             'credentials' => [ProviderException::AUTH, BookingException::PROVIDER],
             'rate limit' => [ProviderException::RATE_LIMITED, BookingException::PROVIDER],
-            'unavailable' => [ProviderException::UNAVAILABLE, BookingException::PROVIDER],
+            'unavailable' => [ProviderException::UNAVAILABLE, BookingException::UNCERTAIN],
             'conflict' => [ProviderException::CONFLICT, BookingException::SLOT_UNAVAILABLE],
         ];
     }
@@ -258,7 +260,8 @@ class CalendarProviderTest extends TestCase
             $this->fail('The provider refused: the cancellation must fail.');
         } catch (BookingException) {
         }
-        $this->assertSame(['confirmed', 'failed', 'unavailable'], [$appointment->fresh()->status, $appointment->fresh()->sync_status, $appointment->fresh()->sync_error]);
+        // The answer was lost: it may or may not be cancelled there. It stays active here, marked unknown (`refresh` asks the agenda).
+        $this->assertSame(['confirmed', 'uncertain', 'unavailable'], [$appointment->fresh()->status, $appointment->fresh()->sync_status, $appointment->fresh()->sync_error]);
 
         unset($simulated->failWith['cancel']);
         $this->manager()->cancel($appointment->fresh(), 'Cambio de planes', 'admin');

@@ -211,6 +211,8 @@
         var autoTimer = null;
         var pollTimer = null;
         var handling = null;
+        var waiting = null; /* the visitor's message is being answered by the workflow: its typing node and the moment we stop waiting */
+        var fastTimer = null;
 
         function add(kind, text) {
             var node = el('div', 'msg ' + kind, text);
@@ -236,18 +238,42 @@
                 .then(function (body) {
                     if (!body) return;
                     noteHandling(body.handling);
-                    (Array.isArray(body.messages) ? body.messages : []).forEach(function (item) {
-                        if (item && typeof item.text === 'string') add('agent', item.text);
+                    var items = Array.isArray(body.messages) ? body.messages : [];
+                    if (items.length > 0) stopWaiting();
+                    items.forEach(function (item) {
+                        if (item && typeof item.text === 'string') add(item.sender === 'ai' ? 'bot' : 'agent', item.text);
                     });
+                    /* The server says nothing is being prepared any more and nothing arrived: the answer will not come (it failed or a person took over). */
+                    if (waiting && items.length === 0 && body.answering === false && Date.now() > waiting.since + 2500) {
+                        stopWaiting();
+                        if (body.handling === 'ai') add('err', 'El asistente no pudo responder. Inténtalo de nuevo en un momento.');
+                    } else if (waiting && Date.now() > waiting.until) {
+                        stopWaiting();
+                        add('note', 'El asistente está tardando más de lo normal. Tu mensaje llegó: la respuesta aparecerá aquí.');
+                    }
                 })
                 .catch(function () { /* the next poll tries again */ });
+        }
+
+        /* While an answer is pending, ask more often (3 s: inside the server limit) and stop as soon as it arrives or after 90 s. */
+        function startWaiting(node) {
+            if (waiting) stopWaiting();
+            waiting = { node: node, since: Date.now(), until: Date.now() + 90000 };
+            window.setTimeout(poll, 1200); /* an answer that is already waiting should not cost a full interval */
+            if (!fastTimer) fastTimer = window.setInterval(poll, 3000);
+        }
+
+        function stopWaiting() {
+            if (waiting) waiting.node.remove();
+            waiting = null;
+            if (fastTimer) { window.clearInterval(fastTimer); fastTimer = null; }
         }
 
         function startPolling() {
             if (preview || pollTimer || !session) return;
             poll();
             pollTimer = window.setInterval(function () {
-                if (open && document.visibilityState === 'visible') poll();
+                if (open && !waiting && document.visibilityState === 'visible') poll();
             }, POLL_MS);
         }
 
@@ -355,6 +381,7 @@
                     body: JSON.stringify({ session_id: session, message: text })
                 }).then(function (response) {
                     return response.json().catch(function () { return {}; }).then(function (body) {
+                        if (response.ok && body.pending === true) { startWaiting(typing); return; }
                         typing.remove();
                         if (response.ok) noteHandling(body.handling);
                         if (response.ok && typeof body.reply === 'string') add('bot', body.reply);
@@ -405,6 +432,7 @@
             destroy: function () {
                 if (autoTimer) window.clearTimeout(autoTimer);
                 if (pollTimer) window.clearInterval(pollTimer);
+                stopWaiting();
                 host.remove();
             }
         };

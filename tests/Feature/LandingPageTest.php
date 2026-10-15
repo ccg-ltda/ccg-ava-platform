@@ -58,7 +58,10 @@ class LandingPageTest extends TestCase
         $modules = array_keys(config('modules.implemented'));
 
         $this->assertSame('chatbots.index', $landing->route(['manage-users', 'view-chatbots', 'view-conversations'], $modules));
-        $this->assertSame('settings.index', $landing->route(['manage-users', 'manage-settings'], $modules));
+        $this->assertSame('users.index', $landing->route(['manage-users', 'manage-settings'], $modules));
+        $this->assertSame('audit.index', $landing->route(['manage-settings'], $modules));
+        $this->assertSame('settings.index', $landing->route(['manage-settings'], ['settings', 'integrations']));
+        $this->assertSame('services.index', $landing->route(['view-bookings', 'manage-users'], $modules), 'Operación comes before Administración, as in the menu');
         $this->assertSame('profile.edit', $landing->route([], $modules));
     }
 
