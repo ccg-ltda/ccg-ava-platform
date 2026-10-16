@@ -14,3 +14,6 @@ Schedule::call(fn () => Cache::put('ava:scheduler:heartbeat', now()->timestamp, 
 
 // Picks up chatbot executions a crash left half done (never resends a message: see ChatbotExecutions::recover).
 Schedule::command('executions:recover')->everyMinute()->withoutOverlapping()->onOneServer();
+
+// Plans and queues the confirmations and reminders of appointments (idempotent; needs the queue worker to deliver what it queues).
+Schedule::command('appointments:notify')->everyMinute()->withoutOverlapping()->onOneServer();

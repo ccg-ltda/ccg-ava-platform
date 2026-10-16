@@ -41,7 +41,7 @@ class AgentController extends Controller
             // The booking tools exist only for a Workspace whose plan includes Servicios y Reservas: n8n discovers them here.
             'booking' => $modules->allowsAll($workspace, ['service_catalog', 'professionals', 'bookings']) ? [
                 'available' => true,
-                'endpoints' => collect(['services', 'professionals', 'availability', 'appointments'])->mapWithKeys(fn (string $name) => [$name => url("/api/agent/booking/{$name}")])->all(),
+                'endpoints' => collect(['services', 'locations', 'professionals', 'availability', 'appointments'])->mapWithKeys(fn (string $name) => [$name => url("/api/agent/booking/{$name}")])->all(),
             ] : ['available' => false],
         ])->header('Cache-Control', 'no-store');
     }

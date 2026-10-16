@@ -35,6 +35,12 @@ class Service extends Model
         return $this->belongsToMany(Professional::class, 'professional_service')->withPivot('workspace_id');
     }
 
+    /** The locations that offer it; none = offered in every location. */
+    public function locations(): BelongsToMany
+    {
+        return $this->belongsToMany(Location::class, 'location_service')->withPivot('workspace_id');
+    }
+
     public function resources(): BelongsToMany
     {
         return $this->belongsToMany(BookableResource::class, 'resource_service', 'service_id', 'resource_id')->withPivot('workspace_id');

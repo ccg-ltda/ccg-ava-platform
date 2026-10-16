@@ -80,7 +80,7 @@ class PlansTest extends TestCase
     public function test_the_catalog_starts_with_the_shared_and_the_booking_modules_the_four_areas_and_a_default_plan_of_the_shared_ones(): void
     {
         $this->assertEqualsCanonicalizing(
-            ['dashboard', 'assistants', 'conversations', 'reports', 'audit', 'settings', 'integrations', 'users_roles', 'service_catalog', 'professionals', 'bookings', 'calendar_providers', 'customers', 'campaigns'],
+            ['dashboard', 'assistants', 'conversations', 'reports', 'audit', 'settings', 'integrations', 'users_roles', 'service_catalog', 'locations', 'professionals', 'bookings', 'calendar_providers', 'customers', 'campaigns'],
             Module::pluck('key')->all(),
         );
         $this->assertEqualsCanonicalizing(['shared', 'health', 'delivery', 'ecommerce', 'services_bookings', 'communication'], ModuleCategory::pluck('key')->all());
@@ -521,7 +521,7 @@ class PlansTest extends TestCase
         $this->get('/dashboard')->assertInertia(fn (AssertableInertia $page) => $page->where('platform', false));
 
         $this->platformAdmin();
-        $this->get('/dashboard')->assertInertia(fn (AssertableInertia $page) => $page->where('platform', true)->has('modules', 14));
+        $this->get('/dashboard')->assertInertia(fn (AssertableInertia $page) => $page->where('platform', true)->has('modules', 15));
     }
 
     // --- audit ---------------------------------------------------------------------------------------------------------------

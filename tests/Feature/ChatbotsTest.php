@@ -103,7 +103,7 @@ class ChatbotsTest extends TestCase
     public function test_a_chatbot_is_created_inside_the_active_workspace_and_the_client_cannot_choose_another(): void
     {
         $this->actAs();
-        $active = Workspace::first();
+        $active = Workspace::orderBy('id')->first();
         $other = $this->otherWorkspace();
 
         $this->post('/chatbots', ['name' => '  Ventas  ', 'description' => 'Atiende ventas', 'workspace_id' => $other->id])->assertSessionHasNoErrors();
@@ -127,7 +127,7 @@ class ChatbotsTest extends TestCase
     public function test_the_general_tab_is_edited_and_validated(): void
     {
         $this->actAs();
-        $bot = $this->bot(Workspace::first());
+        $bot = $this->bot(Workspace::orderBy('id')->first());
 
         $this->post("/chatbots/{$bot->id}", ['name' => 'Soporte', 'description' => 'Ayuda', 'instructions' => 'Responde con amabilidad.'])
             ->assertSessionHasNoErrors()->assertSessionHas('success');
@@ -142,11 +142,11 @@ class ChatbotsTest extends TestCase
     {
         Storage::fake();
         $this->actAs();
-        $bot = $this->bot(Workspace::first());
+        $bot = $this->bot(Workspace::orderBy('id')->first());
 
         $this->post("/chatbots/{$bot->id}", ['name' => 'Asistente', 'avatar' => UploadedFile::fake()->image('a.png', 64, 64)])->assertSessionHasNoErrors();
         $first = $bot->fresh()->avatar_path;
-        $this->assertStringStartsWith('workspaces/'.Workspace::first()->id."/chatbots/{$bot->id}/avatar/", $first);
+        $this->assertStringStartsWith('workspaces/'.Workspace::orderBy('id')->first()->id."/chatbots/{$bot->id}/avatar/", $first);
         Storage::assertExists($first);
         $this->get("/chatbots/{$bot->id}/avatar")->assertOk()->assertHeader('Cache-Control', 'no-cache, private');
 
@@ -163,7 +163,7 @@ class ChatbotsTest extends TestCase
     {
         Storage::fake();
         $this->actAs();
-        $bot = $this->bot(Workspace::first());
+        $bot = $this->bot(Workspace::orderBy('id')->first());
 
         $this->post("/chatbots/{$bot->id}", ['name' => 'A', 'avatar' => UploadedFile::fake()->create('a.svg', 1, 'image/svg+xml')])->assertSessionHasErrors('avatar');
         $this->post("/chatbots/{$bot->id}", ['name' => 'A', 'avatar' => UploadedFile::fake()->image('big.png')->size(2048)])->assertSessionHasErrors('avatar');
@@ -173,7 +173,7 @@ class ChatbotsTest extends TestCase
     public function test_a_chatbot_is_deactivated_and_reactivated_never_deleted(): void
     {
         $this->actAs();
-        $bot = $this->bot(Workspace::first());
+        $bot = $this->bot(Workspace::orderBy('id')->first());
 
         $this->post("/chatbots/{$bot->id}/deactivate")->assertSessionHas('success', 'Chatbot desactivado correctamente');
         $this->assertFalse($bot->fresh()->is_active);
@@ -188,7 +188,7 @@ class ChatbotsTest extends TestCase
     {
         $this->actAs();
         $this->post('/chatbots', ['name' => 'Ventas', 'description' => 'Atiende ventas'])->assertRedirect();
-        $bot = Workspace::first()->chatbots()->firstOrFail();
+        $bot = Workspace::orderBy('id')->first()->chatbots()->firstOrFail();
         $profile = fn () => $this->get("/chatbots/{$bot->id}")->viewData('page')['props']['chatbot'];
 
         // Creating it (name and description) is not saving its identity yet.
@@ -210,7 +210,7 @@ class ChatbotsTest extends TestCase
     public function test_instructions_are_persisted_edited_and_returned_to_the_page(): void
     {
         $this->actAs();
-        $bot = $this->bot(Workspace::first());
+        $bot = $this->bot(Workspace::orderBy('id')->first());
         $props = fn () => $this->get("/chatbots/{$bot->id}")->viewData('page')['props']['chatbot'];
 
         $this->assertSame('', $props()['instructions']);
@@ -240,7 +240,7 @@ class ChatbotsTest extends TestCase
     public function test_the_list_only_has_the_active_workspaces_chatbots(): void
     {
         $this->actAs();
-        $this->bot(Workspace::first(), 'Mío');
+        $this->bot(Workspace::orderBy('id')->first(), 'Mío');
         $this->bot($this->otherWorkspace(), 'Ajeno');
 
         $this->get('/chatbots')->assertInertia(fn (AssertableInertia $page) => $page
@@ -332,7 +332,7 @@ class ChatbotsTest extends TestCase
     public function test_the_channel_states_say_what_can_really_be_done(): void
     {
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $bot = $this->bot($workspace);
 
         $states = fn () => $this->get("/chatbots/{$bot->id}")->viewData('page')['props']['channels'];
@@ -358,7 +358,7 @@ class ChatbotsTest extends TestCase
     public function test_a_channel_links_the_chatbot_to_the_integration_of_its_own_workspace(): void
     {
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $mine = $this->whatsApp($workspace);
         $theirs = $this->whatsApp($this->otherWorkspace(), token: 'other-token');
         $bot = $this->bot($workspace);
@@ -373,7 +373,7 @@ class ChatbotsTest extends TestCase
     public function test_a_channel_cannot_be_activated_without_a_ready_integration_or_when_unavailable(): void
     {
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $bot = $this->bot($workspace);
         $this->whatsApp($this->otherWorkspace()); // another Workspace's integration does not count
 
@@ -388,7 +388,7 @@ class ChatbotsTest extends TestCase
     public function test_one_account_answers_through_one_chatbot_only(): void
     {
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $this->whatsApp($workspace);
         $one = $this->bot($workspace, 'Uno');
         $two = $this->bot($workspace, 'Dos');
@@ -427,7 +427,7 @@ class ChatbotsTest extends TestCase
     public function test_the_show_page_never_carries_a_credential(): void
     {
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $this->whatsApp($workspace, token: 'EAAB-TOP-SECRET');
         $bot = $this->bot($workspace);
         $this->put("/chatbots/{$bot->id}/channels/whatsapp", ['is_active' => true]);
@@ -443,7 +443,7 @@ class ChatbotsTest extends TestCase
     public function test_every_change_is_audited_in_the_workspace_of_the_chatbot(): void
     {
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $this->whatsApp($workspace);
         $this->post('/chatbots', ['name' => 'Ventas']);
         $bot = $workspace->chatbots()->firstOrFail();

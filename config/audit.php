@@ -19,6 +19,7 @@ return [
         'integration' => ['label' => 'Integraciones', 'noun' => 'la integración'],
         'service' => ['label' => 'Servicios', 'noun' => 'el servicio'],
         'professional' => ['label' => 'Profesionales', 'noun' => 'el profesional'],
+        'location' => ['label' => 'Sedes', 'noun' => 'la sede'],
         'bookable_resource' => ['label' => 'Recursos de reserva', 'noun' => 'el recurso'],
         'schedule_exception' => ['label' => 'Excepciones de horario', 'noun' => 'la excepción de horario'],
         'appointment' => ['label' => 'Citas', 'noun' => 'la cita'],

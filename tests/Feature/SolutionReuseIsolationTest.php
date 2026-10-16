@@ -53,12 +53,12 @@ class SolutionReuseIsolationTest extends TestCase
     {
         $catalog = collect(app(ModuleCatalog::class)->grouped())->flatMap(fn (array $category) => collect($category['modules'])->map(fn (array $module) => $module + ['category' => $category['key']]))->keyBy('key');
 
-        foreach (['service_catalog', 'professionals', 'bookings'] as $key) {
+        foreach (['service_catalog', 'locations', 'professionals', 'bookings'] as $key) {
             $this->assertSame(['health'], array_column($catalog[$key]['alsoFor'], 'key'), $key);
             $this->assertSame('services_bookings', $catalog[$key]['category'], 'the module stays one single record in its own category');
         }
 
-        foreach ($catalog->except(['service_catalog', 'professionals', 'bookings']) as $module) {
+        foreach ($catalog->except(['service_catalog', 'locations', 'professionals', 'bookings']) as $module) {
             $this->assertSame([], $module['alsoFor'], $module['key']);
         }
 

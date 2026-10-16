@@ -12,6 +12,7 @@ use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DemoConversationController;
 use App\Http\Controllers\IntegrationController;
+use App\Http\Controllers\LocationController;
 use App\Http\Controllers\MessageTemplateController;
 use App\Http\Controllers\ModuleCategoryController;
 use App\Http\Controllers\ModuleController;
@@ -130,6 +131,17 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         });
     });
 
+    // Sedes: where the business attends. Same permissions as the catalog; the module is `locations`.
+    Route::middleware(['workspace.module:locations', 'workspace.permission:view-bookings'])->prefix('locations')->name('locations.')->group(function () {
+        Route::get('/', [LocationController::class, 'index'])->name('index');
+        Route::middleware('workspace.permission:manage-services')->group(function () {
+            Route::post('/', [LocationController::class, 'store'])->name('store');
+            Route::put('/{location}', [LocationController::class, 'update'])->whereNumber('location')->name('update');
+            Route::post('/{location}/activate', [LocationController::class, 'activate'])->whereNumber('location')->name('activate');
+            Route::post('/{location}/deactivate', [LocationController::class, 'deactivate'])->whereNumber('location')->name('deactivate');
+        });
+    });
+
     Route::middleware(['workspace.module:professionals', 'workspace.permission:view-bookings'])->prefix('professionals')->name('professionals.')->group(function () {
         Route::get('/', [ProfessionalController::class, 'index'])->name('index');
         Route::middleware('workspace.permission:manage-services')->group(function () {
@@ -151,6 +163,7 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         Route::get('/', [BookingController::class, 'index'])->name('index');
         Route::get('/availability', [BookingController::class, 'availability'])->middleware('throttle:120,1')->name('availability');
         Route::put('/settings', [BookingController::class, 'updateSettings'])->middleware('workspace.permission:manage-services')->name('settings.update');
+        Route::put('/settings/notifications', [BookingController::class, 'updateNotifications'])->middleware('workspace.permission:manage-services')->name('settings.notifications');
         Route::post('/settings/public-key', [BookingController::class, 'rotateKey'])->middleware(['workspace.permission:manage-services', 'throttle:10,1'])->name('settings.rotate-key');
         Route::middleware('workspace.permission:manage-bookings')->group(function () {
             Route::post('/', [BookingController::class, 'store'])->middleware('throttle:60,1')->name('store');
@@ -158,6 +171,7 @@ Route::middleware(['auth', 'workspace'])->group(function () {
             Route::post('/{appointment}/reschedule', [BookingController::class, 'reschedule'])->whereNumber('appointment')->name('reschedule');
             Route::post('/{appointment}/cancel', [BookingController::class, 'cancel'])->whereNumber('appointment')->name('cancel');
             Route::post('/{appointment}/refresh', [BookingController::class, 'refresh'])->whereNumber('appointment')->name('refresh');
+            Route::post('/{appointment}/customer-confirmation', [BookingController::class, 'customerConfirmation'])->whereNumber('appointment')->name('customer-confirmation');
         });
     });
 

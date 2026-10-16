@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Booking\AppointmentNotifier;
 use App\Models\Chatbot;
 use App\Models\ChatbotChannel;
 use App\Models\ChatbotExecution;
@@ -127,7 +128,12 @@ class WhatsAppInbound
 
             if (in_array($state, Message::STATUSES, true) && is_string($status['id'] ?? null) && is_string($status['recipient_id'] ?? null)) {
                 $this->settleUncertain($chatbot, $status, $state);
-                $this->conversations->updateStatus($chatbot, 'whatsapp', $status['recipient_id'], $status['id'], $state);
+                $handled = $this->conversations->updateStatus($chatbot, 'whatsapp', $status['recipient_id'], $status['id'], $state);
+
+                // A confirmation or reminder of an appointment (sent by Ava, not part of any conversation): matched by Meta's id or by Ava's own tag, inside this Workspace only.
+                if (! $handled) {
+                    app(AppointmentNotifier::class)->applyStatus($chatbot->workspace_id, $status);
+                }
             }
         }
     }

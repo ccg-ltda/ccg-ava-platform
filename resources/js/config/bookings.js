@@ -16,7 +16,8 @@ export const syncErrors = {
     unknown: 'La agenda externa respondió con un error.',
 };
 
-export const channelLabels = { admin: 'Agenda', web: 'Reserva en línea', chat: 'Ava Chat' };
+/** A price in its own currency (the one recorded with the appointment, not today's price of the service). */
+export const money = (value, currency) => new Intl.NumberFormat('es', { style: 'currency', currency }).format(value);
 
 /** Today and a few days ahead as `YYYY-MM-DD`, in the browser's own calendar (the server decides what is offered). */
 export const addDays = (date, days) => {

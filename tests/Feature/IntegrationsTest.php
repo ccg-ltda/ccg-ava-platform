@@ -71,7 +71,7 @@ class IntegrationsTest extends TestCase
     {
         $this->post('/integrations', $this->payload($overrides))->assertSessionHasNoErrors();
 
-        return ($workspace ?? Workspace::first())->integrations()->latest('id')->firstOrFail();
+        return ($workspace ?? Workspace::orderBy('id')->first())->integrations()->latest('id')->firstOrFail();
     }
 
     // --- listing ---------------------------------------------------------------------------------------------
@@ -99,8 +99,8 @@ class IntegrationsTest extends TestCase
 
         $this->post('/integrations', $this->payload())->assertSessionHasNoErrors()->assertSessionHas('success', 'Integración creada correctamente');
 
-        $integration = Workspace::first()->integrations()->firstOrFail();
-        $this->assertSame(Workspace::first()->id, $integration->workspace_id);
+        $integration = Workspace::orderBy('id')->first()->integrations()->firstOrFail();
+        $this->assertSame(Workspace::orderBy('id')->first()->id, $integration->workspace_id);
         $this->assertSame(['API de pruebas', 'Proveedor X', 'http', true], [$integration->name, $integration->provider, $integration->type, $integration->is_active]);
         $this->assertSame(['https://api.example.com/v1', '/status', 'GET', 10], [$integration->config['base_url'], $integration->config['endpoint'], $integration->config['method'], $integration->config['timeout']]);
         $this->assertSame('bearer', $integration->config['auth']['type']);
@@ -114,7 +114,7 @@ class IntegrationsTest extends TestCase
         $this->post('/integrations', $this->payload(['workspace_id' => $other->id]))->assertSessionHasNoErrors();
 
         $this->assertSame(0, $other->integrations()->count());
-        $this->assertSame(1, Workspace::first()->integrations()->count());
+        $this->assertSame(1, Workspace::orderBy('id')->first()->integrations()->count());
     }
 
     public function test_names_are_unique_per_workspace_only(): void
@@ -327,7 +327,7 @@ class IntegrationsTest extends TestCase
         $integration = null;
         foreach (['supervisor', 'cliente'] as $role) {
             $this->actAs($role);
-            $integration ??= Workspace::first()->integrations()->create(['name' => 'X', 'type' => 'http', 'config' => ['base_url' => 'https://x.test']]);
+            $integration ??= Workspace::orderBy('id')->first()->integrations()->create(['name' => 'X', 'type' => 'http', 'config' => ['base_url' => 'https://x.test']]);
 
             $this->get('/integrations')->assertForbidden();
             $this->post('/integrations', $this->payload())->assertForbidden();

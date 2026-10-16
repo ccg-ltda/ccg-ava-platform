@@ -3,13 +3,16 @@
 namespace App\Http\Controllers;
 
 use App\Audit\AuditLogger;
+use App\Booking\AppointmentNotifier;
 use App\Booking\BookingException;
 use App\Booking\BookingManager;
 use App\Booking\BookingPresenter;
+use App\Booking\Locations;
 use App\Http\Controllers\Concerns\HandlesBooking;
 use App\Http\Requests\AvailabilityRequest;
 use App\Http\Requests\BookAppointmentRequest;
 use App\Http\Requests\RescheduleAppointmentRequest;
+use App\Http\Requests\SaveBookingNotificationSettingsRequest;
 use App\Http\Requests\SaveBookingSettingsRequest;
 use App\Models\Appointment;
 use App\Models\BookingCustomer;
@@ -42,6 +45,8 @@ class BookingController extends Controller
         private readonly BookingPresenter $present,
         private readonly ModuleAccess $modules,
         private readonly AuditLogger $audit,
+        private readonly Locations $locations,
+        private readonly AppointmentNotifier $notifier,
     ) {}
 
     public function index(Request $request): Response
@@ -53,15 +58,17 @@ class BookingController extends Controller
         $days = in_array((int) $request->query('days'), [1, 7, 31], true) ? (int) $request->query('days') : 7;
         $professionalId = ctype_digit((string) $request->query('professional')) ? (int) $request->query('professional') : null;
         $status = in_array($request->query('status'), Appointment::STATUSES, true) ? $request->query('status') : null;
+        $origin = in_array($request->query('origin'), Appointment::CHANNELS, true) ? $request->query('origin') : null;
         $setting = BookingSetting::for($workspace);
 
         return Inertia::render('Bookings/Index', [
             'capabilities' => $capabilities,
-            'filters' => ['from' => $from->setTimezone($timezone)->toDateString(), 'days' => $days, 'professional' => $professionalId, 'status' => $status, 'search' => trim((string) $request->query('search', ''))],
-            'appointments' => $workspace->appointments()->with(['customer', 'workspace'])
+            'filters' => ['from' => $from->setTimezone($timezone)->toDateString(), 'days' => $days, 'professional' => $professionalId, 'status' => $status, 'origin' => $origin, 'search' => trim((string) $request->query('search', ''))],
+            'appointments' => $workspace->appointments()->with(['customer', 'workspace'])->when($this->notifier->ready(), fn ($query) => $query->with('notifications'))
                 ->where('starts_at', '>=', $from)->where('starts_at', '<', $from->addDays($days))
                 ->when($professionalId, fn ($query) => $query->where('professional_id', $professionalId))
                 ->when($status, fn ($query) => $query->where('status', $status))
+                ->when($origin, fn ($query) => $query->where('channel', $origin))
                 ->orderBy('starts_at')->limit(500)->get()->map(fn (Appointment $appointment) => $this->present->appointment($appointment))->all(),
             'options' => $this->options($workspace, $capabilities),
             'customers' => $this->customers($request, $workspace),
@@ -78,7 +85,7 @@ class BookingController extends Controller
 
         try {
             $ignore = $request->validated('ignore_appointment') ? $workspace->appointments()->findOrFail($request->validated('ignore_appointment')) : null;
-            $slots = $this->bookings->availability($workspace, $request->validated('service_id'), $request->validated('professional_id') ?: null, $request->from($workspace->settingsOrDefault()->timezone), $request->days(), $ignore);
+            $slots = $this->bookings->availability($workspace, $request->validated('service_id'), $request->validated('professional_id') ?: null, $request->from($workspace->settingsOrDefault()->timezone), $request->days(), $ignore, $request->locationId());
         } catch (BookingException $exception) {
             return response()->json(['message' => $exception->getMessage(), 'reason' => $exception->reason], $exception->status());
         }
@@ -116,6 +123,14 @@ class BookingController extends Controller
         return $this->attempt(fn () => $this->bookings->cancel($model, $reason, 'admin'), 'Cita cancelada correctamente');
     }
 
+    /** Somebody of the team registers that the customer said they will come (by phone, in person...). Never changes the booking's status. */
+    public function customerConfirmation(Request $request, int $appointment): RedirectResponse
+    {
+        $model = $this->find($request, $appointment);
+
+        return $this->attempt(fn () => $this->bookings->customerConfirm($model, 'staff'), 'Confirmación del cliente registrada');
+    }
+
     public function refresh(Request $request, int $appointment): RedirectResponse
     {
         $model = $this->find($request, $appointment);
@@ -139,6 +154,20 @@ class BookingController extends Controller
         }
 
         return back()->with('success', 'Configuración de reservas guardada');
+    }
+
+    /** Confirmations and reminders: one shared configuration per Workspace (the same for a clinic and a salon). */
+    public function updateNotifications(SaveBookingNotificationSettingsRequest $request): RedirectResponse
+    {
+        $workspace = $request->attributes->get('workspace');
+
+        if (! $this->notifier->ready()) {
+            return back()->with('error', 'Falta aplicar la última migración de la base de datos: un administrador debe ejecutar «php artisan migrate».');
+        }
+
+        $workspace->bookingSetting()->updateOrCreate([], $request->settings());
+
+        return back()->with('success', 'Confirmaciones y recordatorios guardados');
     }
 
     /**
@@ -171,9 +200,19 @@ class BookingController extends Controller
     private function options(Workspace $workspace, array $capabilities): array
     {
         try {
-            return ['services' => $capabilities['services'] ? $this->bookings->services($workspace) : [], 'professionals' => $capabilities['professionals'] ? $this->bookings->professionals($workspace) : [], 'error' => null];
+            $locations = $this->locations->active($workspace);
+
+            return [
+                'services' => $capabilities['services'] ? $this->bookings->services($workspace) : [],
+                'professionals' => $capabilities['professionals'] ? $this->bookings->professionals($workspace) : [],
+                // Locations of Ava's own agenda only; `locationRequired` = the Workspace has several, so every booking must name one.
+                'locations' => $capabilities['external'] ? [] : $locations->map(fn ($location) => ['id' => $location->id, 'name' => $location->name])->values()->all(),
+                'locationRequired' => ! $capabilities['external'] && $locations->count() > 1,
+                'currency' => $workspace->settingsOrDefault()->currency,
+                'error' => null,
+            ];
         } catch (BookingException $exception) {
-            return ['services' => [], 'professionals' => [], 'error' => $exception->getMessage()];
+            return ['services' => [], 'professionals' => [], 'locations' => [], 'locationRequired' => false, 'currency' => $workspace->settingsOrDefault()->currency, 'error' => $exception->getMessage()];
         }
     }
 
@@ -200,6 +239,35 @@ class BookingController extends Controller
             'providers' => collect(config('bookings.providers'))->map(fn (array $provider, string $key) => ['value' => $key, 'label' => $provider['label'], 'available' => $key === 'internal' || $this->providerUsable($workspace, $key)])->values()->all(),
             'steps' => config('bookings.steps'),
             'publicUrl' => $setting->public_enabled && $setting->public_key ? route('booking.public', $setting->public_key) : null,
+            'notifications' => $this->notificationSettings($workspace, $setting),
+        ];
+    }
+
+    /** What the screen of confirmations and reminders needs: the values, what the Workspace can really send and why not. @return array<string, mixed> */
+    private function notificationSettings(Workspace $workspace, BookingSetting $setting): array
+    {
+        $ready = $this->notifier->ready();
+        $channel = $ready ? $this->notifier->channel($workspace) : ['ok' => false, 'code' => 'migration', 'integration' => null];
+        $problems = [
+            'migration' => 'Falta aplicar la última migración de la base de datos en este entorno.',
+            'plan' => 'El plan de este Workspace debe incluir Servicios y Reservas e Integraciones para enviar avisos.',
+            'no_whatsapp' => 'No hay una cuenta de WhatsApp activa: conéctala en Integraciones.',
+            'several_whatsapp' => 'Hay varias cuentas de WhatsApp activas: elige cuál usar para los avisos.',
+            'chosen_account_off' => 'La cuenta de WhatsApp elegida está apagada o ya no existe: elige otra.',
+        ];
+
+        return [
+            'ready' => $ready,
+            'values' => $ready ? [
+                'notify_received' => (bool) $setting->notify_received, 'notify_confirmed' => (bool) $setting->notify_confirmed, 'reminders_enabled' => (bool) $setting->reminders_enabled,
+                'reminder_offsets' => $setting->offsets(), 'notify_integration_id' => $setting->notify_integration_id, 'messages' => (object) ($setting->notify_messages ?? []),
+            ] : ['notify_received' => false, 'notify_confirmed' => false, 'reminders_enabled' => false, 'reminder_offsets' => [], 'notify_integration_id' => null, 'messages' => (object) []],
+            'canSend' => $channel['ok'] && $setting->provider === 'internal',
+            'problem' => $setting->provider !== 'internal' ? 'Los avisos solo funcionan con la agenda de Ava.' : ($problems[$channel['code']] ?? null),
+            'accounts' => $workspace->integrations()->where('type', 'whatsapp')->where('is_active', true)->orderBy('name')->get(['id', 'name'])->map(fn ($account) => ['id' => $account->id, 'name' => $account->name])->all(),
+            'variables' => config('bookings.notifications.variables'),
+            'defaults' => config('bookings.notifications.default_texts'),
+            'limits' => config('bookings.notifications.offsets') + ['text_max' => config('bookings.notifications.text_max'), 'window_hours' => config('bookings.notifications.window_hours')],
         ];
     }
 

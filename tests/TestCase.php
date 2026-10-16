@@ -52,7 +52,7 @@ abstract class TestCase extends BaseTestCase
         $this->seedRoleCatalog();
         Role::findOrCreate($role, 'web');
 
-        $workspace = Workspace::first() ?? Workspace::create([
+        $workspace = Workspace::orderBy('id')->first() ?? Workspace::create([
             'organization_id' => Organization::create(['name' => 'Test Org'])->id,
             'code' => 'TEST_WS',
             'name' => 'Test Workspace',

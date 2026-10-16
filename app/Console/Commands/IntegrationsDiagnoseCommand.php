@@ -2,6 +2,9 @@
 
 namespace App\Console\Commands;
 
+use App\Booking\AppointmentNotifier;
+use App\Models\AppointmentNotification;
+use App\Models\BookingSetting;
 use App\Models\Chatbot;
 use App\Models\ChatbotChannel;
 use App\Models\ChatbotExecution;
@@ -55,6 +58,9 @@ class IntegrationsDiagnoseCommand extends Command
         $this->components->info('Ejecuciones y entregas (últimas 24 h)');
         $this->executions($workspaceId);
 
+        $this->components->info('Confirmaciones y recordatorios de citas');
+        $this->appointmentNotifications($workspaceId);
+
         $this->newLine();
         $this->line("Resultado: {$this->failures} bloqueo(s), {$this->warnings} aviso(s).");
         $this->line('Esto solo revisa la configuración y el estado interno: no llama a Meta ni a n8n. La conexión real se prueba con «Probar conexión» y un mensaje de prueba.');
@@ -94,9 +100,29 @@ class IntegrationsDiagnoseCommand extends Command
         try {
             DB::select('select 1');
             $this->good('Base de datos: '.DB::getDriverName().' responde.');
+            $this->migrations();
         } catch (Throwable) {
             $this->blocker('La base de datos no responde.');
         }
+    }
+
+    /** The code may be deployed before the database is migrated: pending migrations break the pages that use their tables. */
+    private function migrations(): void
+    {
+        $migrator = app('migrator');
+
+        if (! $migrator->repositoryExists()) {
+            $this->blocker('La base de datos no tiene la tabla de migraciones: ejecuta php artisan migrate.');
+
+            return;
+        }
+
+        $files = array_keys($migrator->getMigrationFiles(array_merge($migrator->paths(), [database_path('migrations')])));
+        $pending = array_values(array_diff($files, $migrator->getRepository()->getRan()));
+
+        $pending === []
+            ? $this->good('Migraciones al día ('.count($files).').')
+            : $this->blocker(count($pending).' migración(es) pendiente(s) ('.implode(', ', $pending).'): ejecuta php artisan migrate antes de usar el código nuevo.');
     }
 
     private function queueAndCache(): void
@@ -225,6 +251,45 @@ class IntegrationsDiagnoseCommand extends Command
 
         $this->line('         Canales WhatsApp activos: '.$channels->count().'.');
         $this->line('         Workspaces activos: '.Workspace::where('is_active', true)->count().'.');
+    }
+
+    /** Workspaces that asked for confirmations or reminders but cannot send them, and what happened to the messages of the last 24 hours (ids and counts only). */
+    private function appointmentNotifications(?int $workspaceId): void
+    {
+        $notifier = app(AppointmentNotifier::class);
+
+        if (! $notifier->ready()) {
+            $this->caution('Faltan las tablas o columnas de avisos de citas (migración pendiente): no se planifica ni se envía nada.');
+
+            return;
+        }
+
+        $configured = BookingSetting::query()->with('workspace')->when($workspaceId, fn ($query) => $query->where('workspace_id', $workspaceId))
+            ->where(fn ($query) => $query->where('notify_received', true)->orWhere('notify_confirmed', true)->orWhere('reminders_enabled', true))->get();
+
+        $configured->isEmpty() ? $this->good('Ningún Workspace tiene avisos activos.') : $this->good($configured->count().' Workspace(s) con avisos activos.');
+
+        foreach ($configured as $setting) {
+            $channel = $notifier->channel($setting->workspace);
+            $channel['ok'] ? null : $this->blocker("Workspace {$setting->workspace_id}: tiene avisos activos pero no puede enviarlos ({$channel['code']}).");
+
+            if ($setting->provider !== 'internal') {
+                $this->caution("Workspace {$setting->workspace_id}: avisos activos con una agenda externa; no se enviará nada.");
+            }
+        }
+
+        $recent = AppointmentNotification::query()->where('created_at', '>=', now()->subDay())->when($workspaceId, fn ($query) => $query->where('workspace_id', $workspaceId));
+        $counts = (clone $recent)->selectRaw('status, count(*) as total')->groupBy('status')->pluck('total', 'status');
+        $this->line('  '.($counts->isEmpty() ? 'Sin avisos planificados en 24 h.' : $counts->map(fn ($total, $status) => "{$status}: {$total}")->implode(' · ')));
+
+        foreach (['failed' => 'fallidos', 'uncertain' => 'sin confirmar (revisar a mano, no se reenvían solos)'] as $status => $label) {
+            if (($counts[$status] ?? 0) > 0) {
+                $this->caution("{$counts[$status]} aviso(s) {$label}. Detalle: php artisan appointments:notifications --status={$status}");
+            }
+        }
+
+        $stuck = AppointmentNotification::whereIn('status', [AppointmentNotification::SCHEDULED, AppointmentNotification::QUEUED])->where('scheduled_for', '<', now()->subMinutes(10))->count();
+        $stuck > 0 ? $this->blocker("{$stuck} aviso(s) vencidos sin enviar: ¿el scheduler (appointments:notify) o el worker de colas no corren?") : $this->good('Ningún aviso vencido sin enviar.');
     }
 
     private function executions(?int $workspaceId): void

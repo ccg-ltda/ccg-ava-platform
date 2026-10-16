@@ -141,7 +141,14 @@ export default function Show({ customer, conversations, appointments, campaigns,
                         <ul className="mt-4 divide-y divide-line text-sm">
                             {appointments.map((appointment) => (
                                 <li key={appointment.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
-                                    <span className="font-medium text-ink">{appointment.service}</span>
+                                    <span className="font-medium text-ink">
+                                        {appointment.service}
+                                        {(appointment.location || appointment.price !== null) && (
+                                            <span className="block text-xs font-normal text-ink-muted">
+                                                {[appointment.location, appointment.price !== null && appointment.currency ? new Intl.NumberFormat('es', { style: 'currency', currency: appointment.currency }).format(appointment.price) : null].filter(Boolean).join(' · ')}
+                                            </span>
+                                        )}
+                                    </span>
                                     <span className="text-ink-muted">{formatDateTime(appointment.startsAt)}</span>
                                     <Badge>{appointment.status}</Badge>
                                 </li>

@@ -112,6 +112,7 @@ class PublicBookingTest extends TestCase
         $this->getJson($this->api('/config'))->assertOk()->assertExactJson([
             'business' => $this->workspace->name, 'timezone' => 'UTC', 'currency' => 'DOP', 'provider' => 'internal', 'canBook' => true,
             'requiresConfirmation' => false, 'requirePhone' => true, 'requireEmail' => false, 'cancelNoticeHours' => 2, 'maxDays' => 14,
+            'locations' => [], 'locationRequired' => false,
         ]);
 
         $this->getJson($this->api('/services'))->assertOk()->assertJsonPath('services.0.durationMinutes', 60)->assertJsonMissingPath('services.0.workspace_id')->assertJsonMissingPath('services.0.isActive');

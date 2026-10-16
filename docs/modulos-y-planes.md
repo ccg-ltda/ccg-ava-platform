@@ -21,7 +21,7 @@ El sidebar tiene **tres grupos plegables por función** y todos se pliegan por s
 | Grupo | Entradas | Qué es |
 |---|---|---|
 | **General** | Dashboard, Asistentes, Conversaciones | Lo cotidiano del Workspace. |
-| **Operación** | Reportes, Servicios, Profesionales, Agenda, Clientes, Campañas | Los módulos funcionales reutilizables, sea cual sea la solución comercial que los ofrezca. Proveedores de agenda se configura en Integraciones y no tiene entrada propia. |
+| **Operación** | Reportes, Servicios, Sedes, Profesionales, Agenda, Clientes, Campañas | Los módulos funcionales reutilizables, sea cual sea la solución comercial que los ofrezca. Proveedores de agenda se configura en Integraciones y no tiene entrada propia. |
 | **Administración** | Usuarios y Roles, Auditoría, Configuraciones, Integraciones, Planes (solo administración de plataforma; incluye el catálogo de módulos) | Administración interna. |
 
 Una sección es presentación: reúne entradas relacionadas y desaparece si ninguna se ofrece. **Las soluciones comerciales no son secciones del menú** (son categorías del catálogo y planes): un módulo existe una sola vez y lo comparten todas las soluciones. Un módulo reutilizable nuevo = una entrada en Operación; una solución nueva (Salud, Delivery, eCommerce) = una categoría y planes, sin tocar el menú. No confundir estos grupos del MENÚ (por función) con los grupos conceptuales del CATÁLOGO (`config/modules.php` `groups`: administración, capacidades compartidas, soluciones comerciales), que organizan el constructor de planes. El catálogo completo **no** se convierte en entradas permanentes: el menú muestra, por Workspace, solo los módulos implementados + incluidos en su plan + autorizados al rol. En `Desarrollo_DEV` (todos los módulos implementados) los grupos empiezan plegados salvo el de la página actual, y el catálogo se explora en **Planes**, no en el menú. Cuatro piezas siguen separadas: el catálogo de capacidades implementadas (`config/modules.php implemented`), las soluciones o categorías comerciales (abiertas, creadas desde Planes), los planes que combinan módulos, y los permisos de cada usuario; la disponibilidad de un módulo para un Workspace sale solo de su plan. Los módulos que faltan para Salud, Delivery y eCommerce NO existen todavía: sus categorías están vacías a propósito y se incorporarán siguiendo este mismo modelo (entrada en `implemented` + `workspace.module` + menú en Operación + sembrado).
@@ -44,12 +44,13 @@ Dependencias **técnicas** declaradas (`config/modules.php` `dependencies`), com
 | `customers` | Compartidas | — | Ficha por Workspace; **independiente** de reservas y campañas. No es un CRM. |
 | `campaigns` | Compartidas | `customers` | Una campaña se dirige a clientes: sin ellos no existe. |
 | `service_catalog` | Soluciones | — | Reutilizable por cualquier negocio con citas (no menciona uñas ni salones). |
-| `professionals` | Soluciones | `service_catalog` | Quien presta servicios, horarios y días no laborables. |
+| `locations` | Soluciones | — | Sedes opcionales (también para Salud). Sin sedes la agenda funciona igual; con ellas, cada reserva elige una (reglas en `RECOMENDACIONES.md`, «Sedes, precio y origen»). Solo aplican a la agenda de Ava, no a una externa. |
+| `professionals` | Soluciones | `service_catalog` | Quien presta servicios, horarios (por sede, si se quiere) y días no laborables. |
 | `bookings` | Soluciones | `service_catalog`, `professionals` | Agenda, citas, página pública y herramientas de Ava Chat. Guarda su propio contacto mínimo (`booking_customers`): **no necesita `customers`** (comprobado: ningún flujo de reservas lo lee). |
 | `calendar_providers` | Soluciones | `bookings`, `integrations` | Agenda externa (Booker) como fuente de verdad. |
 | `users_roles`, `audit`, `settings`, `integrations` | Administración | — | Del propio Workspace (no confundir con la administración de CCG). |
 
-Clasificación según el código: **capacidades independientes** = `conversations`, `customers`, `dashboard`, `reports`, `service_catalog`; **compartidas** (las usan varias soluciones) = asistentes, conversaciones, clientes, campañas, panel, reportes y, por diseño, `service_catalog`/`professionals` para Salud y otros; **dependientes** = `assistants`, `campaigns`, `professionals`, `bookings`, `calendar_providers`.
+Clasificación según el código: **capacidades independientes** = `conversations`, `customers`, `dashboard`, `reports`, `service_catalog`, `locations`; **compartidas** (las usan varias soluciones) = asistentes, conversaciones, clientes, campañas, panel, reportes y, por diseño, `service_catalog`/`professionals` para Salud y otros; **dependientes** = `assistants`, `campaigns`, `professionals`, `bookings`, `calendar_providers`.
 
 ### Cómo se relacionan Clientes y Campañas con el resto (sin copiar datos)
 
@@ -90,7 +91,37 @@ Los planes deciden qué módulos EXISTEN para un Workspace; los permisos del rol
 | Agenda de servicios | `dashboard`, `service_catalog`, `professionals`, `bookings` | Reservas con agenda propia; sin Clientes ni Campañas. |
 | Agenda + base de clientes | los de «Agenda de servicios» + `customers` | La ficha de cliente muestra sus reservas; sin envíos masivos. |
 | Servicios con campañas | `dashboard`, `conversations`, `customers`, `campaigns`, `service_catalog`, `professionals`, `bookings` | Mezcla de tres categorías (compartida, comunicación, servicios); campañas con exclusión por consentimiento y simulación. |
-| Salud (futuro) | `service_catalog`, `professionals` + módulos de Salud aún no implementados | Los módulos de Salud, mientras estén «pendientes», no habilitan funcionalidad; solo lo implementado funciona. |
+| Salud (agenda de citas) | `service_catalog`, `locations`, `professionals`, `bookings` (+ `customers`) | Una clínica con varias sedes: servicios por sede, horarios del profesional por sede, reserva con sede, precio registrado y origen acreditado. **Sin datos clínicos** (D-07 pendiente). |
+| Salud (módulos clínicos) | — | No existen: la categoría `health` sigue vacía a propósito hasta resolver D-07. |
+
+### Inventario de Salud (verificado el 2026-10-18)
+
+Salud no tiene módulos propios: se arma con los mismos módulos reutilizables (`also_for`). Estado de cada pieza, según el código y `PLAN_TRABAJO_AVACHAT.md` §8.1:
+
+| Pieza (referencia del plan) | Estado | Notas |
+|---|---|---|
+| Clientes (`customers`) | Implementado y validado (pruebas, simulado) | Ficha comercial; NO es «Pacientes». Muestra sus reservas con sede y precio. Sin importación ni fusión de duplicados. |
+| Servicios (`service_catalog`, S1) | Implementado y validado | Precio opcional con 2 decimales; el precio se copia a la cita al reservar. |
+| Sedes (`locations`, S1) | Implementado y validado (pruebas y navegador); en desarrollo ya migrado y registrado, **pendiente de asignar a un plan** | Migración y catálogo aplicados en la base de desarrollo el 2026-10-18; ningún plan lo incluye aún (decisión de CCG qué plan es de Salud). `Desarrollo_DEV` lo tiene por ser administrativo. En un entorno sin migrar la pantalla abre y lo dice. |
+| Profesionales (`professionals`, S2) | Implementado y validado | Especialidad como texto; horarios por sede (un tramo sin sede vale para todas). No es un registro de credenciales. |
+| Disponibilidad y citas (`bookings`, S3 y S4) | Implementado y validado con la agenda propia; parcial con agenda externa | Concurrencia verificada en PostgreSQL. Booker (`calendar_providers`) solo lee y cancela: sin horarios, reserva ni reprogramación. |
+| Origen y precio de la cita | Implementado y validado | El origen lo fija el servidor; sin tarifas por profesional ni sede. |
+| S5 Confirmaciones y recordatorios (`bookings`) | Implementado (capacidad compartida de Servicios y Reservas); integración interna probada; **Meta real sin validar** | Se configura por Workspace en Agenda → Configuración y necesita Servicios y Reservas **e Integraciones** en el plan, una cuenta de WhatsApp activa, el scheduler (`appointments:notify`) y un worker. Migración `2026_10_19_100000…` preparada, no aplicada en desarrollo. Plantillas de Meta declaradas por el Workspace (D-19 sigue abierta: Ava no puede comprobar su aprobación). |
+| S6 Atención a pacientes (FAQ y derivación) | Implementado parcialmente | Asistentes + Conversaciones con atención humana existen y se probaron simulados; falta la base de conocimiento (D-20), el workflow real de n8n y la decisión D-IA. Sin consejo médico. |
+| Historia clínica, datos de pacientes | **No requerido: alcance cero** | Bloqueado por D-07; no existe ninguna tabla ni campo clínico. |
+| Reserva temporal de un hueco (D-17), reglas de cancelación distintas por tipo (D-18) | Pendiente de decisión funcional | Hoy un único plazo `cancel_notice_hours` para cancelar y reprogramar. |
+| Informes de citas en Dashboard y Reportes | Ausente, sin requisito aprobado | Documentado como límite en `pendientes.md`; no se inventó. |
+
+Dependencias de lo que falta: S5 → S4 + WhatsApp real + plantillas (D-19); S6 → Asistentes + Conversaciones + n8n real + D-20; cualquier dato clínico → D-07 resuelto antes.
+
+### Confirmaciones y recordatorios: qué es común, qué se configura y qué depende de la solución
+
+| Nivel | Qué contiene |
+|---|---|
+| **Común (un solo código para Salud, salones y cualquier negocio con citas)** | Tabla `appointment_notifications`; planificador y envío (`AppointmentNotifier`); mensajes por WhatsApp (texto dentro de 24 h, plantilla fuera); estados `sent/delivered/read/failed/uncertain/skipped/cancelled`; confirmación del cliente que no cambia el estado de la reserva; endpoints del asistente y de la página pública; pantalla de configuración y seguimiento en la Agenda; comandos y diagnóstico. |
+| **Por Workspace (columnas de `booking_settings`)** | Qué avisos se envían (recepción, confirmación, recordatorios), anticipaciones (hasta 3), cuenta de WhatsApp, texto propio y/o plantilla de Meta por tipo. Sin configurar no se envía nada; un Workspace nunca ve ni cambia la configuración de otro. |
+| **Por solución comercial** | Nada en el código. Salud y un salón difieren solo en lo que cada Workspace configura (textos, anticipaciones, plantillas) y en los módulos de su plan (por ejemplo Sedes). No se hereda ninguna regla exclusiva de Salud. |
+| **Depende del plan** | `bookings` e `integrations`; sin ellos la pantalla lo dice y no deja activar nada. Con una agenda externa no se envía nada. |
 
 ## 4. Criterios de aceptación (verificados por prueba)
 

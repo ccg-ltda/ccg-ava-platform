@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Audit\AuditLogger;
 use App\Booking\BookingException;
 use App\Booking\BookingManager;
+use App\Booking\Locations;
 use App\Http\Controllers\Concerns\HandlesBooking;
 use App\Http\Requests\SaveProfessionalRequest;
 use App\Models\Professional;
@@ -26,7 +27,7 @@ class ProfessionalController extends Controller
 
     private const DAYS = [1 => 'Lunes', 2 => 'Martes', 3 => 'Miércoles', 4 => 'Jueves', 5 => 'Viernes', 6 => 'Sábado', 7 => 'Domingo'];
 
-    public function __construct(private readonly BookingManager $bookings, private readonly AuditLogger $audit) {}
+    public function __construct(private readonly BookingManager $bookings, private readonly AuditLogger $audit, private readonly Locations $locations) {}
 
     public function index(Request $request): Response
     {
@@ -56,8 +57,10 @@ class ProfessionalController extends Controller
                 'isActive' => $professional->is_active,
                 'upcomingCount' => $professional->upcoming_count,
                 'serviceIds' => $professional->services->pluck('id')->all(),
-                'schedule' => $professional->scheduleRules->sortBy(['weekday', 'starts_at'])->map(fn (ScheduleRule $rule) => ['weekday' => $rule->weekday, 'startsAt' => substr($rule->starts_at, 0, 5), 'endsAt' => substr($rule->ends_at, 0, 5)])->values()->all(),
+                'schedule' => $professional->scheduleRules->sortBy(['weekday', 'starts_at'])->map(fn (ScheduleRule $rule) => ['weekday' => $rule->weekday, 'startsAt' => substr($rule->starts_at, 0, 5), 'endsAt' => substr($rule->ends_at, 0, 5), 'locationId' => $rule->location_id])->values()->all(),
             ])->all() : [],
+            // Every location of the Workspace (an old schedule may still point to an inactive one), only while the plan includes Sedes.
+            'locations' => $own && $this->locations->enabled($workspace) ? $workspace->locations()->orderByDesc('is_active')->orderBy('name')->get(['id', 'name', 'is_active'])->map(fn ($location) => ['id' => $location->id, 'name' => $location->name, 'isActive' => $location->is_active])->all() : [],
             'external' => $external,
             'externalError' => $error,
             'services' => $own ? $workspace->services()->where('is_active', true)->orderBy('name')->get(['id', 'name'])->all() : [],
@@ -138,10 +141,13 @@ class ProfessionalController extends Controller
             return;
         }
 
-        $before = $this->summary($professional->scheduleRules()->get()->map(fn ($rule) => ['weekday' => $rule->weekday, 'starts_at' => $rule->starts_at, 'ends_at' => $rule->ends_at])->all());
+        $ready = $this->locations->schemaReady();
+        $places = $ready ? $professional->workspace->locations()->pluck('name', 'id') : collect();
+        $before = $this->summary($professional->scheduleRules()->get()->map(fn ($rule) => ['weekday' => $rule->weekday, 'starts_at' => $rule->starts_at, 'ends_at' => $rule->ends_at, 'location' => $places[$rule->location_id] ?? null])->all());
         $professional->scheduleRules()->delete();
-        collect($request->schedule())->each(fn (array $row) => $professional->scheduleRules()->create($row + ['workspace_id' => $professional->workspace_id]));
-        $after = $this->summary($request->schedule());
+        // Before the locations migration there is no `location_id` column to write.
+        collect($request->schedule())->each(fn (array $row) => $professional->scheduleRules()->create(($ready ? $row : array_diff_key($row, ['location_id' => 0])) + ['workspace_id' => $professional->workspace_id]));
+        $after = $this->summary(array_map(fn (array $row) => $row + ['location' => $places[$row['location_id']] ?? null], $request->schedule()));
 
         if ($before !== $after) {
             $this->audit->record('updated', 'professional', $professional->id, $professional->name, [AuditLogger::change('Horario semanal', $before ?: null, $after ?: null)], $professional->workspace);
@@ -152,7 +158,7 @@ class ProfessionalController extends Controller
     private function summary(array $rows): string
     {
         return collect($rows)->sortBy(['weekday', 'starts_at'])->groupBy('weekday')
-            ->map(fn ($day, $weekday) => self::DAYS[$weekday].' '.$day->map(fn ($row) => substr($row['starts_at'], 0, 5).'-'.substr($row['ends_at'], 0, 5))->implode(', '))
+            ->map(fn ($day, $weekday) => self::DAYS[$weekday].' '.$day->map(fn ($row) => substr($row['starts_at'], 0, 5).'-'.substr($row['ends_at'], 0, 5).(($row['location'] ?? null) ? " ({$row['location']})" : ''))->implode(', '))
             ->implode('; ');
     }
 }

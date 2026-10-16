@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Booking\Locations;
 use App\Rules\InternationalPhone;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -36,12 +37,23 @@ class SaveProfessionalRequest extends FormRequest
             'schedule.*.weekday' => ['required', 'integer', 'between:1,7'],
             'schedule.*.starts_at' => ['required', 'date_format:H:i'],
             'schedule.*.ends_at' => ['required', 'date_format:H:i'],
+            // The location (sede) the interval is for; empty = every location. Only a location of this Workspace.
+            'schedule.*.location_id' => app(Locations::class)->schemaReady() ? ['nullable', 'integer', Rule::exists('locations', 'id')->where('workspace_id', $workspace->id)] : ['prohibited'],
         ];
     }
 
     public function after(): array
     {
         return [function (Validator $validator) {
+            // Locations are a module of the plan: without it nothing can be tied to one.
+            $named = collect($this->input('schedule', []))->filter(fn ($row) => is_array($row) && filled($row['location_id'] ?? null));
+
+            if ($named->isNotEmpty() && ! app(Locations::class)->enabled($this->attributes->get('workspace'))) {
+                $validator->errors()->add('schedule', 'El plan de este Workspace no incluye Sedes.');
+
+                return;
+            }
+
             $byDay = collect($this->input('schedule', []))->filter(fn ($row) => is_array($row))->groupBy('weekday');
 
             foreach ($byDay as $rows) {
@@ -79,10 +91,10 @@ class SaveProfessionalRequest extends FormRequest
         return array_map('intval', $this->validated('service_ids') ?? []);
     }
 
-    /** @return list<array{weekday: int, starts_at: string, ends_at: string}> */
+    /** @return list<array{weekday: int, starts_at: string, ends_at: string, location_id: ?int}> */
     public function schedule(): array
     {
-        return collect($this->validated('schedule') ?? [])->map(fn (array $row) => ['weekday' => (int) $row['weekday'], 'starts_at' => $row['starts_at'].':00', 'ends_at' => $row['ends_at'].':00'])->values()->all();
+        return collect($this->validated('schedule') ?? [])->map(fn (array $row) => ['weekday' => (int) $row['weekday'], 'starts_at' => $row['starts_at'].':00', 'ends_at' => $row['ends_at'].':00', 'location_id' => filled($row['location_id'] ?? null) ? (int) $row['location_id'] : null])->values()->all();
     }
 
     public function hasSchedule(): bool

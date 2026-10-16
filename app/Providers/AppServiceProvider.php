@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Booking\AppointmentNotifier;
+use App\Booking\Locations;
 use App\Campaigns\CampaignDispatcher;
 use App\Campaigns\UnavailableCampaignDispatcher;
 use App\Chatbots\ChatbotExecutor;
@@ -22,6 +24,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        // One per request: it remembers whether the database already has the structure of locations.
+        $this->app->scoped(Locations::class);
+        $this->app->scoped(AppointmentNotifier::class);
+
         // What runs a chatbot's workflow (today the platform's n8n); the rest of Ava only knows the contract.
         $this->app->bind(ChatbotExecutor::class, N8nExecutor::class);
 

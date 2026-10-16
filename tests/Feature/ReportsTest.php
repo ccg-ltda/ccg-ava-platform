@@ -104,7 +104,7 @@ class ReportsTest extends TestCase
     public function test_team_growth_counts_only_this_workspaces_members_inside_the_period(): void
     {
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $other = $this->otherWorkspace();
         $this->join($workspace, now()->subDays(2)->toDateTimeString());
         $this->join($workspace, now()->subDays(2)->toDateTimeString());
@@ -145,7 +145,7 @@ class ReportsTest extends TestCase
     {
         $this->actAs('admin', superuser: true);
         config(['workspace.admin_code' => 'TEST_WS']);
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $other = $this->otherWorkspace();
         $this->join($workspace, now()->subDay()->toDateTimeString());
         $this->join($other, now()->toDateTimeString());

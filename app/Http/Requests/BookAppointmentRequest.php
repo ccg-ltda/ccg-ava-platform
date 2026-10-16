@@ -22,12 +22,12 @@ class BookAppointmentRequest extends FormRequest
     /** @return array<string, ValidationRule|array<mixed>|string> */
     public function rules(): array
     {
-        return ['service_id' => ['required', self::ID], 'website' => ['nullable', 'max:0']] + $this->slotRules() + $this->customerRules();
+        return ['service_id' => ['required', self::ID], 'location_id' => ['nullable', 'integer', 'min:1'], 'website' => ['nullable', 'max:0']] + $this->slotRules() + $this->customerRules();
     }
 
     public function attributes(): array
     {
-        return ['service_id' => 'el servicio', 'starts_at' => 'la fecha y hora', 'customer.name' => 'el nombre', 'customer.phone' => 'el teléfono', 'customer.email' => 'el correo', 'notes' => 'la nota'];
+        return ['service_id' => 'el servicio', 'location_id' => 'la sede', 'starts_at' => 'la fecha y hora', 'customer.name' => 'el nombre', 'customer.phone' => 'el teléfono', 'customer.email' => 'el correo', 'notes' => 'la nota'];
     }
 
     /** @return array<string, mixed> what BookingManager::request() takes */
@@ -36,6 +36,7 @@ class BookAppointmentRequest extends FormRequest
         return [
             'service_id' => $this->validated('service_id'),
             'professional_id' => $this->validated('professional_id') ?: null,
+            'location_id' => $this->validated('location_id') ? (int) $this->validated('location_id') : null,
             'starts_at' => $this->startsAt(),
             'customer' => $this->customer(),
             'notes' => filled($this->validated('notes')) ? trim($this->validated('notes')) : null,

@@ -99,7 +99,7 @@ class WorkspaceSettingsTest extends TestCase
             ->assertSessionHasNoErrors()
             ->assertSessionHas('success', 'Configuración guardada correctamente');
 
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $this->assertSame('Mi negocio', $workspace->name);
 
         $settings = $workspace->settings;
@@ -124,7 +124,7 @@ class WorkspaceSettingsTest extends TestCase
 
         $this->post('/settings', $this->payload(['description' => '']))->assertSessionHasNoErrors();
 
-        $this->assertNull(Workspace::first()->settings->description);
+        $this->assertNull(Workspace::orderBy('id')->first()->settings->description);
     }
 
     public function test_settings_belong_to_the_workspace_and_cannot_reach_another(): void
@@ -157,7 +157,7 @@ class WorkspaceSettingsTest extends TestCase
     public function test_dates_follow_the_workspace_format_and_timezone(): void
     {
         $admin = $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $admin->forceFill(['created_at' => '2026-03-05 02:30:00'])->save(); // UTC
 
         $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page->where('users.data.0.created_at', '04/03/2026')); // Santo Domingo (UTC-4), dmy
@@ -178,7 +178,7 @@ class WorkspaceSettingsTest extends TestCase
             $this->post('/settings', $this->payload())->assertForbidden();
         }
 
-        $this->assertSame('Test Workspace', Workspace::first()->name);
+        $this->assertSame('Test Workspace', Workspace::orderBy('id')->first()->name);
         $this->assertSame(0, WorkspaceSetting::count());
     }
 
@@ -230,7 +230,7 @@ class WorkspaceSettingsTest extends TestCase
         }
 
         $this->assertSame(0, WorkspaceSetting::count());
-        $this->assertSame('Test Workspace', Workspace::first()->name);
+        $this->assertSame('Test Workspace', Workspace::orderBy('id')->first()->name);
     }
 
     public function test_the_brand_color_rule_requires_readable_white_text(): void
@@ -243,7 +243,7 @@ class WorkspaceSettingsTest extends TestCase
     public function test_saving_never_touches_the_internal_code_or_membership(): void
     {
         $admin = $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
 
         $this->post('/settings', $this->payload(['code' => 'HACKED', 'is_active' => false, 'organization_id' => 99]))->assertSessionHasNoErrors();
 
@@ -259,7 +259,7 @@ class WorkspaceSettingsTest extends TestCase
         Storage::fake(config('filesystems.default'));
         $this->actAs();
         $this->post('/settings', $this->payload(['logo' => UploadedFile::fake()->image('logo.png')]));
-        $path = Workspace::first()->settings->logo_path;
+        $path = Workspace::orderBy('id')->first()->settings->logo_path;
 
         // A rejected request must not write anything to storage.
         $this->post('/settings', $this->payload(['tax_rate' => 500, 'logo' => UploadedFile::fake()->image('otro.png')]))->assertSessionHasErrors('tax_rate');
@@ -277,7 +277,7 @@ class WorkspaceSettingsTest extends TestCase
     {
         Storage::fake(config('filesystems.default'));
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
 
         $this->post('/settings', $this->payload(['logo' => UploadedFile::fake()->image('logo.png', 200, 200)]))->assertSessionHasNoErrors();
 

@@ -45,7 +45,7 @@ class AuditTest extends TestCase
 
     private function log(array $overrides = []): AuditLog
     {
-        $workspace = $overrides['workspace'] ?? Workspace::first();
+        $workspace = $overrides['workspace'] ?? Workspace::orderBy('id')->first();
         unset($overrides['workspace']);
 
         $createdAt = $overrides['created_at'] ?? null;
@@ -87,7 +87,7 @@ class AuditTest extends TestCase
     public function test_creating_a_user_records_who_where_what_and_the_ip_without_the_password(): void
     {
         $actor = $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
 
         $this->withServerVariables(['REMOTE_ADDR' => '198.51.100.7'])->withHeader('User-Agent', 'Mozilla/5.0 (X11) Chrome/999')
             ->post('/users', ['workspace_id' => $workspace->id, 'name' => 'María López', 'email' => 'maria@example.com', 'password' => self::PASSWORD, 'password_confirmation' => self::PASSWORD, 'role' => 'cliente'])
@@ -126,7 +126,7 @@ class AuditTest extends TestCase
     public function test_editing_a_user_records_only_the_fields_that_changed(): void
     {
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $user = User::factory()->create(['name' => 'María López', 'email' => 'maria@example.com']);
         $workspace->users()->attach($user->id, ['role' => 'cliente']);
 
@@ -149,7 +149,7 @@ class AuditTest extends TestCase
     {
         $this->actAs();
         $user = User::factory()->create(['name' => 'Luis']);
-        Workspace::first()->users()->attach($user->id, ['role' => 'cliente']);
+        Workspace::orderBy('id')->first()->users()->attach($user->id, ['role' => 'cliente']);
 
         $this->post("/users/{$user->id}/deactivate");
         $this->post("/users/{$user->id}/activate");
@@ -212,7 +212,7 @@ class AuditTest extends TestCase
     public function test_workspace_settings_changes_are_audited(): void
     {
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $workspace->settings()->create(array_merge(WorkspaceSetting::defaults(), ['primary_color' => '#1d4ed8']));
         AuditLog::query()->delete();
 
@@ -260,7 +260,7 @@ class AuditTest extends TestCase
     {
         $actor = $this->actAs();
         $user = User::factory()->create();
-        Workspace::first()->users()->attach($user->id, ['role' => 'cliente']);
+        Workspace::orderBy('id')->first()->users()->attach($user->id, ['role' => 'cliente']);
         $this->post("/users/{$user->id}/deactivate");
 
         $actor->forceFill(['name' => 'Ana Renombrada'])->save();
@@ -419,7 +419,7 @@ class AuditTest extends TestCase
     public function test_the_date_range_follows_the_workspace_timezone(): void
     {
         $this->actAs();
-        Workspace::first()->settings()->create(array_merge(WorkspaceSetting::defaults(), ['timezone' => 'America/Bogota']));
+        Workspace::orderBy('id')->first()->settings()->create(array_merge(WorkspaceSetting::defaults(), ['timezone' => 'America/Bogota']));
         // 2026-03-11 02:00 UTC is still March 10 in Bogotá (UTC-5).
         $this->log(['resource_label' => 'Noche', 'created_at' => '2026-03-11 02:00:00']);
 

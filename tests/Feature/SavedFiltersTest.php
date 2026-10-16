@@ -50,7 +50,7 @@ class SavedFiltersTest extends TestCase
         $row = SavedFilter::firstOrFail();
         $this->assertSame('Cambios de usuarios', $row->name);
         $this->assertSame($user->id, $row->user_id);
-        $this->assertSame(Workspace::first()->id, $row->workspace_id);
+        $this->assertSame(Workspace::orderBy('id')->first()->id, $row->workspace_id);
         $this->assertSame(['resource' => 'user', 'action' => 'updated', 'from' => '2026-10-01', 'to' => '2026-10-09'], $row->criteria);
 
         $this->get('/audit')->assertInertia(fn (AssertableInertia $page) => $page
@@ -80,7 +80,7 @@ class SavedFiltersTest extends TestCase
     {
         $this->actAs();
 
-        return Workspace::first();
+        return Workspace::orderBy('id')->first();
     }
 
     // --- validation --------------------------------------------------------------------------------------------
@@ -195,7 +195,7 @@ class SavedFiltersTest extends TestCase
 
         // Another user of the same Workspace.
         $colleague = User::factory()->create();
-        Workspace::first()->users()->attach($colleague->id, ['role' => 'admin']);
+        Workspace::orderBy('id')->first()->users()->attach($colleague->id, ['role' => 'admin']);
         $this->actingAs($colleague);
         $this->get('/audit')->assertInertia(fn (AssertableInertia $page) => $page->where('savedFilters', []));
         $this->put("/saved-filters/audit/{$filter->id}", ['name' => 'Robado'])->assertNotFound();
@@ -211,7 +211,7 @@ class SavedFiltersTest extends TestCase
         $this->delete("/saved-filters/audit/{$filter->id}")->assertNotFound();
 
         // The filter of another module is not reachable through this module's URL either.
-        $this->actingAs($owner)->withSession(['workspace_id' => Workspace::first()->id]);
+        $this->actingAs($owner)->withSession(['workspace_id' => Workspace::orderBy('id')->first()->id]);
         $this->delete("/saved-filters/conversations/{$filter->id}")->assertNotFound();
 
         $filter->refresh();
@@ -229,7 +229,7 @@ class SavedFiltersTest extends TestCase
 
         $row = SavedFilter::firstOrFail();
         $this->assertSame($user->id, $row->user_id);
-        $this->assertSame(Workspace::first()->id, $row->workspace_id);
+        $this->assertSame(Workspace::orderBy('id')->first()->id, $row->workspace_id);
     }
 
     public function test_the_module_permission_is_required(): void

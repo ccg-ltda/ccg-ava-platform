@@ -24,10 +24,20 @@ class AvailabilityCalculator
     /**
      * @return list<array{starts_at: CarbonImmutable, ends_at: CarbonImmutable, professional_id: int, professional_name: string, resource_id: ?int}>
      */
-    public function slots(Workspace $workspace, Service $service, ?int $professionalId, CarbonImmutable $from, CarbonImmutable $to, ?int $ignoreAppointmentId = null, bool $ignorePolicy = false): array
+    public function slots(Workspace $workspace, Service $service, ?int $professionalId, CarbonImmutable $from, CarbonImmutable $to, ?int $ignoreAppointmentId = null, bool $ignorePolicy = false, ?int $locationId = null): array
     {
         if (! $service->is_active || $to <= $from) {
             return [];
+        }
+
+        // With a location: it must be an active one of this Workspace that offers the service, and only the hours set for it (or for every
+        // location) count. Without one nothing changes: every schedule that exists today has no location and applies everywhere.
+        if ($locationId !== null) {
+            $location = $workspace->locations()->where('is_active', true)->find($locationId);
+
+            if (! $location || ! app(Locations::class)->offers($location, $service->id)) {
+                return [];
+            }
         }
 
         $settings = BookingSetting::for($workspace);
@@ -38,7 +48,9 @@ class AvailabilityCalculator
         $latest = $ignorePolicy ? $now->addYears(2) : $now->addDays($settings->max_advance_days);
 
         $professionals = $service->professionals()->where('professionals.workspace_id', $workspace->id)->where('professionals.is_active', true)
-            ->when($professionalId, fn ($query) => $query->where('professionals.id', $professionalId))->orderBy('professionals.name')->get();
+            ->when($professionalId, fn ($query) => $query->where('professionals.id', $professionalId))
+            ->when($locationId, fn ($query) => $query->whereIn('professionals.id', app(Locations::class)->professionalIds($workspace, $locationId)))
+            ->orderBy('professionals.name')->get();
 
         if ($professionals->isEmpty()) {
             return [];
@@ -47,7 +59,9 @@ class AvailabilityCalculator
         $resources = $service->resources()->where('bookable_resources.workspace_id', $workspace->id)->where('bookable_resources.is_active', true)->orderBy('bookable_resources.id')->get();
         $needsResource = $service->resources()->exists();
         $busy = $this->busy($workspace, $from->subDay(), $to->addDay(), $ignoreAppointmentId);
-        $rules = ScheduleRule::where('workspace_id', $workspace->id)->whereIn('professional_id', $professionals->modelKeys())->orderBy('starts_at')->get()
+        $rules = ScheduleRule::where('workspace_id', $workspace->id)->whereIn('professional_id', $professionals->modelKeys())
+            ->when($locationId, fn ($query) => $query->where(fn ($where) => $where->whereNull('location_id')->orWhere('location_id', $locationId)))
+            ->orderBy('starts_at')->get()
             ->groupBy(fn (ScheduleRule $rule) => $rule->professional_id.'|'.$rule->weekday);
         $firstDay = $from->setTimezone($timezone)->startOfDay();
         $lastDay = $to->subSecond()->setTimezone($timezone)->startOfDay();
@@ -104,16 +118,16 @@ class AvailabilityCalculator
     }
 
     /** The slot that starts exactly at `$startsAt` (for that professional, or the first free one when none is named), or null. */
-    public function slotAt(Workspace $workspace, Service $service, ?int $professionalId, CarbonImmutable $startsAt, ?int $ignoreAppointmentId = null, bool $ignorePolicy = false): ?array
+    public function slotAt(Workspace $workspace, Service $service, ?int $professionalId, CarbonImmutable $startsAt, ?int $ignoreAppointmentId = null, bool $ignorePolicy = false, ?int $locationId = null): ?array
     {
-        return $this->slotsAt($workspace, $service, $professionalId, $startsAt, $ignoreAppointmentId, $ignorePolicy)[0] ?? null;
+        return $this->slotsAt($workspace, $service, $professionalId, $startsAt, $ignoreAppointmentId, $ignorePolicy, $locationId)[0] ?? null;
     }
 
     /** Every free slot that starts exactly at `$startsAt` (one per free professional). @return list<array<string, mixed>> */
-    public function slotsAt(Workspace $workspace, Service $service, ?int $professionalId, CarbonImmutable $startsAt, ?int $ignoreAppointmentId = null, bool $ignorePolicy = false): array
+    public function slotsAt(Workspace $workspace, Service $service, ?int $professionalId, CarbonImmutable $startsAt, ?int $ignoreAppointmentId = null, bool $ignorePolicy = false, ?int $locationId = null): array
     {
         return array_values(array_filter(
-            $this->slots($workspace, $service, $professionalId, $startsAt, $startsAt->addSecond(), $ignoreAppointmentId, $ignorePolicy),
+            $this->slots($workspace, $service, $professionalId, $startsAt, $startsAt->addSecond(), $ignoreAppointmentId, $ignorePolicy, $locationId),
             fn (array $slot) => $slot['starts_at']->equalTo($startsAt),
         ));
     }

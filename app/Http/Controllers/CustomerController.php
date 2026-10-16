@@ -171,7 +171,7 @@ class CustomerController extends Controller
         return Appointment::where('workspace_id', $workspace->id)
             ->where(fn ($query) => $query->whereIn('customer_id', $ids)->orWhereIn('conversation_id', $conversationIds))
             ->orderByDesc('starts_at')->limit(20)->get()
-            ->map(fn (Appointment $appointment) => ['id' => $appointment->id, 'service' => $appointment->service_name, 'startsAt' => $appointment->starts_at->toIso8601String(), 'status' => $appointment->status])->all();
+            ->map(fn (Appointment $appointment) => ['id' => $appointment->id, 'service' => $appointment->service_name, 'location' => $appointment->location_name, 'price' => $appointment->price_amount === null ? null : (float) $appointment->price_amount, 'currency' => $appointment->price_currency, 'startsAt' => $appointment->starts_at->toIso8601String(), 'status' => $appointment->status])->all();
     }
 
     /** The campaigns that addressed this customer (only the fact and the outcome). Only with the module and its permission. @return ?list<array<string, mixed>> */

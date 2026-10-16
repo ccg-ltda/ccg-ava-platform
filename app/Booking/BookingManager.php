@@ -5,6 +5,7 @@ namespace App\Booking;
 use App\Audit\AuditLogger;
 use App\Models\Appointment;
 use App\Models\BookingSetting;
+use App\Models\Location;
 use App\Models\Workspace;
 use Carbon\CarbonImmutable;
 
@@ -21,6 +22,7 @@ class BookingManager
         private readonly CalendarProviders $providers,
         private readonly AppointmentService $appointments,
         private readonly AuditLogger $audit,
+        private readonly Locations $locations,
     ) {}
 
     public function provider(Workspace $workspace): CalendarProvider
@@ -49,7 +51,7 @@ class BookingManager
      *
      * @return list<array<string, mixed>>
      */
-    public function bookableServices(Workspace $workspace): array
+    public function bookableServices(Workspace $workspace, int|string|null $locationId = null): array
     {
         $services = $this->services($workspace);
 
@@ -57,16 +59,28 @@ class BookingManager
             return $services;
         }
 
+        // Narrowed to a location when one is asked for: only what it offers and what someone works there for.
+        $location = $locationId !== null ? $this->locations->resolve($workspace, $locationId) : null;
+        $hours = fn ($rules) => $location ? $rules->where(fn ($where) => $where->whereNull('location_id')->orWhere('location_id', $location->id)) : $rules;
         $bookable = $workspace->services()->where('is_active', true)
-            ->whereHas('professionals', fn ($query) => $query->where('professionals.is_active', true)->whereHas('scheduleRules'))->pluck('id')->all();
+            ->whereHas('professionals', fn ($query) => $query->where('professionals.is_active', true)->whereHas('scheduleRules', $hours))->get()
+            ->filter(fn ($service) => ! $location || $this->locations->offers($location, $service->id))->pluck('id')->all();
 
         return array_values(array_filter($services, fn (array $service) => in_array($service['id'], $bookable, true)));
     }
 
     /** @return list<array<string, mixed>> */
-    public function professionals(Workspace $workspace, int|string|null $serviceId = null): array
+    public function professionals(Workspace $workspace, int|string|null $serviceId = null, int|string|null $locationId = null): array
     {
-        return $this->guard(fn () => $this->provider($workspace)->professionals($serviceId));
+        $professionals = $this->guard(fn () => $this->provider($workspace)->professionals($serviceId));
+
+        if ($locationId === null || ! $this->providers->isInternal($this->provider($workspace))) {
+            return $professionals;
+        }
+
+        $here = $this->locations->professionalIds($workspace, $this->locations->resolve($workspace, $locationId)->id);
+
+        return array_values(array_filter($professionals, fn (array $professional) => in_array($professional['id'], $here, true)));
     }
 
     /**
@@ -74,7 +88,7 @@ class BookingManager
      *
      * @return list<array{starts_at: CarbonImmutable, ends_at: CarbonImmutable, professional_id: int|string|null, professional_name: ?string}>
      */
-    public function availability(Workspace $workspace, int|string $serviceId, int|string|null $professionalId, CarbonImmutable $from, int $days, ?Appointment $ignore = null): array
+    public function availability(Workspace $workspace, int|string $serviceId, int|string|null $professionalId, CarbonImmutable $from, int $days, ?Appointment $ignore = null, int|string|null $locationId = null): array
     {
         $days = max(1, min($days, (int) config('bookings.public.max_days')));
         $provider = $this->provider($workspace);
@@ -86,6 +100,13 @@ class BookingManager
 
         if (! $provider->capabilities()['availability']) {
             throw BookingException::unsupported($this->unsupported($workspace, 'consultar horarios'));
+        }
+
+        if ($provider instanceof InternalCalendar) {
+            // Moving an appointment keeps it in ITS location; a new search names one (or has one implied, or none when locations do not apply).
+            $location = $ignore !== null ? $this->locations->ofAppointment($ignore) : $this->locations->resolve($workspace, $locationId)?->id;
+
+            return $this->guard(fn () => $provider->availabilityIn($location instanceof Location ? $location->id : $location, $serviceId, $professionalId, $from->utc(), $from->utc()->addDays($days), $ignore?->id));
         }
 
         return $this->guard(fn () => $provider->availability($serviceId, $professionalId, $from->utc(), $from->utc()->addDays($days), $ignore?->id));
@@ -127,7 +148,7 @@ class BookingManager
                 throw BookingException::invalid('Ese profesional no está disponible.');
             }
 
-            return $this->appointments->book($workspace, $service, $professional === null ? null : (int) $professional, $data['starts_at'], $data['customer'], $channel, $data['notes'] ?? null, $conversationId);
+            return $this->appointments->book($workspace, $service, $professional === null ? null : (int) $professional, $data['starts_at'], $data['customer'], $channel, $data['notes'] ?? null, $conversationId, $data['location_id'] ?? null);
         }
 
         if (! $provider->capabilities()['book']) {
@@ -214,6 +235,16 @@ class BookingManager
         return $appointment;
     }
 
+    /**
+     * The customer's own "I will come" (never the business accepting the booking): only for Ava's own agenda, only while the appointment is open.
+     *
+     * @return array{appointment: Appointment, replayed: bool}
+     */
+    public function customerConfirm(Appointment $appointment, string $source): array
+    {
+        return $this->appointments->customerConfirm($appointment, $source);
+    }
+
     /** Confirm / complete / no-show, only for appointments of Ava's own agenda: an external agenda confirms and closes its own. */
     public function transition(Appointment $appointment, string $to): Appointment
     {
@@ -262,7 +293,10 @@ class BookingManager
         $duration = (int) ($service['duration_minutes'] ?? 0) ?: 30;
 
         // Ava keeps its own record of the request from the first moment: what the provider does with it is written on it, never assumed.
+        // The price and the location of an external agenda are that agenda's: nothing is recorded here that Ava cannot vouch for.
+        $this->appointments->assertChannel($channel);
         $appointment = $workspace->appointments()->create([
+            'origin_channel' => $this->appointments->originChannel($workspace, $channel, $conversationId),
             'customer_id' => $this->appointments->customer($workspace, $data['customer'])->id,
             'conversation_id' => $conversationId,
             'service_name' => $service['name'],

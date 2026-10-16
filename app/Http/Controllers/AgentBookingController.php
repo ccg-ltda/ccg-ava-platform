@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Booking\AppointmentNotifier;
 use App\Booking\BookingException;
 use App\Booking\BookingManager;
 use App\Booking\BookingPresenter;
+use App\Booking\Locations;
 use App\Http\Requests\AvailabilityRequest;
 use App\Http\Requests\BookAppointmentRequest;
 use App\Http\Requests\RescheduleAppointmentRequest;
@@ -23,16 +25,27 @@ use Illuminate\Http\Request;
  */
 class AgentBookingController extends Controller
 {
-    public function __construct(private readonly BookingManager $bookings, private readonly BookingPresenter $present) {}
+    public function __construct(private readonly BookingManager $bookings, private readonly BookingPresenter $present, private readonly Locations $locations) {}
 
     public function services(Request $request): JsonResponse
     {
-        return $this->run(fn (Workspace $workspace) => ['services' => $this->bookings->bookableServices($workspace)] + $this->capabilities($workspace));
+        $location = ctype_digit((string) $request->query('location_id')) ? $request->query('location_id') : null;
+
+        return $this->run(fn (Workspace $workspace) => ['services' => $this->bookings->bookableServices($workspace, $location)] + $this->capabilities($workspace));
+    }
+
+    /** The active locations of the Workspace (empty when none applies): with several, a booking must name one by id. */
+    public function locations(Request $request): JsonResponse
+    {
+        return $this->run(fn (Workspace $workspace) => [
+            'locations' => $this->locations->active($workspace)->map(fn ($location) => ['id' => $location->id, 'name' => $location->name, 'address' => $location->address, 'city' => $location->city, 'phone' => $location->phone, 'notes' => $location->notes])->values()->all(),
+            'required' => $this->locations->required($workspace),
+        ]);
     }
 
     public function professionals(Request $request): JsonResponse
     {
-        return $this->run(fn (Workspace $workspace) => ['professionals' => $this->bookings->professionals($workspace, $request->query('service_id'))]);
+        return $this->run(fn (Workspace $workspace) => ['professionals' => $this->bookings->professionals($workspace, $request->query('service_id'), ctype_digit((string) $request->query('location_id')) ? $request->query('location_id') : null)]);
     }
 
     public function availability(AvailabilityRequest $request): JsonResponse
@@ -42,7 +55,7 @@ class AgentBookingController extends Controller
 
         return $this->run(fn (Workspace $workspace) => ['slots' => array_map(
             fn (array $slot) => $this->present->slot($workspace, $slot),
-            $this->bookings->availability($workspace, $request->validated('service_id'), $request->validated('professional_id') ?: null, $request->from($workspace->settingsOrDefault()->timezone), $request->days(), $moving ? $this->owned($request, (int) $request->validated('ignore_appointment'), $moving) : null),
+            $this->bookings->availability($workspace, $request->validated('service_id'), $request->validated('professional_id') ?: null, $request->from($workspace->settingsOrDefault()->timezone), $request->days(), $moving ? $this->owned($request, (int) $request->validated('ignore_appointment'), $moving) : null, $request->locationId()),
         )]);
     }
 
@@ -72,7 +85,7 @@ class AgentBookingController extends Controller
         return $this->run(function (Workspace $workspace) use ($request, $data) {
             $conversation = $this->conversation($request, $data);
 
-            return ['appointments' => $workspace->appointments()->with(['customer', 'workspace'])->where('conversation_id', $conversation->id)->whereIn('status', Appointment::BLOCKING)->orderBy('starts_at')->get()->map(fn (Appointment $appointment) => $this->answer($appointment))->all()];
+            return ['appointments' => $workspace->appointments()->with(['customer', 'workspace'])->when(app(AppointmentNotifier::class)->ready(), fn ($query) => $query->with('notifications'))->where('conversation_id', $conversation->id)->whereIn('status', Appointment::BLOCKING)->orderBy('starts_at')->get()->map(fn (Appointment $appointment) => $this->answer($appointment))->all()];
         });
     }
 
@@ -81,6 +94,22 @@ class AgentBookingController extends Controller
         $data = $this->contact($request);
 
         return $this->run(fn (Workspace $workspace) => ['appointment' => $this->answer($this->bookings->cancel($this->owned($request, $appointment, $data), null, 'chat'))]);
+    }
+
+    /**
+     * The contact answered that they will come. Only for an appointment of THIS conversation. It records the customer's answer and nothing else:
+     * it never confirms a booking the business has not accepted (`status` stays what the backend says) and an appointment that was cancelled,
+     * closed or has started is refused. Asking twice is the same answer (`replayed`).
+     */
+    public function confirm(Request $request, int $appointment): JsonResponse
+    {
+        $data = $this->contact($request);
+
+        return $this->run(function (Workspace $workspace) use ($request, $appointment, $data) {
+            $result = $this->bookings->customerConfirm($this->owned($request, $appointment, $data), 'assistant');
+
+            return ['appointment' => $this->answer($result['appointment']->load(['customer', 'workspace'])), 'replayed' => $result['replayed']];
+        });
     }
 
     public function reschedule(RescheduleAppointmentRequest $request, int $appointment): JsonResponse
@@ -131,7 +160,10 @@ class AgentBookingController extends Controller
     /** The result as the automation tells the contact: the status Ava (or the agenda) really gave it. @return array<string, mixed> */
     private function answer(Appointment $appointment): array
     {
-        return array_intersect_key($this->present->appointment($appointment), array_flip(['id', 'service', 'professional', 'startsAt', 'dateLabel', 'timeLabel', 'status', 'statusLabel', 'syncStatus']));
+        // What the automation may know about the messages Ava sent: kind, state and time. No text, no phone, no reason.
+        $messages = $appointment->relationLoaded('notifications') ? array_map(fn (array $n) => array_intersect_key($n, array_flip(['kind', 'offset', 'status', 'statusLabel', 'scheduledFor'])), app(AppointmentNotifier::class)->summary($appointment, false)) : [];
+
+        return ['notifications' => $messages] + array_intersect_key($this->present->appointment($appointment), array_flip(['id', 'service', 'professional', 'location', 'price', 'currency', 'startsAt', 'dateLabel', 'timeLabel', 'status', 'statusLabel', 'syncStatus', 'customerConfirmed']));
     }
 
     private function run(callable $action, int|\Closure $status = 200): JsonResponse

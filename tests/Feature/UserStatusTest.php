@@ -35,7 +35,7 @@ class UserStatusTest extends TestCase
     private function member(string $role = 'cliente', ?Workspace $workspace = null): User
     {
         $user = User::factory()->create();
-        ($workspace ?? Workspace::first())->users()->attach($user->id, ['role' => $role]);
+        ($workspace ?? Workspace::orderBy('id')->first())->users()->attach($user->id, ['role' => $role]);
 
         return $user;
     }
@@ -50,7 +50,7 @@ class UserStatusTest extends TestCase
         $this->actAs();
 
         $this->post('/users', [
-            'name' => 'Ana', 'email' => 'ana@example.com', 'role' => 'cliente', 'workspace_id' => Workspace::first()->id,
+            'name' => 'Ana', 'email' => 'ana@example.com', 'role' => 'cliente', 'workspace_id' => Workspace::orderBy('id')->first()->id,
             'password' => 'password123', 'password_confirmation' => 'password123',
         ])->assertSessionHasNoErrors();
         $ana = User::where('email', 'ana@example.com')->firstOrFail();
@@ -60,7 +60,7 @@ class UserStatusTest extends TestCase
             ->assertSessionHasNoErrors();
 
         $this->assertSame('Ana María', $ana->fresh()->name);
-        $this->assertSame('supervisor', Workspace::first()->users()->find($ana->id)->pivot->role);
+        $this->assertSame('supervisor', Workspace::orderBy('id')->first()->users()->find($ana->id)->pivot->role);
     }
 
     public function test_deactivating_keeps_the_user_and_memberships_and_flags_it_in_the_list(): void
@@ -183,7 +183,7 @@ class UserStatusTest extends TestCase
         $this->put('/users/'.$shared->id, ['name' => 'Hacked', 'email' => $shared->email, 'role' => 'cliente'])
             ->assertSessionHasErrors('email');
         $this->post('/users', [
-            'name' => 'Dup', 'email' => $shared->email, 'role' => 'cliente', 'workspace_id' => Workspace::first()->id,
+            'name' => 'Dup', 'email' => $shared->email, 'role' => 'cliente', 'workspace_id' => Workspace::orderBy('id')->first()->id,
             'password' => 'password123', 'password_confirmation' => 'password123',
         ])->assertSessionHasErrors('email');
     }

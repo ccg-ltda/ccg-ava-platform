@@ -8,21 +8,21 @@ import TextInput from '@/Components/TextInput';
 import ScheduleEditor from './ScheduleEditor';
 
 /** Create or edit a professional: who they are, the services they perform and their weekly schedule. */
-export default function ProfessionalModal({ professional, services, days, onClose }) {
+export default function ProfessionalModal({ professional, services, days, locations = [], onClose }) {
     const editing = Boolean(professional?.id);
     const form = useForm({
         name: professional?.name ?? '',
         specialty: professional?.specialty ?? '',
         phone: professional?.phone ?? '',
         service_ids: professional?.serviceIds ?? [],
-        schedule: professional?.schedule ?? [1, 2, 3, 4, 5].map((weekday) => ({ weekday, startsAt: '09:00', endsAt: '17:00' })),
+        schedule: professional?.schedule ?? [1, 2, 3, 4, 5].map((weekday) => ({ weekday, startsAt: '09:00', endsAt: '17:00', locationId: null })),
     });
     const { data, setData, errors } = form;
     const toggle = (id) => setData('service_ids', data.service_ids.includes(id) ? data.service_ids.filter((item) => item !== id) : [...data.service_ids, id]);
 
     const submit = (event) => {
         event.preventDefault();
-        form.transform((payload) => ({ ...payload, schedule: payload.schedule.map((block) => ({ weekday: block.weekday, starts_at: block.startsAt, ends_at: block.endsAt })) }));
+        form.transform((payload) => ({ ...payload, schedule: payload.schedule.map((block) => ({ weekday: block.weekday, starts_at: block.startsAt, ends_at: block.endsAt, location_id: block.locationId || null })) }));
         const options = { preserveScroll: true, onSuccess: onClose };
 
         if (editing) form.put(route('professionals.update', professional.id), options);
@@ -70,7 +70,7 @@ export default function ProfessionalModal({ professional, services, days, onClos
                         <InputError message={errors['service_ids.0'] ?? errors.service_ids} className="mt-1" />
                     </fieldset>
 
-                    <ScheduleEditor days={days} value={data.schedule} onChange={(schedule) => setData('schedule', schedule)} error={errors.schedule} />
+                    <ScheduleEditor days={days} locations={locations} value={data.schedule} onChange={(schedule) => setData('schedule', schedule)} error={errors.schedule} />
                 </div>
                 <div className="flex justify-end gap-3 border-t border-line bg-card px-5 py-4 sm:px-8">
                     <SecondaryButton type="button" onClick={onClose}>

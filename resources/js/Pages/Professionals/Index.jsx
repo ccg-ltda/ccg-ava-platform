@@ -29,7 +29,7 @@ function scheduleSummary(schedule) {
 }
 
 /** Profesionales y disponibilidad: who performs the services and when they work (or the external agenda's, read only). */
-export default function Index({ capabilities, days, professionals, external, externalError, services, resources, exceptions }) {
+export default function Index({ capabilities, days, professionals, external, externalError, services, resources, exceptions, locations }) {
     const confirm = useConfirm();
     const { permissions } = useAccess();
     const { errors } = usePage().props;
@@ -125,7 +125,7 @@ export default function Index({ capabilities, days, professionals, external, ext
                 {panels}
             </Tabs>
 
-            {editing && <ProfessionalModal professional={editing} services={services} days={days} onClose={() => setEditing(null)} />}
+            {editing && <ProfessionalModal professional={editing} services={services} days={days} locations={locations} onClose={() => setEditing(null)} />}
         </>
     );
 }

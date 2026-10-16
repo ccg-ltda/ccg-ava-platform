@@ -107,7 +107,7 @@ class DashboardTest extends TestCase
     public function test_the_figures_match_the_stored_records_and_ignore_what_is_outside_the_period(): void
     {
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $bot = $workspace->chatbots()->create(['name' => 'Uno']);
         $workspace->chatbots()->create(['name' => 'Dos', 'is_active' => false]);
         $this->conversation($workspace, '573001', 'whatsapp', 'ai', null, 2, 1, 'ai', $bot);
@@ -136,7 +136,7 @@ class DashboardTest extends TestCase
     public function test_there_is_no_change_without_a_previous_period_to_compare(): void
     {
         $this->actAs();
-        $this->conversation(Workspace::first(), '573001');
+        $this->conversation(Workspace::orderBy('id')->first(), '573001');
 
         $conversations = $this->props()['kpis']['data']['conversations'];
 
@@ -146,7 +146,7 @@ class DashboardTest extends TestCase
     public function test_the_series_add_up_to_the_records_and_follow_the_period_and_its_grouping(): void
     {
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $this->conversation($workspace, '573001', 'whatsapp', 'ai', CarbonImmutable::now(), 2, 1);
         $this->conversation($workspace, '573002', 'whatsapp', 'ai', CarbonImmutable::now()->subDays(2), 1, 2);
         $this->conversation($workspace, '573003', 'whatsapp', 'ai', CarbonImmutable::now()->subDays(20), 1, 0);
@@ -178,7 +178,7 @@ class DashboardTest extends TestCase
     public function test_the_states_and_channels_distributions_follow_the_period(): void
     {
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $this->conversation($workspace, '573001', 'whatsapp', 'ai');
         $this->conversation($workspace, '573002', 'whatsapp', 'human');
         $this->conversation($workspace, '573003', 'web', 'human');
@@ -219,7 +219,7 @@ class DashboardTest extends TestCase
     public function test_a_section_that_cannot_be_read_is_an_error_and_not_a_zero_and_leaks_nothing(): void
     {
         $this->actAs();
-        $this->conversation(Workspace::first(), '573001');
+        $this->conversation(Workspace::orderBy('id')->first(), '573001');
         $entries = [];
         Log::listen(function (MessageLogged $event) use (&$entries) {
             $entries[] = $event->message.json_encode($event->context);
@@ -251,7 +251,7 @@ class DashboardTest extends TestCase
     public function test_the_data_of_two_workspaces_is_never_mixed(): void
     {
         $this->actAs();
-        $mine = Workspace::first();
+        $mine = Workspace::orderBy('id')->first();
         $other = $this->otherWorkspace();
         $botOther = $other->chatbots()->create(['name' => 'Ajeno']);
         $this->conversation($mine, 'mi-contacto', 'whatsapp', 'ai', null, 1, 1);
@@ -303,7 +303,7 @@ class DashboardTest extends TestCase
     {
         $this->actAs('admin', superuser: true);
         config(['workspace.admin_code' => 'TEST_WS']);
-        $mine = Workspace::first();
+        $mine = Workspace::orderBy('id')->first();
         $other = $this->otherWorkspace();
         $this->conversation($mine, 'mio', 'whatsapp', 'ai', null, 1, 1);
         $this->conversation($other, 'ajeno-1', 'web', 'pending', null, 2, 0);
@@ -333,7 +333,7 @@ class DashboardTest extends TestCase
     public function test_lists_and_details_need_the_permission_of_their_own_module(): void
     {
         $this->actAs('cliente');
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $this->conversation($workspace, 'quien-escribe', 'whatsapp', 'pending');
         $workspace->integrations()->create(['name' => 'Web', 'type' => 'web', 'is_active' => true, 'config' => ['webhook_url' => 'https://n8n.example.com/hook', 'allowed_origins' => []], 'secrets' => ['webhook_secret' => 'super-secreto']]);
 
@@ -367,7 +367,7 @@ class DashboardTest extends TestCase
     public function test_attention_counts_what_waits_for_a_person(): void
     {
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $bot = $workspace->chatbots()->create(['name' => 'Uno']);
         $first = $this->conversation($workspace, '573001', 'whatsapp', 'pending', null, 1, 1, 'ai', $bot);
         $this->conversation($workspace, '573002', 'whatsapp', 'pending', CarbonImmutable::now()->subDays(100), 1, 0, 'ai', $bot);
@@ -389,7 +389,7 @@ class DashboardTest extends TestCase
     public function test_integrations_report_only_what_their_last_test_proves_and_never_secrets(): void
     {
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $make = fn (string $name, array $attributes) => $workspace->integrations()->create(array_merge(['name' => $name, 'type' => 'whatsapp', 'is_active' => true, 'config' => ['phone_number_id' => '123456'], 'secrets' => ['access_token' => 'TOKEN-PRIVADO-XYZ']], $attributes));
         $make('Verificada', ['last_tested_at' => now(), 'last_test_ok' => true]);
         $make('Fallida', ['last_tested_at' => now(), 'last_test_ok' => false]);
@@ -408,7 +408,7 @@ class DashboardTest extends TestCase
     public function test_recent_activity_is_the_audit_log_of_the_workspace_in_scope(): void
     {
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         foreach (range(1, 8) as $number) {
             AuditLog::create(['workspace_id' => $workspace->id, 'workspace_code' => $workspace->code, 'workspace_name' => $workspace->name, 'user_id' => null, 'user_name' => 'Ana', 'user_email' => 'a@b.c', 'action' => 'updated', 'resource_type' => 'user', 'resource_id' => $number, 'resource_label' => "r{$number}", 'description' => "Cambio {$number}", 'changes' => [], 'ip_address' => '1.1.1.1']);
         }
@@ -424,7 +424,7 @@ class DashboardTest extends TestCase
     public function test_demo_conversations_are_counted_and_announced(): void
     {
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $this->conversation($workspace, 'real', 'whatsapp');
         $this->conversation($workspace, 'simulada', 'whatsapp', 'ai', null, 1, 0, 'ai', null, 'demo_uno');
 
@@ -437,7 +437,7 @@ class DashboardTest extends TestCase
     public function test_the_metrics_service_is_reusable_with_a_given_workspace_and_period(): void
     {
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $other = $this->otherWorkspace();
         $this->conversation($workspace, '1', 'whatsapp', 'ai', null, 2);
         $this->conversation($other, '2', 'whatsapp', 'ai', null, 9);
@@ -455,7 +455,7 @@ class DashboardTest extends TestCase
         $this->seedRoleCatalog();
         Role::findOrCreate('solo-asistentes', 'web')->syncPermissions(['view-dashboard', 'view-chatbots']);
         $this->actAs('solo-asistentes');
-        $this->conversation(Workspace::first(), 'contacto-reservado', 'whatsapp', 'pending');
+        $this->conversation(Workspace::orderBy('id')->first(), 'contacto-reservado', 'whatsapp', 'pending');
 
         $props = $this->props();
 
@@ -469,7 +469,7 @@ class DashboardTest extends TestCase
     public function test_a_failing_headline_section_is_an_error_and_not_zeros(): void
     {
         $this->actAs();
-        $this->conversation(Workspace::first(), '573001');
+        $this->conversation(Workspace::orderBy('id')->first(), '573001');
         $this->app->bind(DashboardMetrics::class, fn ($app) => new class($app->make(ChannelCatalog::class), $app->make(WorkspaceReport::class), $app->make(IntegrationRegistry::class)) extends DashboardMetrics
         {
             public function kpis(?Workspace $target, ReportPeriod $period, array $modules): array
@@ -489,7 +489,7 @@ class DashboardTest extends TestCase
     public function test_the_twelve_month_period_groups_by_month_and_an_invalid_period_is_refused(): void
     {
         $this->actAs();
-        $this->conversation(Workspace::first(), '573001', 'whatsapp', 'ai', CarbonImmutable::now()->subMonths(5), 2, 1);
+        $this->conversation(Workspace::orderBy('id')->first(), '573001', 'whatsapp', 'ai', CarbonImmutable::now()->subMonths(5), 2, 1);
 
         $year = $this->props('/dashboard?period=12m');
 
@@ -503,7 +503,7 @@ class DashboardTest extends TestCase
     public function test_the_number_of_queries_does_not_grow_with_the_amount_of_data(): void
     {
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $queries = function () {
             DB::flushQueryLog();
             DB::enableQueryLog();

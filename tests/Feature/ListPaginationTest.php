@@ -106,7 +106,7 @@ class ListPaginationTest extends TestCase
     public function test_workspace_members_page_on_the_server_with_the_same_sizes(): void
     {
         $this->actAsSuperuser();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $workspace->users()->attach(User::factory()->count(35)->create()->pluck('id')->all(), ['role' => 'cliente']);
 
         $this->get("/users?workspace={$workspace->id}")->assertInertia(fn (AssertableInertia $page) => $page
@@ -123,7 +123,7 @@ class ListPaginationTest extends TestCase
     public function test_the_status_filter_combines_with_search_and_page_size(): void
     {
         $this->actAsSuperuser();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         foreach (range(1, 12) as $n) {
             $user = User::factory()->create(['name' => "Persona {$n}"]);
             $user->forceFill(['is_active' => $n % 3 !== 0])->save();
@@ -145,7 +145,7 @@ class ListPaginationTest extends TestCase
     {
         $this->actAsSuperuser();
         $user = User::factory()->create();
-        Workspace::first()->users()->attach($user->id, ['role' => 'cliente']);
+        Workspace::orderBy('id')->first()->users()->attach($user->id, ['role' => 'cliente']);
         $other = Organization::create(['name' => 'Otra']);
         $workspace = Workspace::create(['organization_id' => $other->id, 'code' => 'OTRO', 'name' => 'Otro']);
 

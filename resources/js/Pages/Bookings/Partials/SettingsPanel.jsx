@@ -12,6 +12,7 @@ import SegmentedControl from '@/Components/SegmentedControl';
 import Select from '@/Components/Select';
 import TextInput from '@/Components/TextInput';
 import Toggle from '@/Components/Toggle';
+import NotificationSettings from './NotificationSettings';
 
 /** The booking rules of the Workspace: which agenda, how far ahead, how to cancel, what to ask and the open booking page. */
 export default function SettingsPanel({ settings, capabilities, canManage }) {
@@ -35,6 +36,7 @@ export default function SettingsPanel({ settings, capabilities, canManage }) {
     const external = settings.providers.filter((provider) => provider.value !== 'internal');
 
     return (
+        <div className="space-y-6">
         <form onSubmit={submit} noValidate className="space-y-6">
             <Card className="space-y-5 p-5 sm:p-6">
                 <div>
@@ -117,5 +119,7 @@ export default function SettingsPanel({ settings, capabilities, canManage }) {
                 </div>
             )}
         </form>
+        <NotificationSettings notifications={settings.notifications} canManage={canManage} />
+        </div>
     );
 }

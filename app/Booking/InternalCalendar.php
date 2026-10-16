@@ -50,9 +50,15 @@ class InternalCalendar implements CalendarProvider
 
     public function availability(int|string $serviceId, int|string|null $professionalId, CarbonImmutable $from, CarbonImmutable $to, ?int $ignoreAppointment = null): array
     {
+        return $this->availabilityIn(null, $serviceId, $professionalId, $from, $to, $ignoreAppointment);
+    }
+
+    /** The same, limited to a location of Ava's agenda (already resolved by BookingManager); null = no location applies. */
+    public function availabilityIn(?int $locationId, int|string $serviceId, int|string|null $professionalId, CarbonImmutable $from, CarbonImmutable $to, ?int $ignoreAppointment = null): array
+    {
         $service = $this->workspace->services()->find($serviceId);
 
-        return $service ? array_map(fn (array $slot) => array_diff_key($slot, ['resource_id' => 0]), $this->calculator->slots($this->workspace, $service, $professionalId ? (int) $professionalId : null, $from, $to, $ignoreAppointment)) : [];
+        return $service ? array_map(fn (array $slot) => array_diff_key($slot, ['resource_id' => 0]), $this->calculator->slots($this->workspace, $service, $professionalId ? (int) $professionalId : null, $from, $to, $ignoreAppointment, false, $locationId)) : [];
     }
 
     public function book(BookingRequest $request): ProviderBooking

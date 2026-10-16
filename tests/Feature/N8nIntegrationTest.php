@@ -80,7 +80,7 @@ class N8nIntegrationTest extends TestCase
     public function test_the_instance_and_the_api_key_are_saved_for_the_active_workspace(): void
     {
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
 
         $this->save()->assertSessionHasNoErrors()->assertSessionHas('success');
 
@@ -141,10 +141,10 @@ class N8nIntegrationTest extends TestCase
     public function test_a_generic_connection_already_named_n8n_asks_to_be_renamed(): void
     {
         $this->actAs();
-        Workspace::first()->integrations()->create(['name' => 'n8n', 'type' => 'http', 'config' => ['base_url' => 'https://x.test']]);
+        Workspace::orderBy('id')->first()->integrations()->create(['name' => 'n8n', 'type' => 'http', 'config' => ['base_url' => 'https://x.test']]);
 
         $this->save()->assertSessionHasErrors('name');
-        $this->assertSame(0, Workspace::first()->integrations()->where('type', 'n8n')->count());
+        $this->assertSame(0, Workspace::orderBy('id')->first()->integrations()->where('type', 'n8n')->count());
     }
 
     // --- the API Key is a secret -----------------------------------------------------------------------------
@@ -385,7 +385,7 @@ class N8nIntegrationTest extends TestCase
     {
         $this->actAs();
         $this->save();
-        $bot = Workspace::first()->chatbots()->create(['name' => 'Ventas', 'instructions' => 'Sé breve']);
+        $bot = Workspace::orderBy('id')->first()->chatbots()->create(['name' => 'Ventas', 'instructions' => 'Sé breve']);
 
         $this->post("/chatbots/{$bot->id}/agent-token")->assertSessionHas('agent_token');
         $token = session('agent_token');

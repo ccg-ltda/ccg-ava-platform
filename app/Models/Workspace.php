@@ -123,6 +123,11 @@ class Workspace extends Model
         return $this->hasMany(Conversation::class);
     }
 
+    public function locations(): HasMany
+    {
+        return $this->hasMany(Location::class);
+    }
+
     public function services(): HasMany
     {
         return $this->hasMany(Service::class);

@@ -15,7 +15,7 @@ use Throwable;
  * conversation itself runs in n8n with its own WhatsApp credentials, and Ava never hands this token to anyone. The same
  * credentials let Ava deliver the replies of a human agent (`send`), the only message Ava itself puts on this channel.
  */
-class WhatsAppType implements ChannelIntegrationType, SendsMessages
+class WhatsAppType implements ChannelIntegrationType, SendsMessages, SendsTemplates
 {
     public function key(): string
     {
@@ -148,7 +148,7 @@ class WhatsAppType implements ChannelIntegrationType, SendsMessages
             // Only a failure BEFORE the request could be processed (name, connection or certificate) proves nothing went out;
             // a timeout or a dropped connection may have happened after Meta accepted the message.
             return self::neverReached($e)
-                ? SendResult::failed('No se pudo conectar con Meta.')
+                ? SendResult::failed('No se pudo conectar con Meta.', true)
                 : SendResult::uncertain('Meta no respondió a tiempo: el mensaje pudo haberse enviado. No se reintenta solo; verifica en WhatsApp antes de reenviarlo.');
         } catch (Throwable) {
             return SendResult::uncertain('La solicitud a Meta terminó con un error inesperado: el mensaje pudo haberse enviado. No se reintenta solo; verifica en WhatsApp antes de reenviarlo.');
@@ -163,6 +163,54 @@ class WhatsAppType implements ChannelIntegrationType, SendsMessages
             $status === 401 || $code === 190 => SendResult::failed('Meta rechazó el token de WhatsApp: es inválido o expiró.'),
             $code === 131047 => SendResult::failed('Pasaron más de 24 horas desde el último mensaje del contacto: WhatsApp solo permite enviarle una plantilla aprobada.'),
             $code === 131030 => SendResult::failed('El número del contacto no está autorizado en esta cuenta de WhatsApp.'),
+            $status === 200 => SendResult::uncertain('Meta respondió sin confirmar el mensaje: pudo haberse enviado. No se reintenta solo; verifica en WhatsApp antes de reenviarlo.'),
+            $status >= 500 => SendResult::uncertain("Meta respondió con un error del servidor (HTTP {$status}): el mensaje pudo haberse enviado. No se reintenta solo; verifica en WhatsApp antes de reenviarlo."),
+            default => SendResult::failed("Meta no aceptó el mensaje (HTTP {$status})."),
+        };
+    }
+
+    /**
+     * Sends an approved template (`type: template`). Same contract as `send`: success = Meta ACCEPTED it; a refusal carries a fixed reason; an
+     * answer that may have been lost is `uncertain` and never retried. Meta's codes: 132001 the template does not exist (or not approved) in that
+     * language, 132000 / 132012 the parameters do not match it, 132015 / 132016 paused or disabled, 130429 / 131056 rate limits (nothing went out).
+     *
+     * @param  list<string>  $parameters
+     */
+    public function sendTemplate(Integration $integration, string $to, string $template, string $language, array $parameters, ?string $reference = null): SendResult
+    {
+        $id = $integration->config['phone_number_id'];
+        $url = rtrim(config('integrations.whatsapp.graph_url'), '/').'/'.config('integrations.whatsapp.graph_version')."/{$id}/messages";
+        $timeout = (int) config('integrations.whatsapp.timeout');
+        $body = ['messaging_product' => 'whatsapp', 'recipient_type' => 'individual', 'to' => $to, 'type' => 'template', 'template' => ['name' => $template, 'language' => ['code' => $language]]];
+
+        if ($parameters !== []) {
+            $body['template']['components'] = [['type' => 'body', 'parameters' => array_map(fn (string $value) => ['type' => 'text', 'text' => $value], $parameters)]];
+        }
+
+        try {
+            $response = Http::withToken((string) ($integration->secrets['access_token'] ?? ''))
+                ->acceptJson()->asJson()->timeout($timeout)->connectTimeout(min($timeout, 10))->withoutRedirecting()
+                ->post($url, $body + ($reference !== null ? ['biz_opaque_callback_data' => $reference] : []));
+        } catch (ConnectionException $e) {
+            return self::neverReached($e)
+                ? SendResult::failed('No se pudo conectar con Meta.', true)
+                : SendResult::uncertain('Meta no respondió a tiempo: el mensaje pudo haberse enviado. No se reintenta solo; verifica en WhatsApp antes de reenviarlo.');
+        } catch (Throwable) {
+            return SendResult::uncertain('La solicitud a Meta terminó con un error inesperado: el mensaje pudo haberse enviado. No se reintenta solo; verifica en WhatsApp antes de reenviarlo.');
+        }
+
+        $status = $response->status();
+        $code = (int) $response->json('error.code');
+        $messageId = $response->json('messages.0.id');
+
+        return match (true) {
+            $status === 200 && is_string($messageId) && $messageId !== '' => SendResult::accepted($messageId),
+            $status === 401 || $code === 190 => SendResult::failed('Meta rechazó el token de WhatsApp: es inválido o expiró.'),
+            $code === 132001 => SendResult::failed('Meta no tiene esa plantilla aprobada en ese idioma: revisa el nombre y el idioma.'),
+            in_array($code, [132000, 132012], true) => SendResult::failed('Los parámetros no coinciden con la plantilla aprobada en Meta.'),
+            in_array($code, [132015, 132016], true) => SendResult::failed('Meta pausó o desactivó esa plantilla.'),
+            $code === 131030 => SendResult::failed('El número del contacto no está autorizado en esta cuenta de WhatsApp.'),
+            in_array($code, [130429, 131056], true) || $status === 429 => SendResult::failed('Meta limitó el ritmo de envío: se reintentará.', true),
             $status === 200 => SendResult::uncertain('Meta respondió sin confirmar el mensaje: pudo haberse enviado. No se reintenta solo; verifica en WhatsApp antes de reenviarlo.'),
             $status >= 500 => SendResult::uncertain("Meta respondió con un error del servidor (HTTP {$status}): el mensaje pudo haberse enviado. No se reintenta solo; verifica en WhatsApp antes de reenviarlo."),
             default => SendResult::failed("Meta no aceptó el mensaje (HTTP {$status})."),

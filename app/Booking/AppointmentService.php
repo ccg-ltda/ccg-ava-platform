@@ -6,6 +6,7 @@ use App\Audit\AuditLogger;
 use App\Models\Appointment;
 use App\Models\BookingCustomer;
 use App\Models\BookingSetting;
+use App\Models\Location;
 use App\Models\Professional;
 use App\Models\Service;
 use App\Models\Workspace;
@@ -14,6 +15,7 @@ use Closure;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 /**
@@ -27,15 +29,27 @@ class AppointmentService
     /** Whoever the audit trail names when nobody is signed in (the web page, Ava Chat). */
     private const SOURCES = ['web' => 'Reserva en línea (automático)', 'chat' => 'Asistente (automático)', 'admin' => 'Consola de la plataforma'];
 
-    public function __construct(private readonly AvailabilityCalculator $calculator, private readonly AuditLogger $audit) {}
+    public function __construct(private readonly AvailabilityCalculator $calculator, private readonly AuditLogger $audit, private readonly Locations $locations, private readonly AppointmentNotifier $notifier) {}
 
     /**
+     * `$locationId` is what the caller asked for (null = none named): Locations decides whether the Workspace needs one and refuses an
+     * inactive or foreign one. `$channel` is who creates the booking and is fixed by the code that calls (admin page, public page, assistant),
+     * never by a request field; the conversation channel it is credited to (WhatsApp, web) comes from the conversation itself.
+     *
      * @param  array{name: string, phone: ?string, email: ?string}  $customer
      * @return array{appointment: Appointment, token: string} the token is the customer's link to manage it and is not stored in plain
      */
-    public function book(Workspace $workspace, Service $service, ?int $professionalId, CarbonImmutable $startsAt, array $customer, string $channel, ?string $notes = null, ?int $conversationId = null): array
+    public function book(Workspace $workspace, Service $service, ?int $professionalId, CarbonImmutable $startsAt, array $customer, string $channel, ?string $notes = null, ?int $conversationId = null, int|string|null $locationId = null): array
     {
+        $this->assertChannel($channel);
+
+        if (! $this->locations->schemaReady()) {
+            throw BookingException::state('Las reservas no están disponibles por mantenimiento. Intenta de nuevo más tarde.');
+        }
+
         $this->assertService($workspace, $service);
+        $location = $this->locations->resolve($workspace, $locationId);
+        $origin = $this->originChannel($workspace, $channel, $conversationId);
         $staff = $channel === 'admin';
         $startsAt = $startsAt->utc();
         $this->assertContact($workspace, $customer, $staff);
@@ -44,13 +58,13 @@ class AppointmentService
             throw BookingException::outsidePolicy('Ya tienes varias reservas pendientes. Cancela o espera a que pasen antes de pedir otra.');
         }
 
-        foreach ($this->calculator->slotsAt($workspace, $service, $professionalId, $startsAt, null, $staff) as $candidate) {
+        foreach ($this->calculator->slotsAt($workspace, $service, $professionalId, $startsAt, null, $staff, $location?->id) as $candidate) {
             $token = Str::random(40);
 
             try {
-                $appointment = $this->locked($workspace, $candidate['professional_id'], $candidate['resource_id'], function () use ($workspace, $service, $candidate, $startsAt, $customer, $channel, $notes, $conversationId, $token, $staff) {
-                    // Another request may have taken it between the search and the lock.
-                    $slot = $this->calculator->slotAt($workspace, $service, $candidate['professional_id'], $startsAt, null, $staff);
+                $appointment = $this->locked($workspace, $candidate['professional_id'], $candidate['resource_id'], $location?->id, function () use ($workspace, $service, $candidate, $startsAt, $customer, $channel, $notes, $conversationId, $token, $staff, $location, $origin) {
+                    // Another request may have taken it between the search and the lock (or the location may have been switched off).
+                    $slot = $this->calculator->slotAt($workspace, $service, $candidate['professional_id'], $startsAt, null, $staff, $location?->id);
 
                     if (! $slot) {
                         return null;
@@ -64,6 +78,11 @@ class AppointmentService
                         'conversation_id' => $conversationId,
                         'service_name' => $service->name,
                         'professional_name' => $slot['professional_name'],
+                        'location_id' => $location?->id,
+                        'location_name' => $location?->name,
+                        // What the service cost WHEN it was booked: a later change of the service's price never rewrites it. No price, nothing recorded.
+                        'price_amount' => $service->price,
+                        'price_currency' => $service->price === null ? null : $workspace->settingsOrDefault()->currency,
                         'starts_at' => $slot['starts_at'],
                         'ends_at' => $slot['ends_at'],
                         'blocks_until' => $slot['ends_at']->addMinutes($service->buffer_minutes),
@@ -71,6 +90,7 @@ class AppointmentService
                         'provider' => 'internal',
                         'sync_status' => 'none',
                         'channel' => $channel,
+                        'origin_channel' => $origin,
                         'token_hash' => hash('sha256', $token),
                         'notes' => $notes ? Str::limit(trim($notes), 500, '') : null,
                     ]);
@@ -85,6 +105,7 @@ class AppointmentService
 
             if ($appointment) {
                 $this->auditAutomatic($appointment, 'created', [AuditLogger::change('Estado', null, Appointment::LABELS[$appointment->status])], $channel);
+                $this->safely(fn () => $this->notifier->planEvent($appointment->loadMissing('workspace'), 'created'));
 
                 return ['appointment' => $appointment, 'token' => $token];
             }
@@ -101,11 +122,12 @@ class AppointmentService
         $staff = $channel === 'admin';
         $startsAt = $startsAt->utc();
         $before = $appointment->starts_at->copy();
+        $locationId = $this->locations->ofAppointment($appointment);
 
-        foreach ($this->calculator->slotsAt($workspace, $service, $professionalId ?? $appointment->professional_id, $startsAt, $appointment->id, $staff) as $candidate) {
+        foreach ($this->calculator->slotsAt($workspace, $service, $professionalId ?? $appointment->professional_id, $startsAt, $appointment->id, $staff, $locationId) as $candidate) {
             try {
-                $done = $this->locked($workspace, $candidate['professional_id'], $candidate['resource_id'], function () use ($workspace, $service, $appointment, $candidate, $startsAt, $staff) {
-                    $slot = $this->calculator->slotAt($workspace, $service, $candidate['professional_id'], $startsAt, $appointment->id, $staff);
+                $done = $this->locked($workspace, $candidate['professional_id'], $candidate['resource_id'], $locationId, function () use ($workspace, $service, $appointment, $candidate, $startsAt, $staff, $locationId) {
+                    $slot = $this->calculator->slotAt($workspace, $service, $candidate['professional_id'], $startsAt, $appointment->id, $staff, $locationId);
 
                     if (! $slot) {
                         return false;
@@ -121,6 +143,9 @@ class AppointmentService
                         // A customer who moves a confirmed booking by themselves puts it back to be confirmed when the business asks for that.
                         'status' => ! $staff && BookingSetting::for($workspace)->requires_confirmation ? Appointment::REQUESTED : $appointment->status,
                         'reschedule_count' => $appointment->reschedule_count + 1,
+                        // The customer said they would come to ANOTHER time: that answer does not carry over to the new one.
+                        'customer_confirmed_at' => null,
+                        'customer_confirmation_source' => null,
                     ])->save();
 
                     return true;
@@ -135,6 +160,7 @@ class AppointmentService
 
             if ($done) {
                 $this->auditAutomatic($appointment, 'updated', [AuditLogger::change('Inicio', $before->toDateTimeString(), $appointment->starts_at->toDateTimeString())], $channel);
+                $this->safely(fn () => $this->notifier->invalidate($appointment, 'rescheduled'));
 
                 return $appointment;
             }
@@ -149,6 +175,7 @@ class AppointmentService
         $before = Appointment::LABELS[$appointment->status];
         $appointment->forceFill(['status' => Appointment::CANCELLED, 'cancelled_at' => now(), 'cancel_reason' => $reason ? Str::limit(trim($reason), 255, '') : null])->save();
         $this->auditAutomatic($appointment, 'updated', [AuditLogger::change('Estado', $before, Appointment::LABELS[Appointment::CANCELLED])], $channel);
+        $this->safely(fn () => $this->notifier->invalidate($appointment, 'appointment_closed'));
 
         return $appointment;
     }
@@ -171,8 +198,56 @@ class AppointmentService
         }
 
         $appointment->forceFill(['status' => $to])->save();
+        $this->safely(fn () => $to === Appointment::CONFIRMED ? $this->notifier->planEvent($appointment->loadMissing('workspace'), 'confirmed') : $this->notifier->invalidate($appointment, 'appointment_closed'));
 
         return $appointment;
+    }
+
+    /**
+     * The customer says they will come. It is a different fact from `status` (the BUSINESS accepting the booking) and never changes it. A repeated
+     * answer is the same answer; an answer for an appointment that was cancelled, closed or already started is refused and revives nothing; moving
+     * the appointment clears it. `$source`: assistant (Ava Chat), link (the customer's own link) or staff (somebody registered it).
+     *
+     * @return array{appointment: Appointment, replayed: bool}
+     */
+    public function customerConfirm(Appointment $appointment, string $source): array
+    {
+        if (! in_array($source, ['assistant', 'link', 'staff'], true)) {
+            throw new \InvalidArgumentException("Unknown confirmation source [{$source}].");
+        }
+
+        if ($appointment->provider !== 'internal') {
+            throw BookingException::state('Esta cita pertenece a una agenda externa: se confirma allí.');
+        }
+
+        return DB::transaction(function () use ($appointment, $source) {
+            // Re-read under a lock: a cancellation and a confirmation that arrive together cannot both win.
+            $current = Appointment::where('workspace_id', $appointment->workspace_id)->whereKey($appointment->id)->lockForUpdate()->firstOrFail();
+            $this->assertOpen($current);
+
+            if ($current->starts_at <= now()) {
+                throw BookingException::state('Esta cita ya comenzó: no se puede confirmar.');
+            }
+
+            if ($current->customer_confirmed_at !== null) {
+                return ['appointment' => $current, 'replayed' => true];
+            }
+
+            $current->forceFill(['customer_confirmed_at' => now(), 'customer_confirmation_source' => $source])->save();
+            $this->auditAutomatic($current, 'updated', [AuditLogger::change('Confirmación del cliente', null, 'Confirmó que asistirá')], ['assistant' => 'chat', 'link' => 'web', 'staff' => 'admin'][$source]);
+
+            return ['appointment' => $current, 'replayed' => false];
+        });
+    }
+
+    /** Planning or retiring a notification must never break the booking operation that triggered it: a failure is logged (class only) and the operation stands. */
+    private function safely(Closure $work): void
+    {
+        try {
+            $work();
+        } catch (\Throwable $e) {
+            Log::error('appointment_notification_plan_failed', ['exception' => $e::class]);
+        }
     }
 
     /** The customer of a Workspace identified by phone, else by email; created when new, name refreshed otherwise. */
@@ -241,14 +316,40 @@ class AppointmentService
         }
     }
 
-    /** Runs `$work` in a transaction after locking the professional and the resource it would use, always in the same order. */
-    private function locked(Workspace $workspace, int $professionalId, ?int $resourceId, Closure $work): mixed
+    public function assertChannel(string $channel): void
     {
-        return DB::transaction(function () use ($workspace, $professionalId, $resourceId, $work) {
+        if (! in_array($channel, Appointment::CHANNELS, true)) {
+            throw new \InvalidArgumentException("Unknown booking channel [{$channel}].");
+        }
+    }
+
+    /**
+     * The channel of the conversation the booking is credited to (whatsapp, web), or null. Only an assistant booking is credited, and only
+     * to a conversation of THIS Workspace that really exists: Ava never says a booking came from WhatsApp because a caller said so.
+     */
+    public function originChannel(Workspace $workspace, string $channel, ?int $conversationId): ?string
+    {
+        if ($channel !== 'chat' || $conversationId === null) {
+            return null;
+        }
+
+        $conversation = $workspace->conversations()->find($conversationId)?->channel;
+
+        return in_array($conversation, Appointment::ORIGIN_CHANNELS, true) ? $conversation : null;
+    }
+
+    /** Runs `$work` in a transaction after locking the professional, the resource and the location it would use, always in the same order. */
+    private function locked(Workspace $workspace, int $professionalId, ?int $resourceId, ?int $locationId, Closure $work): mixed
+    {
+        return DB::transaction(function () use ($workspace, $professionalId, $resourceId, $locationId, $work) {
             Professional::where('workspace_id', $workspace->id)->whereKey($professionalId)->lockForUpdate()->first();
 
             if ($resourceId) {
                 $workspace->bookableResources()->whereKey($resourceId)->lockForUpdate()->first();
+            }
+
+            if ($locationId) {
+                Location::where('workspace_id', $workspace->id)->whereKey($locationId)->lockForUpdate()->first();
             }
 
             return $work();

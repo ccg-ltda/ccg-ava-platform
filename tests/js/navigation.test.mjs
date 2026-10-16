@@ -24,7 +24,7 @@ test('General, Operación and Administración hold exactly the agreed modules, e
     const labels = (name) => navigation.find((section) => section.label === name).items.map((item) => item.label);
 
     assert.deepEqual(labels('General'), ['Dashboard', 'Asistentes', 'Conversaciones']);
-    assert.deepEqual(labels('Operación'), ['Reportes', 'Servicios', 'Profesionales', 'Agenda', 'Clientes', 'Campañas']);
+    assert.deepEqual(labels('Operación'), ['Reportes', 'Servicios', 'Sedes', 'Profesionales', 'Agenda', 'Clientes', 'Campañas']);
     assert.deepEqual(labels('Administración'), ['Usuarios y Roles', 'Auditoría', 'Configuraciones', 'Integraciones', 'Planes']);
 
     const modules = navigation.flatMap((section) => section.items).map((item) => item.module).filter(Boolean);

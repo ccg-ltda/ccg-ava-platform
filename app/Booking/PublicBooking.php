@@ -16,7 +16,7 @@ class PublicBooking
     /** Modules the open booking page needs: the catalog, the professionals and the agenda itself. */
     public const MODULES = ['service_catalog', 'professionals', 'bookings'];
 
-    public function __construct(private readonly ModuleAccess $modules) {}
+    public function __construct(private readonly ModuleAccess $modules, private readonly Locations $locations) {}
 
     public function resolve(string $key): Workspace
     {
@@ -46,6 +46,9 @@ class PublicBooking
             'requireEmail' => $setting->require_email,
             'cancelNoticeHours' => $setting->cancel_notice_hours,
             'maxDays' => (int) config('bookings.public.max_days'),
+            // Only Ava's own agenda has locations; with several the visitor must choose one.
+            'locations' => $capabilities['external'] ? [] : $this->locations->active($workspace)->map(fn ($location) => ['id' => $location->id, 'name' => $location->name, 'address' => $location->address, 'city' => $location->city, 'phone' => $location->phone, 'notes' => $location->notes])->values()->all(),
+            'locationRequired' => ! $capabilities['external'] && $this->locations->required($workspace),
         ];
     }
 }

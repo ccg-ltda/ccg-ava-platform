@@ -70,7 +70,7 @@ class AuditEventsTest extends TestCase
     public function test_a_connection_test_records_whether_it_worked_and_never_a_failure_as_success(): void
     {
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $this->post('/integrations', $this->integrationPayload())->assertSessionHasNoErrors();
         $integration = Integration::firstOrFail();
 
@@ -93,7 +93,7 @@ class AuditEventsTest extends TestCase
 
         $this->post("/integrations/{$integration->id}/test")->assertSessionHas('error');
 
-        $this->assertSame(['created/user/success'], $this->trail(Workspace::first(), 'integration'));
+        $this->assertSame(['created/user/success'], $this->trail(Workspace::orderBy('id')->first(), 'integration'));
     }
 
     public function test_the_test_of_another_workspaces_integration_is_refused_and_records_nothing_there(): void
@@ -111,7 +111,7 @@ class AuditEventsTest extends TestCase
     public function test_generating_and_revoking_the_assistant_token_are_audited_once_each_without_the_token(): void
     {
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $other = $this->otherWorkspace();
         $bot = $workspace->chatbots()->create(['name' => 'Asistente']);
 
@@ -202,7 +202,7 @@ class AuditEventsTest extends TestCase
     public function test_the_same_operation_is_a_persons_event_when_a_person_does_it(): void
     {
         $user = $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $bot = $workspace->chatbots()->create(['name' => 'Asistente']);
         $conversation = $bot->conversations()->create(['workspace_id' => $workspace->id, 'channel' => 'web', 'contact_id' => 'v1', 'contact_name' => 'Visitante', 'last_message_at' => now()]);
         $conversation->forceFill(['handling' => 'resolved'])->save();
@@ -270,7 +270,7 @@ class AuditEventsTest extends TestCase
     public function test_the_audit_filters_by_origin_and_result_and_the_summary_counts_them(): void
     {
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $other = $this->otherWorkspace();
         $logger = app(AuditLogger::class);
         $logger->system('requested', 'conversation', 1, 'Uno', [], $workspace, 'Asistente (automático)');
@@ -299,7 +299,7 @@ class AuditEventsTest extends TestCase
     public function test_the_pdf_names_the_origin_and_result_filters(): void
     {
         $this->actAs();
-        app(AuditLogger::class)->system('executed', 'chatbot_execution', 2, 'Dos', [AuditLogger::change('Resultado', null, 'Falló')], Workspace::first(), 'Ejecución automática', AuditLogger::FAILED);
+        app(AuditLogger::class)->system('executed', 'chatbot_execution', 2, 'Dos', [AuditLogger::change('Resultado', null, 'Falló')], Workspace::orderBy('id')->first(), 'Ejecución automática', AuditLogger::FAILED);
 
         $response = $this->get('/audit/export?actor=system&outcome=failed');
 
@@ -310,7 +310,7 @@ class AuditEventsTest extends TestCase
     public function test_only_who_manages_settings_reads_the_automatic_events(): void
     {
         $this->actAs('cliente');
-        app(AuditLogger::class)->system('requested', 'conversation', 1, 'Uno', [], Workspace::first(), 'Asistente (automático)');
+        app(AuditLogger::class)->system('requested', 'conversation', 1, 'Uno', [], Workspace::orderBy('id')->first(), 'Asistente (automático)');
 
         $this->get('/audit?actor=system')->assertForbidden();
         $this->get('/audit/export?actor=system')->assertForbidden();
@@ -319,7 +319,7 @@ class AuditEventsTest extends TestCase
     public function test_a_superuser_filters_automatic_events_by_workspace_only_from_the_administrative_one(): void
     {
         $this->actAs('admin', superuser: true);
-        $a = Workspace::first();
+        $a = Workspace::orderBy('id')->first();
         $b = $this->otherWorkspace();
         $logger = app(AuditLogger::class);
         $logger->system('requested', 'conversation', 1, 'En A', [], $a, 'Asistente (automático)');

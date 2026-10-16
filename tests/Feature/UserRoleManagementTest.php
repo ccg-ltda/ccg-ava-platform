@@ -45,7 +45,7 @@ class UserRoleManagementTest extends TestCase
     private function newUserPayload(string $role, string $email = 'new@example.com'): array
     {
         return [
-            'name' => 'New User', 'email' => $email, 'role' => $role, 'workspace_id' => Workspace::first()->id,
+            'name' => 'New User', 'email' => $email, 'role' => $role, 'workspace_id' => Workspace::orderBy('id')->first()->id,
             'password' => 'password123', 'password_confirmation' => 'password123',
         ];
     }
@@ -96,7 +96,7 @@ class UserRoleManagementTest extends TestCase
         $this->put('/users/'.$admin->id, ['name' => $admin->name, 'email' => $admin->email, 'role' => 'cliente'])
             ->assertSessionHasErrors('role');
 
-        $this->assertSame('admin', Workspace::first()->users()->find($admin->id)->pivot->role);
+        $this->assertSame('admin', Workspace::orderBy('id')->first()->users()->find($admin->id)->pivot->role);
     }
 
     public function test_roles_are_per_workspace_and_not_written_globally_on_update(): void
@@ -104,13 +104,13 @@ class UserRoleManagementTest extends TestCase
         $this->actAs('admin');
         $other = $this->otherWorkspace();
         $shared = User::factory()->create();
-        Workspace::first()->users()->attach($shared->id, ['role' => 'cliente']);
+        Workspace::orderBy('id')->first()->users()->attach($shared->id, ['role' => 'cliente']);
         $other->users()->attach($shared->id, ['role' => 'admin']);
 
         $this->put('/users/'.$shared->id, ['name' => $shared->name, 'email' => $shared->email, 'role' => 'supervisor'])
             ->assertSessionHasNoErrors();
 
-        $this->assertSame('supervisor', Workspace::first()->users()->find($shared->id)->pivot->role);
+        $this->assertSame('supervisor', Workspace::orderBy('id')->first()->users()->find($shared->id)->pivot->role);
         $this->assertSame('admin', $other->users()->find($shared->id)->pivot->role);
         $this->assertSame(0, $shared->roles()->count());
     }
@@ -120,7 +120,7 @@ class UserRoleManagementTest extends TestCase
     public function test_users_page_flags_accounts_whose_identity_cannot_be_edited(): void
     {
         $this->actAs('admin');
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $solo = User::factory()->create(['name' => 'Solo']);
         $shared = User::factory()->create(['name' => 'Shared']);
         $super = User::factory()->create(['name' => 'Super']);
@@ -142,7 +142,7 @@ class UserRoleManagementTest extends TestCase
     {
         $this->actAs('admin', superuser: true);
         $shared = User::factory()->create();
-        Workspace::first()->users()->attach($shared->id, ['role' => 'cliente']);
+        Workspace::orderBy('id')->first()->users()->attach($shared->id, ['role' => 'cliente']);
         $this->otherWorkspace()->users()->attach($shared->id, ['role' => 'cliente']);
 
         $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page
@@ -157,7 +157,7 @@ class UserRoleManagementTest extends TestCase
     {
         $this->actAs('admin');
         $shared = User::factory()->create();
-        Workspace::first()->users()->attach($shared->id, ['role' => 'cliente']);
+        Workspace::orderBy('id')->first()->users()->attach($shared->id, ['role' => 'cliente']);
         $this->otherWorkspace()->users()->attach($shared->id, ['role' => 'cliente']);
 
         $this->put('/users/'.$shared->id, ['name' => 'Hacked', 'email' => 'h@example.com', 'role' => 'cliente'])
@@ -287,7 +287,7 @@ class UserRoleManagementTest extends TestCase
     {
         $this->actAs('admin', superuser: true);
         $member = User::factory()->create();
-        Workspace::first()->users()->attach($member->id, ['role' => 'cliente']);
+        Workspace::orderBy('id')->first()->users()->attach($member->id, ['role' => 'cliente']);
 
         $this->delete('/users/'.$member->id)->assertStatus(405);
 
@@ -309,7 +309,7 @@ class UserRoleManagementTest extends TestCase
     public function test_users_are_paginated_and_report_totals(): void
     {
         $this->actAs('admin');
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $workspace->users()->attach(User::factory()->count(20)->create()->pluck('id')->all(), ['role' => 'cliente']);
 
         $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page
@@ -327,7 +327,7 @@ class UserRoleManagementTest extends TestCase
     public function test_search_filters_by_name_or_email_only_inside_the_workspace(): void
     {
         $this->actAs('admin');
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $match = User::factory()->create(['name' => 'Zulema Quiroga', 'email' => 'zq@example.com']);
         $workspace->users()->attach($match->id, ['role' => 'cliente']);
         $workspace->users()->attach(User::factory()->create(['name' => 'Otro Nombre'])->id, ['role' => 'cliente']);
@@ -355,7 +355,7 @@ class UserRoleManagementTest extends TestCase
     {
         $this->actAs('admin');
         $this->otherWorkspace()->users()->attach(User::factory()->count(3)->create()->pluck('id')->all(), ['role' => 'cliente']);
-        Workspace::first()->users()->attach(User::factory()->create()->id, ['role' => 'cliente']);
+        Workspace::orderBy('id')->first()->users()->attach(User::factory()->create()->id, ['role' => 'cliente']);
 
         $this->get('/users')->assertInertia(function (AssertableInertia $page) {
             $counts = collect($page->toArray()['props']['roles']['data'])->pluck('usersInWorkspace', 'name');

@@ -69,7 +69,7 @@ class ReportsDataTest extends TestCase
     /** The two Workspaces with known data: A (the session's) and B (foreign, with a lot more of everything). */
     private function twoWorkspaces(): array
     {
-        $a = Workspace::first();
+        $a = Workspace::orderBy('id')->first();
         $b = $this->otherWorkspace();
         $this->conversation($a, '573001', 'whatsapp', null, 2, 1, 'ai');
         $this->conversation($a, '573002', 'web', CarbonImmutable::now()->subDays(3), 1, 2, 'agent', 'pending');
@@ -177,7 +177,7 @@ class ReportsDataTest extends TestCase
     public function test_hours_follow_the_workspace_timezone(): void
     {
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $workspace->settings()->create(array_merge(WorkspaceSetting::defaults(), ['timezone' => 'America/Bogota']));
         // 15:30 UTC is 10:30 in Bogotá (UTC-5).
         $this->conversation($workspace, '573009', 'web', CarbonImmutable::now('UTC')->subDay()->setTime(15, 30));
@@ -232,7 +232,7 @@ class ReportsDataTest extends TestCase
         $this->seedRoleCatalog();
         $this->actAs('cliente');
         $colleague = User::factory()->create();
-        Workspace::first()->users()->attach($colleague->id, ['role' => 'agente']);
+        Workspace::orderBy('id')->first()->users()->attach($colleague->id, ['role' => 'agente']);
 
         $props = $this->props();
         $this->assertNull($props['recentUsers']);
@@ -287,7 +287,7 @@ class ReportsDataTest extends TestCase
     public function test_the_number_of_queries_does_not_grow_with_the_data(): void
     {
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $this->conversation($workspace, '573001');
         $this->get('/reports')->assertOk(); // warms the one-time lookups (permissions, settings)
         DB::enableQueryLog();

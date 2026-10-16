@@ -20,6 +20,8 @@ class AvailabilityRequest extends FormRequest
         return [
             'service_id' => ['required', 'regex:/^[A-Za-z0-9_-]{1,64}$/'],
             'professional_id' => ['nullable', 'regex:/^[A-Za-z0-9_-]{1,64}$/'],
+            // Ava's own agenda only (an external agenda has its own locations). Whether it is allowed and required is Locations' business.
+            'location_id' => ['nullable', 'integer', 'min:1'],
             'from' => ['nullable', 'date_format:Y-m-d'],
             'days' => ['nullable', 'integer', 'between:1,'.config('bookings.public.max_days')],
             // The appointment being moved (its own time counts as free): by id for staff and the automation, by its link for the customer.
@@ -34,6 +36,11 @@ class AvailabilityRequest extends FormRequest
         $date = $this->validated('from');
 
         return ($date ? CarbonImmutable::createFromFormat('Y-m-d', $date, $timezone) : CarbonImmutable::now($timezone))->startOfDay()->utc();
+    }
+
+    public function locationId(): ?int
+    {
+        return $this->validated('location_id') ? (int) $this->validated('location_id') : null;
     }
 
     public function days(): int

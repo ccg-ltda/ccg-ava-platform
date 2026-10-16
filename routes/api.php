@@ -35,10 +35,12 @@ Route::middleware(['throttle:agent', 'agent', 'workspace.module:assistants'])->p
         Route::middleware(['workspace.module:service_catalog', 'workspace.module:professionals', 'workspace.module:bookings'])->prefix('booking')->name('booking.')->group(function () {
             Route::get('/services', [AgentBookingController::class, 'services'])->name('services');
             Route::get('/professionals', [AgentBookingController::class, 'professionals'])->name('professionals');
+            Route::get('/locations', [AgentBookingController::class, 'locations'])->name('locations');
             Route::get('/availability', [AgentBookingController::class, 'availability'])->name('availability');
             Route::get('/appointments', [AgentBookingController::class, 'index'])->name('appointments');
             Route::post('/appointments', [AgentBookingController::class, 'book'])->name('book');
             Route::post('/appointments/{appointment}/cancel', [AgentBookingController::class, 'cancel'])->whereNumber('appointment')->name('cancel');
+            Route::post('/appointments/{appointment}/confirm', [AgentBookingController::class, 'confirm'])->whereNumber('appointment')->name('confirm');
             Route::post('/appointments/{appointment}/reschedule', [AgentBookingController::class, 'reschedule'])->whereNumber('appointment')->name('reschedule');
         });
     });
@@ -53,6 +55,7 @@ Route::prefix('booking/{key}')->where(['key' => '[A-Za-z0-9]{32}'])->name('publi
     Route::get('/availability', [PublicBookingController::class, 'availability'])->middleware('throttle:booking-availability')->name('availability');
     Route::post('/appointments', [PublicBookingController::class, 'book'])->middleware('throttle:booking-write')->name('book');
     Route::get('/appointments/{token}', [PublicBookingController::class, 'show'])->where('token', '[A-Za-z0-9]{40}')->middleware('throttle:booking-config')->name('show');
+    Route::post('/appointments/{token}/confirm', [PublicBookingController::class, 'confirm'])->where('token', '[A-Za-z0-9]{40}')->middleware('throttle:booking-write')->name('confirm');
     Route::post('/appointments/{token}/cancel', [PublicBookingController::class, 'cancel'])->where('token', '[A-Za-z0-9]{40}')->middleware('throttle:booking-write')->name('cancel');
     Route::post('/appointments/{token}/reschedule', [PublicBookingController::class, 'reschedule'])->where('token', '[A-Za-z0-9]{40}')->middleware('throttle:booking-write')->name('reschedule');
 });

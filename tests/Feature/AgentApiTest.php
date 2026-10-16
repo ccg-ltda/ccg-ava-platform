@@ -54,7 +54,7 @@ class AgentApiTest extends TestCase
     public function test_only_who_manages_chatbots_generates_or_revokes_the_token(): void
     {
         $this->actAs('admin');
-        $bot = $this->bot(Workspace::first(), 'Ventas', 'Sé breve');
+        $bot = $this->bot(Workspace::orderBy('id')->first(), 'Ventas', 'Sé breve');
 
         $this->actAs('supervisor');
         $this->post("/chatbots/{$bot->id}/agent-token")->assertForbidden();
@@ -68,7 +68,7 @@ class AgentApiTest extends TestCase
     public function test_the_plain_token_is_shown_once_and_only_its_hash_is_stored(): void
     {
         $this->actAs();
-        $bot = $this->bot(Workspace::first(), 'Ventas', 'Sé breve');
+        $bot = $this->bot(Workspace::orderBy('id')->first(), 'Ventas', 'Sé breve');
 
         $this->post("/chatbots/{$bot->id}/agent-token")->assertSessionHas('agent_token')->assertSessionHas('success');
         $plain = session('agent_token');
@@ -93,7 +93,7 @@ class AgentApiTest extends TestCase
     public function test_a_new_token_replaces_the_old_one_and_revoking_removes_access(): void
     {
         $this->actAs();
-        $bot = $this->bot(Workspace::first(), 'Ventas', 'Sé breve');
+        $bot = $this->bot(Workspace::orderBy('id')->first(), 'Ventas', 'Sé breve');
         $old = $this->tokenFor($bot);
 
         $this->post("/chatbots/{$bot->id}/agent-token");
@@ -121,7 +121,7 @@ class AgentApiTest extends TestCase
     public function test_generating_and_revoking_are_audited_without_the_token(): void
     {
         $this->actAs();
-        $bot = $this->bot(Workspace::first(), 'Ventas', 'Sé breve');
+        $bot = $this->bot(Workspace::orderBy('id')->first(), 'Ventas', 'Sé breve');
 
         $this->post("/chatbots/{$bot->id}/agent-token");
         $plain = session('agent_token');
@@ -151,7 +151,7 @@ class AgentApiTest extends TestCase
     public function test_the_configuration_is_the_instructions_saved_in_ava(): void
     {
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $bot = $this->bot($workspace, 'Agente de ventas', '');
         $bot->update(['description' => 'Atiende ventas']);
 
@@ -189,7 +189,7 @@ class AgentApiTest extends TestCase
     public function test_only_active_channels_appear_with_non_secret_identifiers(): void
     {
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $bot = $this->bot($workspace, 'Ventas', 'Sé breve');
         $this->whatsApp($workspace, '100200300', 'EAAB-TOP-SECRET');
         $token = $this->tokenFor($bot);
@@ -274,7 +274,7 @@ class AgentApiTest extends TestCase
     public function test_the_integrations_page_reports_n8n_only_as_far_as_it_was_really_seen(): void
     {
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
         $bot = $this->bot($workspace, 'Ventas', 'Sé breve');
         $this->bot($workspace, 'Soporte', 'Ayuda');
         $automation = fn () => $this->get('/integrations')->viewData('page')['props']['automation'];

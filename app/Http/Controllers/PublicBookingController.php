@@ -43,16 +43,16 @@ class PublicBookingController extends Controller
         return $this->json($this->public->config($workspace, $this->bookings));
     }
 
-    public function services(string $key): JsonResponse
+    public function services(Request $request, string $key): JsonResponse
     {
         return $this->guard(fn (Workspace $workspace) => ['services' => array_map(fn (array $service) => [
             'id' => $service['id'], 'name' => $service['name'], 'description' => $service['description'], 'durationMinutes' => $service['duration_minutes'], 'price' => $service['price'], 'category' => $service['category'],
-        ], $this->bookings->bookableServices($workspace))], $key);
+        ], $this->bookings->bookableServices($workspace, $this->locationQuery($request)))], $key);
     }
 
     public function professionals(Request $request, string $key): JsonResponse
     {
-        return $this->guard(fn (Workspace $workspace) => ['professionals' => array_map(fn (array $item) => ['id' => $item['id'], 'name' => $item['name'], 'specialty' => $item['specialty']], $this->bookings->professionals($workspace, $request->query('service_id')))], $key);
+        return $this->guard(fn (Workspace $workspace) => ['professionals' => array_map(fn (array $item) => ['id' => $item['id'], 'name' => $item['name'], 'specialty' => $item['specialty']], $this->bookings->professionals($workspace, $request->query('service_id'), $this->locationQuery($request)))], $key);
     }
 
     public function availability(AvailabilityRequest $request, string $key): JsonResponse
@@ -60,7 +60,7 @@ class PublicBookingController extends Controller
         return $this->guard(fn (Workspace $workspace) => ['slots' => array_map(
             fn (array $slot) => $this->present->slot($workspace, $slot),
             // With the customer's link, the time that booking holds counts as free for it (so it can be moved a little).
-            $this->bookings->availability($workspace, $request->validated('service_id'), $request->validated('professional_id') ?: null, $request->from($workspace->settingsOrDefault()->timezone), $request->days(), $request->validated('token') ? $this->bookings->findByToken($workspace, $request->validated('token')) : null),
+            $this->bookings->availability($workspace, $request->validated('service_id'), $request->validated('professional_id') ?: null, $request->from($workspace->settingsOrDefault()->timezone), $request->days(), $request->validated('token') ? $this->bookings->findByToken($workspace, $request->validated('token')) : null, $request->locationId()),
         )], $key);
     }
 
@@ -76,6 +76,16 @@ class PublicBookingController extends Controller
     public function show(string $key, string $token): JsonResponse
     {
         return $this->guard(fn (Workspace $workspace) => ['appointment' => $this->present->publicAppointment($this->bookings->findByToken($workspace, $token))], $key);
+    }
+
+    /** The customer, with their own link, says they will come. Same rules as every channel: only an open future appointment, never a revival. */
+    public function confirm(string $key, string $token): JsonResponse
+    {
+        return $this->guard(function (Workspace $workspace) use ($token) {
+            $result = $this->bookings->customerConfirm($this->bookings->findByToken($workspace, $token), 'link');
+
+            return ['appointment' => $this->present->publicAppointment($result['appointment']->load('workspace')), 'replayed' => $result['replayed']];
+        }, $key);
     }
 
     public function cancel(string $key, string $token): JsonResponse
@@ -106,6 +116,14 @@ class PublicBookingController extends Controller
         } catch (BookingException $exception) {
             return $this->json(['message' => $exception->getMessage(), 'reason' => $exception->reason], $exception->status());
         }
+    }
+
+    /** The location the visitor narrowed the list to, if any: only digits count, anything else is the same as none (Locations refuses an unknown one). */
+    private function locationQuery(Request $request): ?string
+    {
+        $value = $request->query('location_id');
+
+        return is_string($value) && ctype_digit($value) ? $value : null;
     }
 
     private function json(array $data, int $status = 200): JsonResponse

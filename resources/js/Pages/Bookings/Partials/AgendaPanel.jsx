@@ -1,5 +1,5 @@
 import { router } from '@inertiajs/react';
-import { Ban, CalendarClock, CalendarDays, Check, ChevronLeft, ChevronRight, RefreshCw, UserX } from 'lucide-react';
+import { Ban, CalendarClock, CalendarDays, Check, ChevronLeft, ChevronRight, RefreshCw, UserCheck, UserX } from 'lucide-react';
 import { useState } from 'react';
 import Badge from '@/Components/Badge';
 import Card from '@/Components/Card';
@@ -10,10 +10,19 @@ import InputLabel from '@/Components/InputLabel';
 import PrimaryButton from '@/Components/PrimaryButton';
 import Select from '@/Components/Select';
 import TextInput from '@/Components/TextInput';
-import { addDays, channelLabels, dayLabel, statusTones, syncErrors, syncLabels } from '@/config/bookings';
+import { addDays, dayLabel, money, statusTones, syncErrors, syncLabels } from '@/config/bookings';
 import AppointmentDialog from './AppointmentDialog';
 
+/** "Recordatorio (1 día antes)", "Confirmación"... for a notification of the Agenda. */
+const notificationLabel = (item) => {
+    const names = { received: 'Recepción', confirmed: 'Confirmación', reminder: 'Recordatorio' };
+    const when = item.kind === 'reminder' && item.offset ? ` (${item.offset % 1440 === 0 ? `${item.offset / 1440} d` : item.offset % 60 === 0 ? `${item.offset / 60} h` : `${item.offset} min`} antes)` : '';
+
+    return `${names[item.kind] ?? item.kind}${when}`;
+};
+
 const RANGES = [{ value: 1, label: 'Día' }, { value: 7, label: 'Semana' }, { value: 31, label: 'Mes' }];
+const ORIGINS = [{ value: '', label: 'Todos los orígenes' }, { value: 'admin', label: 'Agenda del negocio' }, { value: 'web', label: 'Página de reservas' }, { value: 'chat', label: 'Asistente' }];
 const STATUSES = [{ value: '', label: 'Todos los estados' }, { value: 'requested', label: 'Por confirmar' }, { value: 'confirmed', label: 'Confirmadas' }, { value: 'completed', label: 'Realizadas' }, { value: 'no_show', label: 'No asistió' }, { value: 'cancelled', label: 'Canceladas' }, { value: 'failed', label: 'Rechazadas' }];
 
 /** The agenda: appointments of the chosen days grouped by day, with the actions each one allows. */
@@ -60,6 +69,10 @@ export default function AgendaPanel({ appointments, filters, options, capabiliti
                         <InputLabel htmlFor="agenda_status" value="Estado" />
                         <Select id="agenda_status" className="mt-1" value={filters.status ?? ''} onChange={(value) => visit({ status: value || undefined })} options={STATUSES} />
                     </div>
+                    <div className="w-52">
+                        <InputLabel htmlFor="agenda_origin" value="Origen" />
+                        <Select id="agenda_origin" className="mt-1" value={filters.origin ?? ''} onChange={(value) => visit({ origin: value || undefined })} options={ORIGINS} />
+                    </div>
                     <div className="ml-auto flex gap-2">
                         <button type="button" onClick={() => visit({ from: today })} className="text-sm font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary">Hoy</button>
                         {canCreate && <PrimaryButton type="button" onClick={() => setDialog({})}>Nueva cita</PrimaryButton>}
@@ -83,9 +96,21 @@ export default function AgendaPanel({ appointments, filters, options, capabiliti
                                             <p className="text-sm text-ink-muted">
                                                 {appointment.customer?.name}
                                                 {appointment.customer?.phone && ` · ${appointment.customer.phone}`}
-                                                <span className="text-xs"> · {channelLabels[appointment.channel]}</span>
+                                            </p>
+                                            <p className="text-xs text-ink-muted">
+                                                {[appointment.location, appointment.price !== null && appointment.currency ? money(appointment.price, appointment.currency) : null, appointment.originLabel].filter(Boolean).join(' · ')}
                                             </p>
                                             {appointment.notes && <p className="mt-0.5 text-xs text-ink-muted">Nota: {appointment.notes}</p>}
+                                            {appointment.notifications?.length > 0 && (
+                                                <p className="mt-0.5 text-xs text-ink-muted">
+                                                    {appointment.notifications.map((item, index) => (
+                                                        <span key={`${item.kind}-${item.offset}-${index}`} title={item.reason ?? undefined}>
+                                                            {index > 0 && ' · '}
+                                                            {notificationLabel(item)}: {item.statusLabel}
+                                                        </span>
+                                                    ))}
+                                                </p>
+                                            )}
                                             {appointment.status === 'cancelled' && appointment.cancelReason && <p className="mt-0.5 text-xs text-ink-muted">Motivo: {appointment.cancelReason}</p>}
                                             {appointment.syncStatus === 'failed' && <p className="mt-0.5 text-xs text-danger">{syncErrors[appointment.syncError] ?? syncLabels.failed}</p>}
                                             {appointment.syncStatus === 'uncertain' && <p className="mt-0.5 text-xs text-accent-amber">{syncLabels.uncertain}. {syncErrors[appointment.syncError] ?? ''}</p>}
@@ -94,9 +119,12 @@ export default function AgendaPanel({ appointments, filters, options, capabiliti
                                         <div className="flex flex-wrap items-center gap-2">
                                             <Badge tone={statusTones[appointment.status]}>{appointment.statusLabel}</Badge>
                                             {appointment.external && <Badge tone="violet">{capabilities.label}</Badge>}
+                                            {appointment.active && appointment.customerConfirmed && <Badge tone="green">Cliente confirmó</Badge>}
+                                            {appointment.active && !appointment.customerConfirmed && appointment.notifications?.some((item) => item.kind === 'reminder' && ['sent', 'delivered', 'read'].includes(item.status)) && <Badge tone="amber">Sin respuesta</Badge>}
                                         </div>
                                         {canOperate && appointment.active && (
                                             <div className="flex items-center gap-0.5">
+                                                {!appointment.external && !appointment.customerConfirmed && <IconButton icon={UserCheck} label="Registrar que el cliente confirmó" context={appointment.service} onClick={() => act(appointment, 'bookings.customer-confirmation')} />}
                                                 {appointment.status === 'requested' && !appointment.external && <IconButton icon={Check} label="Confirmar" context={appointment.service} onClick={() => act(appointment, 'bookings.status', { status: 'confirmed' })} />}
                                                 {appointment.status === 'confirmed' && !appointment.external && started(appointment) && (
                                                     <>

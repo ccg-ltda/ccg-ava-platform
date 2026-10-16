@@ -26,7 +26,7 @@ class SaveServiceRequest extends FormRequest
             'category' => ['nullable', 'string', 'max:80'],
             'duration_minutes' => ['required', 'integer', 'between:5,720'],
             'buffer_minutes' => ['nullable', 'integer', 'between:0,240'],
-            'price' => ['nullable', 'numeric', 'min:0', 'max:99999999'],
+            'price' => ['nullable', 'numeric', 'min:0', 'max:99999999', 'decimal:0,2'],
             'resource_ids' => ['nullable', 'array'],
             'resource_ids.*' => ['integer', Rule::exists('bookable_resources', 'id')->where('workspace_id', $workspace->id)],
         ];

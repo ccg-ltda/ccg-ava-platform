@@ -1,5 +1,5 @@
 import { Head } from '@inertiajs/react';
-import { CalendarCheck, CheckCircle2, Clock, XCircle } from 'lucide-react';
+import { CalendarCheck, CheckCircle2, Clock, MapPin, XCircle } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Alert from '@/Components/Alert';
 import Card from '@/Components/Card';
@@ -50,27 +50,27 @@ function Slots({ slots, picked, onPick, showProfessional }) {
 }
 
 /** Finds a free start for a service: professional and first day, then the offered times. */
-function SlotFinder({ keyName, config, serviceId, professionalId: fixedProfessional, picked, onPick, token }) {
+function SlotFinder({ keyName, config, serviceId, locationId, professionalId: fixedProfessional, picked, onPick, token }) {
     const [professionals, setProfessionals] = useState([]);
     const [professionalId, setProfessionalId] = useState(fixedProfessional ?? '');
     const [from, setFrom] = useState(today());
     const [state, setState] = useState({ loading: true, slots: [], error: null });
 
     useEffect(() => {
-        getJson(api(keyName, '/professionals'), { service_id: serviceId }).then((body) => setProfessionals(body.professionals)).catch(() => setProfessionals([]));
-    }, [serviceId]);
+        getJson(api(keyName, '/professionals'), { service_id: serviceId, location_id: locationId }).then((body) => setProfessionals(body.professionals)).catch(() => setProfessionals([]));
+    }, [serviceId, locationId]);
 
     useEffect(() => {
         let live = true;
         setState({ loading: true, slots: [], error: null });
-        getJson(api(keyName, '/availability'), { service_id: serviceId, professional_id: professionalId || undefined, from, days: Math.min(7, config.maxDays), token })
+        getJson(api(keyName, '/availability'), { service_id: serviceId, professional_id: professionalId || undefined, location_id: locationId, from, days: Math.min(7, config.maxDays), token })
             .then((body) => live && setState({ loading: false, slots: body.slots, error: null }))
             .catch((error) => live && setState({ loading: false, slots: [], error: error.message }));
 
         return () => {
             live = false;
         };
-    }, [serviceId, professionalId, from]);
+    }, [serviceId, professionalId, from, locationId]);
 
     return (
         <div className="space-y-4">
@@ -131,6 +131,15 @@ function Manage({ keyName, config, token, onDone }) {
                 <div>
                     <p className="text-lg font-bold text-ink">{appointment.service}</p>
                     <p className="text-sm text-ink-muted">{appointment.dateLabel} · {appointment.timeLabel}{appointment.professional && ` · ${appointment.professional}`}</p>
+                    {appointment.location && (
+                        <p className="mt-0.5 inline-flex items-center gap-1 text-sm text-ink-muted">
+                            <MapPin className="size-3.5" aria-hidden="true" />
+                            {appointment.location}
+                        </p>
+                    )}
+                    {appointment.price !== null && appointment.price !== undefined && appointment.currency && (
+                        <p className="text-sm text-ink-muted">Precio al reservar: {new Intl.NumberFormat('es', { style: 'currency', currency: appointment.currency }).format(appointment.price)}</p>
+                    )}
                     <p className="mt-1 text-sm font-semibold text-ink">{appointment.statusLabel}</p>
                     {appointment.status === 'requested' && <p className="text-sm text-ink-muted">Tu solicitud llegó al negocio. Te confirmarán la cita.</p>}
                 </div>
@@ -147,6 +156,8 @@ function Manage({ keyName, config, token, onDone }) {
             )}
 
             <div className="flex flex-wrap gap-3">
+                {appointment.canConfirm && !moving && <PrimaryButton type="button" disabled={busy} onClick={() => run('confirm')}>Confirmo que asistiré</PrimaryButton>}
+                {appointment.customerConfirmed && appointment.status !== 'cancelled' && <span className="inline-flex items-center gap-1.5 text-sm font-medium text-accent-green"><CheckCircle2 className="size-4" aria-hidden="true" />Confirmaste tu asistencia</span>}
                 {appointment.canChange && !moving && <SecondaryButton type="button" onClick={() => setMoving(true)}>Cambiar horario</SecondaryButton>}
                 {appointment.canCancel && !confirming && <SecondaryButton type="button" onClick={() => setConfirming(true)}>Cancelar reserva</SecondaryButton>}
                 {confirming && (
@@ -173,6 +184,7 @@ export default function Public({ publicKey: key, business, primaryColor }) {
     const [services, setServices] = useState([]);
     const [loadError, setLoadError] = useState(null);
     const [serviceId, setServiceId] = useState('');
+    const [locationId, setLocationId] = useState('');
     const [slot, setSlot] = useState(null);
     const [customer, setCustomer] = useState({ name: '', phone: '', email: '' });
     const [notes, setNotes] = useState('');
@@ -183,8 +195,17 @@ export default function Public({ publicKey: key, business, primaryColor }) {
 
     useEffect(() => {
         getJson(api(key, '/config')).then(setConfig).catch((e) => setLoadError(e.message));
-        getJson(api(key, '/services')).then((body) => setServices(body.services)).catch((e) => setLoadError(e.message));
     }, [key]);
+
+    // With several locations the visitor chooses one first; with one it is implied. The services shown are the ones that location offers.
+    const locations = config?.locations ?? [];
+    const effectiveLocation = locationId || (locations.length === 1 ? String(locations[0].id) : '');
+    const waitingForLocation = config && config.locationRequired && !effectiveLocation;
+
+    useEffect(() => {
+        if (!config || waitingForLocation) return;
+        getJson(api(key, '/services'), { location_id: effectiveLocation || undefined }).then((body) => setServices(body.services)).catch((e) => setLoadError(e.message));
+    }, [key, config, effectiveLocation, waitingForLocation]);
 
     const submit = async (event) => {
         event.preventDefault();
@@ -192,7 +213,7 @@ export default function Public({ publicKey: key, business, primaryColor }) {
         setError(null);
 
         try {
-            const body = await postJson(api(key, '/appointments'), { service_id: serviceId, professional_id: slot.professionalId, starts_at: slot.startsAt, customer, notes, website });
+            const body = await postJson(api(key, '/appointments'), { service_id: serviceId, professional_id: slot.professionalId, location_id: effectiveLocation ? Number(effectiveLocation) : undefined, starts_at: slot.startsAt, customer, notes, website });
             window.history.replaceState({}, '', `${window.location.pathname}?cita=${body.token}`);
             setToken(body.token);
         } catch (e) {
@@ -209,6 +230,7 @@ export default function Public({ publicKey: key, business, primaryColor }) {
         setToken(null);
         setSlot(null);
         setServiceId('');
+        setLocationId('');
     };
 
     const service = services.find((item) => String(item.id) === String(serviceId));
@@ -249,8 +271,30 @@ export default function Public({ publicKey: key, business, primaryColor }) {
                 {!token && config?.canBook && (
                     <Card className="p-5 sm:p-7">
                         <form onSubmit={submit} noValidate className="space-y-6">
+                            {locations.length > 0 && (
+                                <div>
+                                    <h2 className="text-base font-bold">{locations.length > 1 ? '1. Elige la sede' : 'Sede'}</h2>
+                                    <div className="mt-3 grid gap-2">
+                                        {locations.map((item) => (
+                                            <label key={item.id} className="flex cursor-pointer items-start gap-3 rounded-xl border border-field p-3 transition-colors hover:border-primary/50 has-checked:border-primary has-checked:bg-primary-soft/50">
+                                                <input type="radio" name="location" className="mt-1 size-4 accent-primary" checked={String(effectiveLocation) === String(item.id)} onChange={() => { setLocationId(String(item.id)); setServiceId(''); setSlot(null); }} />
+                                                <span className="min-w-0 flex-1">
+                                                    <span className="flex items-center gap-1.5 text-sm font-semibold">
+                                                        <MapPin className="size-3.5 shrink-0 text-ink-muted" aria-hidden="true" />
+                                                        {item.name}
+                                                    </span>
+                                                    {(item.address || item.city) && <span className="block text-xs text-ink-muted">{[item.address, item.city].filter(Boolean).join(', ')}</span>}
+                                                    {item.notes && <span className="block text-xs text-ink-muted">{item.notes}</span>}
+                                                </span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {!waitingForLocation && (
                             <div>
-                                <h2 className="text-base font-bold">1. Elige el servicio</h2>
+                                <h2 className="text-base font-bold">{locations.length > 1 ? '2. Elige el servicio' : '1. Elige el servicio'}</h2>
                                 <div className="mt-3 grid gap-2">
                                     {services.length === 0 && <p className="text-sm text-ink-muted">Este negocio todavía no tiene servicios disponibles.</p>}
                                     {services.map((item) => (
@@ -269,19 +313,20 @@ export default function Public({ publicKey: key, business, primaryColor }) {
                                     ))}
                                 </div>
                             </div>
+                            )}
 
                             {service && (
                                 <div>
-                                    <h2 className="text-base font-bold">2. Elige día y hora</h2>
+                                    <h2 className="text-base font-bold">{locations.length > 1 ? '3. Elige día y hora' : '2. Elige día y hora'}</h2>
                                     <div className="mt-3">
-                                        <SlotFinder keyName={key} config={config} serviceId={serviceId} picked={slot} onPick={setSlot} />
+                                        <SlotFinder keyName={key} config={config} serviceId={serviceId} locationId={effectiveLocation || undefined} picked={slot} onPick={setSlot} />
                                     </div>
                                 </div>
                             )}
 
                             {slot && (
                                 <div className="space-y-4">
-                                    <h2 className="text-base font-bold">3. Tus datos</h2>
+                                    <h2 className="text-base font-bold">{locations.length > 1 ? '4. Tus datos' : '3. Tus datos'}</h2>
                                     <div className="grid gap-4 sm:grid-cols-2">
                                         <div className="sm:col-span-2">
                                             <InputLabel htmlFor="pub_name" value="Nombre" />
@@ -298,7 +343,8 @@ export default function Public({ publicKey: key, business, primaryColor }) {
                                         </div>
                                         <div className="sm:col-span-2">
                                             <InputLabel htmlFor="pub_notes" value="Nota (opcional)" />
-                                            <Textarea id="pub_notes" rows={2} className="mt-1" value={notes} maxLength={500} onChange={(e) => setNotes(e.target.value)} />
+                                            <Textarea id="pub_notes" rows={2} className="mt-1" aria-describedby="pub_notes_hint" value={notes} maxLength={500} onChange={(e) => setNotes(e.target.value)} />
+                                            <p id="pub_notes_hint" className="mt-1 text-xs text-ink-muted">Solo datos para organizar la cita. No escribas diagnósticos, síntomas ni información médica.</p>
                                         </div>
                                     </div>
                                     {/* Honeypot: invisible to people, tempting to bots. */}

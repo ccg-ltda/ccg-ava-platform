@@ -15,6 +15,8 @@ final class SendResult
         public readonly ?string $externalId = null,
         public readonly ?string $reason = null,
         public readonly bool $uncertain = false,
+        /** Nothing went out AND trying again later can work (no connection, rate limit): the only failure Ava may retry by itself. */
+        public readonly bool $retryable = false,
     ) {}
 
     public static function accepted(?string $externalId): self
@@ -22,9 +24,9 @@ final class SendResult
         return new self(true, $externalId);
     }
 
-    public static function failed(string $reason): self
+    public static function failed(string $reason, bool $retryable = false): self
     {
-        return new self(false, null, $reason);
+        return new self(false, null, $reason, false, $retryable);
     }
 
     public static function uncertain(string $reason): self

@@ -15,7 +15,7 @@ import { dayLabel, getJson } from '@/config/bookings';
  * Picks WHEN: the free starts the agenda really offers for a service (and optionally a professional) over a few days. Nothing is
  * typed by hand: only a start the server computed can be chosen, and the server checks it again when it is saved.
  */
-function SlotPicker({ serviceId, professionalId, from, value, onPick, ignoreAppointment }) {
+function SlotPicker({ serviceId, professionalId, locationId, from, value, onPick, ignoreAppointment }) {
     const [state, setState] = useState({ loading: false, slots: [], error: null });
 
     useEffect(() => {
@@ -23,14 +23,14 @@ function SlotPicker({ serviceId, professionalId, from, value, onPick, ignoreAppo
         let live = true;
         setState({ loading: true, slots: [], error: null });
 
-        getJson(route('bookings.availability'), { service_id: serviceId, professional_id: professionalId || undefined, from, days: 7, ignore_appointment: ignoreAppointment })
+        getJson(route('bookings.availability'), { service_id: serviceId, professional_id: professionalId || undefined, location_id: locationId || undefined, from, days: 7, ignore_appointment: ignoreAppointment })
             .then((body) => live && setState({ loading: false, slots: body.slots, error: null }))
             .catch((error) => live && setState({ loading: false, slots: [], error: error.message }));
 
         return () => {
             live = false;
         };
-    }, [serviceId, professionalId, from, ignoreAppointment]);
+    }, [serviceId, professionalId, locationId, from, ignoreAppointment]);
 
     if (!serviceId) return <p className="text-sm text-ink-muted">Elige un servicio para ver los horarios libres.</p>;
     if (state.loading) return <p className="text-sm text-ink-muted" role="status">Buscando horarios…</p>;
@@ -73,6 +73,7 @@ export default function AppointmentDialog({ appointment, options, today, onClose
     const rescheduling = Boolean(appointment);
     const [serviceId, setServiceId] = useState(appointment?.serviceId ?? '');
     const [professionalId, setProfessionalId] = useState(appointment?.professionalId ?? '');
+    const [locationId, setLocationId] = useState(options.locations?.length === 1 ? options.locations[0].id : '');
     const [from, setFrom] = useState(today);
     const [slot, setSlot] = useState(null);
     const [customer, setCustomer] = useState({ name: '', phone: '', email: '' });
@@ -81,6 +82,9 @@ export default function AppointmentDialog({ appointment, options, today, onClose
     const [saving, setSaving] = useState(false);
 
     const services = options.services.map((service) => ({ value: service.id, label: service.name }));
+    const locations = options.locations ?? [];
+    const service = options.services.find((item) => String(item.id) === String(serviceId));
+    const needsLocation = !rescheduling && options.locationRequired && !locationId;
     const professionals = [{ value: '', label: 'Cualquiera disponible' }, ...options.professionals.map((professional) => ({ value: professional.id, label: professional.name }))];
 
     const submit = (event) => {
@@ -89,7 +93,7 @@ export default function AppointmentDialog({ appointment, options, today, onClose
 
         const payload = rescheduling
             ? { starts_at: slot.startsAt, professional_id: slot.professionalId ?? undefined }
-            : { service_id: serviceId, professional_id: slot.professionalId ?? undefined, starts_at: slot.startsAt, customer, notes };
+            : { service_id: serviceId, professional_id: slot.professionalId ?? undefined, location_id: locationId || undefined, starts_at: slot.startsAt, customer, notes };
 
         router.post(rescheduling ? route('bookings.reschedule', appointment.id) : route('bookings.store'), payload, {
             preserveScroll: true,
@@ -119,6 +123,13 @@ export default function AppointmentDialog({ appointment, options, today, onClose
                                 <InputError message={errors.service_id} className="mt-1" />
                             </div>
                         )}
+                        {!rescheduling && locations.length > 0 && (
+                            <div>
+                                <InputLabel htmlFor="appt_location" value={options.locationRequired ? 'Sede' : 'Sede (opcional)'} />
+                                <Select id="appt_location" className="mt-1" value={locationId} onChange={(value) => { setLocationId(value); setSlot(null); }} options={options.locationRequired ? locations.map((l) => ({ value: l.id, label: l.name })) : [{ value: '', label: 'Sin sede' }, ...locations.map((l) => ({ value: l.id, label: l.name }))]} placeholder="Elige una sede" invalid={Boolean(errors.location_id)} />
+                                <InputError message={errors.location_id} className="mt-1" />
+                            </div>
+                        )}
                         <div>
                             <InputLabel htmlFor="appt_pro" value="Profesional" />
                             <Select id="appt_pro" className="mt-1" value={professionalId} onChange={(value) => { setProfessionalId(value); setSlot(null); }} options={professionals} />
@@ -131,7 +142,10 @@ export default function AppointmentDialog({ appointment, options, today, onClose
 
                     <div>
                         <p className="mb-2 text-sm font-medium text-ink">Horarios libres</p>
-                        <SlotPicker serviceId={serviceId} professionalId={professionalId} from={from} value={slot} onPick={setSlot} ignoreAppointment={appointment?.id} />
+                        {needsLocation ? <p className="text-sm text-ink-muted">Elige la sede para ver los horarios libres.</p> : <SlotPicker serviceId={serviceId} professionalId={professionalId} locationId={locationId} from={from} value={slot} onPick={setSlot} ignoreAppointment={appointment?.id} />}
+                        {!rescheduling && service && service.price !== null && service.price !== undefined && (
+                            <p className="mt-2 text-xs text-ink-muted">Precio actual del servicio: {new Intl.NumberFormat('es', { style: 'currency', currency: options.currency }).format(service.price)}. Queda registrado en la cita; si cambia después, esta cita conserva el de hoy.</p>
+                        )}
                         <InputError message={errors.starts_at} className="mt-1" />
                     </div>
 
@@ -158,7 +172,8 @@ export default function AppointmentDialog({ appointment, options, today, onClose
                             </div>
                             <div>
                                 <InputLabel htmlFor="appt_notes" value="Nota (opcional)" />
-                                <Textarea id="appt_notes" rows={2} className="mt-1" value={notes} maxLength={500} onChange={(e) => setNotes(e.target.value)} />
+                                <Textarea id="appt_notes" rows={2} className="mt-1" aria-describedby="appt_notes_hint" value={notes} maxLength={500} onChange={(e) => setNotes(e.target.value)} />
+                                <p id="appt_notes_hint" className="mt-1 text-xs text-ink-muted">Solo datos para organizar la cita. No registres diagnósticos ni información médica: Ava no tiene una política definida para guardarla.</p>
                             </div>
                         </fieldset>
                     )}

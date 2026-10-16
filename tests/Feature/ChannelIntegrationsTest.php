@@ -64,7 +64,7 @@ class ChannelIntegrationsTest extends TestCase
     public function test_a_workspace_configures_its_own_whatsapp_account(): void
     {
         $this->actAs();
-        $workspace = Workspace::first();
+        $workspace = Workspace::orderBy('id')->first();
 
         $this->put('/integrations/channels/whatsapp', $this->payload())->assertSessionHasNoErrors()->assertSessionHas('success', 'Canal configurado correctamente');
 
@@ -141,7 +141,7 @@ class ChannelIntegrationsTest extends TestCase
     public function test_each_workspace_has_its_own_configuration_that_never_mixes(): void
     {
         $this->actAs();
-        $mine = Workspace::first();
+        $mine = Workspace::orderBy('id')->first();
         $theirs = $this->workspace('OTHER_WS');
         $foreign = $theirs->integrations()->create([
             'name' => 'WhatsApp', 'type' => 'whatsapp', 'is_active' => true,
@@ -170,7 +170,7 @@ class ChannelIntegrationsTest extends TestCase
         $this->put("/integrations/channels/whatsapp?workspace={$other->id}", $this->payload(['phone_number_id' => '555666777']))->assertSessionHasNoErrors();
 
         $this->assertSame(0, $other->integrations()->count());
-        $this->assertSame('555666777', Workspace::first()->integrations()->firstOrFail()->config['phone_number_id']);
+        $this->assertSame('555666777', Workspace::orderBy('id')->first()->integrations()->firstOrFail()->config['phone_number_id']);
     }
 
     public function test_another_workspaces_integration_cannot_be_activated_deactivated_or_tested(): void
@@ -261,10 +261,10 @@ class ChannelIntegrationsTest extends TestCase
     public function test_a_generic_connection_with_the_channels_name_asks_to_be_renamed(): void
     {
         $this->actAs();
-        Workspace::first()->integrations()->create(['name' => 'WhatsApp', 'type' => 'http', 'config' => ['base_url' => 'https://x.test']]);
+        Workspace::orderBy('id')->first()->integrations()->create(['name' => 'WhatsApp', 'type' => 'http', 'config' => ['base_url' => 'https://x.test']]);
 
         $this->put('/integrations/channels/whatsapp', $this->payload())->assertSessionHasErrors('name');
-        $this->assertSame(0, Workspace::first()->integrations()->where('type', 'whatsapp')->count());
+        $this->assertSame(0, Workspace::orderBy('id')->first()->integrations()->where('type', 'whatsapp')->count());
     }
 
     // --- activation, tests, audit ----------------------------------------------------------------------------
