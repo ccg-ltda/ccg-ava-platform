@@ -21,7 +21,7 @@ El sidebar tiene **tres grupos plegables por función** y todos se pliegan por s
 | Grupo | Entradas | Qué es |
 |---|---|---|
 | **General** | Dashboard, Asistentes, Conversaciones | Lo cotidiano del Workspace. |
-| **Operación** | Reportes, Servicios, Sedes, Profesionales, Agenda, Clientes, Campañas | Los módulos funcionales reutilizables, sea cual sea la solución comercial que los ofrezca. Proveedores de agenda se configura en Integraciones y no tiene entrada propia. |
+| **Operación** | Reportes, Catálogo, Pedidos, Servicios, Sedes, Profesionales, Agenda, Clientes, Campañas | Los módulos funcionales reutilizables, sea cual sea la solución comercial que los ofrezca. Proveedores de agenda se configura en Integraciones y no tiene entrada propia. |
 | **Administración** | Usuarios y Roles, Auditoría, Configuraciones, Integraciones, Planes (solo administración de plataforma; incluye el catálogo de módulos) | Administración interna. |
 
 Una sección es presentación: reúne entradas relacionadas y desaparece si ninguna se ofrece. **Las soluciones comerciales no son secciones del menú** (son categorías del catálogo y planes): un módulo existe una sola vez y lo comparten todas las soluciones. Un módulo reutilizable nuevo = una entrada en Operación; una solución nueva (Salud, Delivery, eCommerce) = una categoría y planes, sin tocar el menú. No confundir estos grupos del MENÚ (por función) con los grupos conceptuales del CATÁLOGO (`config/modules.php` `groups`: administración, capacidades compartidas, soluciones comerciales), que organizan el constructor de planes. El catálogo completo **no** se convierte en entradas permanentes: el menú muestra, por Workspace, solo los módulos implementados + incluidos en su plan + autorizados al rol. En `Desarrollo_DEV` (todos los módulos implementados) los grupos empiezan plegados salvo el de la página actual, y el catálogo se explora en **Planes**, no en el menú. Cuatro piezas siguen separadas: el catálogo de capacidades implementadas (`config/modules.php implemented`), las soluciones o categorías comerciales (abiertas, creadas desde Planes), los planes que combinan módulos, y los permisos de cada usuario; la disponibilidad de un módulo para un Workspace sale solo de su plan. Los módulos que faltan para Salud, Delivery y eCommerce NO existen todavía: sus categorías están vacías a propósito y se incorporarán siguiendo este mismo modelo (entrada en `implemented` + `workspace.module` + menú en Operación + sembrado).
@@ -45,12 +45,14 @@ Dependencias **técnicas** declaradas (`config/modules.php` `dependencies`), com
 | `campaigns` | Compartidas | `customers` | Una campaña se dirige a clientes: sin ellos no existe. |
 | `service_catalog` | Soluciones | — | Reutilizable por cualquier negocio con citas (no menciona uñas ni salones). |
 | `locations` | Soluciones | — | Sedes opcionales (también para Salud). Sin sedes la agenda funciona igual; con ellas, cada reserva elige una (reglas en `RECOMENDACIONES.md`, «Sedes, precio y origen»). Solo aplican a la agenda de Ava, no a una externa. |
+| `product_catalog` | Soluciones (eCommerce, también Delivery) | — | Productos con SKU, precio, categoría y sedes que los ofrecen. Nunca se borran. NO es `service_catalog` (los servicios se reservan; los productos se piden). |
+| `orders` | Soluciones (eCommerce, también Delivery) | `product_catalog` | Pedidos con líneas copiadas del catálogo, total calculado por el servidor, estados y trazabilidad. Registra el pedido: sin pagos, sin avisos al cliente todavía. |
 | `professionals` | Soluciones | `service_catalog` | Quien presta servicios, horarios (por sede, si se quiere) y días no laborables. |
 | `bookings` | Soluciones | `service_catalog`, `professionals` | Agenda, citas, página pública y herramientas de Ava Chat. Guarda su propio contacto mínimo (`booking_customers`): **no necesita `customers`** (comprobado: ningún flujo de reservas lo lee). |
 | `calendar_providers` | Soluciones | `bookings`, `integrations` | Agenda externa (Booker) como fuente de verdad. |
 | `users_roles`, `audit`, `settings`, `integrations` | Administración | — | Del propio Workspace (no confundir con la administración de CCG). |
 
-Clasificación según el código: **capacidades independientes** = `conversations`, `customers`, `dashboard`, `reports`, `service_catalog`, `locations`; **compartidas** (las usan varias soluciones) = asistentes, conversaciones, clientes, campañas, panel, reportes y, por diseño, `service_catalog`/`professionals` para Salud y otros; **dependientes** = `assistants`, `campaigns`, `professionals`, `bookings`, `calendar_providers`.
+Clasificación según el código: **capacidades independientes** = `conversations`, `customers`, `dashboard`, `reports`, `service_catalog`, `locations`, `product_catalog`; **compartidas** (las usan varias soluciones) = asistentes, conversaciones, clientes, campañas, panel, reportes y, por diseño, `service_catalog`/`professionals` para Salud y otros; **dependientes** = `assistants`, `campaigns`, `professionals`, `bookings`, `calendar_providers`.
 
 ### Cómo se relacionan Clientes y Campañas con el resto (sin copiar datos)
 
@@ -94,6 +96,22 @@ Los planes deciden qué módulos EXISTEN para un Workspace; los permisos del rol
 | Salud (agenda de citas) | `service_catalog`, `locations`, `professionals`, `bookings` (+ `customers`) | Una clínica con varias sedes: servicios por sede, horarios del profesional por sede, reserva con sede, precio registrado y origen acreditado. **Sin datos clínicos** (D-07 pendiente). |
 | Salud (módulos clínicos) | — | No existen: la categoría `health` sigue vacía a propósito hasta resolver D-07. |
 
+### Cómo se registra y se habilita un módulo (y cómo lo ve Desarrollo_DEV)
+
+Un módulo es utilizable desde la pantalla solo cuando coinciden cinco cosas. Falta una y el módulo «existe» pero no se ve o no abre:
+
+| # | Pieza | Dónde | Quién la crea en un entorno ya instalado |
+|---|---|---|---|
+| 1 | Código y rutas protegidas (`workspace.module:<clave>` + `workspace.permission:`) | `routes/web.php` | el despliegue del código |
+| 2 | Entrada «implementado» (con `route`, `permission` y dependencias) | `config/modules.php` | el despliegue del código |
+| 3 | Fila en el catálogo (la que listan Planes y los planes) | tabla `modules` | `php artisan db:seed --class=ModuleCatalogSeeder` (idempotente, nunca renombra) |
+| 4 | Permisos | `config/permissions.php` + tabla `permissions` | `php artisan db:seed --class=RolesAndPermissionsSeeder` (solo `admin` los recibe; no toca otros roles) |
+| 5 | Entrada de menú y de accesos rápidos | `resources/js/config/navigation.js` y `dashboard.js` | el despliegue del código (compilación) |
+
+Además, sus migraciones (`php artisan migrate`). En Docker: `make dev-sync` ejecuta migrate, los dos sembradores y `integrations:diagnose` contra el contenedor `app` de la pila local y se niega a correr si ese contenedor no es `APP_ENV=local`. Todo lo que ejecuta es repetible: las migraciones aplicadas no se repiten, `ModuleCatalogSeeder` solo crea lo que falta y `RolesAndPermissionsSeeder` solo crea permisos que faltan y da a `admin` los de cliente (en `local` además deja existir las tres cuentas de muestra con `firstOrCreate`, sin cambiar las que ya existen). Nunca lo apuntes a producción o a un entorno compartido: ahí las migraciones y los sembradores se ejecutan a propósito, uno a uno (`make prod-migrate`).
+
+**Desarrollo_DEV** es el Workspace de pruebas funcionales: al ser el Workspace administrativo (`workspace.admin_code`) recibe TODOS los módulos implementados sin plan (`ModuleAccess::keys`), así que no hace falta asignarle un plan ni copiar una lista de módulos: basta que el módulo esté en `implemented`. Lo que SÍ necesita es el paso 4 (el menú exige el permiso del rol) y las migraciones. Esa condición no se hereda: un cliente solo ve los módulos de su plan, un rol sin permiso no los abre ni siquiera en Desarrollo_DEV, y los planes comerciales no cambian solos (se editan desde Planes). `ModuleRegistrationTest` y la sección «Módulos y permisos» de `integrations:diagnose` vigilan que las cinco piezas coincidan.
+
 ### Inventario de Salud (verificado el 2026-10-18)
 
 Salud no tiene módulos propios: se arma con los mismos módulos reutilizables (`also_for`). Estado de cada pieza, según el código y `PLAN_TRABAJO_AVACHAT.md` §8.1:
@@ -113,6 +131,18 @@ Salud no tiene módulos propios: se arma con los mismos módulos reutilizables (
 | Informes de citas en Dashboard y Reportes | Ausente, sin requisito aprobado | Documentado como límite en `pendientes.md`; no se inventó. |
 
 Dependencias de lo que falta: S5 → S4 + WhatsApp real + plantillas (D-19); S6 → Asistentes + Conversaciones + n8n real + D-20; cualquier dato clínico → D-07 resuelto antes.
+
+### E-commerce y Delivery: qué es común y qué es propio (2026-10-20)
+
+| Nivel | Contenido |
+|---|---|
+| **Común (una sola implementación)** | Catálogo de productos, pedido, líneas con instantánea de precio, estados y transiciones, historial, permisos (`view/manage-catalog`, `view/manage/process-orders`), sedes opcionales como punto de operación y Clientes como vínculo opcional. |
+| **Se configura por Workspace** | La moneda (ajuste del Workspace), los productos, qué sedes ofrecen cada producto y el rol de cada persona. |
+| **Solo Delivery (hoy: datos; la lógica está pendiente)** | Dirección, ciudad, referencias y datos de quien recibe (campos del pedido `delivery`); pendientes: zonas de cobertura, tarifas, repartidor y seguimiento. |
+| **Solo E-commerce (pendiente)** | Variantes, stock, transportadora, cambios y devoluciones, promociones. |
+| **Todavía no existe en ninguna** | Pagos, descuentos, impuestos, costo de envío, avisos al cliente (`OrderNotifier` sin canal), integración con tiendas externas (D-25). |
+
+Una empresa que contrata Salud y E-commerce tiene DOS Workspaces: el código no comparte filas entre ellos.
 
 ### Confirmaciones y recordatorios: qué es común, qué se configura y qué depende de la solución
 

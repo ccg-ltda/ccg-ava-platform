@@ -58,6 +58,9 @@ class IntegrationsDiagnoseCommand extends Command
         $this->components->info('Ejecuciones y entregas (últimas 24 h)');
         $this->executions($workspaceId);
 
+        $this->components->info('Módulos y permisos (lo que hace visible un módulo)');
+        $this->modulesAndPermissions();
+
         $this->components->info('Confirmaciones y recordatorios de citas');
         $this->appointmentNotifications($workspaceId);
 
@@ -251,6 +254,37 @@ class IntegrationsDiagnoseCommand extends Command
 
         $this->line('         Canales WhatsApp activos: '.$channels->count().'.');
         $this->line('         Workspaces activos: '.Workspace::where('is_active', true)->count().'.');
+    }
+
+    /**
+     * A module is only usable from the interface when FOUR things line up: its code (config/modules.php `implemented`), its row in the catalog
+     * (ModuleCatalogSeeder), its permissions in the database (RolesAndPermissionsSeeder) and the migration of its tables. Code deployed without the
+     * other steps leaves the module invisible or closed (a menu entry needs its permission; the catalog of Planes needs its row).
+     */
+    private function modulesAndPermissions(): void
+    {
+        if (! Schema::hasTable('modules') || ! Schema::hasTable('permissions')) {
+            $this->blocker('Faltan las tablas del catálogo de módulos o de permisos.');
+
+            return;
+        }
+
+        $missingModules = array_values(array_diff(array_keys(config('modules.implemented')), DB::table('modules')->pluck('key')->all()));
+        $missingModules === []
+            ? $this->good('Todos los módulos implementados están en el catálogo.')
+            : $this->blocker('Módulos implementados que faltan en el catálogo ('.implode(', ', $missingModules).'): ejecuta php artisan db:seed --class=ModuleCatalogSeeder.');
+
+        $missingPermissions = array_values(array_diff(array_keys(config('permissions.permissions')), DB::table('permissions')->pluck('name')->all()));
+        $missingPermissions === []
+            ? $this->good('Todos los permisos del sistema existen.')
+            : $this->blocker('Permisos que faltan ('.implode(', ', $missingPermissions).'): ejecuta php artisan db:seed --class=RolesAndPermissionsSeeder.');
+
+        $admin = DB::table('roles')->where('name', 'admin')->first();
+        $lacking = $admin ? array_values(array_diff(
+            array_keys(array_filter(config('permissions.permissions'), fn (array $permission) => ! ($permission['platform'] ?? false) && $permission !== config('permissions.permissions.access-private-data'))),
+            DB::table('role_has_permissions')->join('permissions', 'permissions.id', '=', 'role_has_permissions.permission_id')->where('role_has_permissions.role_id', $admin->id)->pluck('permissions.name')->all(),
+        )) : [];
+        $lacking === [] ? $this->good('El rol admin tiene todos los permisos de cliente.') : $this->caution('El rol admin no tiene ('.implode(', ', $lacking).'): su menú no mostrará esos módulos.');
     }
 
     /** Workspaces that asked for confirmations or reminders but cannot send them, and what happened to the messages of the last 24 hours (ids and counts only). */

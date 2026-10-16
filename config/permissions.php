@@ -19,6 +19,7 @@ return [
         'bookings' => 'Servicios y reservas',
         'customers' => 'Clientes',
         'campaigns' => 'Campañas',
+        'commerce' => 'Catálogo y pedidos',
         'platform' => 'Administración de la plataforma',
     ],
 
@@ -51,6 +52,12 @@ return [
 
         'view-campaigns' => ['group' => 'campaigns', 'label' => 'Consultar campañas', 'description' => 'Ve plantillas y campañas.'],
         'manage-campaigns' => ['group' => 'campaigns', 'label' => 'Gestionar campañas', 'description' => 'Crea plantillas y campañas, las prepara, las simula y las cancela. No envía mensajes.'],
+
+        'view-catalog' => ['group' => 'commerce', 'label' => 'Consultar el catálogo de productos', 'description' => 'Ve los productos, sus precios y las sedes que los ofrecen.'],
+        'manage-catalog' => ['group' => 'commerce', 'label' => 'Gestionar el catálogo de productos', 'description' => 'Crea y edita productos, cambia su precio y los activa o desactiva. No borra ninguno.'],
+        'view-orders' => ['group' => 'commerce', 'label' => 'Consultar pedidos', 'description' => 'Ve los pedidos, sus líneas, los datos de contacto y entrega y su historial de estados.'],
+        'manage-orders' => ['group' => 'commerce', 'label' => 'Registrar, editar y cancelar pedidos', 'description' => 'Crea pedidos, edita sus notas y datos de entrega mientras no hayan salido, y los cancela con un motivo.'],
+        'process-orders' => ['group' => 'commerce', 'label' => 'Avanzar el estado de los pedidos', 'description' => 'Confirma, prepara, marca como listo, despacha y entrega pedidos. No los crea ni los cancela.'],
 
         'manage-plans' => ['group' => 'platform', 'label' => 'Administrar planes comerciales', 'description' => 'Crea y edita planes, define sus módulos y los asigna a Workspaces. Solo opera en Desarrollo_DEV.', 'platform' => true],
         'manage-modules' => ['group' => 'platform', 'label' => 'Administrar el catálogo de módulos', 'description' => 'Registra módulos y categorías. Solo opera en Desarrollo_DEV.', 'platform' => true],

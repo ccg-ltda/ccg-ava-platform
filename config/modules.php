@@ -75,6 +75,8 @@ return [
         'calendar_providers' => ['bookings', 'integrations'],
         // A campaign is addressed to customers of the Workspace: it cannot exist without the customer records.
         'campaigns' => ['customers'],
+        // An order is made of products of the catalog: without it there is nothing to order.
+        'orders' => ['product_catalog'],
     ],
 
     /*
@@ -105,6 +107,8 @@ return [
         'users_roles' => ['name' => 'Usuarios y roles', 'description' => 'Cuentas, roles, permisos y membresías.', 'group' => 'platform', 'category' => 'shared', 'route' => 'users.index', 'permission' => 'manage-users'],
         'service_catalog' => ['name' => 'Catálogo de servicios', 'description' => 'Servicios con duración, precio opcional y tiempo entre citas. Reutilizable por cualquier negocio con citas.', 'group' => 'solutions', 'category' => 'services_bookings', 'also_for' => ['health'], 'route' => 'services.index', 'permission' => 'view-bookings'],
         'locations' => ['name' => 'Sedes', 'description' => 'Las sedes donde se atiende: dirección, contacto, servicios que ofrece cada una y horarios de los profesionales por sede. Opcional: sin sedes, la agenda funciona igual.', 'group' => 'solutions', 'category' => 'services_bookings', 'also_for' => ['health'], 'route' => 'locations.index', 'permission' => 'view-bookings'],
+        'product_catalog' => ['name' => 'Catálogo de productos', 'description' => 'Productos con SKU, precio, categoría y las sedes que los ofrecen. Base de E-commerce y Delivery; no son los servicios reservables.', 'group' => 'solutions', 'category' => 'ecommerce', 'also_for' => ['delivery'], 'route' => 'catalog.index', 'permission' => 'view-catalog'],
+        'orders' => ['name' => 'Pedidos', 'description' => 'Pedidos con líneas, total calculado por el servidor, estados y trazabilidad. Registra el pedido; no gestiona pagos ni avisa al cliente todavía.', 'group' => 'solutions', 'category' => 'ecommerce', 'also_for' => ['delivery'], 'route' => 'orders.index', 'permission' => 'view-orders'],
         'professionals' => ['name' => 'Profesionales y disponibilidad', 'description' => 'Profesionales, recursos opcionales, horarios semanales, descansos y días no laborables.', 'group' => 'solutions', 'category' => 'services_bookings', 'also_for' => ['health'], 'route' => 'professionals.index', 'permission' => 'view-bookings'],
         'bookings' => ['name' => 'Agenda y reservas', 'description' => 'Agenda, citas (crear, confirmar, reprogramar, cancelar), clientes, reglas de reserva, reserva web y herramientas de Ava Chat.', 'group' => 'solutions', 'category' => 'services_bookings', 'also_for' => ['health'], 'route' => 'bookings.index', 'permission' => 'view-bookings'],
         'calendar_providers' => ['name' => 'Proveedores de agenda', 'description' => 'Conecta una agenda externa (Booker) como fuente de verdad en lugar de la agenda de Ava.', 'group' => 'solutions', 'category' => 'services_bookings', 'route' => 'integrations.index', 'permission' => 'manage-settings'],

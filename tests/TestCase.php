@@ -31,7 +31,7 @@ abstract class TestCase extends BaseTestCase
      */
     protected function seedRoleCatalog(): void
     {
-        $permissions = collect(['manage-users', 'create-users', 'edit-users', 'assign-roles', 'deactivate-users', 'manage-settings', 'export-audit', 'view-dashboard', 'view-users', 'view-chatbots', 'manage-chatbots', 'view-conversations', 'reply-conversations', 'manage-conversations', 'view-bookings', 'manage-bookings', 'manage-services', 'view-customers', 'manage-customers', 'view-campaigns', 'manage-campaigns', 'manage-plans', 'manage-modules', 'access-private-data'])
+        $permissions = collect(['manage-users', 'create-users', 'edit-users', 'assign-roles', 'deactivate-users', 'manage-settings', 'export-audit', 'view-dashboard', 'view-users', 'view-chatbots', 'manage-chatbots', 'view-conversations', 'reply-conversations', 'manage-conversations', 'view-bookings', 'manage-bookings', 'manage-services', 'view-customers', 'manage-customers', 'view-campaigns', 'manage-campaigns', 'view-catalog', 'manage-catalog', 'view-orders', 'manage-orders', 'process-orders', 'manage-plans', 'manage-modules', 'access-private-data'])
             ->each(fn (string $name) => Permission::findOrCreate($name, 'web'));
 
         // `admin` never holds the commercial permissions: only `plataforma` does (as in the seeder).

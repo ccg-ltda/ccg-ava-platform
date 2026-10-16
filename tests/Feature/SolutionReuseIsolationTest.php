@@ -58,7 +58,13 @@ class SolutionReuseIsolationTest extends TestCase
             $this->assertSame('services_bookings', $catalog[$key]['category'], 'the module stays one single record in its own category');
         }
 
-        foreach ($catalog->except(['service_catalog', 'locations', 'professionals', 'bookings']) as $module) {
+        // Catálogo de productos and Pedidos belong to E-commerce and are also offered to Delivery: one implementation, never a copy.
+        foreach (['product_catalog', 'orders'] as $key) {
+            $this->assertSame(['delivery'], array_column($catalog[$key]['alsoFor'], 'key'), $key);
+            $this->assertSame('ecommerce', $catalog[$key]['category'], $key);
+        }
+
+        foreach ($catalog->except(['service_catalog', 'locations', 'professionals', 'bookings', 'product_catalog', 'orders']) as $module) {
             $this->assertSame([], $module['alsoFor'], $module['key']);
         }
 

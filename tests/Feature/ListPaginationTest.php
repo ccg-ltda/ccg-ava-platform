@@ -68,7 +68,7 @@ class ListPaginationTest extends TestCase
 
         $this->get('/users?permissions_per_page=20')->assertInertia(fn (AssertableInertia $page) => $page
             ->where('permissions.data', fn ($rows) => collect($rows)->firstWhere('name', 'manage-users')['roles'] === ['admin'])
-            ->has('permissionRoles', 6)->has('permissionNames', 24));
+            ->has('permissionRoles', 6)->has('permissionNames', 29));
     }
 
     public function test_partial_reloads_only_resolve_the_requested_list(): void

@@ -16,8 +16,10 @@ use App\Http\Controllers\LocationController;
 use App\Http\Controllers\MessageTemplateController;
 use App\Http\Controllers\ModuleCategoryController;
 use App\Http\Controllers\ModuleController;
+use App\Http\Controllers\OrderController;
 use App\Http\Controllers\OrganizationController;
 use App\Http\Controllers\PlanController;
+use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProfessionalController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicBookingController;
@@ -117,6 +119,28 @@ Route::middleware(['auth', 'workspace'])->group(function () {
             Route::put('/{chatbot}/channels/{channel}', [ChatbotController::class, 'updateChannel'])->whereNumber('chatbot')->where('channel', '[a-z_]+')->name('channels.update');
             Route::put('/{chatbot}/channels/{channel}/appearance', [ChannelAppearanceController::class, 'update'])->whereNumber('chatbot')->where('channel', '[a-z_]+')->name('channels.appearance.update');
         });
+    });
+
+    // Catálogo de productos and Pedidos (E-commerce and Delivery). Reading is `view-catalog` / `view-orders`; changing the catalog is `manage-catalog`; placing,
+    // editing and cancelling an order is `manage-orders`; moving it along the flow is `process-orders` (cancelling is re-checked inside as `manage-orders`).
+    Route::middleware(['workspace.module:product_catalog', 'workspace.permission:view-catalog'])->prefix('catalog')->name('catalog.')->group(function () {
+        Route::get('/', [ProductController::class, 'index'])->name('index');
+        Route::middleware('workspace.permission:manage-catalog')->group(function () {
+            Route::post('/', [ProductController::class, 'store'])->name('store');
+            Route::put('/{product}', [ProductController::class, 'update'])->whereNumber('product')->name('update');
+            Route::post('/{product}/activate', [ProductController::class, 'activate'])->whereNumber('product')->name('activate');
+            Route::post('/{product}/deactivate', [ProductController::class, 'deactivate'])->whereNumber('product')->name('deactivate');
+        });
+    });
+
+    Route::middleware(['workspace.module:orders', 'workspace.permission:view-orders'])->prefix('orders')->name('orders.')->group(function () {
+        Route::get('/', [OrderController::class, 'index'])->name('index');
+        Route::get('/{order}', [OrderController::class, 'show'])->whereNumber('order')->name('show');
+        Route::middleware('workspace.permission:manage-orders')->group(function () {
+            Route::post('/', [OrderController::class, 'store'])->middleware('throttle:60,1')->name('store');
+            Route::put('/{order}', [OrderController::class, 'update'])->whereNumber('order')->name('update');
+        });
+        Route::post('/{order}/status', [OrderController::class, 'transition'])->whereNumber('order')->middleware('workspace.permission:process-orders,manage-orders')->name('transition');
     });
 
     // Servicios y Reservas. Reading is `view-bookings`; configuring the catalog, professionals, schedules and rules is `manage-services`;

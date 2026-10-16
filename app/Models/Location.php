@@ -34,6 +34,12 @@ class Location extends Model
         return $this->belongsToMany(Service::class, 'location_service')->withPivot('workspace_id');
     }
 
+    /** Products offered here. A product with no location at all is offered everywhere (see Product::locations). */
+    public function products(): BelongsToMany
+    {
+        return $this->belongsToMany(Product::class, 'location_product')->withPivot('workspace_id');
+    }
+
     public function appointments(): HasMany
     {
         return $this->hasMany(Appointment::class);

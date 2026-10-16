@@ -42,4 +42,9 @@ export const quickLinkHints = {
     'bookings.index': 'Citas, clientes y reglas de reserva',
     'services.index': 'Lo que ofreces para reservar',
     'professionals.index': 'Quién atiende y cuándo trabaja',
+    'locations.index': 'Dónde atiendes y qué ofrece cada sede',
+    'customers.index': 'Fichas de clientes y su historial',
+    'campaigns.index': 'Plantillas y campañas',
+    'catalog.index': 'Productos, precios y sedes que los ofrecen',
+    'orders.index': 'Pedidos y su estado',
 };

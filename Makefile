@@ -1,7 +1,7 @@
 COMPOSE      ?= docker compose
 COMPOSE_PROD ?= docker compose -f docker-compose.prod.yml
 
-.PHONY: help up down restart build logs ps shell artisan migrate fresh seed test pint \
+.PHONY: help up down restart build logs ps shell artisan migrate fresh seed dev-sync test pint \
         e2e-setup e2e-cleanup prod-up prod-down prod-logs prod-migrate
 
 help: ## List available targets
@@ -36,6 +36,13 @@ migrate: ## Run migrations
 
 fresh: ## Drop everything and migrate + seed (DEVELOPMENT ONLY)
 	$(COMPOSE) exec app php artisan migrate:fresh --seed --force
+
+dev-sync: ## After pulling new code: apply migrations, register new modules and permissions (idempotent; refuses to run unless the app container is APP_ENV=local)
+	@$(COMPOSE) exec app sh -c 'test "$$APP_ENV" = local' || { echo "dev-sync only runs against a local development stack (APP_ENV=local). Aborted."; exit 1; }
+	$(COMPOSE) exec app php artisan migrate --force
+	$(COMPOSE) exec app php artisan db:seed --class=ModuleCatalogSeeder
+	$(COMPOSE) exec app php artisan db:seed --class=RolesAndPermissionsSeeder
+	$(COMPOSE) exec app php artisan integrations:diagnose || true
 
 seed: ## Run the seeders
 	$(COMPOSE) exec app php artisan db:seed --force

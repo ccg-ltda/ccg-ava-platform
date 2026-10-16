@@ -240,7 +240,7 @@ class UserRoleManagementTest extends TestCase
 
         $admin = Role::findByName('admin', 'web');
         $this->put('/roles/'.$admin->id, ['permissions' => []])->assertSessionHasErrors('permissions');
-        $this->assertCount(21, $admin->fresh()->permissions);
+        $this->assertCount(26, $admin->fresh()->permissions);
     }
 
     public function test_roles_cannot_be_deleted_even_by_superusers(): void
@@ -259,11 +259,11 @@ class UserRoleManagementTest extends TestCase
     {
         $this->actAs('admin');
         $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('canManageRoles', false)->has('permissionNames', 24));
+            ->where('canManageRoles', false)->has('permissionNames', 29));
 
         $this->actAs('admin', superuser: true);
         $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('canManageRoles', true)->has('permissionNames', 24));
+            ->where('canManageRoles', true)->has('permissionNames', 29));
     }
 
     // --- isolation ----------------------------------------------------------------------------------------
@@ -370,7 +370,7 @@ class UserRoleManagementTest extends TestCase
         $this->actAs('admin');
 
         $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('permissionNames', 24)->where('canManageRoles', false));
+            ->has('permissionNames', 29)->where('canManageRoles', false));
         $this->post('/roles', ['name' => 'x', 'permissions' => ['manage-users']])->assertForbidden();
     }
 

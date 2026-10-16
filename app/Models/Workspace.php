@@ -128,6 +128,16 @@ class Workspace extends Model
         return $this->hasMany(Location::class);
     }
 
+    public function products(): HasMany
+    {
+        return $this->hasMany(Product::class);
+    }
+
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class);
+    }
+
     public function services(): HasMany
     {
         return $this->hasMany(Service::class);

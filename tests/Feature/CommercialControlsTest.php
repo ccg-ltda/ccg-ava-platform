@@ -96,6 +96,7 @@ class CommercialControlsTest extends TestCase
             'bookings' => ['service_catalog', 'professionals'],
             'calendar_providers' => ['bookings', 'integrations'],
             'campaigns' => ['customers'],
+            'orders' => ['product_catalog'],
         ], $access->dependencies());
 
         $this->contract($this->client, ['assistants', 'dashboard']);

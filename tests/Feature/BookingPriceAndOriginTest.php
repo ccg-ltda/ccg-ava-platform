@@ -217,6 +217,8 @@ class BookingPriceAndOriginTest extends TestCase
         [$bot] = $this->bot($this->workspace);
         $conversation = $bot->conversations()->create(['workspace_id' => $this->workspace->id, 'channel' => 'whatsapp', 'contact_id' => '573001112233', 'contact_name' => 'Laura']);
         $migration = require database_path('migrations/2026_10_18_100000_create_locations_and_booking_traceability.php');
+        // The catalog and orders tables point to locations (a later migration): they go first, as a rollback would do it.
+        (require database_path('migrations/2026_10_20_100000_create_catalog_and_orders_tables.php'))->down();
 
         // Go back to the schema as it was before, with appointments that already exist.
         $migration->down();

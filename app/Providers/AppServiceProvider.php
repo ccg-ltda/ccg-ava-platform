@@ -9,6 +9,9 @@ use App\Campaigns\UnavailableCampaignDispatcher;
 use App\Chatbots\ChatbotExecutor;
 use App\Chatbots\N8nExecutor;
 use App\Models\User;
+use App\Orders\CommerceSchema;
+use App\Orders\OrderNotifier;
+use App\Orders\UnavailableOrderNotifier;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Foundation\DevCommands;
 use Illuminate\Http\Request;
@@ -27,6 +30,10 @@ class AppServiceProvider extends ServiceProvider
         // One per request: it remembers whether the database already has the structure of locations.
         $this->app->scoped(Locations::class);
         $this->app->scoped(AppointmentNotifier::class);
+        $this->app->scoped(CommerceSchema::class);
+
+        // How an order event would reach the customer: no channel is connected yet, so the unavailable notifier says so and sends nothing.
+        $this->app->bind(OrderNotifier::class, UnavailableOrderNotifier::class);
 
         // What runs a chatbot's workflow (today the platform's n8n); the rest of Ava only knows the contract.
         $this->app->bind(ChatbotExecutor::class, N8nExecutor::class);

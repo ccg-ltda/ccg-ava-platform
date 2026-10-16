@@ -42,7 +42,8 @@ class PendingLocationsMigrationTest extends TestCase
         $this->professional = $this->makeProfessional($this->workspace, [$this->service]);
         $this->actAsMember($this->workspace);
 
-        // The schema as it was before the migration, with the migration still unapplied.
+        // The schema as it was before the migration, with the migration still unapplied. The catalog and orders tables point to locations (a later migration): they go first.
+        (require database_path('migrations/2026_10_20_100000_create_catalog_and_orders_tables.php'))->down();
         (require database_path('migrations/'.self::MIGRATION.'.php'))->down();
         DB::table('migrations')->where('migration', self::MIGRATION)->delete();
     }

@@ -194,7 +194,7 @@ class DashboardMetrics
     public function channels(?Workspace $target, ReportPeriod $period): array
     {
         return $this->conversations($target)->whereBetween('created_at', $this->range($period->from, $period->to))
-            ->selectRaw('channel, count(*) as total')->groupBy('channel')->orderByDesc('total')->pluck('total', 'channel')
+            ->selectRaw('channel, count(*) as total')->groupBy('channel')->orderByDesc('total')->orderByDesc('channel')->pluck('total', 'channel')
             ->map(fn ($total, $channel) => ['key' => $channel, 'label' => config("chatbots.channels.{$channel}.label", $channel), 'value' => (int) $total])->values()->all();
     }
 

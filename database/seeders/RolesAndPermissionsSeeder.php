@@ -68,6 +68,10 @@ class RolesAndPermissionsSeeder extends Seeder
         Permission::firstOrCreate(['name' => 'manage-customers']);
         Permission::firstOrCreate(['name' => 'view-campaigns']);
         Permission::firstOrCreate(['name' => 'manage-campaigns']);
+        // Catálogo y Pedidos: read, manage, and move orders along the flow. Only `admin` receives them by default; a superuser hands them to other roles.
+        foreach (['view-catalog', 'manage-catalog', 'view-orders', 'manage-orders', 'process-orders'] as $name) {
+            Permission::firstOrCreate(['name' => $name]);
+        }
         // Commercial administration of Ava Platform: they only operate inside the administrative Workspace
         // (EnsurePlatformAdministration) and are never granted automatically (see PLATFORM_PERMISSIONS below).
         foreach (self::PLATFORM_PERMISSIONS as $name) {

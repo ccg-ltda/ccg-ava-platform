@@ -20,6 +20,8 @@ return [
         'service' => ['label' => 'Servicios', 'noun' => 'el servicio'],
         'professional' => ['label' => 'Profesionales', 'noun' => 'el profesional'],
         'location' => ['label' => 'Sedes', 'noun' => 'la sede'],
+        'product' => ['label' => 'Catálogo de productos', 'noun' => 'el producto'],
+        'order' => ['label' => 'Pedidos', 'noun' => 'el pedido'],
         'bookable_resource' => ['label' => 'Recursos de reserva', 'noun' => 'el recurso'],
         'schedule_exception' => ['label' => 'Excepciones de horario', 'noun' => 'la excepción de horario'],
         'appointment' => ['label' => 'Citas', 'noun' => 'la cita'],

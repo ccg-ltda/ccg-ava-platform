@@ -227,6 +227,7 @@ class IntegrationReadinessTest extends TestCase
 
     public function test_the_diagnostic_is_ready_when_everything_is_configured(): void
     {
+        $this->seedRoleCatalog(); // a deployed environment has its permissions: the diagnosis now checks them
         config(['n8n.execution_url' => 'https://n8n.platform.example.com/webhook', 'n8n.workflows' => ['support' => ['name' => 'S', 'n8n_workflow_id' => 'wf', 'webhook_path' => 'support-v1', 'version' => '1']]]);
 
         [$code, $output] = $this->diagnose();

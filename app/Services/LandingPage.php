@@ -20,6 +20,8 @@ class LandingPage
         ['view-bookings', 'bookings', 'bookings.index'],
         ['view-customers', 'customers', 'customers.index'],
         ['view-campaigns', 'campaigns', 'campaigns.index'],
+        ['view-orders', 'orders', 'orders.index'],
+        ['view-catalog', 'product_catalog', 'catalog.index'],
         ['manage-users', 'users_roles', 'users.index'],
         ['manage-settings', 'audit', 'audit.index'],
         ['manage-settings', 'settings', 'settings.index'],
