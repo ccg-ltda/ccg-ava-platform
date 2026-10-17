@@ -12,6 +12,7 @@ use App\Models\Integration;
 use App\Models\Message;
 use App\Models\Workspace;
 use App\Services\ModuleAccess;
+use App\Support\ScheduledCommandMonitor;
 use Illuminate\Console\Command;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Cache;
@@ -187,6 +188,38 @@ class IntegrationsDiagnoseCommand extends Command
         $scheduled
             ? $this->good('executions:recover está programado (cada minuto); el scheduler del despliegue debe estar corriendo.')
             : $this->blocker('executions:recover no está programado: nada retomará ejecuciones a medias.');
+
+        $this->scheduledCommands();
+    }
+
+    /**
+     * What each watched scheduled command did: when it last SUCCEEDED (tells "it did not run" apart from "it failed") and how many times it failed in
+     * 24 h. A command failing right now (its last failure is newer than its last success) blocks in production.
+     */
+    private function scheduledCommands(): void
+    {
+        $production = app()->isProduction();
+
+        foreach (ScheduledCommandMonitor::WATCHED as $name => $every) {
+            try {
+                $status = ScheduledCommandMonitor::status($name);
+            } catch (Throwable) {
+                $this->caution('No se pudo leer el estado de los comandos programados (la caché no responde).');
+
+                return;
+            }
+
+            $age = $status['last_ok'] === null ? null : (int) floor((now()->timestamp - $status['last_ok']) / 60);
+            $failingNow = $status['last_failure'] !== null && ($status['last_ok'] === null || $status['last_failure'] > $status['last_ok']);
+
+            match (true) {
+                $failingNow => $this->{$production ? 'blocker' : 'caution'}("{$name}: FALLA ahora ({$status['failures_24h']} falla(s) en 24 h; la última es posterior al último éxito). Causa en storage/logs/scheduler-failures.log."),
+                $status['last_ok'] === null => $this->caution("{$name}: sin ninguna ejecución correcta registrada (el scheduler acaba de arrancar o no corre)."),
+                $age > max(5, $every * 3) => $this->{$production ? 'blocker' : 'caution'}("{$name}: NO SE EJECUTA desde hace {$age} min (se espera cada {$every} min): el scheduler está detenido o este comando no se programó."),
+                $status['failures_24h'] > 0 => $this->caution("{$name}: {$status['failures_24h']} falla(s) en 24 h, ya recuperada(s) (último éxito hace {$age} min). Causa en storage/logs/scheduler-failures.log."),
+                default => $this->good("{$name}: último éxito hace {$age} min."),
+            };
+        }
     }
 
     private function meta(): void

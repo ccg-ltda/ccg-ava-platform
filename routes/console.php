@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\ScheduledCommandMonitor;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
@@ -13,10 +14,10 @@ Artisan::command('inspire', function () {
 Schedule::call(fn () => Cache::put('ava:scheduler:heartbeat', now()->timestamp, 900))->name('scheduler-heartbeat')->everyMinute();
 
 // Picks up chatbot executions a crash left half done (never resends a message: see ChatbotExecutions::recover).
-Schedule::command('executions:recover')->everyMinute()->withoutOverlapping()->onOneServer();
+ScheduledCommandMonitor::watch(Schedule::command('executions:recover')->everyMinute()->withoutOverlapping()->onOneServer(), 'executions-recover');
 
 // Plans and queues the confirmations and reminders of appointments (idempotent; needs the queue worker to deliver what it queues).
-Schedule::command('appointments:notify')->everyMinute()->withoutOverlapping()->onOneServer();
+ScheduledCommandMonitor::watch(Schedule::command('appointments:notify')->everyMinute()->withoutOverlapping()->onOneServer(), 'appointments-notify');
 
 // Settles the traces of assistant tool calls that never recorded an outcome (see AgentToolTrace::reconcile; a no-op until its table exists).
-Schedule::command('agent:tools:reconcile')->everyFiveMinutes()->withoutOverlapping()->onOneServer();
+ScheduledCommandMonitor::watch(Schedule::command('agent:tools:reconcile')->everyFiveMinutes()->withoutOverlapping()->onOneServer(), 'agent-tools-reconcile');

@@ -155,6 +155,8 @@ Resumen; evidencia, definiciones de «listo», brechas por solución y decisione
 | Piloto con clientes reales | **No listo:** ninguna integración externa (Meta, n8n, Booker) se ha ejecutado contra el servicio real y el workflow de la empresa no está adaptado al contrato de Ava; falta aviso de privacidad y contrato de tratamiento. Es viable un piloto técnico interno y, después, uno limitado de Servicios y Reservas / Salud (solo citas) |
 | Comercialización | **No listo:** sin límites, precios, medición de uso, suscripción, facturación ni onboarding |
 
+**Cuarto bloque (piloto):** flujo Ava–n8n–WhatsApp trazado y probado con servicios simulados (ninguna conexión real validada), comandos programados observables (`integrations:diagnose` distingue «no se ejecuta» de «falla»), copias con prueba de restauración (`make backup`, `make restore-check`), borradores de privacidad pendientes de revisión jurídica (`docs/privacidad.md` Parte III), primer piloto definido y estructura de planes propuesta sin precios. Detalle en `RECOMENDACIONES.md` §9.
+
 ## Estado de integraciones y módulos
 
 | Parte | Implementado | Validación |

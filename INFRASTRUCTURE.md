@@ -111,3 +111,48 @@ El bucket de MinIO es **privado** (`MINIO_DEFAULT_BUCKETS` sin `:public`): los a
 ### Horizon
 
 `/horizon` solo está abierto en `APP_ENV=local`. Fuera de local, el gate `viewHorizon` (`app/Providers/HorizonServiceProvider.php`) tiene la lista de emails vacía: **nadie entra** hasta que definas quién.
+
+## Operación del piloto (copia, supervisión, despliegue y marcha atrás)
+
+Procedimientos verificados en el entorno de desarrollo; contra producción NO se han ejecutado (no hay entorno de producción). Todo lo marcado «responsable» necesita una persona asignada antes del piloto.
+
+### Copia de seguridad y comprobación de restauración
+
+```bash
+# Copia (solo lee la base; guarda .dump + .sha256 + backup.log; falla con código ≠ 0 si el volcado está vacío o ilegible)
+BACKUP_DIR=/var/backups/ava COMPOSE_FILE=docker-compose.prod.yml ENV_FILE=prod.env sh docker/ops/backup.sh
+# Prueba de restauración en una base DESECHABLE (nunca sobre la real; se elimina sola)
+BACKUP_FILE=/var/backups/ava/ava_<fecha>.dump COMPOSE_FILE=docker-compose.prod.yml ENV_FILE=prod.env sh docker/ops/restore-check.sh
+```
+
+- Programar la copia con `cron` del servidor (p. ej. diaria a las 02:00 UTC) y enviar el código de salida y `backup.log` a la alerta del responsable. Guardar los volcados FUERA del repositorio y fuera del servidor de la aplicación (otro volumen o Space con acceso restringido); `KEEP_DAYS` (14 por defecto) borra solo los archivos `ava_*.dump*` de la propia herramienta.
+- Con PostgreSQL gestionado de DigitalOcean, activar además sus copias automáticas con recuperación a un punto en el tiempo; este script sigue sirviendo como copia propia y portátil.
+- NO cubre los archivos (Spaces/MinIO): activar el versionado del bucket. NO cubre Redis (colas y caché; se reconstruyen, las ejecuciones fallidas se recuperan con `executions:recover`).
+- **Evidencia (2026-10-17, desarrollo, `ccg_ava`):** `backup.sh` generó un volcado de 228 909 bytes con 56 tablas con datos; `restore-check.sh` lo restauró en una base desechable con los mismos conteos (`migrations` 27, `workspaces` 3, `users` 5, `conversations` 11, `messages` 76, `appointments` 1) y la eliminó; un volcado truncado se rechazó con código 1 y un fallo de `pg_dump` dejó `FAILED` en `backup.log` sin dejar archivo. La restauración sobre una base real NO se ha probado.
+- **Recuperación real (manual, supervisada):** poner la aplicación en mantenimiento (`php artisan down`), crear una base NUEVA, `pg_restore --no-owner -d <nueva> <archivo>`, apuntar `DB_DATABASE` a ella, `php artisan up`, `integrations:diagnose`. No sobrescribir la base dañada hasta confirmar la nueva.
+
+### Supervisión mínima (qué mirar y cuándo)
+
+| Qué | Cómo | Frecuencia / alerta |
+|---|---|---|
+| Salud general y bloqueos | `docker compose ... exec app php artisan integrations:diagnose` (código ≠ 0 en producción si hay bloqueos: scheduler sin latido, un comando programado que FALLA o NO SE EJECUTA, cola/Horizon, secretos de Meta o n8n) | A diario y tras cada despliegue; automatizable con `cron` y aviso por correo |
+| Comandos programados | `diagnose` informa por comando (`executions:recover`, `appointments:notify`, `agent:tools:reconcile`) el último éxito, las fallas de 24 h y «FALLA ahora» / «NO SE EJECUTA». La causa de una falla queda en `storage/logs/scheduler-failures.log` (dentro del contenedor del scheduler) y la última salida en `storage/logs/scheduler-last-<comando>.log` | A diario; mirar el archivo solo en el servidor (no se muestra en la interfaz) |
+| Ejecuciones de IA fallidas | `php artisan executions:list --failed`; `php artisan executions:recover` | A diario durante el piloto |
+| Resultados inciertos de herramientas | `php artisan agent:tools:reconcile` (el scheduler lo ejecuta cada 5 min); en cada conversación, el panel de operaciones muestra la traza | A diario |
+| Contenedores | `docker compose ... ps` (todos `healthy`) y `logs --tail` de `app`, `worker`, `scheduler`, `reverb` | A diario; alerta externa de reinicios |
+| Horizon | Cerrado salvo en local. El responsable decide la lista de correos en `HorizonServiceProvider` (decisión pendiente); mientras tanto, `php artisan horizon:status` y `queue:failed` | A diario |
+| Webhooks de Meta | Recepción: `integrations:diagnose` y registros `whatsapp_*`; sin latido de mensajes durante un horario normal = revisar suscripción y firma | Durante el piloto, cada mañana |
+
+### Despliegue, migración y marcha atrás
+
+1. **Antes:** `backup.sh` + `restore-check.sh` con éxito; leer las migraciones nuevas y `migrate --pretend` en una copia restaurada de la base; confirmar variables obligatorias; tener la imagen anterior etiquetada (`APP_IMAGE=ccg-ava-platform:<etiqueta>`).
+2. **Despliegue:** `docker compose --env-file prod.env -f docker-compose.prod.yml up -d --build --scale app=N --scale worker=M`, luego `exec app php artisan migrate --force` (explícito, nunca automático) y `exec worker php artisan horizon:terminate`.
+3. **Después:** `integrations:diagnose` sin bloqueos; una conversación de prueba interna de extremo a extremo.
+4. **Marcha atrás del código:** volver a levantar con la etiqueta anterior de `APP_IMAGE`. Las migraciones son aditivas (columnas nulables, tablas y restricciones nuevas) y el código anterior las tolera; `migrate:rollback` solo se usa en una copia, nunca como primera opción. **Marcha atrás de datos:** restaurar la copia previa en una base nueva (procedimiento de arriba); se pierde lo ocurrido desde la copia, por eso se hace en una ventana acordada.
+5. **Nunca** `migrate:fresh`, `db:wipe`, `migrate:refresh` ni `db:seed` completo en producción. Las semillas permitidas son las idempotentes de roles y catálogo de módulos.
+
+### Acceso, aislamiento y secretos
+
+- Administración de plataforma: solo `Desarrollo_DEV` y superusuarios; no entran a los datos de un cliente sin acceso temporal justificado y auditado (D-P1 pendiente). Un cliente solo ve su Workspace.
+- Los secretos (`APP_KEY`, `DB_PASSWORD`, `REDIS_PASSWORD`, `META_*`, `N8N_*`, `AWS_*`, `REVERB_*`) viven en el archivo de variables del servidor o en el gestor de secretos del proveedor, nunca en Git ni en imágenes. Rotar `META_APP_SECRET` y `N8N_EXECUTION_SECRET` si se sospecha de exposición y tras terminar el piloto.
+- Contraseña del primer administrador: cambiarla en el primer inicio de sesión; `ADMIN_*` se definen solo para ejecutar `AdminUserSeeder` y se eliminan después.

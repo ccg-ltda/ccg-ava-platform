@@ -20,6 +20,13 @@ class AppointmentsNotifyCommand extends Command
         $result = $notifier->run();
         $this->components->info("Planificados: {$result['planned']}. En cola: {$result['queued']}. Recuperados: {$result['recovered']}.");
 
+        if ($result['failed'] > 0) {
+            // Every step was attempted; the exit code tells the scheduler's monitor that something did not work (what failed is in the log with a fixed code).
+            $this->components->error("Pasos con error: {$result['failed']}. Los demás se ejecutaron; revisa el registro (appointments_notify_*).");
+
+            return self::FAILURE;
+        }
+
         return self::SUCCESS;
     }
 }

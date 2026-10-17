@@ -2,7 +2,7 @@ COMPOSE      ?= docker compose
 COMPOSE_PROD ?= docker compose -f docker-compose.prod.yml
 
 .PHONY: help up down restart build logs ps shell artisan migrate fresh seed dev-sync test pint \
-        e2e-setup e2e-cleanup prod-up prod-down prod-logs prod-migrate
+        e2e-setup e2e-cleanup prod-up prod-down prod-logs prod-migrate backup restore-check
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-14s %s\n", $$1, $$2}'
@@ -75,3 +75,9 @@ prod-logs: ## Follow production logs
 
 prod-migrate: ## Run migrations in production (explicit, never automatic)
 	$(COMPOSE_PROD) exec app php artisan migrate --force
+
+backup: ## Backup the database (BACKUP_DIR=/path outside the repo; add COMPOSE_FILE/ENV_FILE for production)
+	sh docker/ops/backup.sh
+
+restore-check: ## Prove a backup restores into a disposable database (BACKUP_FILE=/path/ava_X.dump)
+	sh docker/ops/restore-check.sh

@@ -361,8 +361,8 @@ Esta sección responde, con evidencia, tres preguntas distintas: ¿se puede desp
 
 **A. Preparación técnica para desplegar un entorno de pruebas: APTO CON CONDICIONES OPERATIVAS (sin bloqueadores de código conocidos).**
 - *Evidencia a favor:* la imagen `production` se construyó y se inspeccionó (PHP 8.4.26, Laravel 13.30.1, sin extensión GD, sin dependencias de desarrollo, sin `.env`; `.dockerignore` ahora excluye `tests` y `docs`); `docker-compose.prod.yml` es válido y fija `APP_ENV=production`, `APP_DEBUG=false` e `INTEGRATIONS_ALLOW_PRIVATE_HOSTS=false` (una prueba compara el compose con la configuración); las rutas de Inertia DevTools no existen en producción; secretos cifrados y de solo escritura; webhooks firmados; límites de ritmo; aislamiento verificado en la base (claves foráneas compuestas) y en pruebas; migraciones probadas desde cero, con datos previos, hacia atrás y hacia delante en PostgreSQL 16; `composer audit` sin avisos y `npm audit` en 0 tras actualizar tres paquetes de desarrollo (`source-map-js`, `concurrently`, `shell-quote`); consola del navegador sin errores en 120 combinaciones de pantalla, ancho y tema.
-- *Condiciones (no son código):* dominio con HTTPS y `TRUSTED_PROXIES`; todas las variables obligatorias del compose; administrador inicial con contraseña fuerte (`ADMIN_*`); Horizon y UN scheduler corriendo (el diagnóstico los exige en producción); copia de seguridad programada del PostgreSQL (hoy solo existe el procedimiento manual de §7.8); decisión sobre quién entra a `/horizon` (hoy nadie); decisión de PostgreSQL y Redis gestionados o en el compose.
-- *Observación sin causa identificada:* el scheduler registró UNA falla de `appointments:notify` (código de salida 1) el 2026-10-16 a las 16:58 UTC; no se repitió (el comando corre cada minuto y termina bien, también a mano) y la salida de los comandos programados se descarta (`> /dev/null`), así que la causa no se puede recuperar. Para un entorno de pruebas se recomienda conservar esa salida (§8.5, «mejora»).
+- *Condiciones (no son código):* dominio con HTTPS y `TRUSTED_PROXIES`; todas las variables obligatorias del compose; administrador inicial con contraseña fuerte (`ADMIN_*`); Horizon y UN scheduler corriendo (el diagnóstico los exige en producción); copia de seguridad programada del PostgreSQL (existen `docker/ops/backup.sh` y `restore-check.sh`, probados en desarrollo; falta programarlos en el servidor real, §9.3); decisión sobre quién entra a `/horizon` (hoy nadie); decisión de PostgreSQL y Redis gestionados o en el compose.
+- *Observación sin causa identificada:* el scheduler registró UNA falla de `appointments:notify` (código de salida 1) el 2026-10-16 a las 16:58 UTC; no se repitió (el comando corre cada minuto y termina bien, también a mano) y la salida de los comandos programados se descarta (`> /dev/null`), así que la causa no se puede recuperar. Para un entorno de pruebas se recomienda conservar esa salida (§8.5, «mejora»). **Actualización (cuarto bloque, §9.2):** la causa sigue sin poder probarse; se corrigieron el aislamiento por Workspace/paso y la pérdida de la salida, y el diagnóstico ahora distingue «NO SE EJECUTA» de «FALLA ahora».
 
 **B. Preparación para un piloto funcional con clientes controlados: NO LISTO HOY para clientes reales; LISTO para un piloto técnico interno con números y datos de prueba.** Falta lo esencial: ninguna integración externa se ha ejecutado contra el servicio real, y el workflow de n8n de la empresa no está adaptado al contrato (§3.1), con el riesgo de mensajes duplicados. Lo que está listo del lado de Ava: conversación, control IA/persona sin pérdida de control, herramientas de reservas y de pedidos con idempotencia, trazabilidad, consentimiento por ficha y baja por mensaje, aislamiento, diagnóstico por consola y panel de operaciones por conversación. Lo que bloquea un piloto con clientes reales está listado en §8.5 (bloqueadores B1 a B4).
 
@@ -420,7 +420,7 @@ Esta sección responde, con evidencia, tres preguntas distintas: ¿se puede desp
 
 **Necesarios antes de comercializar:** límites, medición, suscripción y facturación; onboarding; SLA y soporte; términos y política de privacidad; responsable del costo de plantillas de Meta; licencia de n8n para este modelo de servicio; métricas de reservas, pedidos y tiempos de respuesta.
 
-**Mejoras posteriores:** historial del widget al recargar; CORS acotado por Workspace; conservar la salida de los comandos programados (hoy `> /dev/null`) con cuidado de no volcar datos personales; separar el registro de las pruebas del de desarrollo (las pruebas escriben `testing.ERROR` en `storage/logs/laravel.log`); sustituir `assertContainsOnly` en `CalendarProviderTest` (2 avisos de obsolescencia de PHPUnit 13); acotar la validación de teléfonos por país con una biblioteca; imagen de desarrollo con GD para todos los servicios.
+**Mejoras posteriores:** historial del widget al recargar; CORS acotado por Workspace; (hecho en el cuarto bloque, §9.2: la salida de los comandos programados ya se conserva); separar el registro de las pruebas del de desarrollo (las pruebas escriben `testing.ERROR` en `storage/logs/laravel.log`); sustituir `assertContainsOnly` en `CalendarProviderTest` (2 avisos de obsolescencia de PHPUnit 13); acotar la validación de teléfonos por país con una biblioteca; imagen de desarrollo con GD para todos los servicios.
 
 **Corregido en este bloque:** (1) desborde horizontal de 1 px en el Dashboard a 390 px (las tarjetas de accesos rápidos no se encogían en una rejilla de una columna implícita; ahora `grid-cols-1`; verificado a 390, 820, 960 y 1440 px); (2) vulnerabilidad alta de `source-map-js` (denegación de servicio en el compilador) y avisos de `concurrently` y `shell-quote` en herramientas de desarrollo, con actualización de versión menor en `package-lock.json` (npm audit: 0); (3) la imagen de producción ya no incluye el directorio de pruebas (`.dockerignore`); (4) pruebas que faltaban: reserva pendiente de confirmación jamás responde `confirmed: true`, una reserva rechazada no deja nada ni afirma confirmación, y un pedido rechazado nunca se parece a uno creado.
 
@@ -489,3 +489,107 @@ Esta sección responde, con evidencia, tres preguntas distintas: ¿se puede desp
 
 **Lo que no se pudo validar:** WhatsApp/Meta, n8n (de la plataforma y por Workspace) y Booker contra servicios reales; el workflow real de la empresa; el widget en un teléfono real y en navegadores distintos de Chromium; la restauración sobre una base real; el comportamiento bajo carga. Cada uno deja su riesgo documentado en §8.
 
+
+## 9. Piloto real: trazado del flujo, operación, privacidad y estructura de planes (2026-10-17, cuarto bloque)
+
+Este bloque no ejecutó ninguna integración externa. Todo lo que dice «validado» se refiere a código y pruebas con servicios SIMULADOS. Se distinguen cuatro cosas: **código validado** (pruebas automáticas), **integración real validada** (ninguna), **piloto preparado** (documentación, scripts y criterios; falta ejecutarlo) y **producto comercial completo** (no existe).
+
+### 9.1 Flujo Ava – n8n – WhatsApp trazado paso a paso
+
+| # | Paso | Dónde ocurre (código) | Prueba que lo cubre (simulado) | Real |
+|---|---|---|---|---|
+| 1 | Meta entrega el evento; se verifica la firma y se identifica Workspace y asistente por el `phone_number_id` del canal (un número ajeno o reclamado por dos integraciones se ignora, nunca se adivina) | `WhatsAppInbound`, `routes/api.php` | `ChatbotExecutionTest` (asociación, firma, payload ajeno, reenvío de Meta una sola vez) | No |
+| 2 | Se identifica o crea la conversación y se guarda el mensaje (el estado de entrada no lo toca ninguna ejecución) | `WhatsAppInbound`, `ChatbotExecutions::schedule` | `ChatbotExecutionTest` | No |
+| 3 | Se decide si responde la IA (modo IA, asistente y canal activos, workflow asignado y habilitado); en modo persona o resuelta no se ejecuta nada | `ConversationControl`, `ChatbotExecutions` | `HumanHandlingTest`, `ChatbotExecutionTest` (modo humano, resuelta, ejecución encolada antes de un traspaso) | No |
+| 4 | Se arma el contexto: instrucciones, reglas de honestidad, últimos 10 mensajes de ESA conversación, `memory_key` opaca, herramientas del plan y token de ejecución (sin credenciales permanentes ni número del contacto) | `ChatbotExecutor` | `ChatbotExecutionTest` (sin credenciales, historial acotado), `PlatformRunTest` (token y herramientas por plan) | No |
+| 5 | Se llama al workflow de n8n con firma HMAC, `X-Ava-Execution` estable, reintentos en 408/425/429/5xx y destino seguro | `ChatbotExecutor`, `SafeHttpTarget` | `ChatbotExecutionTest` (reintentos, agotados, `invalid_response`, destino interno bloqueado), `N8nIntegrationTest` | No |
+| 6 | El workflow usa las herramientas con SU token (reservas, pedidos), acotado a esa conversación y a esa ejecución; muere al terminar, al expirar o si una persona toma la conversación | `/api/agent/*`, `ExecutionAccess` | `PlatformRunTest` (token), `AgentBookingTest`, `AgentOrderTest` | No |
+| 7 | Cada herramienta deja una traza (iniciada, éxito, rechazo, fallo o incierto) sin texto ni datos personales; los reintentos con la misma clave devuelven el mismo resultado y marcan `replayed`; los inciertos se concilian | `TraceAgentTool`, `AgentToolCall`, `agent:tools:reconcile` | `AgentToolTraceTest` (21), `AgentOrderTest`, **nueva** prueba de recorrido completo (abajo) | No |
+| 8 | Se verifica que el resultado persistió (la cita/pedido existe en la base, del Workspace y de la conversación) y la respuesta de la herramienta dice el estado real (`confirmed: false` = por confirmar; `409 uncertain` = no repetir) | controladores `Agent*`, `Appointment`, `Order` | `AgentBookingTest`, `AgentOrderTest`, **nueva** prueba de recorrido | No |
+| 9 | La respuesta final del workflow la envía Ava (no n8n) por WhatsApp; Ava guarda el mensaje con su estado y registra los estados `sent`/`delivered`/`read` de Meta | `ChatbotExecutions`, `WhatsAppSender` | `ChatbotExecutionTest` (reply a WhatsApp, rechazo cierto sin reenvío, estados) | No |
+| 10 | Errores: fallo definitivo o agotado queda como ejecución `failed` con un código fijo, sin contenido; `executions:list --failed` y `executions:recover` | `ChatbotExecutions`, `executions:*` | `ChatbotExecutionTest`, `PlatformRunTest` (diagnóstico sin contenido) | No |
+| 11 | Traspaso a persona: `handoff: true` o una persona toma la conversación; la IA calla y las respuestas tardías se descartan | `ConversationControl` | `HumanHandlingTest`, `ChatbotExecutionTest` | No |
+
+**Prueba añadida (única brecha encontrada en la cadena):** `PlatformRunTest::test_a_visitor_message_reaches_the_workflow_which_books_with_its_own_token_and_the_answer_comes_back_traced` recorre en una sola prueba mensaje del visitante → ejecución → un n8n simulado que reserva dos veces con la misma clave usando el token que Ava le dio → una sola cita (de esa conversación y Workspace) → dos trazas (la segunda `replayed`) → la respuesta llega al visitante → el token ya no sirve. Las demás cadenas ya estaban cubiertas por separado (columna «Prueba»); no se duplicaron.
+
+**Veredicto del flujo:** código y contrato validados con servicios simulados; **ninguna conexión real validada**. Faltan, en este orden: (1) credenciales de Meta y webhook público; (2) `N8N_EXECUTION_*` y el workflow adaptado a §3.1; (3) los pasos 5 a 9 de §3.2; (4) además: reserva completa por el asistente, traspaso y devolución, y lectura de la traza (§8.8). Hasta que eso ocurra, ninguna afirmación de que «funciona con WhatsApp» es válida.
+
+### 9.2 `appointments:notify`: investigación y resultado
+
+- **Hecho observado:** el scheduler registró UNA falla (código de salida 1, 2026-10-16 16:58 UTC), la primera ejecución tras aparecer la entrada en el calendario. No se repitió. La salida de los comandos programados se descartaba, por lo que **la causa histórica no se puede probar y no se afirma una**. Se probó y descartó una hipótesis (esquema anterior a la tabla de avisos): el comando termina con código 0 incluso con el esquema anterior.
+- **Defectos reales encontrados y corregidos:** (1) un error en un Workspace o en un paso (recuperar atascados, planificar, enviar vencidos) abortaba todo el comando y dejaba sin avisos a los demás Workspaces; ahora cada Workspace y cada paso están aislados, el error se registra (`appointments_notify_step_failed`, `appointments_notify_workspace_failed`, solo clase de excepción y id de Workspace) y el comando termina con código 1 e imprime cuántos pasos fallaron; (2) la salida se perdía; ahora `ScheduledCommandMonitor` guarda la última salida de cada comando vigilado (`executions:recover`, `appointments:notify`, `agent:tools:reconcile`) en `storage/logs/scheduler-last-<nombre>.log`, anota cada éxito, cuenta las fallas de 24 h, y ante una falla añade esa salida (máx. 4 KB) a `storage/logs/scheduler-failures.log` (rotado a 1 MB) y deja `scheduled_command_failed` en el log; (3) `integrations:diagnose` distingue ahora «último éxito hace N min», «NO SE EJECUTA», «FALLA ahora» y «ya recuperada», y en producción los dos últimos bloquean. Estos archivos están en el servidor, no en la interfaz, y no se imprimen en el diagnóstico.
+- **Sin duplicados ni envíos reales:** el comando es idempotente (clave única por cita, tipo, desfase y versión en `appointment_notifications`). La prueba `test_a_failing_workspace_never_stops_the_others_and_the_command_reports_it_then_recovers_without_duplicates` fuerza un Workspace que falla, comprueba que los demás reciben su aviso, que el comando devuelve 1, y que al corregir el fallo se envía lo pendiente SIN repetir lo ya enviado. Todo con `Http::fake`: no se envió ningún mensaje real.
+- **Cómo verificar en cualquier entorno:** `php artisan integrations:diagnose` (sección de comandos programados), ver `storage/logs/scheduler-failures.log` en el servidor del scheduler y ejecutar `php artisan appointments:notify; echo $?`.
+- **Pruebas:** `ScheduledCommandMonitorTest` (7), `AppointmentNotificationsTest`, `IntegrationReadinessTest`.
+
+### 9.3 Preparación operativa del piloto
+
+| Tema | Estado | Evidencia |
+|---|---|---|
+| Configuración de producción y secretos | Procedimiento documentado; compose válido; la imagen no trae `.env`; secretos solo en el archivo de variables del servidor | `INFRASTRUCTURE.md` (Producción y Operación del piloto), §8.10 |
+| Copias automáticas | **Scripts creados y probados en desarrollo:** `docker/ops/backup.sh` (volcado, suma SHA-256, lectura del índice, bitácora, retención) y `docker/ops/restore-check.sh` (restaura en una base desechable y compara conteos); `make backup` / `make restore-check`. **Falta programarlos en el servidor real y guardar los volcados fuera de él** | Volcado de 228 909 bytes con 56 tablas; restauración con los mismos conteos; un volcado truncado y un fallo de `pg_dump` fallan con código 1 y sin dejar archivo |
+| Restauración sobre una base real | **No probada** (solo en base desechable) | Procedimiento manual en `INFRASTRUCTURE.md` |
+| Supervisión de scheduler, worker, Horizon | `integrations:diagnose` (latido del scheduler, cola, Horizon, comandos programados), `executions:list --failed`, `queue:failed`; acceso a `/horizon` sin decidir (nadie entra fuera de local) | `IntegrationReadinessTest`, `ScheduledCommandMonitorTest` |
+| Alertas | **No existen** alertas automáticas ni pantalla de ejecuciones; el procedimiento de revisión diaria está definido pero necesita un responsable y, idealmente, un `cron` que envíe el código de salida de `diagnose` a un correo | Pendiente |
+| Despliegue, migración y marcha atrás | Documentados (imagen anterior etiquetada, migraciones aditivas, restauración en base nueva); no ejecutados en producción | `INFRASTRUCTURE.md` |
+| Administración y aislamiento | Probados (`WorkspaceIsolationSweepTest`, `PlatformBoundaryTest`); acceso excepcional de soporte (D-P1) sin decidir: denegado por defecto | §8.6 |
+| Detección de fallas de WhatsApp/n8n | Ejecuciones `failed` con código fijo, conversación con estado de envío `failed`, canal en «Error de conexión», trazas inciertas; todo consultable por consola; sin alerta proactiva | `ChatbotExecutionTest`, `N8nIntegrationTest` |
+
+### 9.4 Privacidad y consentimiento
+
+Se amplió `docs/privacidad.md` con la Parte III (§12 a §16): descripción técnica verificable de los datos, borrador de aviso de privacidad, roles CCG / cliente / subencargados, marcos de retención, solicitudes de titulares e incidentes, y las decisiones nuevas **P-STOP, P-SALUD, P-CONSENT, P-RET, P-AVISO, P-INC, P-SUB**. **Todo está marcado «pendiente de revisión jurídica»; no es asesoría legal ni se debe entregar a un cliente tal cual.** No se cambió ninguna regla de consentimiento en el código: la baja por mensaje sigue excluyendo solo de campañas, y **no se decidió** si STOP también debe cancelar recordatorios transaccionales (P-STOP).
+
+### 9.5 Primer piloto definido: Servicios y Reservas / Salud (solo citas)
+
+| Aspecto | Definición propuesta (requiere aprobación del responsable del producto) |
+|---|---|
+| Alcance | Un Workspace; uno o dos profesionales; servicios, horarios y citas con la **agenda propia de Ava** (sin Booker); WhatsApp y webchat; un solo workflow adaptado a §3.1 |
+| Fuera de alcance | Datos clínicos (la nota de la cita queda fuera del uso del piloto, P-SALUD), campañas, pedidos, pagos, promociones, sedes múltiples, Booker |
+| Participantes | Primero números y personas de prueba del equipo; después un grupo pequeño de clientes avisados por escrito, con el aviso de privacidad aprobado |
+| Funciones | Consultar servicios, profesionales y horarios; reservar, cancelar y reprogramar por el asistente; confirmación; traspaso a persona y vuelta a la IA; recordatorio de 24 h SOLO con plantilla de Meta aprobada; panel de operaciones por conversación |
+| Condiciones de entrada | Pasos de §3.2 ejecutados con éxito con números propios; workflow adaptado; D-IA, D-P1, P-AVISO, P-RET y P-STOP resueltas por escrito; contrato de tratamiento firmado; copia programada y restauración probada en el servidor real; responsable de supervisión nombrado |
+| Criterios de éxito | 0 citas duplicadas o en dos Workspaces; 100 % de las citas confirmadas por el asistente existen en la agenda (conciliación diaria); 0 mensajes duplicados al contacto; 0 fugas entre Workspaces; todo traspaso a persona respetado (la IA calla); ejecuciones `failed` revisadas y resueltas en menos de un día hábil; ninguna falla del scheduler sin atender más de un día; la persona responsable considera aceptable la calidad de las respuestas |
+| Criterios de falla y parada | Cualquier confirmación falsa (cita dicha como hecha que no existe), cita duplicada, dato de un Workspace visible en otro, mensaje enviado a quien pidió la baja de campañas por una campaña, texto de salud almacenado sin base acordada, o copia fallida dos días seguidos. Acción: apagar el asistente del Workspace (`is_active`) o el canal, pasar a modo persona y abrir un incidente |
+| Supervisión | Revisión diaria: `integrations:diagnose`, `executions:list --failed`, trazas inciertas, `backup.log`; revisión semanal de conversaciones muestreadas por una persona con permiso |
+| Recuperación | Reabrir la ejecución con `executions:recover`; conciliar con `agent:tools:reconcile`; restaurar la copia en una base nueva si hay corrupción; el asistente se apaga sin perder los mensajes |
+| Auditoría | Auditoría de cambios y de accesos de soporte; trazas de herramientas por conversación; registro de ejecuciones; bitácora de copias |
+| Retención durante el piloto | Hasta decidir P-RET no se borra nada; los datos del piloto se tratan como sujetos a la política que se apruebe |
+
+### 9.6 Estructura inicial de planes (propuesta, sin precios ni cobros)
+
+Se propone nombrar los planes por **módulos**, que es lo único que el código soporta hoy (`plans` + `module_plan`; las dependencias técnicas están en `config/modules.php`). **No hay precios, límites, medición, suscripción ni facturación, y esta propuesta no los crea.**
+
+| Plan (nombre provisional) | Módulos | Observaciones |
+|---|---|---|
+| **Base** | Dashboard, Asistentes, Conversaciones, Reportes, Auditoría, Configuraciones, Integraciones, Usuarios y roles | Es el «Plataforma completa» actual; no incluye ninguna solución |
+| **Servicios y Reservas** | Base + Catálogo de servicios, Profesionales, Agenda y reservas, Clientes | Citas con agenda propia de Ava; avisos de citas dependen de plantillas de Meta |
+| **Servicios y Reservas + Sedes** | Anterior + Sedes | Cuando el negocio atiende en varias ubicaciones |
+| **Salud (citas)** | Igual que Servicios y Reservas | Sin datos clínicos mientras no se decida P-SALUD; la categoría «Salud» ya existe en el catálogo |
+| **Agenda externa (Booker)** | Servicios y Reservas + Proveedores de agenda | Solo con Sandbox validado; hoy parcial |
+| **Delivery** | Base + Catálogo de productos, Pedidos, Clientes (+ Sedes) | Sin cobertura, tarifa de envío ni avisos; no ofrecer como producto completo |
+| **E-commerce** | Base + Catálogo de productos, Pedidos, Clientes | Sin flujo de compra: no ofrecer |
+| **Campañas** (complemento) | Clientes + Campañas | Sin envío real |
+
+**Decisiones comerciales pendientes (no tomadas):** límites por plan (asistentes, conversaciones, mensajes, profesionales, sedes, usuarios); precios y moneda; periodicidad y renovación; qué pasa al exceder un límite; medición de uso y su fuente; facturación e impuestos; costo de las conversaciones y plantillas de Meta y quién lo asume; licencia de n8n para este modelo; SLA y soporte; modelo de alta (autoservicio o asistido); condiciones de baja y devolución de datos; qué módulos son complemento y cuáles van en la base (D-02, D-03, D-05).
+
+### 9.7 Brechas actualizadas (resumen; el detalle está en §8.4 y §8.5)
+
+| Ámbito | Cambio de este bloque | Brecha que permanece |
+|---|---|---|
+| Plataforma compartida: operación | Copias con evidencia, observabilidad de comandos programados, recorrido completo probado | Alertas proactivas, pantalla de ejecuciones, acceso a Horizon, copia programada en servidor real, restauración sobre base real |
+| Plataforma compartida: privacidad | Borradores técnicos (§9.4) | Aviso en canales, base legal, retención, solicitudes de titulares, incidentes |
+| Plataforma compartida: comercial | Estructura de planes propuesta | Todo lo de §9.6 |
+| Servicios y Reservas / Salud | Piloto definido con criterios | Pruebas reales (B1), workflow adaptado (B2), Booker incompleto |
+| Delivery / E-commerce | Sin cambios | Cobertura, tarifas, avisos, flujo de compra, pagos |
+| IA y WhatsApp/n8n | Cadena trazada y probada con un recorrido completo | Ninguna conexión real validada |
+
+### 9.8 Validación del cuarto bloque
+
+| Comprobación | Resultado |
+|---|---|
+| PHPUnit completo en SQLite (contenedor de desarrollo con GD) | **1311 pruebas, 10 769 aserciones, 0 fallos, 3 omitidas** (las propias de PostgreSQL) |
+| PHPUnit completo en PostgreSQL 16 desechable (`ccg_ava_final_test`, eliminada) | **1311 pruebas, 10 779 aserciones, 0 fallos, 0 omitidas** |
+| Estilo, JavaScript, compilación | `pint --test` correcto; `npm run test:js` 21/21; `npm run build` correcto |
+| Dependencias | `composer audit` sin avisos; `npm audit` 0 vulnerabilidades |
+| Copias | `backup.sh` y `restore-check.sh` ejecutados contra `ccg_ava` (solo lectura) con restauración en base desechable eliminada; casos de fallo comprobados (§9.3) |
+| No ejecutado en este bloque | Interfaz en navegador (no cambió ninguna pantalla), migraciones (no hay nuevas), imagen de producción (sin cambios de Dockerfile) |

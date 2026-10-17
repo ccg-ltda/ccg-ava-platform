@@ -163,3 +163,56 @@ Estado verificado en el código. «Fase» = cuándo se cierra el hueco que queda
 3. La anonimización de un cliente no alcanza conversaciones ni reservas (Fase 3).
 4. Fuera de la aplicación (base de datos, copias, n8n, Meta) los controles de esta propuesta no aplican (Fase 4 y contratos).
 5. El valor de 30 minutos es técnico, no una decisión de negocio.
+
+
+---
+
+# Parte III — Borradores técnicos para el piloto (2026-10-17)
+
+> **PENDIENTE DE REVISIÓN JURÍDICA.** Esta parte es un borrador técnico para que el equipo jurídico y el responsable del producto lo revisen. No es asesoría legal, no está aprobado y NO debe publicarse ni entregarse a un cliente o a un contacto final tal cual. Los textos entre corchetes los completa quien tenga la responsabilidad. Nada de esto cambia el comportamiento actual del código.
+
+## 12. Descripción técnica verificable (insumo para el aviso de privacidad)
+
+| Tema | Lo que Ava hace hoy (verificado en código y pruebas) |
+|---|---|
+| Datos del contacto | Teléfono del canal, nombre de perfil si el canal lo envía, mensajes recibidos y enviados, y los datos que el propio contacto escribe en la conversación o en una reserva (nombre, motivo, nota de la cita) |
+| Para qué se usan | Responder la conversación, gestionar citas y pedidos que el contacto solicita, y permitir que una persona del Workspace intervenga |
+| Quién los ve | El personal autorizado del Workspace; la administración de CCG solo con acceso temporal justificado y auditado |
+| A quién se envían | Meta (canal de WhatsApp) y el servicio de n8n que ejecuta el workflow del asistente (recibe el texto del mensaje, hasta 10 mensajes previos de ESA conversación, un identificador y una clave de memoria opaca, y un token temporal de la ejecución; no recibe el número del contacto ni credenciales permanentes, pero el contenido que el contacto escriba sí puede incluir sus datos); Booker solo si el cliente lo conecta. Almacenamiento de archivos: Spaces/MinIO del despliegue |
+| Aislamiento entre clientes | Todas las consultas se limitan al Workspace; claves foráneas compuestas impiden relacionar datos de dos Workspaces; probado en `WorkspaceIsolationSweepTest` y las pruebas de cada herramienta |
+| Baja por mensaje | Un mensaje que sea exactamente «STOP» o «BAJA» (normalizado) marca al contacto como dado de baja de CAMPAÑAS. No responde, no registra a quien no tiene ficha y no cancela citas ni recordatorios (ver decisión P-STOP) |
+| Datos clínicos | Ava no tiene campos clínicos. La nota de la cita y el mensaje son texto libre: un paciente puede escribir información de salud (ver decisión P-SALUD) |
+| Retención | No existe política: mensajes, conversaciones, trazas de herramientas y auditoría solo crecen |
+| Solicitudes de titulares | No hay exportación por persona; la anonimización de la ficha no alcanza conversaciones, mensajes ni reservas |
+
+## 13. Borrador de aviso de privacidad para el contacto final — [PENDIENTE DE REVISIÓN JURÍDICA]
+
+> [Nombre del cliente responsable] usa un asistente virtual para atender tus mensajes por [WhatsApp / el chat de su sitio web]. Para ello trata tu número de teléfono, tu nombre y el contenido de la conversación, con la finalidad de [responder tus consultas, gestionar tus citas / pedidos]. Algunas respuestas las genera un sistema automatizado y una persona del equipo puede intervenir. Tus mensajes se procesan mediante proveedores tecnológicos ([Meta], [servicio de automatización], [proveedor de infraestructura]). Conservamos los datos durante [plazo definido por el cliente]. Puedes pedir consultar, corregir o eliminar tus datos escribiendo a [canal de contacto]. Para dejar de recibir mensajes promocionales escribe BAJA. [Remisión a la política completa y datos del responsable.]
+
+**Por decidir antes de usarlo:** quién es el responsable y quién el encargado, base legal para cada finalidad, dónde y cuándo se muestra (primer mensaje del canal, pie del widget), idioma y jurisdicción aplicable.
+
+## 14. Roles CCG / cliente / subencargados — [PENDIENTE DE REVISIÓN JURÍDICA]
+
+| Actor | Rol propuesto (a validar) | Qué debe cubrir el contrato |
+|---|---|---|
+| Cliente (empresa que usa Ava) | Responsable del tratamiento de sus contactos | Finalidades, base legal, atención de solicitudes de titulares |
+| CCG | Encargado del tratamiento, y responsable de los datos de sus propios usuarios (personal del cliente) | Instrucciones del cliente, medidas de seguridad, acceso de soporte (D-P1), incidentes, devolución y supresión al terminar |
+| Meta, n8n, proveedor de nube y almacenamiento, Booker (si aplica) | Subencargados o proveedores independientes (a validar caso por caso) | Lista actualizada, ubicación del tratamiento, términos de cada proveedor, licencia de n8n para este modelo |
+
+## 15. Retención, solicitudes de titulares e incidentes — marcos propuestos, sin plazos
+
+- **Retención:** definir por categoría (mensajes, conversaciones, fichas, reservas, pedidos, trazas de herramientas, auditoría, copias de seguridad) un plazo y una acción (borrar o anonimizar). **[DECISIÓN jurídica]**: no se proponen cifras aquí. Implementarlo requiere trabajo (trabajos programados y pruebas) que se hará solo cuando haya plazos aprobados. Las copias de seguridad de `docker/ops/backup.sh` conservan datos hasta `KEEP_DAYS`; ese plazo también debe alinearse con la política.
+- **Solicitudes de titulares:** el cliente responde; CCG apoya. Hoy: corregir = editar la ficha; eliminar = anonimizar la ficha (insuficiente); consultar = manual por una persona con permiso. Falta una exportación y una eliminación completas por persona (diseño pendiente; requiere decidir qué se conserva por obligación legal).
+- **Incidentes:** procedimiento por definir (a quién se avisa, en qué plazo según contrato y ley, quién decide). Insumos técnicos disponibles: auditoría de accesos de soporte, registros de aplicación, `scheduler-failures.log`, trazas de herramientas.
+
+## 16. Decisiones nuevas que necesitan responsable (no tomadas por el código)
+
+| Id | Decisión | Estado actual del código |
+|---|---|---|
+| **P-STOP** | ¿«STOP»/«BAJA» debe detener también recordatorios y confirmaciones transaccionales de citas, o solo campañas? Opciones: A) solo campañas (hoy); B) también recordatorios; C) preguntar al contacto qué avisos quiere. Los recordatorios solo existen con plantilla de Meta aprobada | Solo excluye campañas. NO se cambió la regla |
+| **P-SALUD** | ¿Se permite o se bloquea texto libre de salud en la nota de la cita y en la conversación del piloto? Opciones: nota apagada y aviso al contacto; aceptar con base legal reforzada | La nota existe y se guarda. El piloto propuesto la deja fuera del alcance |
+| **P-CONSENT** | ¿Una conversación iniciada por el contacto basta para responderle y guardar el historial? ¿Qué constancia se guarda? | Sin registro de consentimiento de conversación; las campañas siguen exigiendo «Autorizado» |
+| **P-RET** | Plazos de retención y borrado por categoría y copias | Ninguno implementado |
+| **P-AVISO** | Texto, ubicación y versión del aviso para WhatsApp y webchat | El widget no muestra aviso |
+| **P-INC** | Procedimiento de incidentes | No definido |
+| **P-SUB** | Lista de subencargados y licencia de n8n | No definida |

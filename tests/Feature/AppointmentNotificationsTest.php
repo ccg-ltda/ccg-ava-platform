@@ -735,6 +735,40 @@ class AppointmentNotificationsTest extends TestCase
         $this->assertStringContainsString("Workspace {$this->other->id}: tiene avisos activos pero no puede enviarlos (no_whatsapp)", Artisan::output());
     }
 
+    public function test_a_failing_workspace_never_stops_the_others_and_the_command_reports_it_then_recovers_without_duplicates(): void
+    {
+        $service = $this->makeService($this->other, ['name' => 'Corte', 'duration_minutes' => 30]);
+        $this->makeProfessional($this->other, [$service], 'Ana');
+        $this->account($this->other, 'WhatsApp', true, '444555666');
+        $this->configure(['reminders_enabled' => true, 'reminder_offsets' => [1440], 'notify_messages' => $this->template()]);
+        $this->configure(['reminders_enabled' => true, 'reminder_offsets' => [1440], 'notify_messages' => $this->template()], $this->other);
+        $clinic = $this->book();
+        $salon = $this->book('2026-10-13T10:00:00Z', '+573009998877', 'admin', $this->other);
+
+        // The data of ONE Workspace makes its step fail (as a corrupt row or a bug could): the other Workspace must still get its reminder.
+        $broken = true;
+        Appointment::retrieved(function (Appointment $appointment) use (&$broken) {
+            if ($broken && $appointment->workspace_id === $this->workspace->id) {
+                throw new \RuntimeException('corrupt row');
+            }
+        });
+        $this->travelTo(CarbonImmutable::parse('2026-10-12 10:00:30', 'UTC'));
+
+        $this->assertSame(1, Artisan::call('appointments:notify'), 'a step failed: the scheduler must see an error');
+        $this->assertStringContainsString('Pasos con error: 1', Artisan::output());
+        $this->assertCount(1, $this->sent(), 'the other Workspace was not held back by it');
+        $this->assertSame(['sent'], $this->notifications($salon)->pluck('status')->all());
+        $this->assertSame([], $this->notifications($clinic)->all(), 'the failed Workspace planned nothing: no half-written state');
+
+        // The cause goes away: the next tick plans and sends the missed reminder once, and never repeats the one already sent.
+        $broken = false;
+        $this->assertSame(0, Artisan::call('appointments:notify'));
+        $this->assertSame(0, Artisan::call('appointments:notify'));
+        $this->assertCount(2, $this->sent());
+        $this->assertSame(['sent'], $this->notifications($clinic)->pluck('status')->all());
+        $this->assertSame(1, $this->notifications($salon)->count());
+    }
+
     public function test_the_database_keeps_the_notification_history_and_refuses_cross_workspace_links(): void
     {
         $this->configure(['notify_confirmed' => true, 'notify_messages' => $this->template('confirmed')]);

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Booking\BookingManager;
 use App\Booking\ProviderException;
 use App\Integrations\SafeHttpTarget;
+use App\Models\AgentToolCall;
 use App\Models\Appointment;
 use App\Models\AuditLog;
 use App\Models\Chatbot;
@@ -485,5 +486,40 @@ class PlatformRunTest extends TestCase
 
         $this->assertMatchesRegularExpression("/\|\s+{$mine->id}\s+\|/", $out);
         $this->assertDoesNotMatchRegularExpression("/\|\s+{$theirs->id}\s+\|/", $out);
+    }
+
+    // --- the whole journey (simulated n8n) -------------------------------------------------------------------------------
+
+    public function test_a_visitor_message_reaches_the_workflow_which_books_with_its_own_token_and_the_answer_comes_back_traced(): void
+    {
+        $key = $this->webWidget($this->bot);
+        $seen = [];
+        Http::fake([self::N8N.'/*' => function (Request $r) use (&$seen) {
+            // What a correct workflow does: read the token Ava gave it, book TWICE with the same key (a retry), and answer with what the tool said.
+            $body = json_decode($r->body(), true);
+            $headers = ['Idempotency-Key' => 'journey-1'];
+            $first = $this->withToken($body['ava']['token'])->withHeaders($headers)->postJson('/api/agent/booking/appointments', $this->book());
+            $retry = $this->withToken($body['ava']['token'])->withHeaders($headers)->postJson('/api/agent/booking/appointments', $this->book());
+            $seen = ['token' => $body['ava']['token'], 'first' => $first->status(), 'retry' => $retry->status(), 'same' => $first->json('appointment.id') === $retry->json('appointment.id')];
+
+            return Http::response(['execution_id' => $r->header('X-Ava-Execution')[0], 'reply' => $first->json('confirmed') ? 'Tu cita quedó confirmada.' : 'Tu cita quedó por confirmar.']);
+        }]);
+
+        $this->postJson("/api/widget/{$key}/messages", ['session_id' => 'visitor-journey-1', 'message' => 'Quiero una cita'])->assertOk();
+
+        $this->assertSame([201, true], [$seen['first'], $seen['same']], 'the retry returns the booking that exists');
+        $this->assertSame(1, Appointment::count(), 'a retried call never books twice');
+        $execution = ChatbotExecution::sole();
+        $this->assertSame('succeeded', $execution->status);
+        $this->assertSame($execution->conversation_id, Appointment::sole()->conversation_id, 'the booking belongs to the conversation of this execution');
+        $this->assertSame($this->workspace->id, Appointment::sole()->workspace_id);
+
+        $calls = AgentToolCall::where('conversation_id', $execution->conversation_id)->where('tool', 'booking.book')->get();
+        $this->assertCount(2, $calls, 'the call and its retry are both traced');
+        $this->assertSame([false, true], $calls->sortBy('id')->pluck('replayed')->all());
+        $this->assertSame($execution->correlation_id, $calls->first()->execution_ref);
+
+        $this->getJson("/api/widget/{$key}/messages?session_id=visitor-journey-1")->assertOk()->assertJsonPath('messages.0.text', 'Tu cita quedó confirmada.');
+        $this->withToken($seen['token'])->getJson('/api/agent/booking/appointments')->assertUnauthorized();
     }
 }

@@ -135,11 +135,28 @@ class AppointmentNotifier
     public function run(): array
     {
         if (! $this->ready()) {
-            return ['recovered' => 0, 'planned' => 0, 'queued' => 0];
+            return ['recovered' => 0, 'planned' => 0, 'queued' => 0, 'failed' => 0];
         }
 
-        return ['recovered' => $this->recoverStuck(), 'planned' => $this->planReminders(), 'queued' => $this->dispatchDue()];
+        // Each step runs on its own: a failure in one (or in one Workspace's data, see planReminders) never stops the others, so a bad record of one client
+        // cannot keep the due messages of every other client from being queued. What failed is counted and logged with a fixed code; the command then exits
+        // with an error so the scheduler's monitor sees it (the rows themselves stay as they were: every step is idempotent and is retried on the next tick).
+        $this->stepFailures = 0;
+        $result = ['recovered' => 0, 'planned' => 0, 'queued' => 0];
+
+        foreach (['recovered' => 'recoverStuck', 'planned' => 'planReminders', 'queued' => 'dispatchDue'] as $key => $step) {
+            try {
+                $result[$key] = $this->{$step}();
+            } catch (Throwable $e) {
+                $this->stepFailures++;
+                Log::error('appointments_notify_step_failed', ['step' => $step, 'exception' => $e::class]);
+            }
+        }
+
+        return $result + ['failed' => $this->stepFailures];
     }
+
+    private int $stepFailures = 0;
 
     private function planReminders(): int
     {
@@ -147,28 +164,43 @@ class AppointmentNotifier
         $policy = CarbonImmutable::parse(config('bookings.notifications.phone_policy_since'), 'UTC');
 
         BookingSetting::where('reminders_enabled', true)->with('workspace.organization')->each(function (BookingSetting $setting) use (&$planned, $policy) {
-            $workspace = $setting->workspace;
-            $offsets = $setting->offsets();
-
-            if (! $workspace || $offsets === [] || ! $this->modules->allows($workspace, 'bookings')) {
-                return;
+            try {
+                $planned += $this->planWorkspace($setting, $policy);
+            } catch (Throwable $e) {
+                // One Workspace's problem never stops the others.
+                $this->stepFailures++;
+                Log::error('appointments_notify_workspace_failed', ['workspace' => $setting->workspace_id, 'exception' => $e::class]);
             }
-
-            $until = now()->addMinutes($offsets[0] + 10);
-            $grace = now()->subMinutes(5); // a minute lost by the scheduler is still sent; an offset that passed long ago is not invented
-
-            Appointment::where('workspace_id', $workspace->id)->where('provider', 'internal')->where('status', Appointment::CONFIRMED)
-                ->where('created_at', '>=', $policy)->where('starts_at', '>', now())->where('starts_at', '<=', $until)->get()
-                ->each(function (Appointment $appointment) use ($offsets, $grace, &$planned) {
-                    foreach ($offsets as $offset) {
-                        $at = $appointment->starts_at->copy()->subMinutes($offset);
-
-                        if ($at >= $grace) {
-                            $planned += $this->plan($appointment, 'reminder', $offset, $at);
-                        }
-                    }
-                });
         });
+
+        return $planned;
+    }
+
+    /** The reminders of ONE Workspace that must be planned now. */
+    private function planWorkspace(BookingSetting $setting, CarbonImmutable $policy): int
+    {
+        $workspace = $setting->workspace;
+        $offsets = $setting->offsets();
+
+        if (! $workspace || $offsets === [] || ! $this->modules->allows($workspace, 'bookings')) {
+            return 0;
+        }
+
+        $planned = 0;
+        $until = now()->addMinutes($offsets[0] + 10);
+        $grace = now()->subMinutes(5); // a minute lost by the scheduler is still sent; an offset that passed long ago is not invented
+
+        Appointment::where('workspace_id', $workspace->id)->where('provider', 'internal')->where('status', Appointment::CONFIRMED)
+            ->where('created_at', '>=', $policy)->where('starts_at', '>', now())->where('starts_at', '<=', $until)->get()
+            ->each(function (Appointment $appointment) use ($offsets, $grace, &$planned) {
+                foreach ($offsets as $offset) {
+                    $at = $appointment->starts_at->copy()->subMinutes($offset);
+
+                    if ($at >= $grace) {
+                        $planned += $this->plan($appointment, 'reminder', $offset, $at);
+                    }
+                }
+            });
 
         return $planned;
     }
