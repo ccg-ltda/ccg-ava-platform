@@ -447,6 +447,44 @@ class BookerTest extends TestCase
         $this->put('/integrations/providers/booker', ['environment' => 'staging', 'location_id' => '1'])->assertForbidden();
     }
 
+    public function test_booker_is_offered_as_an_agenda_only_where_it_is_connected(): void
+    {
+        $providers = fn () => $this->get('/bookings')->assertOk()->viewData('page')['props']['settings'];
+        $values = fn (array $settings) => array_column($settings['providers'], 'value');
+
+        // A Workspace whose plan has no external agendas never sees Booker, and the page does not even hint that it exists.
+        $this->contractModules($this->workspace, array_diff(self::MODULES, ['calendar_providers']));
+        $this->actingAs($this->member($this->workspace, 'admin'))->withSession(['workspace_id' => $this->workspace->id]);
+        $settings = $providers();
+        $this->assertSame(['internal'], $values($settings));
+        $this->assertFalse($settings['externalInPlan']);
+
+        // The plan includes them but nothing is connected yet: still not offered; the page only says where to connect one.
+        $this->contractModules($this->workspace, self::MODULES);
+        $settings = $providers();
+        $this->assertSame(['internal'], $values($settings));
+        $this->assertTrue($settings['externalInPlan']);
+
+        // Connected and active: offered and usable.
+        $integration = $this->connect();
+        $settings = $providers();
+        $this->assertSame(['internal', 'booker'], $values($settings));
+        $this->assertTrue(collect($settings['providers'])->firstWhere('value', 'booker')['available']);
+
+        // Another Workspace with the same plan but no connection does not see it just because this one does.
+        $other = $this->bookingWorkspace('OTRO', self::MODULES);
+        $this->actingAs($this->member($other, 'admin'))->withSession(['workspace_id' => $other->id]);
+        $this->assertSame(['internal'], $values($providers()));
+
+        // A Workspace that had selected it and then lost the connection keeps seeing it, as unavailable, so the setup can be fixed.
+        $this->actingAs($this->member($this->workspace, 'admin'))->withSession(['workspace_id' => $this->workspace->id]);
+        $this->workspace->bookingSetting()->updateOrCreate([], ['provider' => 'booker']);
+        $integration->update(['is_active' => false]);
+        $settings = $providers();
+        $this->assertSame(['internal', 'booker'], $values($settings));
+        $this->assertFalse(collect($settings['providers'])->firstWhere('value', 'booker')['available']);
+    }
+
     public function test_the_provider_form_validates_and_an_unknown_provider_does_not_exist(): void
     {
         $this->actingAs($this->member($this->workspace, 'admin'))->withSession(['workspace_id' => $this->workspace->id]);

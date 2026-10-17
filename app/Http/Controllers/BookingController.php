@@ -236,7 +236,13 @@ class BookingController extends Controller
     {
         return [
             'values' => $setting->only(['provider', 'requires_confirmation', 'min_notice_minutes', 'max_advance_days', 'cancel_notice_hours', 'slot_step_minutes', 'require_phone', 'require_email', 'public_enabled']),
-            'providers' => collect(config('bookings.providers'))->map(fn (array $provider, string $key) => ['value' => $key, 'label' => $provider['label'], 'available' => $key === 'internal' || $this->providerUsable($workspace, $key)])->values()->all(),
+            // An external agenda is offered ONLY where it can be used: the plan includes Proveedores de agenda AND the integration is configured and active.
+            // The one the Workspace already selected stays listed (as unavailable) so a broken setup is visible and can be fixed; every other Workspace never sees it.
+            'providers' => collect(config('bookings.providers'))
+                ->filter(fn (array $provider, string $key) => $key === 'internal' || $setting->provider === $key || $this->providerUsable($workspace, $key))
+                ->map(fn (array $provider, string $key) => ['value' => $key, 'label' => $provider['label'], 'available' => $key === 'internal' || $this->providerUsable($workspace, $key)])->values()->all(),
+            // Whether the plan includes external agendas at all: only then does the page say that one can be connected in Integraciones.
+            'externalInPlan' => $this->modules->allows($workspace, 'calendar_providers'),
             'steps' => config('bookings.steps'),
             'publicUrl' => $setting->public_enabled && $setting->public_key ? route('booking.public', $setting->public_key) : null,
             'notifications' => $this->notificationSettings($workspace, $setting),

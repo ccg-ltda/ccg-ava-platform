@@ -56,6 +56,8 @@ docker compose exec -e APP_ENV=testing -e DB_CONNECTION=sqlite -e DB_DATABASE=:m
   -e SESSION_DRIVER=array -e QUEUE_CONNECTION=sync -e BROADCAST_CONNECTION=null app php artisan test
 ```
 
+**Extensión GD (solo imagen de desarrollo):** 8 pruebas (avatar de asistente, logo de Workspace y avatar del widget) generan imágenes falsas con `UploadedFile::fake()->image()`, que necesita `ext-gd`. La etapa `development` del `Dockerfile` la instala (PNG, JPEG, WebP y FreeType); la imagen de producción no, porque la aplicación no procesa imágenes. Una imagen de desarrollo construida antes de ese cambio falla esas 8 pruebas con `GD extension is not installed`: reconstruye con `docker compose build app && docker compose up -d` (recrea los contenedores de desarrollo; los volúmenes y la base se conservan). Comprobación: `docker compose exec app php -m | grep -i '^gd$'`. El contenedor `app` de este entorno ya está reconstruido con GD (2026-10-17); `worker`, `scheduler` y `reverb` siguen sobre la imagen anterior hasta que se recreen (no la necesitan).
+
 Red de seguridad: `tests/TestCase.php` aborta cualquier test si la conexión no es SQLite en memoria o una base cuyo nombre acaba en `_test`/`_testing` (`tests/Support/TestDatabaseGuard.php`). Un `php artisan test` a pelo dentro del contenedor falla con "Refusing to run tests..." antes de tocar la base de desarrollo.
 
 **Validaciones en navegador (Playwright) contra la base de desarrollo:** no uses ni modifiques cuentas, membresías ni roles reales. Crea datos aislados y bórralos siempre al terminar, también si la validación falla:

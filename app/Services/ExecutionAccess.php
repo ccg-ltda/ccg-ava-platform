@@ -5,20 +5,23 @@ namespace App\Services;
 use App\Models\ChatbotExecution;
 
 /**
- * A short-lived credential that Ava hands to the workflow it starts, so the workflow can use Ava's booking tools for THAT
+ * A short-lived credential that Ava hands to the workflow it starts, so the workflow can use Ava's booking and order tools for THAT
  * conversation without anyone copying a long-lived chatbot token into n8n. It is stateless (an HMAC of the execution id and the
  * expiry with the application key, nothing stored) and it grants less than a chatbot token on purpose:
  *  - it works only while its execution is `running` (a finished, failed or discarded execution makes it useless) AND the AI still has the
  *    conversation exactly as when the execution was queued (`handling_version`): once a person takes it, asks for one or resolves it, the
  *    token stops working, so a workflow that is still running cannot keep booking for a conversation a person now handles;
  *  - it expires (`n8n.run_token_ttl`);
- *  - it works only on the booking tools (`agent.booking.*`) and only for the conversation of its execution: the contact is
- *    taken from the execution, never from the request (see AgentBookingController::contact).
+ *  - it works only on the booking and order tools (`agent.booking.*`, `agent.orders.*`) and only for the conversation of its execution: the contact is
+ *    taken from the execution, never from the request (see AgentConversationContext).
  * It cannot read the chatbot configuration, report messages, change who answers or reach any other Workspace.
  */
 class ExecutionAccess
 {
     public const PREFIX = 'avx_';
+
+    /** The only routes a run-scoped token reaches (by route name): the booking and the order tools. */
+    public const TOOL_ROUTES = ['agent.booking.', 'agent.orders.'];
 
     public function issue(ChatbotExecution $execution): string
     {

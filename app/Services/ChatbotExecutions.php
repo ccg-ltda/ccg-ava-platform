@@ -270,13 +270,14 @@ class ChatbotExecutions
             ],
             'message' => ['id' => $execution->message_id, 'text' => $execution->message->body],
             'history' => $history,
-            // How the workflow reaches Ava's tools for THIS conversation: a run-scoped token (booking tools only, valid while this
+            // How the workflow reaches Ava's tools for THIS conversation: a run-scoped token (booking and order tools only, valid while this
             // execution runs) and which tools the Workspace plan includes. The workflow never needs a long-lived chatbot token.
             'ava' => [
                 'api_url' => url('/api/agent'),
                 'token' => $this->access->issue($execution),
                 'token_expires_at' => now()->addSeconds((int) config('n8n.run_token_ttl'))->toIso8601String(),
-                'tools' => ['booking' => $this->modules->allowsAll($chatbot->workspace, ModuleAccess::BOOKING_MODULES)],
+                'guidelines' => config('chatbots.guidelines'),
+                'tools' => ['booking' => $this->modules->allowsAll($chatbot->workspace, ModuleAccess::BOOKING_MODULES), 'orders' => $this->modules->allowsAll($chatbot->workspace, ModuleAccess::ORDER_MODULES)],
             ],
         ];
     }

@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * when it was placed; `total` is computed by the server and never edited. Never deleted: it leaves the flow by being `cancelled`.
  * Created only through App\Orders\OrderService.
  */
-#[Fillable(['workspace_id', 'number', 'customer_id', 'customer_name', 'customer_phone', 'customer_email', 'delivery_method', 'delivery_address', 'delivery_city', 'delivery_reference', 'recipient_name', 'recipient_phone', 'location_id', 'location_name', 'currency', 'total', 'status', 'status_changed_at', 'notes', 'cancel_reason'])]
+#[Fillable(['workspace_id', 'number', 'customer_id', 'conversation_id', 'idempotency_key', 'idempotency_fingerprint', 'customer_name', 'customer_phone', 'customer_email', 'delivery_method', 'delivery_address', 'delivery_city', 'delivery_reference', 'recipient_name', 'recipient_phone', 'location_id', 'location_name', 'currency', 'total', 'status', 'status_changed_at', 'notes', 'cancel_reason'])]
 class Order extends Model
 {
     use Audited;
@@ -31,6 +31,11 @@ class Order extends Model
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    public function conversation(): BelongsTo
+    {
+        return $this->belongsTo(Conversation::class);
     }
 
     public function location(): BelongsTo

@@ -110,6 +110,37 @@ class AgentBookingTest extends TestCase
         $this->assertSame(0, Appointment::count());
     }
 
+    public function test_a_workspace_that_confirms_bookings_never_gets_a_confirmed_answer_for_a_pending_one(): void
+    {
+        $this->workspace->bookingSetting()->updateOrCreate([], ['requires_confirmation' => true]);
+        $this->conversation();
+
+        $response = $this->agentCall('POST', '/appointments', $this->book())->assertCreated();
+
+        // The booking exists but the business has not accepted it: the assistant must say "por confirmar", and Ava says so too.
+        $response->assertJsonPath('confirmed', false)->assertJsonPath('appointment.status', 'requested');
+        $this->assertSame(['requested'], Appointment::pluck('status')->all());
+
+        // Repeating the request returns the same pending booking, still not confirmed.
+        $this->agentCall('POST', '/appointments', $this->book())->assertOk()->assertJsonPath('replayed', true)->assertJsonPath('confirmed', false);
+        $this->assertSame(1, Appointment::count());
+    }
+
+    public function test_a_refused_booking_creates_nothing_and_reports_no_confirmation(): void
+    {
+        $this->conversation();
+        $this->agentCall('POST', '/appointments', $this->book())->assertCreated();
+
+        // The same slot for another person is refused: the answer carries a reason and no `confirmed` flag, and nothing new exists.
+        $this->conversation('573009998877');
+        $refused = $this->agentCall('POST', '/appointments', $this->book(['customer' => ['name' => 'Otra Persona', 'phone' => '+573009998877']], '573009998877'))->assertStatus(409);
+
+        $this->assertSame('slot_unavailable', $refused->json('reason'));
+        $this->assertArrayNotHasKey('confirmed', $refused->json());
+        $this->assertArrayNotHasKey('appointment', $refused->json());
+        $this->assertSame(1, Appointment::count());
+    }
+
     public function test_the_contact_is_validated_and_a_taken_slot_is_reported_as_such(): void
     {
         $this->conversation();

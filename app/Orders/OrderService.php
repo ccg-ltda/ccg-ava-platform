@@ -29,10 +29,12 @@ class OrderService
     /**
      * @param  array<string, mixed>  $data  customer_name, customer_phone?, customer_email?, customer_id?, delivery_method, delivery_address?, delivery_city?,
      *                                      delivery_reference?, recipient_name?, recipient_phone?, location_id?, notes?, lines: list<array{product_id, quantity}>
+     * @param  array{conversation_id: int, key: string, fingerprint: string}|null  $origin  only the assistant's tools pass it: the conversation the order comes from and the digest that identifies this
+     *                                                                                      request. Asking again with the same key returns the order that already exists (`wasRecentlyCreated` is false) and tells nobody twice.
      *
      * @throws OrderException
      */
-    public function create(Workspace $workspace, array $data, ?User $actor): Order
+    public function create(Workspace $workspace, array $data, ?User $actor, ?array $origin = null): Order
     {
         $lines = $this->merge($data['lines'] ?? []);
         $location = $this->location($workspace, $data['location_id'] ?? null);
@@ -53,9 +55,19 @@ class OrderService
             throw OrderException::unavailable('Indica el nombre de quien hace el pedido.');
         }
 
-        $order = DB::transaction(function () use ($workspace, $data, $lines, $location, $customer, $method, $name, $actor) {
+        $order = DB::transaction(function () use ($workspace, $data, $lines, $location, $customer, $method, $name, $actor, $origin) {
             // One order at a time per Workspace gets its number (and reads the catalog): the lock is on the Workspace row.
             Workspace::whereKey($workspace->id)->lockForUpdate()->first();
+
+            // A retried request from the assistant is the same order, not a second one (the lock makes two simultaneous retries take turns).
+            if ($origin && ($existing = $workspace->orders()->where('idempotency_key', $origin['key'])->first())) {
+                // The same key with the same content is a retry; the same key with another content is NOT a retry and must not become another order.
+                if ($existing->idempotency_fingerprint !== $origin['fingerprint']) {
+                    throw new OrderException('Esa clave de idempotencia ya se usó con otro contenido: no se creó ningún pedido. Usa una clave nueva para un pedido distinto.', 409, 'idempotency_conflict');
+                }
+
+                return $existing;
+            }
 
             $products = $workspace->products()->whereIn('id', array_keys($lines))->get()->keyBy('id');
             $cents = 0;
@@ -102,7 +114,7 @@ class OrderService
                 'status' => 'received',
                 'status_changed_at' => now(),
                 'notes' => $this->text($data['notes'] ?? null),
-            ]);
+            ] + ($origin ? ['conversation_id' => $origin['conversation_id'], 'idempotency_key' => $origin['key'], 'idempotency_fingerprint' => $origin['fingerprint']] : [])); // only the assistant's orders carry them (and only once the migration ran)
 
             foreach ($rows as $row) {
                 OrderLine::create([
@@ -116,7 +128,9 @@ class OrderService
             return $order;
         });
 
-        $this->tell($order, 'received');
+        if ($order->wasRecentlyCreated) {
+            $this->tell($order, 'received');
+        }
 
         return $order;
     }

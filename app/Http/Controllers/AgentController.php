@@ -37,11 +37,18 @@ class AgentController extends Controller
                 'updated_at' => $chatbot->updated_at?->toIso8601String(),
             ],
             'workspace' => ['code' => $workspace->code, 'name' => $workspace->name],
+            // What the assistant may never do and what Ava does not do yet: the same lines that travel with every execution.
+            'guidelines' => config('chatbots.guidelines'),
             'channels' => $channels->isEmpty() ? (object) [] : $channels,
             // The booking tools exist only for a Workspace whose plan includes Servicios y Reservas: n8n discovers them here.
             'booking' => $modules->allowsAll($workspace, ['service_catalog', 'professionals', 'bookings']) ? [
                 'available' => true,
                 'endpoints' => collect(['services', 'locations', 'professionals', 'availability', 'appointments'])->mapWithKeys(fn (string $name) => [$name => url("/api/agent/booking/{$name}")])->all(),
+            ] : ['available' => false],
+            // The order tools exist only for a Workspace whose plan includes the catalog and Pedidos. The assistant sends products and quantities, never prices or totals.
+            'orders' => $modules->allowsAll($workspace, ['product_catalog', 'orders']) ? [
+                'available' => true,
+                'endpoints' => collect(['options', 'products', 'orders'])->mapWithKeys(fn (string $name) => [$name => url($name === 'orders' ? '/api/agent/orders' : "/api/agent/orders/{$name}")])->all(),
             ] : ['available' => false],
         ])->header('Cache-Control', 'no-store');
     }

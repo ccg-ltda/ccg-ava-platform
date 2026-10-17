@@ -91,18 +91,18 @@ class ModuleAvailabilityTest extends TestCase
 
     // --- the plan decides what a Workspace can open ------------------------------------------------------------------
 
-    /** @return array<string, array{string, string, string}> module key, URL, human name */
+    /** @return array<string, array{string, string}> module key, URL */
     public static function pages(): array
     {
         return [
-            'dashboard' => ['dashboard', '/dashboard', 'Dashboard'],
-            'reports' => ['reports', '/reports', 'Reportes'],
-            'audit' => ['audit', '/audit', 'Auditoría'],
-            'settings' => ['settings', '/settings', 'Configuraciones'],
-            'integrations' => ['integrations', '/integrations', 'Integraciones'],
-            'users_roles' => ['users_roles', '/users', 'Usuarios y roles'],
-            'assistants' => ['assistants', '/chatbots', 'Asistentes'],
-            'conversations' => ['conversations', '/conversations', 'Conversaciones'],
+            'dashboard' => ['dashboard', '/dashboard'],
+            'reports' => ['reports', '/reports'],
+            'audit' => ['audit', '/audit'],
+            'settings' => ['settings', '/settings'],
+            'integrations' => ['integrations', '/integrations'],
+            'users_roles' => ['users_roles', '/users'],
+            'assistants' => ['assistants', '/chatbots'],
+            'conversations' => ['conversations', '/conversations'],
         ];
     }
 

@@ -2,11 +2,14 @@
 
 namespace App\Services;
 
+use App\Customers\ContactOptOut;
 use App\Models\Chatbot;
 use App\Models\Conversation;
 use App\Models\Message;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Where messages enter the conversations of ONE chatbot on a channel. The automation (n8n) tells Ava each message and
@@ -16,7 +19,7 @@ use Illuminate\Support\Facades\DB;
  */
 class ConversationService
 {
-    public function __construct(private readonly ConversationControl $control) {}
+    public function __construct(private readonly ConversationControl $control, private readonly ContactOptOut $optOut) {}
 
     /**
      * Stores a message (creating the conversation on the first one). A message whose `external_id` is already stored
@@ -28,7 +31,7 @@ class ConversationService
      */
     public function record(Chatbot $chatbot, string $channel, array $data): array
     {
-        return DB::transaction(function () use ($chatbot, $channel, $data) {
+        $result = DB::transaction(function () use ($chatbot, $channel, $data) {
             $conversation = $chatbot->conversations()->firstOrCreate(
                 ['channel' => $channel, 'contact_id' => $data['contact_id']],
                 ['workspace_id' => $chatbot->workspace_id],
@@ -71,6 +74,22 @@ class ConversationService
 
             return ['message' => $message, 'created' => true, 'conversation' => $conversation];
         });
+
+        if ($result['created'] && $data['direction'] === 'in' && $data['type'] === 'text' && ! ($data['simulated'] ?? false)) {
+            $this->honourOptOut($chatbot, $channel, $data);
+        }
+
+        return $result;
+    }
+
+    /** A contact who writes STOP is taken off marketing. It never fails the message that carried it: the message is already stored. */
+    private function honourOptOut(Chatbot $chatbot, string $channel, array $data): void
+    {
+        try {
+            $this->optOut->apply($chatbot->workspace, $channel, $data['contact_id'], $data['body'] ?? null);
+        } catch (Throwable $e) {
+            Log::error('opt_out_failed', ['exception' => $e::class, 'workspace' => $chatbot->workspace_id]);
+        }
     }
 
     /** Updates the delivery state of an outgoing message that is already stored; false when there is none. */

@@ -108,8 +108,24 @@ class PlatformRunTest extends TestCase
         $this->assertStringStartsWith('avx_', $body['ava']['token']);
         $this->assertSame(url('/api/agent'), $body['ava']['api_url']);
         $this->assertTrue($body['ava']['tools']['booking']);
+        $this->assertFalse($body['ava']['tools']['orders'], 'This plan has no catalog and Pedidos: the order tools are not announced.');
+        $this->assertSame(config('chatbots.guidelines'), $body['ava']['guidelines'], 'The rules of honesty travel with every execution.');
         $this->assertStringNotContainsString($long, json_encode($body), 'The long-lived chatbot token never travels to the workflow.');
         $this->assertStringNotContainsString('573001112233', json_encode($body));
+    }
+
+    public function test_the_order_tools_are_announced_only_when_the_plan_has_the_catalog_and_orders(): void
+    {
+        $this->contractModules($this->workspace, ['dashboard', 'assistants', 'conversations', 'product_catalog', 'orders']);
+        Http::fake([self::N8N.'/*' => fn (Request $r) => Http::response(['execution_id' => $r->header('X-Ava-Execution')[0], 'reply' => 'Hola'])]);
+        $conversation = $this->conversation();
+        $message = $conversation->messages()->create(['workspace_id' => $this->workspace->id, 'direction' => 'in', 'sender' => 'contact', 'type' => 'text', 'body' => 'Hola', 'external_id' => 'wamid.X1', 'sent_at' => now()]);
+
+        app(ChatbotExecutions::class)->schedule($conversation->load('chatbot.workspace.organization'), $message);
+
+        $body = json_decode(Http::recorded(fn (Request $r) => str_starts_with($r->url(), self::N8N))->first()[0]->body(), true);
+        $this->assertTrue($body['ava']['tools']['orders']);
+        $this->assertFalse($body['ava']['tools']['booking']);
     }
 
     public function test_the_booking_tools_are_not_announced_when_the_plan_lacks_them(): void
@@ -123,6 +139,7 @@ class PlatformRunTest extends TestCase
 
         $body = json_decode(Http::recorded(fn (Request $r) => str_starts_with($r->url(), self::N8N))->first()[0]->body(), true);
         $this->assertFalse($body['ava']['tools']['booking']);
+        $this->assertFalse($body['ava']['tools']['orders']);
     }
 
     // --- what the run-scoped token may do -------------------------------------------------------------------------------

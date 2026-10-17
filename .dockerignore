@@ -27,3 +27,7 @@ docker-compose*.yml
 Dockerfile
 Makefile
 *.md
+
+# Not needed at runtime: keeps the production image free of the test suite and local documents.
+tests
+docs

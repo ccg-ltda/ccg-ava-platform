@@ -27,4 +27,11 @@ return [
     'identity_channels' => ['whatsapp', 'web', 'instagram', 'messenger'],
 
     'max_tags' => 10,
+
+    /*
+     * Opt-out by message. When a contact writes EXACTLY one of these words (case, accents and punctuation ignored) the consent of the customer that
+     * contact is linked to becomes `revoked`. Only exact matches: a sentence that merely contains the word never changes anything. Revoking is always
+     * the safe direction, so nothing asks for confirmation; Ava does not answer the contact (acknowledging an opt-out is a pending decision).
+     */
+    'opt_out_keywords' => ['stop', 'baja'],
 ];

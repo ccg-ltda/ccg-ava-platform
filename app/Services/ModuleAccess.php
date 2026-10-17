@@ -112,6 +112,9 @@ class ModuleAccess
     /** Modules the booking tools of the agent API need (see routes/api.php). */
     public const BOOKING_MODULES = ['assistants', 'conversations', 'service_catalog', 'professionals', 'bookings'];
 
+    /** Every module the assistant's order tools need (the channel, the catalog and Pedidos). */
+    public const ORDER_MODULES = ['assistants', 'conversations', 'product_catalog', 'orders'];
+
     /** @param  list<string>  $modules */
     public function allowsAll(Workspace $workspace, array $modules): bool
     {

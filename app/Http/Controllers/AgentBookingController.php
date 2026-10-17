@@ -13,6 +13,8 @@ use App\Http\Requests\RescheduleAppointmentRequest;
 use App\Models\Appointment;
 use App\Models\Conversation;
 use App\Models\Workspace;
+use App\Services\AgentConversationContext;
+use App\Services\AgentToolTrace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -25,7 +27,7 @@ use Illuminate\Http\Request;
  */
 class AgentBookingController extends Controller
 {
-    public function __construct(private readonly BookingManager $bookings, private readonly BookingPresenter $present, private readonly Locations $locations) {}
+    public function __construct(private readonly BookingManager $bookings, private readonly BookingPresenter $present, private readonly Locations $locations, private readonly AgentConversationContext $context, private readonly AgentToolTrace $trace) {}
 
     public function services(Request $request): JsonResponse
     {
@@ -71,6 +73,8 @@ class AgentBookingController extends Controller
             // The same request again returns the booking Ava already has (200), not a second one.
             $status = ($result['replayed'] ?? false) ? 200 : 201;
 
+            $this->traced($request, $result['appointment'], $result['replayed'] ?? false);
+
             return ['appointment' => $this->answer($result['appointment']), 'confirmed' => $result['appointment']->status === Appointment::CONFIRMED, 'replayed' => $result['replayed'] ?? false];
         }, function () use (&$status) {
             return $status;
@@ -93,7 +97,12 @@ class AgentBookingController extends Controller
     {
         $data = $this->contact($request);
 
-        return $this->run(fn (Workspace $workspace) => ['appointment' => $this->answer($this->bookings->cancel($this->owned($request, $appointment, $data), null, 'chat'))]);
+        return $this->run(function (Workspace $workspace) use ($request, $appointment, $data) {
+            $cancelled = $this->bookings->cancel($this->owned($request, $appointment, $data), null, 'chat');
+            $this->traced($request, $cancelled);
+
+            return ['appointment' => $this->answer($cancelled)];
+        });
     }
 
     /**
@@ -108,6 +117,8 @@ class AgentBookingController extends Controller
         return $this->run(function (Workspace $workspace) use ($request, $appointment, $data) {
             $result = $this->bookings->customerConfirm($this->owned($request, $appointment, $data), 'assistant');
 
+            $this->traced($request, $result['appointment'], $result['replayed']);
+
             return ['appointment' => $this->answer($result['appointment']->load(['customer', 'workspace'])), 'replayed' => $result['replayed']];
         });
     }
@@ -116,7 +127,22 @@ class AgentBookingController extends Controller
     {
         $data = $this->contact($request);
 
-        return $this->run(fn (Workspace $workspace) => ['appointment' => $this->answer($this->bookings->reschedule($this->owned($request, $appointment, $data), $request->startsAt(), $request->professionalId(), 'chat'))]);
+        return $this->run(function (Workspace $workspace) use ($request, $appointment, $data) {
+            $moved = $this->bookings->reschedule($this->owned($request, $appointment, $data), $request->startsAt(), $request->professionalId(), 'chat');
+            $this->traced($request, $moved);
+
+            return ['appointment' => $this->answer($moved)];
+        });
+    }
+
+    /**
+     * What the trace may say about an appointment the tool changed, set only now that the change exists: which appointment, whether this was a retry, the state Ava
+     * (or the agenda) really gave it, and whether messages to the customer are PLANNED (never that they were sent: sending is recorded in appointment_notifications).
+     */
+    private function traced(Request $request, Appointment $appointment, bool $replayed = false): void
+    {
+        $planned = app(AppointmentNotifier::class)->ready() && $appointment->notifications()->exists();
+        $this->trace->report(['resource_type' => 'appointment', 'resource_id' => $appointment->id, 'replayed' => $replayed, 'result_state' => $appointment->status, 'notification' => $planned ? 'planned' : 'none']);
     }
 
     /** What the automation may do with this Workspace's agenda right now, so it can tell the contact instead of failing. @return array<string, mixed> */
@@ -130,22 +156,13 @@ class AgentBookingController extends Controller
     /** @return array{channel: string, contact_id: string} who the automation is talking to: validated, never trusted as an id of ours */
     private function contact(Request $request): array
     {
-        // A run-scoped token already says whose conversation this is: the caller cannot name another one.
-        if ($execution = $request->attributes->get('execution')) {
-            $conversation = $execution->conversation;
-            abort_if(($request->input('channel') !== null && $request->input('channel') !== $conversation->channel)
-                || ($request->input('contact_id') !== null && (string) $request->input('contact_id') !== $conversation->contact_id), 403, 'Este token solo puede actuar en la conversación de su ejecución.');
-
-            return ['channel' => $conversation->channel, 'contact_id' => $conversation->contact_id];
-        }
-
-        return $request->validate(['channel' => ['required', 'string', 'max:32'], 'contact_id' => ['required', 'string', 'max:64']]);
+        return $this->context->contact($request);
     }
 
     /** The conversation of THIS chatbot with that contact; without it there is nothing to attach a booking to. */
     private function conversation(Request $request, array $data): Conversation
     {
-        return $request->attributes->get('chatbot')->conversations()->where('channel', $data['channel'])->where('contact_id', $data['contact_id'])->first()
+        return $this->context->conversation($request, $data)
             ?? throw new BookingException(BookingException::NOT_FOUND, 'No existe una conversación de este asistente con ese contacto. Reporta primero su mensaje a Ava.');
     }
 

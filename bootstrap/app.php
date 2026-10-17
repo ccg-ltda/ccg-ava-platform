@@ -6,6 +6,7 @@ use App\Http\Middleware\EnsureWorkspaceContext;
 use App\Http\Middleware\EnsureWorkspaceModule;
 use App\Http\Middleware\EnsureWorkspacePermission;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\TraceAgentTool;
 use Illuminate\Auth\Middleware\Authorize;
 use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
 use Illuminate\Contracts\Session\Middleware\AuthenticatesSessions;
@@ -69,6 +70,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'agent' => AuthenticateAgent::class,
+            'agent.trace' => TraceAgentTool::class,
             'workspace' => EnsureWorkspaceContext::class,
             'workspace.permission' => EnsureWorkspacePermission::class,
             'workspace.module' => EnsureWorkspaceModule::class,

@@ -76,7 +76,7 @@ class CalendarProviderTest extends TestCase
         $agenda = $this->agenda($kind);
 
         $this->assertSame(['services', 'professionals', 'availability', 'book', 'reschedule', 'cancel', 'find'], array_keys($agenda->capabilities()));
-        $this->assertContainsOnly('bool', $agenda->capabilities());
+        $this->assertContainsOnlyBool($agenda->capabilities());
 
         foreach ($agenda->services() as $service) {
             $this->assertSame(['id', 'name', 'description', 'duration_minutes', 'price', 'category'], array_keys($service));

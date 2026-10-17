@@ -1,6 +1,6 @@
 # Ava Platform
 
-Plataforma multi-Workspace para operar asistentes de IA (chatbots) y atender a sus contactos. Ava es la **única fuente del comportamiento** de cada chatbot (instrucciones, canales, apariencia); la IA y la conversación con WhatsApp viven en **n8n**, que lee la configuración de Ava y le reporta los mensajes. Cuando hace falta, una persona toma el control de la conversación desde Ava y responde por el mismo canal.
+**AvaChat (Ava Platform)** es una plataforma multi-Workspace de atención inteligente al cliente: asistentes de IA que atienden conversaciones por WhatsApp y web, personas que toman el control cuando hace falta y herramientas de negocio (clientes, servicios y agenda, catálogo y pedidos) que el asistente y los agentes usan para ejecutar operaciones reales. No es un CRM ni un ERP: sus módulos existen para que la conversación pueda consultar información real, ejecutar una operación autorizada y dejar trazabilidad. Ava es la **única fuente del comportamiento** de cada chatbot (instrucciones, canales, apariencia); la IA y la conversación con WhatsApp viven en **n8n**, que lee la configuración de Ava y le reporta los mensajes. Cuando hace falta, una persona toma el control de la conversación desde Ava y responde por el mismo canal.
 
 Este README es la guía de arranque. Las reglas de desarrollo y las decisiones permanentes están en [`reglas.md`](reglas.md), las tareas abiertas en [`pendientes.md`](pendientes.md) y la infraestructura en [`INFRASTRUCTURE.md`](INFRASTRUCTURE.md).
 
@@ -94,7 +94,7 @@ Para negocios con citas (barbería, estética, y más adelante Salud). Se contra
 - **Agenda de Ava:** servicios (duración, precio opcional, tiempo entre citas), profesionales con horario semanal y descansos, recursos opcionales, días no laborables, citas (crear, confirmar, reprogramar, cancelar) y clientes (solo nombre y contacto). La disponibilidad la calcula un único servicio; PostgreSQL impide además por restricción que dos citas se solapen.
 - **Reserva en línea:** en Agenda y reservas → Configuración se activa la página pública y se copia su enlace (`/book/{clave}`); si se filtra o se abusa de él, «Regenerar enlace» lo reemplaza al instante. Las reglas (anticipación, cancelación, confirmar reservas, datos pedidos) son del Workspace.
 - **Ava Chat:** n8n usa `/api/agent/booking/*` con el token del chatbot (`/api/agent/config` anuncia las herramientas). Ava guarda la cita, la ata a la conversación, la audita y devuelve el estado real.
-- **Booker:** se configura en Integraciones → Agendas externas (solo con `calendar_providers`) y se elige en Agenda y reservas → Configuración. Hoy lee servicios y profesionales y lee/cancela citas; los horarios, reservar y reprogramar con Booker NO están implementados (falta verificarlos con un Sandbox) y Ava lo dice. Probado solo con respuestas simuladas.
+- **Booker:** se configura en Integraciones → Agendas externas (solo con `calendar_providers`) y se elige en Agenda y reservas → Configuración. La opción solo se muestra en un Workspace donde está conectada y activa (los demás ven únicamente la agenda de Ava). Hoy lee servicios y profesionales y lee/cancela citas; los horarios, reservar y reprogramar con Booker NO están implementados (falta verificarlos con un Sandbox) y Ava lo dice. Probado solo con respuestas simuladas.
 - **Ciclo de una cita:** crear → (confirmar) → reprogramar / cancelar con motivo → realizada / no asistió. Desactivar un servicio o profesional, o cerrar un día con citas ya hechas, avisa cuántas hay y no las cancela.
 
 ### Teléfonos internacionales
@@ -106,6 +106,11 @@ Todo teléfono NUEVO o modificado (ficha de Cliente, profesional y reservas del 
 - **Web:** widget (`public/widget/ava-widget.js`) con un código de instalación único; el visitante habla con la IA a través del webhook de n8n del Workspace y, si un agente toma la conversación, recibe sus respuestas en el mismo chat.
 - **WhatsApp:** n8n recibe y responde, y reporta cada mensaje a Ava. Las respuestas de un agente las envía Ava por la Graph API con el token de la integración del Workspace. Instagram y Messenger aún no están disponibles.
 - **Atención humana:** `ai → pending → human → resolved`. Mientras una persona tiene la conversación, la IA no responde (n8n debe consultar `authorize` antes de enviar; el widget web lo aplica Ava misma).
+- **Herramientas del asistente (`/api/agent/*`):** n8n las usa con el token del chatbot o, mejor, con el token de ejecución de vida corta que Ava le entrega en cada ejecución (solo sirve para la conversación de esa ejecución y muere si una persona la toma). `/api/agent/config` anuncia cuáles ofrece el plan del Workspace: **reservas** (`/api/agent/booking/*`) y **pedidos** (`/api/agent/orders/*`). El asistente nunca ejecuta nada por su cuenta: pide la operación y cuenta al contacto lo que Ava respondió.
+- **Pedidos desde el asistente (Delivery y E-commerce):** con los módulos Catálogo de productos y Pedidos en el plan, el asistente consulta el catálogo con el precio de ese momento (`GET /api/agent/orders/products` y `/options`), crea un pedido (`POST /api/agent/orders`, solo productos, cantidades, entrega y contacto; **nunca** precios ni totales: los calcula Ava) y consulta los pedidos de SU conversación (`GET /api/agent/orders`). Un reintento es el mismo pedido (idempotencia por ejecución o cabecera `Idempotency-Key`), el contacto solo ve lo de su conversación, y el asistente NO cambia estados ni cancela. Hoy no hay pagos, cobertura, costo de envío, inventario ni avisos al cliente, y la API lo dice (`customerNotified`, `delivery.coverageChecked`, `stockTracked`). Un reintento con la misma clave y el mismo contenido es el mismo pedido; la misma clave con otro contenido es `409 idempotency_conflict` y no crea nada. Exige las migraciones `2026_10_21_100000_link_orders_to_conversations` y `2026_10_21_110000_create_agent_tool_calls_table`, aplicadas el 2026-10-17 solo en la base de desarrollo local `ccg_ava`; **pendientes en cualquier otro entorno** (procedimiento, copia previa y comprobaciones en `RECOMENDACIONES.md` §6.2 y §7.8); sin ellas las herramientas de pedidos responden `503 not_ready` y los pedidos del admin siguen funcionando. Probado solo contra la API de Ava con pruebas automáticas; ningún flujo real de n8n lo usa todavía.
+- **Trazabilidad de las herramientas:** cada llamada del asistente a las herramientas de reservas y pedidos queda en `agent_tool_calls` (qué se pidió, cuándo, en qué conversación, si Ava lo hizo, lo rechazó, falló o es incierto, y si fue un reintento), sin datos personales ni secretos; distingue la llamada, la operación persistida y un aviso planificado (nunca «enviado»). El agente la ve en la conversación («Herramientas del asistente»). No registra lo que el workflow de n8n consulta por su cuenta. `php artisan agent:tools:reconcile` liquida las llamadas que quedaron sin resultado.
+- **Reglas de honestidad:** `config/chatbots.php` `guidelines` viaja en cada ejecución (`ava.guidelines`) y en `/api/agent/config`: el asistente no debe inventar precios, horarios ni confirmaciones, ni prometer lo que Ava no hace hoy. Ava no ejecuta modelos: la regla solo puede aplicarla el workflow; lo que Ava sí aplica por su cuenta (totales, disponibilidad, estados, permisos) no depende del modelo.
+- **Baja por mensaje (STOP):** si un contacto escribe exactamente `STOP` o `BAJA` (`config/customers.php` `opt_out_keywords`), el cliente vinculado a ese contacto (por identidad de canal o, en WhatsApp, por su número) pasa a consentimiento `revoked`, que toda campaña respeta. Queda auditado sin datos personales y Ava no responde al contacto (confirmar la baja es una decisión pendiente). Si el contacto no tiene ficha, no se crea ninguna.
 
 ### n8n de la plataforma (ejecución iniciada por Ava)
 
@@ -136,15 +141,26 @@ graphify update .                                             # actualiza el gra
 ```
 
 - **En el anfitrión usa PHPUnit directo:** `php artisan test` lanza un proceso hijo que ignora `-d memory_limit` y con el límite de 128 MB del PHP de Windows se queda sin memoria (`Allowed memory size of 134217728 bytes exhausted`).
-- **Última validación (2026-10-17):** PHPUnit 1137/1137 en SQLite (≈170 s) y 1137/1137 en PostgreSQL 16 (≈570 s); `npm run test:js` 21/21; Pint y `npm run build` correctos.
+- **Última validación (2026-10-17, tercer bloque):** PHPUnit 1302 pruebas con 0 fallos en SQLite (3 omitidas: las de PostgreSQL) y en PostgreSQL 16 desechable (0 omitidas), ambas dentro del contenedor de desarrollo, que incluye GD; `npm run test:js` 21/21; Pint y `npm run build` correctos; `composer audit` y `npm audit` sin vulnerabilidades; 120 comprobaciones de pantalla (15 pantallas × 390, 820, 960 y 1440 px × claro y oscuro) sin errores de consola ni desborde. Detalle, comandos y límites en `RECOMENDACIONES.md` §7.7, §7.8 y §8.10.
 - **Contra PostgreSQL:** crea una base desechable cuyo nombre acabe en `_test` (`TestDatabaseGuard` se niega a usar cualquier otra) y ejecuta PHPUnit con `DB_CONNECTION=pgsql DB_HOST=127.0.0.1 DB_PORT=5433 DB_DATABASE=<nombre>_test DB_USERNAME=... DB_PASSWORD=...`. Nunca apuntes las pruebas a `ccg_ava`.
 - `tests/TestCase.php` se niega a ejecutar tests contra la base de desarrollo. No hay ESLint ni Prettier; las pruebas de JavaScript cubren la definición del menú, los permisos y las reglas del editor de mensajes, y la interfaz solo se revisa a mano con Playwright (no hay pruebas de navegador automáticas).
+
+## Estado de preparación (2026-10-17)
+
+Resumen; evidencia, definiciones de «listo», brechas por solución y decisiones pendientes en `RECOMENDACIONES.md` §8.
+
+| Nivel | Veredicto |
+|---|---|
+| Entorno de pruebas desplegable | **Apto con condiciones operativas** (HTTPS, variables, worker y scheduler, copia programada); sin bloqueadores de código conocidos |
+| Piloto con clientes reales | **No listo:** ninguna integración externa (Meta, n8n, Booker) se ha ejecutado contra el servicio real y el workflow de la empresa no está adaptado al contrato de Ava; falta aviso de privacidad y contrato de tratamiento. Es viable un piloto técnico interno y, después, uno limitado de Servicios y Reservas / Salud (solo citas) |
+| Comercialización | **No listo:** sin límites, precios, medición de uso, suscripción, facturación ni onboarding |
 
 ## Estado de integraciones y módulos
 
 | Parte | Implementado | Validación |
 |---|---|---|
 | Servicios y Reservas (agenda de Ava, página pública, Ava Chat) | Sí | Pruebas automáticas y navegador; concurrencia en PostgreSQL a mano |
+| Catálogo de productos, Pedidos y herramientas de pedidos del asistente (Delivery y E-commerce, primera fase) | Sí, sin pagos, cobertura, envío, inventario ni avisos | Pruebas automáticas (SQLite y PostgreSQL); ningún workflow real de n8n las usa todavía |
 | Clientes, Campañas (borradores y simulación), Planes, permisos, aislamiento, privacidad | Sí | Pruebas automáticas (SQLite y PostgreSQL) |
 | WhatsApp (Meta), n8n de la plataforma, n8n por Workspace | Sí | **Solo simulado**: faltan cuentas, workflow y licencia reales |
 | Booker | Parcial: conexión, servicios, profesionales, leer y cancelar | **Solo simulado**; horarios, reservar y reprogramar NO existen |

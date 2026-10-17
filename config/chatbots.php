@@ -112,6 +112,45 @@ return [
     /* Longest text of the instructions of a chatbot, in characters. */
     'instructions_max' => 8000,
 
+    /*
+     * Rules of honesty that travel with EVERY execution and with the configuration an automation reads (they are not a prompt Ava runs: Ava does not
+     * execute models, the workflow does). They say what the assistant may not do and what Ava does not do yet, so it neither invents nor promises.
+     * Ava enforces what it can on its own side (prices, totals, availability, states, permissions); these lines cover what only the model can break.
+     */
+    'guidelines' => [
+        'Usa solo datos que Ava te devuelva en esta conversación (precios, horarios, disponibilidad, sedes, productos, estados de citas y pedidos). Nunca los inventes ni los recuerdes de memoria.',
+        'Confirma una cita o un pedido únicamente cuando la herramienta responda con éxito, y dile al contacto el estado exacto que devuelve Ava («por confirmar» no es «confirmada»).',
+        'Si una herramienta falla, responde «uncertain» o no está disponible, díselo al contacto tal cual y no repitas la operación por tu cuenta.',
+        'Nunca envíes precios, totales, moneda, número de pedido ni estados a Ava: solo qué productos y cuántos. El total lo calcula Ava.',
+        'No prometas lo que Ava no hace hoy: no avisa al cliente de los cambios de un pedido, no valida cobertura ni costo de envío, no controla inventario y no procesa pagos.',
+        'No canceles ni cambies el estado de un pedido por tu cuenta: eso lo decide el negocio. Si el contacto lo pide, transfiere a una persona.',
+        'Si falta un dato, el contacto lo pide o no sabes cómo continuar, transfiere a una persona (handoff) en lugar de adivinar.',
+        'No pidas ni escribas datos de salud, diagnósticos ni otra información sensible: no son necesarios para atender.',
+    ],
+
+    /*
+     * The business tools an assistant can run through Ava (route name without "agent."), how the trace (agent_tool_calls) names them and whether they only
+     * read or change something. The labels name the REQUEST, never its result: the result is the `status` of the trace.
+     */
+    'tools' => [
+        'booking.services' => ['label' => 'Consulta de servicios', 'kind' => 'read'],
+        'booking.professionals' => ['label' => 'Consulta de profesionales', 'kind' => 'read'],
+        'booking.locations' => ['label' => 'Consulta de sedes', 'kind' => 'read'],
+        'booking.availability' => ['label' => 'Consulta de disponibilidad', 'kind' => 'read'],
+        'booking.appointments' => ['label' => 'Consulta de sus citas', 'kind' => 'read'],
+        'booking.book' => ['label' => 'Reserva de una cita', 'kind' => 'write'],
+        'booking.cancel' => ['label' => 'Cancelación de una cita', 'kind' => 'write'],
+        'booking.confirm' => ['label' => 'Confirmación del cliente', 'kind' => 'write'],
+        'booking.reschedule' => ['label' => 'Reprogramación de una cita', 'kind' => 'write'],
+        'orders.options' => ['label' => 'Consulta de opciones de pedido', 'kind' => 'read'],
+        'orders.products' => ['label' => 'Consulta del catálogo', 'kind' => 'read'],
+        'orders.index' => ['label' => 'Consulta de sus pedidos', 'kind' => 'read'],
+        'orders.store' => ['label' => 'Creación de un pedido', 'kind' => 'write'],
+    ],
+
+    /* How the interface names the status of a traced call. `started` is also what stays when the process ended before the outcome could be written. */
+    'tool_statuses' => ['started' => 'Sin resultado registrado', 'succeeded' => 'Hecho', 'rejected' => 'Rechazado', 'failed' => 'Falló', 'uncertain' => 'Resultado incierto'],
+
     /* Avatar of a chatbot: same formats and weight limit as the Workspace logo (never SVG). */
     'avatar' => [
         'mimes' => ['png', 'jpg', 'jpeg', 'webp'],

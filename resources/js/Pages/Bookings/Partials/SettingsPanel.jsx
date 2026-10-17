@@ -56,7 +56,11 @@ export default function SettingsPanel({ settings, capabilities, canManage }) {
                         Esa agenda no está disponible todavía: el plan debe incluir Proveedores de agenda y la integración debe estar configurada y activa en <Link href={route('integrations.index')} className="font-semibold underline">Integraciones</Link>.
                     </Alert>
                 )}
-                {external.length === 0 && <p className="text-xs text-ink-muted">Para usar una agenda externa (Booker), el plan del Workspace debe incluir «Proveedores de agenda».</p>}
+                {external.length === 0 && settings.externalInPlan && (
+                    <p className="text-xs text-ink-muted">
+                        Para usar una agenda externa, conéctala primero en <Link href={route('integrations.index')} className="font-semibold underline">Integraciones</Link>: aparecerá aquí cuando esté configurada y activa.
+                    </p>
+                )}
                 {capabilities.external && !capabilities.book && <Alert tone="info">Con {capabilities.label}, Ava aún no puede ofrecer horarios ni reservar: se consultan servicios y profesionales y se pueden ver y cancelar citas.</Alert>}
             </Card>
 

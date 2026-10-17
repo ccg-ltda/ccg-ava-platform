@@ -169,9 +169,12 @@ class AgentApiTest extends TestCase
                     'updated_at' => $bot->fresh()->updated_at->toIso8601String(),
                 ],
                 'workspace' => ['code' => $workspace->code, 'name' => $workspace->name],
+                'guidelines' => config('chatbots.guidelines'),
                 'channels' => [],
                 // This Workspace's plan does not include Servicios y Reservas (see the default plan): the booking tools are not offered.
                 'booking' => ['available' => false],
+                // Nor does it include the catalog and Pedidos: the order tools are not offered either.
+                'orders' => ['available' => false],
             ]);
 
         // Editing in Ava changes what the automation reads: there is no second copy.

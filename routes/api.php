@@ -3,6 +3,7 @@
 use App\Http\Controllers\AgentBookingController;
 use App\Http\Controllers\AgentController;
 use App\Http\Controllers\AgentMessageController;
+use App\Http\Controllers\AgentOrderController;
 use App\Http\Controllers\PublicBookingController;
 use App\Http\Controllers\WhatsAppWebhookController;
 use App\Http\Controllers\WidgetController;
@@ -32,7 +33,7 @@ Route::middleware(['throttle:agent', 'agent', 'workspace.module:assistants'])->p
         Route::post('/conversations/handoff', [AgentMessageController::class, 'handoff'])->name('conversations.handoff');
 
         // Booking tools of Ava Chat: they also need the plan of the Workspace to include Servicios y Reservas (every module the booking page needs).
-        Route::middleware(['workspace.module:service_catalog', 'workspace.module:professionals', 'workspace.module:bookings'])->prefix('booking')->name('booking.')->group(function () {
+        Route::middleware(['workspace.module:service_catalog', 'workspace.module:professionals', 'workspace.module:bookings', 'agent.trace'])->prefix('booking')->name('booking.')->group(function () {
             Route::get('/services', [AgentBookingController::class, 'services'])->name('services');
             Route::get('/professionals', [AgentBookingController::class, 'professionals'])->name('professionals');
             Route::get('/locations', [AgentBookingController::class, 'locations'])->name('locations');
@@ -42,6 +43,15 @@ Route::middleware(['throttle:agent', 'agent', 'workspace.module:assistants'])->p
             Route::post('/appointments/{appointment}/cancel', [AgentBookingController::class, 'cancel'])->whereNumber('appointment')->name('cancel');
             Route::post('/appointments/{appointment}/confirm', [AgentBookingController::class, 'confirm'])->whereNumber('appointment')->name('confirm');
             Route::post('/appointments/{appointment}/reschedule', [AgentBookingController::class, 'reschedule'])->whereNumber('appointment')->name('reschedule');
+        });
+
+        // Order tools of Ava Chat (Delivery and E-commerce): the plan must include the catalog and Pedidos. They read the catalog, place an order and read the
+        // orders of THIS conversation; the assistant never moves an order along its flow or cancels it.
+        Route::middleware(['workspace.module:product_catalog', 'workspace.module:orders', 'agent.trace'])->prefix('orders')->name('orders.')->group(function () {
+            Route::get('/options', [AgentOrderController::class, 'options'])->name('options');
+            Route::get('/products', [AgentOrderController::class, 'products'])->name('products');
+            Route::get('/', [AgentOrderController::class, 'index'])->name('index');
+            Route::post('/', [AgentOrderController::class, 'store'])->name('store');
         });
     });
 });

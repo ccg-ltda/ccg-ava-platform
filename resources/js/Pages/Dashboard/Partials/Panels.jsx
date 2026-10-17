@@ -191,7 +191,7 @@ export function QuickLinks() {
     return (
         <section aria-label="Accesos rápidos">
             <h2 className="mb-3 text-sm font-bold tracking-wider text-ink uppercase">Accesos rápidos</h2>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {items.map((item) => (
                     <Link
                         key={item.route}

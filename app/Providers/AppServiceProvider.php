@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Orders\CommerceSchema;
 use App\Orders\OrderNotifier;
 use App\Orders\UnavailableOrderNotifier;
+use App\Services\AgentToolTrace;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Foundation\DevCommands;
 use Illuminate\Http\Request;
@@ -31,6 +32,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(Locations::class);
         $this->app->scoped(AppointmentNotifier::class);
         $this->app->scoped(CommerceSchema::class);
+        $this->app->scoped(AgentToolTrace::class);
 
         // How an order event would reach the customer: no channel is connected yet, so the unavailable notifier says so and sends nothing.
         $this->app->bind(OrderNotifier::class, UnavailableOrderNotifier::class);

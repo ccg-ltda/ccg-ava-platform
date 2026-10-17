@@ -7,6 +7,7 @@ use App\Services\ExecutionAccess;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -23,7 +24,7 @@ class AuthenticateAgent
     {
         $token = $request->bearerToken();
 
-        // The run-scoped token Ava gives a workflow it starts: only the booking tools, only for the conversation of that execution.
+        // The run-scoped token Ava gives a workflow it starts: only the booking and order tools, only for the conversation of that execution.
         if ($token && str_starts_with($token, ExecutionAccess::PREFIX)) {
             return $this->handleRun($request, $next, $token);
         }
@@ -51,7 +52,7 @@ class AuthenticateAgent
         $chatbot = $execution?->chatbot;
 
         abort_unless($execution, 401, 'Token inválido o vencido.');
-        abort_unless(str_starts_with((string) $request->route()?->getName(), 'agent.booking.'), 403, 'Este token solo sirve para las herramientas de reservas de su ejecución.');
+        abort_unless(Str::startsWith((string) $request->route()?->getName(), ExecutionAccess::TOOL_ROUTES), 403, 'Este token solo sirve para las herramientas de reservas y pedidos de su ejecución.');
         abort_unless($chatbot->is_active && $chatbot->workspace->is_active && $chatbot->workspace->organization->is_active, 403, 'El chatbot, su Workspace o su organización están desactivados.');
 
         $request->attributes->set('chatbot', $chatbot);

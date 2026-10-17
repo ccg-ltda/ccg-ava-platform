@@ -3,7 +3,7 @@
 namespace App\Http\Requests\Concerns;
 
 use App\Rules\InternationalPhone;
-use App\Support\PhoneNumber;
+use App\Services\AgentConversationContext;
 use Carbon\CarbonImmutable;
 
 /**
@@ -43,22 +43,10 @@ trait BookingInput
         return CarbonImmutable::parse($this->validated('starts_at'), 'UTC')->utc();
     }
 
-    /**
-     * Only for the automation of a chatbot (agent API): the id of a WhatsApp conversation is a full international number that Meta
-     * writes without the "+", so a phone equal to THAT conversation's id is international even without it. Anyone else (staff, the
-     * public page) must type the "+": nothing here infers a country.
-     */
+    /** Only for the automation of a chatbot (agent API): see AgentConversationContext::verifiedPhoneDigits. */
     private function verifiedContactDigits(): ?string
     {
-        if (! $this->attributes->has('chatbot')) {
-            return null;
-        }
-
-        $execution = $this->attributes->get('execution');
-        $channel = $execution ? $execution->conversation->channel : $this->input('channel');
-        $contact = $execution ? $execution->conversation->contact_id : $this->input('contact_id');
-
-        return $channel === 'whatsapp' && is_string($contact) && PhoneNumber::e164('+'.$contact) !== null ? $contact : null;
+        return app(AgentConversationContext::class)->verifiedPhoneDigits($this);
     }
 
     /** @return array{name: string, phone: ?string, email: ?string} */

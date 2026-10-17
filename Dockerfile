@@ -65,6 +65,10 @@ RUN npm run build
 FROM base AS development
 ENV APP_ENV=local PHP_OPCACHE_VALIDATE_TIMESTAMPS=1
 
+# GD only here, never in the production image: the application does not process images (avatars and logos are stored as uploaded), but the
+# test suite builds fake PNG/JPEG uploads with it (`UploadedFile::fake()->image()`), and without it 8 tests fail with "GD extension is not installed".
+RUN apk add --no-cache libpng libjpeg-turbo libwebp freetype     && apk add --no-cache --virtual .gd-build-deps $PHPIZE_DEPS libpng-dev libjpeg-turbo-dev libwebp-dev freetype-dev     && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp     && docker-php-ext-install -j"$(nproc)" gd     && apk del .gd-build-deps     && rm -rf /tmp/pear /var/cache/apk/*
+
 # ---------------------------------------------------------------------------
 # production: self-contained, stateless image
 # ---------------------------------------------------------------------------

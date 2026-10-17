@@ -17,3 +17,6 @@ Schedule::command('executions:recover')->everyMinute()->withoutOverlapping()->on
 
 // Plans and queues the confirmations and reminders of appointments (idempotent; needs the queue worker to deliver what it queues).
 Schedule::command('appointments:notify')->everyMinute()->withoutOverlapping()->onOneServer();
+
+// Settles the traces of assistant tool calls that never recorded an outcome (see AgentToolTrace::reconcile; a no-op until its table exists).
+Schedule::command('agent:tools:reconcile')->everyFiveMinutes()->withoutOverlapping()->onOneServer();

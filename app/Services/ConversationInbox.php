@@ -29,6 +29,7 @@ class ConversationInbox
         private readonly ChannelDelivery $delivery,
         private readonly ConversationAgents $agents,
         private readonly DemoConversations $demo,
+        private readonly ConversationOperations $operations,
     ) {}
 
     /** Whether the channel keeps conversations in Ava (config/chatbots.php `conversations`). */
@@ -122,6 +123,10 @@ class ConversationInbox
             // The demo bench: only on a demo conversation, in a demo environment, for who manages conversations.
             'simulate' => ! $foreign && $conversation->isDemo() && $this->demo->enabled() && in_array('manage-conversations', $permissions, true),
             'can' => $foreign ? $this->nothing() : $this->abilities($conversation, $user, $permissions, $delivery['ok']),
+            // What was done from this conversation (appointments, orders): never on another Workspace seen read only, and only what the user may open.
+            'operations' => $foreign ? [] : $this->operations->for($conversation, $permissions, $settings),
+            // The tools the assistant ran for this conversation, as traced (see AgentToolTrace): operational facts only.
+            'tools' => $foreign ? [] : $this->operations->tools($conversation, $settings),
             'truncated' => $newest->count() > self::MESSAGE_LIMIT,
             'items' => $newest->take(self::MESSAGE_LIMIT)->reverse()->values()->map(fn (Message $message) => [
                 'id' => $message->id,
