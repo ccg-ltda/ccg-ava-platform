@@ -40,6 +40,7 @@ class AuthenticatedSessionController extends Controller
         return Inertia::render('Auth/Login', [
             'workspace' => ['code' => $workspace->code],
             'rememberedEmail' => $this->remembered->email($request),
+            'status' => session('status'),
         ]);
     }
 

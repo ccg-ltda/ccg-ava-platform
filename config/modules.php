@@ -82,7 +82,7 @@ return [
     /*
      * CORE routes: what every signed-in person needs whatever the plan, and the platform administration. They are NOT contractable
      * modules and never appear in a plan or in the catalog; each has its own rule instead of `workspace.module`:
-     *  - own account and session (profile, logout, e-mail verification, password reset);
+     *  - own account and session (profile, acceptance of the legal texts, logout, e-mail verification, password reset);
      *  - the shell of the app (the Workspace logo and the Workspace selector, which only answers what the user may choose);
      *  - saved filters (the module of each filter's scope is checked inside `SavedFilters`);
      *  - platform administration (plans, catalog, access of support), tied to `Desarrollo_DEV` by `workspace.platform` / permission.
@@ -90,7 +90,7 @@ return [
      * page can not be left outside the plan by accident.
      */
     'core_routes' => [
-        'profile.*', 'logout', 'verification.*', 'password.*', 'confirm-password',
+        'profile.*', 'legal.accept', 'legal.accept.store', 'logout', 'verification.*', 'password.*', 'confirm-password',
         'workspaces.search', 'workspace.logo',
         'saved-filters.*',
         'plans.*', 'modules.*', 'module-categories.*', 'workspaces.plan.update', 'support-access.*',

@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Validation\Rules\Password;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -51,6 +52,9 @@ class AppServiceProvider extends ServiceProvider
     {
         Vite::prefetch(concurrency: 3);
 
+        // Production accounts need a longer, mixed password; development and tests keep the framework minimum.
+        Password::defaults(fn () => app()->isProduction() ? Password::min(12)->letters()->mixedCase()->numbers() : Password::min(8));
+
         // The role/permission catalog is global (shared by every Workspace), so only superusers working inside the administrative
         // Workspace manage it: a superuser acting inside a client Workspace has no platform privileges.
         Gate::define('manage-roles', fn (User $user) => $user->isPlatformSuperuser());
@@ -67,6 +71,15 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('booking-config', fn (Request $request) => Limit::perMinute((int) config('bookings.public.config_per_minute'))->by($request->ip().'|'.$request->route('key')));
         RateLimiter::for('booking-availability', fn (Request $request) => Limit::perMinute((int) config('bookings.public.availability_per_minute'))->by($request->ip().'|'.$request->route('key')));
         RateLimiter::for('booking-write', fn (Request $request) => Limit::perMinute((int) config('bookings.public.write_per_minute'))->by($request->ip().'|'.$request->route('key')));
+        // Account recovery is open to the internet and sends email: limited per IP and per address, so one mailbox cannot be flooded.
+        RateLimiter::for('password-reset-request', fn (Request $request) => [
+            Limit::perMinute(5)->by('ip:'.$request->ip()),
+            Limit::perHour(5)->by('email:'.sha1(mb_strtolower(is_string($email = $request->input('email')) ? $email : ''))),
+        ]);
+        RateLimiter::for('password-reset-submit', fn (Request $request) => Limit::perMinute(10)->by('ip:'.$request->ip()));
+        // Changing one's own password asks for the current one: limit guessing it from a hijacked session.
+        RateLimiter::for('password-change', fn (Request $request) => Limit::perMinute(6)->by('user:'.$request->user()?->id.'|'.$request->ip()));
+
         // The automation of a chatbot reads its configuration on every conversation.
         RateLimiter::for('agent', fn (Request $request) => Limit::perMinute((int) config('chatbots.agent_per_minute'))->by(sha1((string) $request->bearerToken()).'|'.$request->ip()));
 

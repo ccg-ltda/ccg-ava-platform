@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\AuthenticateAgent;
+use App\Http\Middleware\EnsureLegalAcceptance;
 use App\Http\Middleware\EnsurePlatformAdministration;
 use App\Http\Middleware\EnsureWorkspaceContext;
 use App\Http\Middleware\EnsureWorkspaceModule;
@@ -38,7 +39,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
+            EnsureLegalAcceptance::class,
         ]);
+
+        // A session opened before a password change or reset is closed on its next request (the guard compares the password hash).
+        $middleware->authenticateSessions();
 
         // Behind a load balancer / reverse proxy: TRUSTED_PROXIES="*" or a comma-separated list. Unset = trust none.
         $middleware->trustProxies(
@@ -81,8 +86,8 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        // A failed validation flashes the submitted input into the session: never credentials of an integration.
-        $exceptions->dontFlash(['auth_secret', 'headers', 'query', 'body']);
+        // A failed validation flashes the submitted input into the session: never credentials of an integration nor a recovery token.
+        $exceptions->dontFlash(['auth_secret', 'headers', 'query', 'body', 'token']);
 
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),

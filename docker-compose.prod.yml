@@ -86,6 +86,26 @@ x-php: &php
     # a webhook exists: nothing is sent outside the server otherwise. CHATBOT_FAILURE_NOTICE is the ONLY text a contact receives in that case; empty = none.
     ALERT_LOG_CHANNELS: ${ALERT_LOG_CHANNELS:-stderr}
     HORIZON_ALLOWED_EMAILS: ${HORIZON_ALLOWED_EMAILS:-}
+    # Account recovery sends email: without a real MAIL_MAILER (smtp, ses...) and sender the forgot-password form says mail is not configured.
+    MAIL_MAILER: ${MAIL_MAILER:-log}
+    MAIL_SCHEME: ${MAIL_SCHEME:-}
+    MAIL_HOST: ${MAIL_HOST:-}
+    MAIL_PORT: ${MAIL_PORT:-587}
+    MAIL_USERNAME: ${MAIL_USERNAME:-}
+    MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+    MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-}
+    MAIL_FROM_NAME: ${MAIL_FROM_NAME:-CCG Avachat}
+    AUTH_PASSWORD_RESET_EXPIRE: ${AUTH_PASSWORD_RESET_EXPIRE:-60}
+    # Legal pages: company data confirmed by CCG (empty = shown as [POR CONFIRMAR]); acceptance stays off until the texts are reviewed.
+    LEGAL_ACCEPTANCE_REQUIRED: ${LEGAL_ACCEPTANCE_REQUIRED:-false}
+    LEGAL_DOCUMENTS_REVIEWED: ${LEGAL_DOCUMENTS_REVIEWED:-false}
+    LEGAL_EFFECTIVE_DATE: ${LEGAL_EFFECTIVE_DATE:-}
+    LEGAL_COMPANY_NAME: ${LEGAL_COMPANY_NAME:-}
+    LEGAL_COMPANY_TAX_ID: ${LEGAL_COMPANY_TAX_ID:-}
+    LEGAL_COMPANY_ADDRESS: ${LEGAL_COMPANY_ADDRESS:-}
+    LEGAL_CONTACT_EMAIL: ${LEGAL_CONTACT_EMAIL:-}
+    LEGAL_PRIVACY_CONTACT: ${LEGAL_PRIVACY_CONTACT:-}
+    LEGAL_JURISDICTION: ${LEGAL_JURISDICTION:-}
     LOG_SLACK_WEBHOOK_URL: ${LOG_SLACK_WEBHOOK_URL:-}
     CHATBOT_FAILURE_NOTICE: ${CHATBOT_FAILURE_NOTICE:-}
     # First administrator (php artisan db:seed --class=AdminUserSeeder); set them only for that command.

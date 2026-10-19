@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
+use App\Legal\LegalDocuments;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -12,6 +13,8 @@ use Inertia\Response;
 
 class ProfileController extends Controller
 {
+    public function __construct(private readonly LegalDocuments $legal) {}
+
     /**
      * Display the user's profile form.
      */
@@ -20,6 +23,9 @@ class ProfileController extends Controller
         return Inertia::render('Profile/Edit', [
             'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
             'status' => session('status'),
+            'legalAvailable' => $available = $this->legal->available(),
+            'marketing' => $available && $this->legal->marketingGranted($request->user()),
+            'accepted' => $available ? $this->legal->acceptedBy($request->user()) : [],
         ]);
     }
 

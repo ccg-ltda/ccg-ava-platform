@@ -272,6 +272,8 @@ class UserController extends Controller
             $user->email = $data['email'];
             if ($changingPassword) {
                 $user->password = $data['password']; // the model's `hashed` cast hashes it
+                // The new hash already closes every open session (AuthenticateSession); a new remember token also ends the "remember me" cookies.
+                $user->remember_token = Str::random(60);
             }
             $user->save();
 

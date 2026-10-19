@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Booking\AppointmentNotifier;
+use App\Legal\LegalDocuments;
 use App\Models\AppointmentNotification;
 use App\Models\BookingSetting;
 use App\Models\Chatbot;
@@ -12,6 +13,7 @@ use App\Models\Integration;
 use App\Models\Message;
 use App\Models\Workspace;
 use App\Services\ModuleAccess;
+use App\Support\MailAvailability;
 use App\Support\ScheduledCommandMonitor;
 use Illuminate\Console\Command;
 use Illuminate\Console\Scheduling\Schedule;
@@ -46,6 +48,9 @@ class IntegrationsDiagnoseCommand extends Command
         $this->environment();
         $this->queueAndCache();
         $this->scheduler();
+
+        $this->components->info('Acceso de las cuentas (recuperación de contraseña y textos legales)');
+        $this->accountAccess();
 
         $this->components->info('Meta (WhatsApp Cloud API)');
         $this->meta();
@@ -219,6 +224,29 @@ class IntegrationsDiagnoseCommand extends Command
                 $status['failures_24h'] > 0 => $this->caution("{$name}: {$status['failures_24h']} falla(s) en 24 h, ya recuperada(s) (último éxito hace {$age} min). Causa en storage/logs/scheduler-failures.log."),
                 default => $this->good("{$name}: último éxito hace {$age} min."),
             };
+        }
+    }
+
+    private function accountAccess(): void
+    {
+        // Recovery needs real mail: without it the form says so and sends nothing, so it is a warning (never a block).
+        MailAvailability::deliversRealMail()
+            ? $this->good('Correo: transporte real y remitente propio (no se envía nada desde este comando).')
+            : $this->caution('Correo no configurado (MAIL_MAILER log/array/null o remitente de ejemplo): «¿Olvidaste tu contraseña?» avisa de que no puede enviar el enlace.');
+
+        $tables = app(LegalDocuments::class)->available();
+        $required = (bool) config('legal.acceptance_required');
+
+        if (! $tables) {
+            $required
+                ? $this->blocker('LEGAL_ACCEPTANCE_REQUIRED está activo pero faltan las tablas de aceptaciones: toda cuenta recibe un 503. Ejecuta php artisan migrate.')
+                : $this->caution('Faltan las tablas de aceptaciones y de comunicaciones comerciales (migración create_legal_acceptances_tables): el perfil funciona pero no guarda esas preferencias.');
+        } else {
+            $this->good('Tablas de aceptaciones presentes.');
+        }
+
+        if ($required && ! config('legal.reviewed')) {
+            $this->caution('Se exige aceptar textos legales que siguen marcados como borrador (LEGAL_DOCUMENTS_REVIEWED=false).');
         }
     }
 

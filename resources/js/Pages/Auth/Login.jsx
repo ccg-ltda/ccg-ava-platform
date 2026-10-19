@@ -1,5 +1,5 @@
-import { Head, useForm } from '@inertiajs/react';
-import { useState } from 'react';
+import { Head, Link, useForm } from '@inertiajs/react';
+import { useEffect, useState } from 'react';
 import { useAccess } from '@/Components/Access/AccessContext';
 import { AccessInput, AccessPasswordInput } from '@/Components/Access/AccessInput';
 import WorkspaceBadge from '@/Components/Access/WorkspaceBadge';
@@ -13,8 +13,15 @@ const isEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
  * Step 2 of access. The Workspace comes from the server session (shown here only as a badge);
  * credentials and Workspace membership are checked by the server on submit.
  */
-export default function Login({ workspace, rememberedEmail }) {
+export default function Login({ workspace, rememberedEmail, status }) {
     const { showToast } = useAccess();
+
+    // E.g. "Tu contraseña se ha restablecido" after recovering the password.
+    useEffect(() => {
+        if (status) {
+            showToast(status, 'success');
+        }
+    }, [status]);
     const { data, setData, post, processing, errors, clearErrors } = useForm({
         email: rememberedEmail ?? '',
         password: '',
@@ -102,15 +109,7 @@ export default function Login({ workspace, rememberedEmail }) {
                         />
                         Recordar sesión
                     </label>
-                    <a
-                        href="#"
-                        onClick={(e) => {
-                            e.preventDefault();
-                            showToast('Funcionalidad de recuperación en desarrollo', 'warning');
-                        }}
-                    >
-                        ¿Olvidó su contraseña?
-                    </a>
+                    <Link href={route('password.request')}>¿Olvidó su contraseña?</Link>
                 </div>
 
                 <button type="submit" className="login-btn" disabled={processing}>
@@ -119,7 +118,7 @@ export default function Login({ workspace, rememberedEmail }) {
             </form>
 
             <p className="footer-text">
-                ¿No tiene cuenta? <a href="#">Regístrese aquí</a>
+                ¿Necesita acceso? Las cuentas las crea el administrador de su Workspace.
             </p>
         </>
     );

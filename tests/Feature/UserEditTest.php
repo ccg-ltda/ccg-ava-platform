@@ -236,4 +236,32 @@ class UserEditTest extends TestCase
 
         $this->put('/users/'.$outsider->id, $this->payload($outsider, ['password' => 'Nueva-clave-123', 'password_confirmation' => 'Nueva-clave-123']))->assertNotFound();
     }
+
+    public function test_an_administrative_password_change_closes_the_sessions_the_person_had_open_and_the_remember_me_cookie(): void
+    {
+        $this->actAs('admin');
+        $user = $this->member();
+        $oldHash = $user->password;
+        $remember = $user->remember_token;
+
+        $this->put('/users/'.$user->id, $this->payload($user, ['password' => 'Nueva-clave-123', 'password_confirmation' => 'Nueva-clave-123']))->assertSessionHasNoErrors();
+
+        $fresh = $user->fresh();
+        $this->assertNotSame($remember, $fresh->remember_token);
+
+        // A session the person opened before the change carries the old hash: it is closed on its next request.
+        $this->withSession(['password_hash_web' => $oldHash, 'workspace_id' => $this->a->id])->actingAs($fresh)->get('/profile')->assertRedirect();
+        $this->withSession(['password_hash_web' => $fresh->password, 'workspace_id' => $this->a->id])->actingAs($fresh)->get('/profile')->assertOk();
+    }
+
+    public function test_editing_without_a_password_leaves_sessions_and_remember_token_alone(): void
+    {
+        $this->actAs('admin');
+        $user = $this->member();
+        $remember = $user->remember_token;
+
+        $this->put('/users/'.$user->id, $this->payload($user, ['name' => 'Otro Nombre', 'password' => '', 'password_confirmation' => '']))->assertSessionHasNoErrors();
+
+        $this->assertSame($remember, $user->fresh()->remember_token);
+    }
 }

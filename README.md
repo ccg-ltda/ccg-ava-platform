@@ -55,7 +55,9 @@ Todas están documentadas en `.env.example`; nunca escribas secretos en el repos
 
 1. Entra en `/pre-login` y escribe el código del Workspace (por ejemplo `DESARROLLO_DEV`).
 2. Inicia sesión con correo y contraseña. No hay registro público: un administrador crea las cuentas desde **Usuarios y Roles**.
-3. El administrador inicial sale de `ADMIN_EMAIL` / `ADMIN_PASSWORD`. En `local` y `testing` el seeder crea además cuentas de ejemplo con contraseñas conocidas; nunca existen en otros entornos.
+3. **¿Olvidaste tu contraseña?** `/forgot-password` envía un enlace de un solo uso que caduca (`AUTH_PASSWORD_RESET_EXPIRE`, 60 min); la respuesta es la misma exista o no la cuenta y hay límites por IP y por correo. Exige un `MAIL_MAILER` real y un `MAIL_FROM_ADDRESS` propio: sin ellos (fuera de local) el formulario avisa de que el correo no está configurado y no finge el envío. Cada persona cambia su contraseña desde **Mi perfil**; cambiarla o restablecerla cierra las demás sesiones abiertas. En producción la contraseña exige 12 caracteres con mayúsculas, minúsculas y números.
+4. **Textos legales** públicos en `/legal` (términos, aviso de privacidad y política de datos), enlazados desde el acceso y los formularios. Son **borradores** pendientes de revisión jurídica; los datos de la empresa salen de `LEGAL_*` y, vacíos, se muestran como «[POR CONFIRMAR]». Mientras no se aplique la migración `create_legal_acceptances_tables` el perfil lo avisa y no guarda nada. La aceptación por cuenta (versión, fecha e IP) existe pero está apagada (`LEGAL_ACCEPTANCE_REQUIRED=false`) hasta que CCG confirme los textos; las comunicaciones comerciales son una autorización aparte, opcional y revocable desde el perfil.
+5. El administrador inicial sale de `ADMIN_EMAIL` / `ADMIN_PASSWORD`. En `local` y `testing` el seeder crea además cuentas de ejemplo con contraseñas conocidas; nunca existen en otros entornos.
 
 Permisos de Conversaciones: `view-conversations` (leer), `reply-conversations` (tomar, escribir, devolver a la IA, resolver) y `manage-conversations` (asignar). El rol `agente` trae los dos primeros; `admin` tiene todos.
 

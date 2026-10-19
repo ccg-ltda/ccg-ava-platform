@@ -12,6 +12,7 @@ use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DemoConversationController;
 use App\Http\Controllers\IntegrationController;
+use App\Http\Controllers\LegalController;
 use App\Http\Controllers\LocationController;
 use App\Http\Controllers\MessageTemplateController;
 use App\Http\Controllers\ModuleCategoryController;
@@ -40,6 +41,10 @@ use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/pre-login');
 
+// Public legal texts (no session): linked from the access screens and the account-recovery forms.
+Route::get('/legal', [LegalController::class, 'index'])->name('legal.index');
+Route::get('/legal/{slug}', [LegalController::class, 'show'])->where('slug', '[a-z-]+')->name('legal.show');
+
 // The open booking page of a Workspace (no session): the key in the URL is the only thing the visitor chooses. Its data comes from /api/booking/{key}/....
 Route::get('/book/{key}', [PublicBookingController::class, 'page'])->where('key', '[A-Za-z0-9]{32}')->middleware('throttle:booking-config')->name('booking.public');
 
@@ -54,6 +59,7 @@ Route::middleware(['auth', 'verified', 'workspace'])->group(function () {
 Route::middleware(['auth', 'workspace'])->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::put('/profile/communications', [LegalController::class, 'updateCommunications'])->name('profile.communications');
 
     Route::get('/settings', [SettingsController::class, 'index'])
         ->middleware(['workspace.module:settings', 'workspace.permission:manage-settings'])->name('settings.index');
