@@ -233,8 +233,7 @@ La tarea está terminada solo si: el requerimiento está completo, no hay duplic
 
 - Conviven Tailwind 4 compilado (`app.css`, el sistema de tokens) y el CSS propio del acceso (`ava.css`, que deriva sus tokens de los de la app). Todo estilo nuevo va al sistema de tokens de Tailwind 4.
 - Quedan sin uso el enlace «Regístrese aquí» y el de «¿Olvidó su contraseña?» del login (apuntan a `#`).
-- `Hooks/` y `Services/` casi no tienen contenido; `tailwind.config.js` está huérfano pero el `Dockerfile` lo copia, así que no se borra sin tocar el Dockerfile.
+- `Hooks/` y `Services/` casi no tienen contenido.
 - Sin capa de servicios ni acciones: la lógica nueva no debe crecer dentro de los controladores.
-- `composer.json` pide PHP ^8.3 pero el lock exige 8.4.1 o más.
 - La imagen de MinIO es solo para desarrollo.
 - Detalle y estado de cada punto en `pendientes.md`.

@@ -20,7 +20,7 @@ Organization → Workspace → membresía (workspace_user.role) → usuarios
 
 PHP 8.4 (contenedor) · Laravel 13 · Inertia 3 · React 19 (JSX) · Vite 8 · Tailwind CSS 4 · PostgreSQL 16 · Redis 7 · Horizon · Reverb · MinIO/S3 · `spatie/laravel-permission`. Los tests usan SQLite en memoria.
 
-Requisitos: Docker con Compose. Los contenedores usan PHP 8.4 (`Dockerfile`), Node 22 y PostgreSQL 16. Para ejecutar PHPUnit, Pint o `npm` en el anfitrión, además PHP 8.4+ (`composer.json` declara `^8.3`, pero el `composer.lock` exige 8.4.1 o superior), Composer y Node 20+.
+Requisitos: Docker con Compose. Los contenedores usan PHP 8.4 (`Dockerfile`), Node 22 y PostgreSQL 16. Para ejecutar PHPUnit, Pint o `npm` en el anfitrión, además PHP 8.4+ (`composer.json` declara `^8.4`), Composer y Node 20+.
 
 ## Puesta en marcha con Docker
 

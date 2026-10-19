@@ -114,7 +114,7 @@ El bucket de MinIO es **privado** (`MINIO_DEFAULT_BUCKETS` sin `:public`): los a
 
 ### Horizon
 
-`/horizon` solo está abierto en `APP_ENV=local`. Fuera de local, el gate `viewHorizon` (`app/Providers/HorizonServiceProvider.php`) tiene la lista de emails vacía: **nadie entra** hasta que definas quién.
+`/horizon` está abierto en `APP_ENV=local`. Fuera de local, el gate `viewHorizon` (`app/Providers/HorizonServiceProvider.php`) deja entrar solo a las cuentas **activas** cuyo correo esté en `HORIZON_ALLOWED_EMAILS` (separados por comas, sin distinguir mayúsculas). Con la variable vacía —el valor por defecto— **nadie entra**. Quién figura en la lista es una decisión del responsable (ver `pendientes.md`).
 
 ## Operación del piloto (copia, supervisión, despliegue y marcha atrás)
 
@@ -144,7 +144,7 @@ BACKUP_FILE=/var/backups/ava/ava_<fecha>.dump COMPOSE_FILE=docker-compose.prod.y
 | Ejecuciones de IA fallidas | `php artisan executions:list --failed`; `php artisan executions:recover` | A diario durante el piloto |
 | Resultados inciertos de herramientas | `php artisan agent:tools:reconcile` (el scheduler lo ejecuta cada 5 min); en cada conversación, el panel de operaciones muestra la traza | A diario |
 | Contenedores | `docker compose ... ps` (todos `healthy`) y `logs --tail` de `app`, `worker`, `scheduler`, `reverb` | A diario; alerta externa de reinicios |
-| Horizon | Cerrado salvo en local. El responsable decide la lista de correos en `HorizonServiceProvider` (decisión pendiente); mientras tanto, `php artisan horizon:status` y `queue:failed` | A diario |
+| Horizon | Cerrado salvo en local y para los correos de `HORIZON_ALLOWED_EMAILS` (vacío por defecto = nadie; el responsable decide la lista). Sin lista, `php artisan horizon:status` y `queue:failed` | A diario |
 | Webhooks de Meta | Recepción: `integrations:diagnose` y registros `whatsapp_*`; sin latido de mensajes durante un horario normal = revisar suscripción y firma | Durante el piloto, cada mañana |
 
 ### Alertas operativas y fallo de la IA (D-FALLO)

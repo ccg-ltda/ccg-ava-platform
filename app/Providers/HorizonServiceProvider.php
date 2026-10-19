@@ -27,10 +27,13 @@ class HorizonServiceProvider extends HorizonApplicationServiceProvider
      */
     protected function gate(): void
     {
+        // Outside local only the accounts listed in HORIZON_ALLOWED_EMAILS enter (empty list = nobody), and only while they are active.
         Gate::define('viewHorizon', function ($user = null) {
-            return in_array(optional($user)->email, [
-                //
-            ]);
+            if (! $user || ! $user->is_active) {
+                return false;
+            }
+
+            return in_array(mb_strtolower((string) $user->email), array_map('mb_strtolower', (array) config('horizon.allowed_emails')), true);
         });
     }
 }

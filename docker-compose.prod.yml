@@ -85,6 +85,7 @@ x-php: &php
     # that raised them and, here, to the container log (stderr) so `docker compose logs` keeps them. Add `slack` (with LOG_SLACK_WEBHOOK_URL) only when
     # a webhook exists: nothing is sent outside the server otherwise. CHATBOT_FAILURE_NOTICE is the ONLY text a contact receives in that case; empty = none.
     ALERT_LOG_CHANNELS: ${ALERT_LOG_CHANNELS:-stderr}
+    HORIZON_ALLOWED_EMAILS: ${HORIZON_ALLOWED_EMAILS:-}
     LOG_SLACK_WEBHOOK_URL: ${LOG_SLACK_WEBHOOK_URL:-}
     CHATBOT_FAILURE_NOTICE: ${CHATBOT_FAILURE_NOTICE:-}
     # First administrator (php artisan db:seed --class=AdminUserSeeder); set them only for that command.

@@ -3,7 +3,7 @@
 # Single image for every role (app, worker, scheduler, reverb). Roles only differ in the
 # command they run. Targets: `development` (code is bind-mounted) and `production`.
 
-# composer.lock pins symfony/* 8.x, which requires PHP >= 8.4.1 (composer.json only says ^8.3).
+# composer.lock pins symfony/* 8.x, which requires PHP >= 8.4.1 (composer.json says ^8.4).
 ARG PHP_VERSION=8.4
 ARG NODE_VERSION=22
 
@@ -54,7 +54,7 @@ FROM node:${NODE_VERSION}-alpine AS frontend
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
-COPY vite.config.js postcss.config.js tailwind.config.js jsconfig.json ./
+COPY vite.config.js postcss.config.js jsconfig.json ./
 COPY resources ./resources
 COPY public ./public
 RUN npm run build

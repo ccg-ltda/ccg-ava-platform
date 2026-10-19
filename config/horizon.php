@@ -87,6 +87,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Horizon Access Outside Local
+    |--------------------------------------------------------------------------
+    |
+    | Comma-separated emails allowed to open the Horizon dashboard when APP_ENV
+    | is not local (see HorizonServiceProvider). Empty means nobody.
+    |
+    */
+
+    'allowed_emails' => array_values(array_filter(array_map('trim', explode(',', (string) env('HORIZON_ALLOWED_EMAILS', ''))))),
+
+    /*
+    |--------------------------------------------------------------------------
     | Queue Wait Time Thresholds
     |--------------------------------------------------------------------------
     |

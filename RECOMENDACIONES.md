@@ -812,7 +812,7 @@ Verificado en código y pruebas (no se encontró una brecha nueva de aislamiento
 | B5 | Licencia de n8n para este modelo de servicio | Dirección | Riesgo contractual antes de clientes |
 | D1 | Destino de la alerta (Slack, correo, agente de logs) o responsable que revise `alerts.log` y la bandeja «Pendientes» a diario | Responsable del piloto | Hoy la alerta solo existe en el servidor |
 | D2 | Texto aprobado de `CHATBOT_FAILURE_NOTICE` (o dejarlo vacío) | Negocio/jurídico | Sin él el contacto no recibe aviso |
-| D3 | Quién accede a `/horizon` y quién supervisa | Responsable | Hoy nadie entra fuera de local |
+| D3 | Quién accede a `/horizon` y quién supervisa | Responsable | Mecanismo hecho (`HORIZON_ALLOWED_EMAILS`, vacío = nadie fuera de local); falta la lista |
 | D4 | Copia programada con `cron` y restauración probada en el servidor real | Infraestructura | Solo probado en desarrollo |
 | D5 | Aviso de privacidad, contrato de tratamiento, retención, STOP, salud, D-P1 | Jurídico/dirección | **Bloquea clientes reales, no el piloto técnico con personas autorizadas** |
 
@@ -996,3 +996,13 @@ Riesgos: hipótesis de Booker (§13.2); workflow real distinto del contrato; ale
 | Rutas, migraciones, Docker | 222 rutas; 0 migraciones pendientes (solo lectura sobre desarrollo; 23 archivos); `docker-compose.prod.yml` válido con valores ficticios; `integrations:diagnose` 0 bloqueos, 3 avisos esperados |
 | Graphify | `graphify update .`: 5235 nodos, 17 681 aristas, 253 comunidades |
 | NO ejecutado | Booker, Meta y n8n reales; pantallas en navegador (solo cambió el valor inicial del campo `api` en un modal, no revisado en navegador ni en modo oscuro); despliegue; migraciones en bases compartidas |
+
+## 14. Depuración de pendientes (2026-10-19, octavo bloque)
+
+Base: `main` = `origin/main` = `4d2dfff`. Sin commit, push, despliegue ni llamadas externas.
+
+**Cambios:** (1) `viewHorizon` deja entrar fuera de local solo a cuentas activas listadas en `HORIZON_ALLOWED_EMAILS` (vacío = nadie; `HorizonAccessTest`); la variable se reenvía en `docker-compose.prod.yml`. (2) `composer.json` pide PHP `^8.4` (coherente con el lock y la imagen); `composer update --lock` solo cambió el hash y la plataforma. (3) `tailwind.config.js` (huérfano en Tailwind 4) y su `COPY` del `Dockerfile` eliminados; `npm run build` correcto. (4) `pendientes.md` reorganizado contra el código: la lista anterior seguía diciendo que no había tareas programadas, sedes, recordatorios, Productos ni Pedidos.
+
+**Validación:** PHPUnit SQLite 1363 pruebas, 11 110 aserciones, 0 fallos, 3 omitidas (PostgreSQL); PHPUnit PostgreSQL 16 desechable 1363 pruebas, 11 120 aserciones, 0 fallos (base eliminada); Pint 425 archivos; `test:js` sin fallos; `build`, `composer audit` y `npm audit` limpios; compose de producción válido con valores ficticios; 222 rutas; 0 migraciones pendientes. El circuito local no se repitió: el bloque no tocó ejecuciones, reservas ni webhooks.
+
+**Sigue sin probarse contra servicios reales:** Meta, n8n y Booker.
