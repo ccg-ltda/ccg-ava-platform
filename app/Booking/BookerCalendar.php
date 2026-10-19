@@ -37,14 +37,22 @@ class BookerCalendar implements CalendarProvider
 
     public function services(): array
     {
-        return array_values(array_map(fn (array $treatment) => [
+        return array_values(array_map(self::serviceOf(...), $this->treatments()));
+    }
+
+    /** A Booker treatment as an Ava service (shared with the Merchant API reader, which returns treatments of the same kind). @param  array<string, mixed>  $treatment @return array<string, mixed> */
+    public static function serviceOf(array $treatment): array
+    {
+        $amount = is_array($treatment['Price'] ?? null) ? ($treatment['Price']['Amount'] ?? null) : ($treatment['Price'] ?? null);
+
+        return [
             'id' => (string) $treatment['ID'],
             'name' => (string) ($treatment['Name'] ?? ''),
             'description' => filled($treatment['Description'] ?? null) ? (string) $treatment['Description'] : null,
             'duration_minutes' => isset($treatment['TotalDuration']) ? (int) $treatment['TotalDuration'] : (isset($treatment['TreatmentDuration']) ? (int) $treatment['TreatmentDuration'] : null),
-            'price' => $this->price($treatment['Price'] ?? null),
+            'price' => is_numeric($amount) ? (float) $amount : null,
             'category' => filled($treatment['Category'] ?? null) ? (string) (is_array($treatment['Category']) ? ($treatment['Category']['Name'] ?? '') : $treatment['Category']) : null,
-        ], $this->treatments()));
+        ];
     }
 
     public function professionals(int|string|null $serviceId = null): array
@@ -150,12 +158,5 @@ class BookerCalendar implements CalendarProvider
         }
 
         return $items;
-    }
-
-    private function price(mixed $price): ?float
-    {
-        $amount = is_array($price) ? ($price['Amount'] ?? null) : $price;
-
-        return is_numeric($amount) ? (float) $amount : null;
     }
 }

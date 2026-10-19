@@ -54,7 +54,29 @@ return [
      */
     'booker' => [
         'timeout' => 15,
-        'urls' => ['staging' => 'https://api-staging.booker.com', 'production' => 'https://api.booker.com'],
+        /* Hosts by environment. They are environment configuration, never hard-wired: the integration of each Workspace picks one. */
+        'urls' => ['staging' => env('BOOKER_STAGING_URL', 'https://api-staging.booker.com'), 'production' => env('BOOKER_PRODUCTION_URL', 'https://api.booker.com')],
+
+        /* `scope` of the OAuth client-credentials token. `public` is what the customer API (Ruby client) uses; the scope the Merchant API needs is NOT confirmed: set BOOKER_SCOPE after the first Staging test. */
+        'scope' => env('BOOKER_SCOPE', 'public'),
+
+        /*
+         * The Merchant API (the one Booker's support confirmed for availability and booking). The paths are the ones support gave for Staging;
+         * the SHAPE of the requests and responses is not documented anywhere Ava can read, so it lives in one class (App\Booking\BookerMerchantCalendar)
+         * and is verified in Staging. Until `verified` is true Ava offers availability and booking for a Workspace pointed at STAGING only, never at production.
+         * `locations_test_ids` are Booker's shared test locations: never accepted for production.
+         */
+        'merchant' => [
+            'verified' => (bool) env('BOOKER_MERCHANT_VERIFIED', false),
+            'cache_seconds' => 300,
+            'paths' => [
+                'treatments' => '/v4.1/merchant/treatments',
+                'customers' => '/v4.1/merchant/customers',
+                'availability' => '/v4.1/merchant/availability/1day',
+                'appointment_create' => '/v4.1/merchant/appointment/create',
+            ],
+            'test_location_ids' => ['3749'],
+        ],
     ],
 
     /* WhatsApp Business (Meta Graph API): used only to verify a number with its token (read-only). */

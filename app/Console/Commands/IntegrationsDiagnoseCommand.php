@@ -164,7 +164,7 @@ class IntegrationsDiagnoseCommand extends Command
 
         if (config('queue.default') === 'redis') {
             try {
-                $masters = class_exists(MasterSupervisorRepository::class) ? count(app(MasterSupervisorRepository::class)->all()) : 0;
+                $masters = interface_exists(MasterSupervisorRepository::class) ? count(app(MasterSupervisorRepository::class)->all()) : 0;
                 $masters > 0 ? $this->good('Horizon corriendo.') : $this->{$production ? 'blocker' : 'caution'}('Horizon no está corriendo: ninguna ejecución ni envío se procesará.');
             } catch (Throwable) {
                 $this->caution('No se pudo consultar Horizon (Redis no responde).');
@@ -369,6 +369,9 @@ class IntegrationsDiagnoseCommand extends Command
 
         $codes = $scope(ChatbotExecution::where('created_at', '>=', $since)->where('status', 'failed'))->selectRaw('outcome_code, count(*) as total')->groupBy('outcome_code')->pluck('total', 'outcome_code');
         $codes->isNotEmpty() ? $this->caution('Ejecuciones fallidas por código: '.$codes->map(fn ($total, $code) => ($code ?: 'sin código')."={$total}")->implode(', ').'.') : null;
+
+        $handedOver = $scope(ChatbotExecution::where('control_result', 'escalated')->where('created_at', '>=', $since))->count();
+        $handedOver > 0 ? $this->caution("{$handedOver} conversación(es) pasaron a una persona en las últimas 24 h porque la IA falló (alerta en storage/logs/alerts.log): atiéndelas desde la bandeja «Pendientes».") : null;
 
         $stale = $scope(ChatbotExecution::whereIn('status', ['pending', 'running'])->where('updated_at', '<', now()->subMinutes(5)))->count();
         $stale > 0 ? $this->caution("{$stale} ejecución(es) llevan más de 5 minutos sin avanzar (¿worker detenido? ejecuta executions:recover).") : $this->good('Ninguna ejecución atascada.');

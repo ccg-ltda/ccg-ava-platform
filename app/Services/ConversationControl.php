@@ -53,6 +53,31 @@ class ConversationControl
         });
     }
 
+    /**
+     * D-FALLO: the AI failed for good on a message and nobody else has answered. Only a conversation the AI still has, exactly as it was when the
+     * failed execution started (`$expectedVersion`), moves to `pending`: one a person already holds (pending or human) is left alone, a resolved one
+     * is NOT reopened (the contact's next message does that) and one whose control changed since is not touched. Returns whether it moved, so
+     * the caller raises the alert and sends the approved notice exactly once.
+     */
+    public function handOverAfterFailure(Conversation $conversation, int $expectedVersion, string $code): bool
+    {
+        $moved = false;
+
+        $this->change($conversation, function (Conversation $locked) use ($expectedVersion, $code, &$moved) {
+            if ($locked->handling !== Conversation::AI || $locked->handling_version !== $expectedVersion) {
+                return null;
+            }
+
+            $before = $this->snapshot($locked);
+            $this->move($locked, Conversation::PENDING, null, ['handoff_reason' => "La IA no pudo responder ({$code}). Atiende a esta persona."]);
+            $moved = true;
+
+            return ['requested', $before];
+        });
+
+        return $moved;
+    }
+
     /** An agent takes the conversation (from the AI or from the pending queue). */
     public function take(Conversation $conversation, User $agent): Conversation
     {

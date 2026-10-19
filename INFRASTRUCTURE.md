@@ -82,6 +82,10 @@ Todo sale de `.env` (ver `.env.example`). El cableado de arquitectura (pgsql, dr
 | `REVERB_APP_ID`, `REVERB_APP_KEY`, `REVERB_APP_SECRET` | Websockets |
 | `TRUSTED_PROXIES` | `*` o lista de IPs cuando hay balanceador delante |
 | `APP_PORT`, `VITE_PORT`, `DB_FORWARD_PORT`, `MINIO_PORT` | Puertos del host (desarrollo) |
+| `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN`, `N8N_EXECUTION_URL`, `N8N_EXECUTION_SECRET`, `N8N_EXECUTION_TIMEOUT` | Integración con Meta y con el n8n de la plataforma (vacío = no configurado) |
+| `BOOKER_STAGING_URL`, `BOOKER_PRODUCTION_URL`, `BOOKER_SCOPE`, `BOOKER_MERCHANT_VERIFIED` | Booker: hosts por entorno, scope del token y el interruptor que habilita horarios y reserva en producción (`false` hasta verificarlos en Staging). Las credenciales de Booker son de cada Workspace (cifradas en la base), no variables de entorno |
+| `ALERT_LOG_CHANNELS`, `LOG_SLACK_WEBHOOK_URL` | Dónde se escribe, además de `storage/logs/alerts.log`, la alerta de un fallo definitivo de la IA (el compose de producción usa `stderr`). Sin un canal externo la alerta no sale del servidor |
+| `CHATBOT_FAILURE_NOTICE` | Único texto que recibe el contacto cuando la IA falla y la conversación pasa a una persona. Debe estar aprobado por el negocio; vacío = no se envía nada |
 
 El bucket de MinIO es **privado** (`MINIO_DEFAULT_BUCKETS` sin `:public`): los archivos (por ejemplo el logo de cada Workspace) solo salen por rutas autenticadas de Laravel, nunca por una URL directa del objeto. Si tu volumen de MinIO es anterior a este cambio y el bucket sigue público, ciérralo sin perder datos: `docker compose exec minio sh -c 'mc alias set local http://localhost:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" && mc anonymous set none local/ccg-ava'`.
 
@@ -143,6 +147,14 @@ BACKUP_FILE=/var/backups/ava/ava_<fecha>.dump COMPOSE_FILE=docker-compose.prod.y
 | Horizon | Cerrado salvo en local. El responsable decide la lista de correos en `HorizonServiceProvider` (decisión pendiente); mientras tanto, `php artisan horizon:status` y `queue:failed` | A diario |
 | Webhooks de Meta | Recepción: `integrations:diagnose` y registros `whatsapp_*`; sin latido de mensajes durante un horario normal = revisar suscripción y firma | Durante el piloto, cada mañana |
 
+### Alertas operativas y fallo de la IA (D-FALLO)
+
+Cuando la IA falla de forma definitiva (n8n inaccesible tras 3 intentos, respuesta que no cumple el contrato, 401/403 de n8n, error interno repetido, mensaje demasiado viejo porque la cola estuvo detenida), Ava pasa la conversación a «Pendiente de agente» (solo si la IA todavía la tenía), escribe una línea `ai_failure_handed_to_human` en el log `alerts` (identificadores, código fijo, tipo de fallo y causa; nunca texto ni número del contacto) y, si `CHATBOT_FAILURE_NOTICE` está definida, envía ese único texto al contacto. Qué hay y qué no:
+
+- **Existe y está probado:** conversación pendiente, auditoría del Workspace, línea de alerta en `storage/logs/alerts.log` del contenedor que la generó (el `worker`) y, con el compose de producción, en `docker compose logs worker` (`ALERT_LOG_CHANNELS=stderr`). `integrations:diagnose` cuenta las conversaciones pasadas a una persona por un fallo en las últimas 24 h y `executions:recover` completa un traspaso que una caída dejó a medias.
+- **Requiere configuración externa (no hecha):** un destino que avise a una persona (por ejemplo `ALERT_LOG_CHANNELS=stderr,slack` con `LOG_SLACK_WEBHOOK_URL`, o un agente de logs que vigile `ai_failure_handed_to_human`). Hasta entonces nadie recibe un aviso fuera del servidor: durante el piloto el responsable debe mirar la bandeja «Pendientes» y `diagnose` a diario.
+- Revisión: `docker compose ... logs worker | grep ai_failure_handed_to_human`, `executions:list --failed`, bandeja de Conversaciones (filtro pendientes).
+
 ### Despliegue, migración y marcha atrás
 
 1. **Antes:** `backup.sh` + `restore-check.sh` con éxito; leer las migraciones nuevas y `migrate --pretend` en una copia restaurada de la base; confirmar variables obligatorias; tener la imagen anterior etiquetada (`APP_IMAGE=ccg-ava-platform:<etiqueta>`).
@@ -156,3 +168,7 @@ BACKUP_FILE=/var/backups/ava/ava_<fecha>.dump COMPOSE_FILE=docker-compose.prod.y
 - Administración de plataforma: solo `Desarrollo_DEV` y superusuarios; no entran a los datos de un cliente sin acceso temporal justificado y auditado (D-P1 pendiente). Un cliente solo ve su Workspace.
 - Los secretos (`APP_KEY`, `DB_PASSWORD`, `REDIS_PASSWORD`, `META_*`, `N8N_*`, `AWS_*`, `REVERB_*`) viven en el archivo de variables del servidor o en el gestor de secretos del proveedor, nunca en Git ni en imágenes. Rotar `META_APP_SECRET` y `N8N_EXECUTION_SECRET` si se sospecha de exposición y tras terminar el piloto.
 - Contraseña del primer administrador: cambiarla en el primer inicio de sesión; `ADMIN_*` se definen solo para ejecutar `AdminUserSeeder` y se eliminan después.
+
+### Circuito local de pruebas (solo desarrollo)
+
+`sh docker/ops/local-loop/run.sh` (en Git Bash de Windows: `MSYS_NO_PATHCONV=1 sh docker/ops/local-loop/run.sh`, o desde WSL/PowerShell con `sh`) ejecuta, en el contenedor `app` de desarrollo y contra la base desechable `ccg_ava_e2e` (la crea y la elimina; rechaza ejecutarse si el contenedor no es `APP_ENV=local`), el recorrido Meta (conductor firmado) → Ava → trabajador de cola → doble de n8n → herramientas → doble de la Graph API, con escenarios de verificación del webhook, reserva, rechazo, duplicado, traspaso, fallos de n8n, respuestas inválidas y caída del trabajador con recuperación. Los dobles NO son Meta ni n8n. No usar contra producción ni contra `ccg_ava`.

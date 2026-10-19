@@ -4,12 +4,14 @@ namespace Tests\Feature;
 
 use App\Models\Appointment;
 use App\Models\AuditLog;
+use App\Models\BookingCustomer;
 use App\Models\Chatbot;
 use App\Models\Conversation;
 use App\Models\Service;
 use App\Models\Workspace;
 use App\Services\AgentAccess;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\Support\BuildsBookings;
 use Tests\Support\SimulatedCalendar;
 use Tests\TestCase;
@@ -242,5 +244,135 @@ class AgentBookingTest extends TestCase
         $this->agentCall('GET', '/services')->assertOk()->assertJsonPath('capabilities.book', false)->assertJsonPath('capabilities.availability', false);
         $this->agentCall('POST', '/appointments', $this->book(['service_id' => 'S1']))->assertStatus(422)->assertJsonPath('reason', 'unsupported');
         $this->assertSame(0, Appointment::count());
+    }
+
+    public function test_availability_never_offers_a_taken_slot_and_a_day_without_hours_is_an_empty_answer_not_an_error(): void
+    {
+        $this->conversation();
+        $query = "/availability?service_id={$this->service->id}&from=2026-10-13&days=1";
+        $before = collect($this->agentCall('GET', $query)->assertOk()->json('slots'))->pluck('startsAt');
+        $this->assertContains('2026-10-13T10:00:00Z', $before);
+
+        $this->agentCall('POST', '/appointments', $this->book())->assertCreated();
+
+        $after = collect($this->agentCall('GET', $query)->assertOk()->json('slots'))->pluck('startsAt');
+        $this->assertNotContains('2026-10-13T10:00:00Z', $after, 'a booked slot is no longer offered');
+        $this->assertLessThan($before->count(), $after->count(), 'slots overlapping the booking disappear too');
+
+        // Nothing is open on this date: the workflow gets an empty list to tell the contact, never a 4xx/5xx or an invented slot.
+        $this->agentCall('GET', "/availability?service_id={$this->service->id}&from=2026-12-25&days=1")->assertOk()->assertJsonPath('slots', []);
+    }
+
+    // --- D-TEL: the phone of a WhatsApp contact comes from the conversation, not from the workflow --------------------------------
+
+    /** The booking the workflow sends when it does NOT know the contact's number (Ava never gives it to the workflow). */
+    private function bookWithoutPhone(string $contact = '573001112233', array $customer = ['name' => 'Laura Pérez']): array
+    {
+        return ['channel' => 'whatsapp', 'contact_id' => $contact, 'service_id' => $this->service->id, 'starts_at' => '2026-10-13T10:00:00Z', 'customer' => $customer];
+    }
+
+    public function test_on_whatsapp_a_booking_without_phone_uses_the_verified_number_of_the_conversation(): void
+    {
+        $this->conversation();
+
+        $response = $this->agentCall('POST', '/appointments', $this->bookWithoutPhone())->assertCreated();
+
+        $this->assertSame('573001112233', BookingCustomer::sole()->phone);
+        $this->assertSame('Laura Pérez', BookingCustomer::sole()->name);
+        // The number goes into the booking, never back out to the workflow: the answer, the audit and the trace carry no phone.
+        $this->assertStringNotContainsString('573001112233', $response->getContent());
+        $this->assertStringNotContainsString('573001112233', json_encode(AuditLog::all()->toArray()));
+        $this->assertStringNotContainsString('573001112233', json_encode(DB::table('agent_tool_calls')->get()->all()));
+    }
+
+    public function test_a_phone_the_workflow_does_send_is_kept_and_never_replaced_by_the_conversation_number(): void
+    {
+        $this->conversation();
+
+        $this->agentCall('POST', '/appointments', $this->bookWithoutPhone('573001112233', ['name' => 'Para su mamá', 'phone' => '+57 310 555 0000']))->assertCreated();
+
+        $this->assertSame(['573105550000'], BookingCustomer::pluck('phone')->all());
+    }
+
+    public function test_a_whatsapp_id_that_is_not_a_valid_international_number_is_never_used_as_a_phone(): void
+    {
+        foreach (['12345' => 'too short for a phone', 'abc-123-xyz' => 'an internal identifier', '999999999999999999' => 'more digits than a phone has', '0573001112233' => 'a leading zero'] as $contact => $why) {
+            $this->conversation((string) $contact);
+
+            $refused = $this->agentCall('POST', '/appointments', $this->bookWithoutPhone((string) $contact))->assertStatus(422);
+
+            $this->assertSame('contact_required', $refused->json('reason'), $why);
+            $this->assertSame(0, Appointment::count(), $why);
+            $this->assertSame(0, BookingCustomer::count(), $why);
+        }
+
+        // The Workspace may accept an email alone; then the booking proceeds and no phone is invented.
+        $this->workspace->bookingSetting()->updateOrCreate([], ['require_phone' => false]);
+        $this->agentCall('POST', '/appointments', $this->bookWithoutPhone('12345', ['name' => 'Laura', 'email' => 'laura@example.com']))->assertCreated();
+        $this->assertNull(BookingCustomer::sole()->phone);
+    }
+
+    public function test_webchat_asks_for_a_phone_or_an_email_and_never_takes_one_from_the_visitor_id(): void
+    {
+        $this->bot->conversations()->create(['workspace_id' => $this->workspace->id, 'channel' => 'web', 'contact_id' => '573001112233', 'contact_name' => 'Visitante']);
+        $web = fn (array $customer) => ['channel' => 'web', 'contact_id' => '573001112233', 'service_id' => $this->service->id, 'starts_at' => '2026-10-13T10:00:00Z', 'customer' => $customer];
+
+        $refused = $this->agentCall('POST', '/appointments', $web(['name' => 'Laura']))->assertStatus(422);
+
+        $this->assertSame('contact_required', $refused->json('reason'));
+        $this->assertStringContainsString('teléfono o un correo', $refused->json('message'));
+        $this->assertSame(0, Appointment::count());
+        // The trace records a rejected call with the fixed code, never the contact data.
+        $this->assertSame(['rejected', 'contact_required'], [DB::table('agent_tool_calls')->where('tool', 'booking.book')->value('status'), DB::table('agent_tool_calls')->where('tool', 'booking.book')->value('reason')]);
+
+        // Operations that need no contact data are not blocked by the missing data.
+        $this->agentCall('GET', "/availability?service_id={$this->service->id}&from=2026-10-13&days=1")->assertOk();
+        $this->agentCall('GET', '/appointments', ['channel' => 'web', 'contact_id' => '573001112233'])->assertOk()->assertJsonPath('appointments', []);
+
+        // By default the Workspace also asks for a phone: an email alone is not enough, and the answer says which datum is missing.
+        $this->agentCall('POST', '/appointments', $web(['name' => 'Laura', 'email' => 'laura@example.com']))->assertStatus(422)->assertJsonPath('reason', 'contact_required');
+        $this->assertSame(0, Appointment::count());
+
+        $this->agentCall('POST', '/appointments', $web(['name' => 'Laura', 'phone' => '+57 300 111 2233']))->assertCreated();
+        $this->assertSame(['573001112233'], BookingCustomer::pluck('phone')->all());
+    }
+
+    public function test_the_workspace_rule_that_asks_for_an_email_is_still_enforced_with_the_same_reason(): void
+    {
+        $this->workspace->bookingSetting()->updateOrCreate([], ['require_email' => true]);
+        $this->conversation();
+
+        $this->agentCall('POST', '/appointments', $this->bookWithoutPhone())->assertStatus(422)->assertJsonPath('reason', 'contact_required');
+        $this->agentCall('POST', '/appointments', $this->bookWithoutPhone('573001112233', ['name' => 'Laura', 'email' => 'laura@example.com']))->assertCreated();
+    }
+
+    public function test_retries_and_a_second_booking_by_the_same_contact_never_duplicate_the_booking_or_the_customer(): void
+    {
+        $this->conversation();
+
+        $this->agentCall('POST', '/appointments', $this->bookWithoutPhone())->assertCreated();
+        $this->agentCall('POST', '/appointments', $this->bookWithoutPhone())->assertOk()->assertJsonPath('replayed', true);
+        // The workflow that did send the contact's own number lands on the same booking too.
+        $this->agentCall('POST', '/appointments', $this->bookWithoutPhone('573001112233', ['name' => 'Laura Pérez', 'phone' => '573001112233']))->assertOk()->assertJsonPath('replayed', true);
+        // The same person books another time: the same customer, no second record.
+        $this->agentCall('POST', '/appointments', ['starts_at' => '2026-10-13T14:00:00Z'] + $this->bookWithoutPhone())->assertCreated();
+
+        $this->assertSame([2, 1], [Appointment::count(), BookingCustomer::count()]);
+    }
+
+    public function test_the_same_whatsapp_number_in_another_workspace_is_a_different_customer_in_that_workspace_only(): void
+    {
+        $other = $this->bookingWorkspace('OTHER', self::MODULES);
+        [$otherBot, $otherToken] = $this->bot($other);
+        $otherService = $this->makeService($other);
+        $this->makeProfessional($other, [$otherService]);
+        $this->conversation();
+        $this->conversation('573001112233', $otherBot);
+
+        $this->agentCall('POST', '/appointments', $this->bookWithoutPhone())->assertCreated();
+        $theirs = $this->agentCall('POST', '/appointments', ['service_id' => $otherService->id] + $this->bookWithoutPhone(), $otherToken)->assertCreated();
+
+        $this->assertSame([1, 1], [BookingCustomer::where('workspace_id', $this->workspace->id)->count(), BookingCustomer::where('workspace_id', $other->id)->count()]);
+        $this->assertSame($other->id, Appointment::findOrFail($theirs->json('appointment.id'))->workspace_id);
     }
 }

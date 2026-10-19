@@ -16,6 +16,9 @@ class BookingException extends RuntimeException
 
     public const INVALID = 'invalid';
 
+    /** The booking has no way to reach the customer (no phone and no email, or the one the Workspace requires): the caller must ask the contact. */
+    public const CONTACT_REQUIRED = 'contact_required';
+
     public const NOT_FOUND = 'not_found';
 
     public const STATE = 'state';
@@ -50,6 +53,11 @@ class BookingException extends RuntimeException
     public static function invalid(string $message): self
     {
         return new self(self::INVALID, $message);
+    }
+
+    public static function contactRequired(string $message): self
+    {
+        return new self(self::CONTACT_REQUIRED, $message);
     }
 
     public static function state(string $message): self

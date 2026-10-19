@@ -50,8 +50,9 @@ class N8nExecutor implements ChatbotExecutor
             $response = $this->target->client($this->target->resolve($url), (int) config('n8n.timeout'), $headers)->withBody($body, 'application/json')->post($url);
         } catch (UnsafeTarget) {
             return ExecutionOutcome::permanent('unsafe_target');
-        } catch (ConnectionException) {
-            return ExecutionOutcome::temporary('unreachable');
+        } catch (ConnectionException $e) {
+            // cURL error 28 is "operation timed out": the workflow may be running (slow) rather than unreachable, and the report should say which.
+            return ExecutionOutcome::temporary(str_contains($e->getMessage(), 'cURL error 28') ? 'timeout' : 'unreachable');
         } catch (Throwable) {
             return ExecutionOutcome::temporary('request_failed');
         }
@@ -60,6 +61,11 @@ class N8nExecutor implements ChatbotExecutor
 
         if (in_array($status, [408, 425, 429], true) || $status >= 500) {
             return ExecutionOutcome::temporary('n8n_unavailable');
+        }
+
+        // 401/403: the workflow refused Ava's signature or credentials. Retrying the same request cannot fix it; the secret or webhook must.
+        if (in_array($status, [401, 403], true)) {
+            return ExecutionOutcome::permanent('n8n_auth');
         }
 
         if (! $response->successful()) {

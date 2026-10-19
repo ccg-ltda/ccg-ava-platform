@@ -4,6 +4,7 @@ namespace App\Integrations;
 
 use App\Audit\Masked;
 use App\Booking\BookerCalendar;
+use App\Booking\BookerMerchantCalendar;
 use App\Booking\CalendarProvider;
 use App\Booking\ProviderException;
 use App\Models\Integration;
@@ -41,7 +42,9 @@ class BookerType implements CalendarProviderType
     {
         return [
             ['name' => 'environment', 'label' => 'Entorno', 'kind' => 'select', 'required' => true, 'options' => [['value' => 'staging', 'label' => 'Sandbox (pruebas)'], ['value' => 'production', 'label' => 'Producción']], 'hint' => 'Usa Sandbox hasta que Booker confirme el acceso a producción.'],
-            ['name' => 'location_id', 'label' => 'ID de la ubicación (Location ID)', 'kind' => 'text', 'required' => true, 'placeholder' => '1234'],
+            ['name' => 'api', 'label' => 'API de Booker', 'kind' => 'select', 'required' => true, 'default' => 'merchant', 'options' => [['value' => 'merchant', 'label' => 'Merchant (horarios y reservas)'], ['value' => 'customer', 'label' => 'Customer (solo lectura de servicios)']], 'hint' => 'Merchant es la API que Booker confirmó para consultar horarios y crear citas.'],
+            ['name' => 'location_id', 'label' => 'Sucursal principal (Location ID)', 'kind' => 'text', 'required' => true, 'placeholder' => '1234', 'hint' => 'El ID de la ubicación que Booker habilitó para este entorno. En producción nunca uses el ID de pruebas.'],
+            ['name' => 'locations', 'label' => 'Otras sucursales (opcional)', 'kind' => 'textarea', 'required' => false, 'placeholder' => "5678 | Sede Norte\n9012 | Sede Sur", 'hint' => 'Una por línea: Location ID | nombre. Con varias sucursales el asistente pregunta cuál quiere el cliente.'],
             ['name' => 'client_id', 'label' => 'Client ID', 'kind' => 'secret', 'required' => true],
             ['name' => 'client_secret', 'label' => 'Client Secret', 'kind' => 'secret', 'required' => true],
             ['name' => 'subscription_key', 'label' => 'Subscription Key', 'kind' => 'secret', 'required' => true, 'hint' => 'La clave de suscripción del portal de desarrolladores de Booker.'],
@@ -57,7 +60,13 @@ class BookerType implements CalendarProviderType
     {
         return [
             'environment' => ['required', Rule::in(array_keys(config('integrations.booker.urls')))],
+            'api' => ['nullable', Rule::in(['merchant', 'customer'])],
             'location_id' => ['required', 'string', 'regex:/^\d{1,12}$/'],
+            'locations' => ['nullable', 'string', 'max:2000', function (string $attribute, mixed $value, \Closure $fail) use ($input) {
+                if ($this->parseLocations((string) $value, $input['location_id'] ?? null) === null) {
+                    $fail('Escribe una sucursal por línea con el formato «Location ID | nombre», sin repetir IDs (máximo 20).');
+                }
+            }],
             'client_id' => ['nullable', 'string', 'max:512'],
             'client_secret' => ['nullable', 'string', 'max:4096'],
             'subscription_key' => ['nullable', 'string', 'max:512'],
@@ -78,12 +87,24 @@ class BookerType implements CalendarProviderType
             $secrets[$name] = $value;
         }
 
-        return ['config' => ['environment' => $input['environment'], 'location_id' => $input['location_id']], 'secrets' => $secrets];
+        $main = trim($input['location_id']);
+        $extra = $this->parseLocations((string) ($input['locations'] ?? ''), $main) ?? [];
+        $test = array_map('strval', config('integrations.booker.merchant.test_location_ids'));
+
+        // The ID of Booker's shared test location can never be the production configuration, whatever the form said.
+        if ($input['environment'] === 'production' && array_intersect(array_merge([$main], array_column($extra, 'id')), $test) !== []) {
+            throw ValidationException::withMessages(['location_id' => 'Ese ID es una ubicación de pruebas de Booker: no se acepta en producción.']);
+        }
+
+        return ['config' => ['environment' => $input['environment'], 'api' => $input['api'] ?? ($current?->config['api'] ?? 'customer'), 'location_id' => $main, 'locations' => array_merge([['id' => $main, 'name' => 'Sede principal']], $extra)], 'secrets' => $secrets];
     }
 
     public function form(Integration $integration): array
     {
-        $form = ['environment' => $integration->config['environment'], 'location_id' => $integration->config['location_id']];
+        $form = [
+            'environment' => $integration->config['environment'], 'api' => $integration->config['api'] ?? 'customer', 'location_id' => $integration->config['location_id'],
+            'locations' => collect($integration->config['locations'] ?? [])->slice(1)->map(fn (array $location) => "{$location['id']} | {$location['name']}")->implode("\n"),
+        ];
 
         foreach (self::SECRETS as $name) {
             $form[$name] = '';
@@ -97,7 +118,9 @@ class BookerType implements CalendarProviderType
     {
         return ['rows' => [
             ['label' => 'Entorno', 'value' => $integration->config['environment'] === 'production' ? 'Producción' : 'Sandbox'],
+            ['label' => 'API', 'value' => ($integration->config['api'] ?? 'customer') === 'merchant' ? 'Merchant' : 'Customer'],
             ['label' => 'Ubicación', 'value' => $integration->config['location_id']],
+            ['label' => 'Sucursales configuradas', 'value' => (string) max(1, count($integration->config['locations'] ?? []))],
         ]];
     }
 
@@ -114,7 +137,13 @@ class BookerType implements CalendarProviderType
 
         try {
             $client->authenticate();
-            $client->get('/v4.1/customer/location/'.(int) $integration->config['location_id']);
+
+            if (($integration->config['api'] ?? 'customer') === 'merchant') {
+                // A harmless read of the catalog proves the token works with the Merchant API for that location (nothing is created).
+                $client->merchant('treatments', ['LocationID' => (int) $integration->config['location_id'], 'UsePaging' => true, 'PageSize' => 1, 'PageNumber' => 1], retry: true);
+            } else {
+                $client->get('/v4.1/customer/location/'.(int) $integration->config['location_id']);
+            }
         } catch (ProviderException $exception) {
             return TestResult::failure($this->reason($exception), null, $this->elapsed($start));
         }
@@ -124,18 +153,48 @@ class BookerType implements CalendarProviderType
 
     public function calendar(Integration $integration): CalendarProvider
     {
-        return new BookerCalendar($integration, new BookerClient($integration, $this->target));
+        $client = new BookerClient($integration, $this->target);
+
+        return ($integration->config['api'] ?? 'customer') === 'merchant' ? new BookerMerchantCalendar($integration, $client) : new BookerCalendar($integration, $client);
     }
 
     public function auditValues(array $config, ?array $secrets): array
     {
         return [
             'Entorno de Booker' => $config['environment'] ?? null,
+            'API de Booker' => $config['api'] ?? 'customer',
             'Ubicación de Booker' => $config['location_id'] ?? null,
+            'Sucursales de Booker' => collect($config['locations'] ?? [])->pluck('id')->implode(', ') ?: null,
             'Client ID de Booker' => Masked::of($secrets['client_id'] ?? null),
             'Client Secret de Booker' => Masked::of($secrets['client_secret'] ?? null),
             'Subscription Key de Booker' => Masked::of($secrets['subscription_key'] ?? null),
         ];
+    }
+
+    /**
+     * One location per line, `LocationID | name`. Null when a line is malformed, an ID repeats (or repeats the main one) or there are more than 20.
+     *
+     * @return list<array{id: string, name: string}>|null
+     */
+    private function parseLocations(string $text, ?string $main): ?array
+    {
+        $seen = $main !== null ? [trim($main)] : [];
+        $locations = [];
+
+        foreach (preg_split('/\R/', trim($text)) ?: [] as $line) {
+            if (trim($line) === '') {
+                continue;
+            }
+
+            if (preg_match('/^\s*(\d{1,12})\s*\|\s*(.{1,80}?)\s*$/u', $line, $match) !== 1 || in_array($match[1], $seen, true) || count($locations) >= 20) {
+                return null;
+            }
+
+            $seen[] = $match[1];
+            $locations[] = ['id' => $match[1], 'name' => $match[2]];
+        }
+
+        return $locations;
     }
 
     private function reason(ProviderException $exception): string

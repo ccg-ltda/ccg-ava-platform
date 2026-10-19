@@ -40,9 +40,50 @@ class BookingManager
     }
 
     /** @return list<array<string, mixed>> */
-    public function services(Workspace $workspace): array
+    public function services(Workspace $workspace, int|string|null $locationId = null): array
     {
-        return $this->guard(fn () => $this->provider($workspace)->services());
+        return $this->guard(fn () => $this->located($workspace, $this->provider($workspace), $locationId, false)->services());
+    }
+
+    /**
+     * The locations (sucursales) an EXTERNAL agenda serves for this Workspace, or null when the agenda has none of its own (Ava's own agenda uses
+     * App\Booking\Locations). With two or more, a booking must name one.
+     *
+     * @return array{locations: list<array{id: string, name: string}>, required: bool}|null
+     */
+    public function externalLocations(Workspace $workspace): ?array
+    {
+        $provider = $this->provider($workspace);
+
+        return $provider instanceof LocationAwareCalendar ? ['locations' => $provider->locations(), 'required' => count($provider->locations()) > 1] : null;
+    }
+
+    /**
+     * The agenda bound to the location a call is about. Only an external agenda with several locations is affected; the location must be one the
+     * Workspace configured (anything else is the same refusal) and, when the call needs it (`$required`: availability and booking), must be named
+     * as soon as there is more than one, because guessing would put the appointment in the wrong place.
+     *
+     * @throws BookingException
+     */
+    private function located(Workspace $workspace, CalendarProvider $provider, int|string|null $locationId, bool $required): CalendarProvider
+    {
+        if (! $provider instanceof LocationAwareCalendar) {
+            return $provider;
+        }
+
+        if ($locationId === null || $locationId === '') {
+            if ($required && count($provider->locations()) > 1) {
+                throw BookingException::invalid('Indica la sede donde quieres la cita.');
+            }
+
+            return $provider->forLocation(null);
+        }
+
+        if (! collect($provider->locations())->contains(fn (array $location) => $location['id'] === (string) $locationId)) {
+            throw BookingException::invalid('Esa sede no está disponible.');
+        }
+
+        return $provider->forLocation($locationId);
     }
 
     /**
@@ -53,7 +94,7 @@ class BookingManager
      */
     public function bookableServices(Workspace $workspace, int|string|null $locationId = null): array
     {
-        $services = $this->services($workspace);
+        $services = $this->services($workspace, $locationId);
 
         if (! $this->providers->isInternal($this->provider($workspace))) {
             return $services;
@@ -72,7 +113,7 @@ class BookingManager
     /** @return list<array<string, mixed>> */
     public function professionals(Workspace $workspace, int|string|null $serviceId = null, int|string|null $locationId = null): array
     {
-        $professionals = $this->guard(fn () => $this->provider($workspace)->professionals($serviceId));
+        $professionals = $this->guard(fn () => $this->located($workspace, $this->provider($workspace), $locationId, false)->professionals($serviceId));
 
         if ($locationId === null || ! $this->providers->isInternal($this->provider($workspace))) {
             return $professionals;
@@ -101,6 +142,8 @@ class BookingManager
         if (! $provider->capabilities()['availability']) {
             throw BookingException::unsupported($this->unsupported($workspace, 'consultar horarios'));
         }
+
+        $provider = $this->located($workspace, $provider, $locationId, true);
 
         if ($provider instanceof InternalCalendar) {
             // Moving an appointment keeps it in ITS location; a new search names one (or has one implied, or none when locations do not apply).
@@ -214,6 +257,11 @@ class BookingManager
 
         $this->appointments->assertOpen($appointment);
 
+        // An agenda that cannot cancel (Booker's Merchant API has no cancel endpoint confirmed) is never pretended to: the appointment stays active here.
+        if (! ($appointment->sync_status === 'uncertain' && $appointment->external_id === null) && ! $this->providers->for($appointment->workspace, $appointment->provider)->capabilities()['cancel']) {
+            throw BookingException::unsupported($this->unsupported($appointment->workspace, 'cancelar'));
+        }
+
         // A request whose outcome was never known has no id in the other agenda: staff, after checking there, may close it here.
         if ($channel === 'admin' && $appointment->sync_status === 'uncertain' && $appointment->external_id === null) {
             $appointment->forceFill(['status' => Appointment::CANCELLED, 'cancelled_at' => now(), 'cancel_reason' => $reason ? mb_substr(trim($reason), 0, 255) : 'Verificada sin registro en la agenda externa.', 'sync_status' => 'failed', 'sync_error' => 'not_found'])->save();
@@ -285,9 +333,11 @@ class BookingManager
 
     private function bookExternally(Workspace $workspace, CalendarProvider $provider, array $data, string $channel, ?int $conversationId): Appointment
     {
-        $service = collect($this->services($workspace))->first(fn (array $item) => (string) $item['id'] === (string) $data['service_id']) ?? throw BookingException::invalid('Ese servicio no está disponible.');
+        $provider = $this->located($workspace, $provider, $data['location_id'] ?? null, true);
+        $locationId = $provider instanceof LocationAwareCalendar ? $provider->location()['id'] : null;
+        $service = collect($this->services($workspace, $locationId))->first(fn (array $item) => (string) $item['id'] === (string) $data['service_id']) ?? throw BookingException::invalid('Ese servicio no está disponible.');
         $professional = ($data['professional_id'] ?? null) !== null
-            ? collect($this->professionals($workspace, $data['service_id']))->first(fn (array $item) => (string) $item['id'] === (string) $data['professional_id'])
+            ? collect($this->professionals($workspace, $data['service_id'], $locationId))->first(fn (array $item) => (string) $item['id'] === (string) $data['professional_id'])
             : null;
         $startsAt = $data['starts_at']->utc();
         $duration = (int) ($service['duration_minutes'] ?? 0) ?: 30;
@@ -301,6 +351,7 @@ class BookingManager
             'conversation_id' => $conversationId,
             'service_name' => $service['name'],
             'professional_name' => $professional['name'] ?? null,
+            'location_name' => $provider instanceof LocationAwareCalendar ? $provider->location()['name'] : null,
             'starts_at' => $startsAt,
             'ends_at' => $startsAt->addMinutes($duration),
             'blocks_until' => $startsAt->addMinutes($duration),

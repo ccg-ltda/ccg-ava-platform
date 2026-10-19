@@ -50,7 +50,7 @@ function Field({ field, data, setData, errors, stored, editing }) {
 export default function ChannelIntegrationModal({ channel, onClose, routeName = 'integrations.channels.update' }) {
     const editing = Boolean(channel.integration);
     const stored = channel.integration?.form;
-    const form = useForm(Object.fromEntries(channel.fields.map(({ name }) => [name, stored?.[name] ?? ''])));
+    const form = useForm(Object.fromEntries(channel.fields.map(({ name, default: initial }) => [name, stored?.[name] ?? initial ?? ''])));
     const { data, setData, errors } = form;
 
     const submit = (event) => {

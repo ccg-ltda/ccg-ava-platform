@@ -15,7 +15,7 @@ interface CalendarProviderType extends IntegrationType
     /**
      * The inputs of the configuration form. `kind`: text, select (with `options`), textarea or secret (write-only).
      *
-     * @return list<array{name: string, label: string, kind: 'text'|'textarea'|'secret'|'select', required: bool, placeholder?: string, hint?: string, options?: list<array{value: string, label: string}>}>
+     * @return list<array{name: string, label: string, kind: 'text'|'textarea'|'secret'|'select', required: bool, default?: string, placeholder?: string, hint?: string, options?: list<array{value: string, label: string}>}>
      */
     public function fields(): array;
 

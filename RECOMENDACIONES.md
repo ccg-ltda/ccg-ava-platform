@@ -134,6 +134,7 @@ Ava hace `POST {N8N_EXECUTION_URL}/{webhook_path}` con las cabeceras `X-Ava-Exec
 3. **Memoria:** usar `conversation.memory_key`, no el número del contacto (no se envía).
 4. **Reservas:** llamar a `ava.api_url` con `Authorization: Bearer <ava.token>` en `/booking/services`, `/professionals`, `/availability`, `/appointments` (POST reservar, GET listar, `/{id}/cancel`, `/{id}/reschedule`), sin enviar `channel` ni `contact_id`. **Sedes:** consultar `GET /booking/locations` (`{locations:[{id,name,address,city,phone,notes}], required}`; también se anuncia en `GET /api/agent/config` → `booking.endpoints.locations`). Si `required` es `true` (dos o más sedes activas) el workflow debe preguntar la sede al contacto y enviar su `id` como `location_id` (entero) en `/availability`, `/services`, `/professionals` y en el POST de `/appointments`; si es `false`, no enviarlo (con una sola sede Ava la asume). Ava valida en el servidor que la sede sea del Workspace, esté activa, ofrezca el servicio y tenga horario del profesional: si no, `422 invalid` (sede mala o faltante) o `409 slot_unavailable` (combinación incompatible). Reprogramar no recibe sede: conserva la de la cita. Un workflow que no envíe `location_id` sigue funcionando mientras el Workspace tenga 0 o 1 sedes. **Notas:** no poner en `notes` información médica ni clínica; la nota no vuelve en ninguna respuesta de Ava. **Confirmación del cliente y avisos (aditivo, 2026-10-19):** si el contacto responde que asistirá, el workflow llama a `POST /booking/appointments/{id}/confirm` (solo citas de ESA conversación; con el token de ejecución también vale). Responde `{appointment, replayed}`; `409 state` si la cita se canceló, se cerró o ya empezó (no insistir ni inventar). Confirmar así NO acepta la reserva: el estado lo sigue diciendo `appointment.status` (`requested` hasta que el negocio la acepte) y el asistente debe seguir diciendo «por confirmar» mientras lo sea. Las citas que devuelve Ava traen `customerConfirmed` (bool) y `notifications` (`kind`, `offset`, `status`, `statusLabel`, `scheduledFor` de los avisos que Ava envió; sin texto, teléfono ni motivos). Ava envía los avisos por su cuenta (el workflow no debe duplicarlos por WhatsApp). Decir al contacto el estado que devuelve Ava (`confirmed` solo si la agenda lo confirmó; `requested`/`failed` se comunican tal cual) y respetar `capabilities` (con Booker, hoy no hay horarios ni reservar).
 5. **Reintentos y respuestas de reservas:** una ejecución puede llamar al workflow hasta 3 veces con el MISMO `X-Ava-Execution`. Tratar así las respuestas: `201`/`200` con `confirmed: true` → confirmada; `confirmed: false` → «por confirmar»; `409 slot_unavailable` → ofrecer otro horario; **`409 uncertain` → NO repetir ni inventar un resultado** (decir que el negocio verificará la solicitud); `422 unsupported` → la agenda conectada no lo permite; `502 provider` → rechazo cierto, se puede reintentar más tarde; `401` (el token murió porque una persona tomó la conversación) → terminar sin responder.
+5b. **Contacto de la cita (D-TEL, resuelta el 2026-10-19; ver §11.2):** Ava NO entrega el teléfono del contacto al workflow. En **WhatsApp** el workflow reserva **sin** `customer.phone` y Ava usa el id de la conversación como teléfono si es un número internacional válido (un `customer.phone` que el workflow sí envíe se respeta). En **web** (o si el id de WhatsApp no es un número válido) el workflow DEBE pedir teléfono o correo en el chat (el Workspace puede exigir ambos: `require_phone` es verdadero por defecto) y enviarlo en `customer.phone` (formato `+573001112233`) o `customer.email`; si falta, Ava responde `422` con `reason: "contact_required"` y un `message` que dice qué dato falta: el workflow lo pide al contacto y reintenta, sin inventarlo. Las operaciones que no necesitan datos de contacto (servicios, horarios, listar, cancelar, reprogramar) nunca lo piden. **Forma de la respuesta (F2):** el último nodo debe responder UN objeto JSON (modo «First Incoming Item»), nunca una lista ni «Immediately»; copiar el `execution_id` de la cabecera `X-Ava-Execution`. Formato exacto en §11.3.
 6. **Transferencia a una persona:** `handoff: true` en la respuesta (el token de ejecución solo llega a reservas).
 7. **Instrucciones:** vienen en `chatbot.instructions`; Ava es la única fuente (no duplicarlas en n8n).
 8. **Pedidos (Delivery y E-commerce; `ava.tools.orders` y `/api/agent/config` → `orders` lo anuncian solo si el plan incluye Catálogo de productos y Pedidos):** llamar a `ava.api_url` con `Authorization: Bearer <ava.token>` en `GET /orders/options` (moneda, formas de entrega, sedes, qué NO hace Ava), `GET /orders/products?q=&category=&location_id=` (productos ACTIVOS con el precio de ese momento; `stockTracked: false`: Ava no controla inventario, no prometer unidades), `POST /orders` y `GET /orders?number=` (los pedidos de ESA conversación). **Crear:** enviar solo `customer {name, phone?, email?}`, `delivery_method` (`pickup`|`delivery`), `delivery_address` (obligatoria a domicilio), `delivery_city?`, `delivery_reference?`, `recipient_name?`, `recipient_phone?`, `location_id?`, `notes?` y `lines [{product_id, quantity}]`; **nunca precios, totales, moneda, número ni estado** (se ignoran: el total lo calcula Ava con el catálogo). El teléfono nuevo lleva `+` y país, salvo el del propio contacto de WhatsApp. **Idempotencia:** la clave es la ejecución (token de ejecución) o la cabecera `Idempotency-Key` (1 a 128 caracteres imprimibles, sin espacios; obligatoria con un token permanente: sin ella `422 idempotency_key_required`, mal formada `422 idempotency_key_invalid`). Ava guarda solo el digest de la conversación + la clave y el digest del CONTENIDO del pedido (nunca la clave que envió el llamante). Misma clave y mismo contenido (el orden de las líneas y un producto repetido en dos líneas no cambian el contenido; en recogida se ignoran los datos de entrega) = reintento: `200 replayed: true` y el mismo pedido. **Misma clave con otro contenido = `409 idempotency_conflict` y no se crea nada**: con el token de ejecución una ejecución solo puede crear UN pedido; para otro pedido hace falta otro mensaje del contacto. Una petición rechazada (422) no consume la clave. **Respuestas:** `201` creado; `200` repetido; `409 idempotency_conflict` (la clave ya se usó con otro contenido); `422 invalid` (producto inactivo, ajeno o inexistente, falta dirección, teléfono sin país...: corregir con el contacto, no reintentar igual); `404 not_found` (la conversación no existe: reportar antes su mensaje); `503 not_ready` (falta aplicar la migración en ese entorno); `401` (el token murió porque una persona tomó la conversación) → terminar sin responder. Decir al contacto el número, el estado y el total que devuelve Ava, y **no prometer** avisos de cambios de estado (`customerNotified: false`), cobertura ni costo de envío (`delivery.coverageChecked: false`, `shippingCost: null`), pagos ni inventario. El asistente **no puede** cancelar ni cambiar el estado de un pedido: si el contacto lo pide, `handoff`.
@@ -593,3 +594,405 @@ Se propone nombrar los planes por **módulos**, que es lo único que el código 
 | Dependencias | `composer audit` sin avisos; `npm audit` 0 vulnerabilidades |
 | Copias | `backup.sh` y `restore-check.sh` ejecutados contra `ccg_ava` (solo lectura) con restauración en base desechable eliminada; casos de fallo comprobados (§9.3) |
 | No ejecutado en este bloque | Interfaz en navegador (no cambió ninguna pantalla), migraciones (no hay nuevas), imagen de producción (sin cambios de Dockerfile) |
+
+
+## 10. Validación del flujo Ava – n8n – WhatsApp en un circuito local y preparación de la primera prueba real (2026-10-17, quinto bloque)
+
+Punto de partida: rama `main`, commit `12b021c` (igual a `origin/main`), árbol limpio. Este bloque no hace commit ni push.
+
+### 10.1 Qué se comprobó y qué NO
+
+**Lo que existe en el entorno:** ninguna credencial real. `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN`, `N8N_EXECUTION_URL` y `N8N_EXECUTION_SECRET` están vacías en el contenedor de desarrollo; el catálogo `config/n8n.php` `workflows` está vacío; `workflows:manage list` no muestra workflows ni asignaciones; hay 0 integraciones de WhatsApp y 0 canales activos en `ccg_ava`; el repositorio no contiene ninguna exportación del workflow de n8n de la empresa (ni se encontró una en el equipo). **Por tanto el nivel 3 (integración externa) NO se ejecutó** y la estructura del workflow real NO se conoce ni se inventó.
+
+**Lo que sí se ejecutó (nivel 2, «circuito local»):** `docker/ops/local-loop/run.sh` levanta, dentro del contenedor de desarrollo y contra una base DESECHABLE `ccg_ava_e2e` (creada y eliminada por el propio script, nunca `ccg_ava`), el propio Ava como servidor HTTP, un trabajador de cola real (controlador `database`), un **doble de n8n** y un **doble de la Graph API de Meta**, y un conductor que envía eventos de WhatsApp firmados con HMAC como lo hace Meta. Es HTTP real, cola real, firma real y base real, pero **Meta y n8n son dobles escritos por nosotros: el circuito demuestra el código de Ava, no que Meta, n8n o el workflow de la empresa se comporten igual.** El doble de n8n verifica la firma `X-Ava-Signature` y la marca de tiempo como debe hacerlo un workflow correcto, y usa el `ava.token` de la ejecución para llamar a las herramientas de reservas.
+
+### 10.2 Resultado del circuito local (evidencia)
+
+| # | Escenario | Resultado observado |
+|---|---|---|
+| 0 | Verificación del webhook (GET de Meta) | Token correcto → devuelve el `challenge`; token incorrecto → 403 |
+| 1 | Mensaje simple | Mensaje guardado; ejecución `succeeded/ok`, `delivery accepted`; respuesta enviada a la Graph API (con `biz_opaque_callback_data`), mensaje saliente `sent` |
+| 2 | Disponibilidad | El workflow lee servicios y horarios con el token de la ejecución; trazas `booking.services` y `booking.availability` (`read`, `succeeded`) |
+| 3 | Sin disponibilidad | Lista vacía; el asistente responde que no hay horarios; sin error |
+| 4 | Reserva | `booking.book` 201 `confirmed`, y el reintento con la misma `Idempotency-Key` devuelve 200 `replayed`; **una sola cita** `confirmed` de esa conversación y Workspace, verificada en la base; el texto al usuario se generó DESPUÉS de la respuesta de la herramienta |
+| 5 | Mismo horario por otro contacto | 409 `slot_unavailable` (traza `rejected`); 0 citas nuevas; el asistente dice que el horario ya no está disponible |
+| 6 | Mismo contacto y horario en OTRO Workspace | Se reserva en ese Workspace sin interferir: 1 cita por Workspace, sin cruces |
+| 7 | Evento duplicado de Meta (mismo `wamid`) | 1 mensaje, 1 ejecución, 1 respuesta |
+| 8 | Traspaso a persona (`handoff: true`) | La conversación pasa a `pending`, el mensaje al contacto sale, y un mensaje posterior NO llama a n8n (0 llamadas) |
+| 9 | n8n responde 503 | 3 intentos (reintento por la cola) → `failed/retries_exhausted`; el mensaje del contacto se conserva sin respuesta |
+| 10 | n8n más lento que el límite (4 s en esta prueba) | 3 intentos → `failed/retries_exhausted` (13 s en total) |
+| 11 | Respuesta con otro `execution_id` / respuesta como lista JSON | `failed/invalid_response` en un intento, sin reintento ni respuesta al contacto |
+| 12 | Evento con firma incorrecta | 403; no se crea conversación |
+| 13 | Token de ejecución alterado en una herramienta | 401 |
+| 14 | Número de WhatsApp que no es de nadie | 200 y se ignora; no se crea conversación |
+| 15 | Caída del trabajador (SIGKILL) a mitad de una ejecución | La ejecución queda `running`; `executions:recover` ANTES del umbral (`timeout + 60 s`) no la toca; pasado el umbral y con un trabajador nuevo termina `succeeded` con 2 intentos, y **sale una sola respuesta** hacia Meta (n8n se llamó dos veces: la primera ejecución se interrumpió) |
+| 16 | Fugas | El payload enviado a n8n nunca contenía el token de Meta ni el número del contacto (0 coincidencias en todas las ejecuciones); el token de Meta solo viajó hacia la Graph API |
+
+Un solo comando reproduce 1 a 14 y 16: `sh docker/ops/local-loop/run.sh`.
+
+### 10.3 Hallazgos del circuito (no se vieron en las pruebas automáticas)
+
+| Id | Hallazgo | Clasificación | Acción |
+|---|---|---|---|
+| **F1** (resuelta, §11.2) | La herramienta de reserva rechaza (422 «Indica un teléfono o un correo…») si el workflow no envía `customer.phone` o `customer.email`, y Ava NO le entrega el teléfono del contacto (por diseño de privacidad). Un workflow que siga el §3.1 al pie de la letra no puede reservar sin pedirle al contacto un teléfono o correo en el chat | Brecha de contrato (documentada en §3.1 punto 4 solo de forma implícita) | Documentado aquí y en §3.1. **Decisión pendiente D-TEL:** A) el workflow siempre pide teléfono/correo al contacto (hoy). B) Ava usa el identificador del contacto de WhatsApp como teléfono de la cita cuando el canal es WhatsApp (sin enviarlo a n8n). No se cambió el código sin aprobación |
+| **F2** | Si el workflow termina con «Respond to Webhook» en modo «All Incoming Items» o «Immediately», n8n devuelve una lista o `{"message":"Workflow was started"}` y Ava lo rechaza como `invalid_response` | Requisito para el workflow | Documentado en §3.1: respuesta «First Incoming Item» con un objeto JSON y el `execution_id` copiado de la cabecera `X-Ava-Execution`. Ava no relaja la validación |
+| **F3** (resuelta, §11.2) | Cuando una ejecución falla de forma definitiva (`retries_exhausted`, `invalid_response`, `n8n_rejected`…) el contacto NO recibe respuesta y la conversación NO se marca para una persona; solo se ve con `executions:list --failed` | Necesario antes de un piloto con clientes | **Decisión pendiente D-FALLO:** A) mensaje fijo de disculpa. B) pasar la conversación a «pendiente de persona». C) A+B. D) nada (hoy). Recomendado: B como mínimo y una alerta |
+| **F4** | El umbral de recuperación de una ejecución interrumpida es `N8N_EXECUTION_TIMEOUT + 60 s`; una caída deja al contacto sin respuesta durante al menos ese tiempo | Informativo | Documentado |
+| **F5** | `integrations:diagnose` contaba «Migraciones al día (23)» y la documentación decía 27: la base de desarrollo tiene **27 filas** en `migrations` pero el repositorio tiene **23 archivos**; 4 filas son de migraciones históricas consolidadas en `14e07f6` y `c5b4e97` (`add_human_handling_to_conversations`, `add_demo_markers`, `add_actor_and_outcome_to_audit_logs`, `add_anonymized_at_to_customers`). No hay migraciones pendientes y un entorno nuevo ejecuta solo los 23 archivos (la suite PostgreSQL lo prueba) | Corrección documental | Las cifras de «27 migraciones» de §7.8 y §8.10 se refieren a las filas de la base de desarrollo; el valor correcto del repositorio es 23. Una base de producción NUEVA tendrá 23 filas |
+| **F6** | **Defecto real encontrado:** `integrations:diagnose` usaba `class_exists()` sobre una INTERFAZ (`MasterSupervisorRepository`), que siempre es falso: decía «Horizon no está corriendo» aunque Horizon corriera (`horizon:status` y el repositorio de supervisores lo confirmaban) y, con la cola en Redis y en producción, lo trataba como BLOQUEO: cada diagnóstico de producción habría salido con código 1 aunque todo estuviera sano | Bloqueador de despliegue (falso positivo) | Corregido (`interface_exists`) con una prueba de regresión que falla con el código anterior (`IntegrationReadinessTest::test_horizon_is_reported_running_only_when_a_master_supervisor_exists`) |
+
+### 10.4 Meta, n8n, webchat y Booker: estado verificado
+
+| Pieza | Configurado | Conexión establecida | Conversación real completada |
+|---|---|---|---|
+| Meta / WhatsApp | No (sin `META_*`, sin integraciones) | No | No. Con dobles: recepción firmada, identificación del canal, envío, estados, duplicados y firma incorrecta funcionan (§10.2) |
+| n8n de la plataforma | No (sin `N8N_EXECUTION_*`, sin workflow en el catálogo) | No | No. Con un doble: firma, contexto, herramientas, reintentos, tiempos de espera, respuestas inválidas y traspaso funcionan |
+| n8n por Workspace | 0 integraciones | No | No |
+| Webchat | Código y pruebas | Parcial: navegador real contra un doble (bloque anterior) | No contra n8n real. Comparte la ruta de ejecución de WhatsApp, cubierta en el circuito |
+| Booker | Visible solo donde está conectada; solo lectura y cancelación implementadas | No | No. Horarios, reservar y reprogramar NO están implementados |
+
+### 10.5 Tareas programadas y copias (reverificado)
+
+`integrations:diagnose` en la base de desarrollo: scheduler con latido reciente; `executions-recover`, `appointments-notify` y `agent-tools-reconcile` con «último éxito hace 0 min»; 0 trabajos fallidos; el aviso «Horizon no está corriendo» era un defecto del diagnóstico, corregido (F6). `docker/ops/backup.sh` y `restore-check.sh` se probaron en el bloque anterior (volcado de 228 909 bytes, restauración en base desechable con los mismos conteos, fallos detectados). **Falta para el servidor real:** programar la copia (`cron` diario), guardar los volcados fuera del servidor, probar la restauración con una copia real en un entorno aislado, y alertas. No se tocó ninguna programación ni infraestructura de producción. No se ejecutó `appointments:notify` contra un destino de mensajes en este circuito.
+
+### 10.6 Bloqueadores, clasificados
+
+| Clase | Pendiente |
+|---|---|
+| **Antes de cualquier despliegue** | Ninguno de código conocido. Condiciones de A (HTTPS, variables, administrador inicial, Horizon y un scheduler, copia programada) |
+| **Antes de una prueba externa (nivel 3)** | Credenciales y número de Meta de prueba, URL pública HTTPS, instancia de n8n, `N8N_EXECUTION_URL` y `_SECRET`, **la exportación del workflow real adaptado a §3.1 (incluidos F1 y F2)** y su registro en `config/n8n.php` (cambio de código que revisa y despliega el equipo), números autorizados, decisión D-TEL |
+| **Antes de un piloto con clientes** | D-FALLO (F3); aviso de privacidad, contrato de tratamiento, retención, P-STOP, P-SALUD, D-P1 (§9.4 y `docs/privacidad.md`); copia programada y restauración probada en el servidor real; responsable de supervisión y alertas; plantillas de Meta aprobadas; acceso a Horizon |
+| **Mejora posterior** | Pantalla de ejecuciones, alertas proactivas, métricas de reservas, Booker completo, límites y facturación |
+
+### 10.7 Veredictos
+
+- **A. Entorno técnico: APTO CON CONDICIONES OPERATIVAS** para una versión controlada de pruebas. Evidencia: suites completas en SQLite y PostgreSQL 16, circuito local de extremo a extremo, imagen de producción verificada (bloque anterior), copias con restauración en base desechable. Condiciones: las de §10.6 «antes de cualquier despliegue».
+- **B. Piloto funcional: NO DEMOSTRADO.** El recorrido completo (mensaje → Ava → workflow → disponibilidad → reserva → verificación en base → respuesta → traza, con traspaso, errores y recuperación) funciona con dobles locales. No se ha ejecutado con WhatsApp ni con el workflow reales. Faltan §10.6 «antes de una prueba externa» y las decisiones D-TEL y D-FALLO. **No se declara el piloto listo.**
+- **C. Piloto con clientes: NO LISTO.** Faltan las condiciones de privacidad, contrato, retención, supervisión y alertas de §10.6.
+
+### 10.8 Primera prueba real: pasos concretos
+
+1. **Decidir** D-TEL (¿el workflow pide teléfono o Ava lo completa?) y D-FALLO (¿qué ve el contacto si la IA falla?).
+2. **Obtener** de quien administra n8n la exportación JSON del workflow (sin credenciales) y del equipo de Meta: número de prueba, `phone_number_id`, App Secret, token permanente, dominio HTTPS.
+3. **Adaptar el workflow** a §3.1 en una COPIA (verificar firma y marca de tiempo; responder un objeto JSON con el `execution_id` de la cabecera; no enviar a WhatsApp; usar `memory_key`; reservar con `ava.token` y `Idempotency-Key`; pedir teléfono/correo; tratar 409 `uncertain`, 409 `slot_unavailable` y 401). No se modifica un workflow productivo.
+4. **Registrarlo** en `config/n8n.php`, desplegar un entorno de pruebas con HTTPS y las variables `META_*` y `N8N_*` en su archivo de variables, migrar (23 archivos), sembrar roles y catálogo, copia previa.
+5. **Configurar** un Workspace de pruebas (plan con Asistentes, Conversaciones y Servicios y Reservas), un servicio, un profesional con horario, el canal de WhatsApp (`phone_number_id` y token, «Probar conexión»), y asignar el workflow (`workflows:manage assign`).
+6. **Ejecutar** los pasos 5 a 9 de §3.2 con números autorizados: mensaje, respuesta, estados, evento repetido sin duplicar, reserva completa, traspaso a persona y devolución a la IA, fallos a propósito (n8n apagado, token inválido), y leer la traza. Comprobar en la base que la cita existe y que lo que se le dijo al usuario coincide.
+7. **Registrar** en este documento qué se verificó con servicios reales, con fecha y sin datos personales.
+
+**Criterios de éxito y parada del piloto:** los de §9.5, más: (a) toda cita comunicada como confirmada existe en la agenda (conciliación diaria); (b) ninguna ejecución `failed` sin atender más de un día hábil; (c) se detiene y se apaga el asistente ante una confirmación falsa, una cita duplicada o una fuga entre Workspaces.
+
+### 10.9 Siguiente bloque recomendado
+
+1. Resolver D-TEL y D-FALLO (decisión del responsable del producto) e implementarlas (cambio pequeño y probado).
+2. Prueba real nivel 3 con credenciales y el workflow adaptado (§10.8).
+3. Cerrar privacidad (P-AVISO, P-RET, P-STOP, P-SALUD, D-P1) con revisión jurídica.
+4. Alertas y copia programada en el servidor.
+5. Después, Booker, Delivery y comercial.
+
+### 10.10 Validación del quinto bloque
+
+| Comprobación | Resultado |
+|---|---|
+| PHPUnit completo en SQLite (contenedor con GD) | **1313 pruebas, 10 781 aserciones, 0 fallos, 3 omitidas** (las de PostgreSQL) |
+| PHPUnit completo en PostgreSQL 16 desechable (`ccg_ava_final_test`, eliminada) | **1313 pruebas, 10 791 aserciones, 0 fallos, 0 omitidas** |
+| Pruebas nuevas | `AgentBookingTest` (un horario reservado deja de ofrecerse; un día sin horario devuelve lista vacía) e `IntegrationReadinessTest` (Horizon: regresión de F6, verificada fallando con el código anterior) |
+| Estilo, JavaScript, compilación, dependencias | `pint --test` correcto (incluye los archivos del circuito local); `npm run test:js` 21/21; `npm run build` correcto; `composer audit` y `npm audit` sin vulnerabilidades |
+| Circuito local (`run.sh`) | 19 escenarios, exit 0, base `ccg_ava_e2e` eliminada al terminar; `ccg_ava` no se tocó (solo lecturas de diagnóstico) |
+| NO ejecutado | Nivel 3 (Meta, n8n y workflow reales); interfaz en navegador (sin cambios de pantalla); migraciones (no hay nuevas); `appointments:notify` contra un destino de mensajes |
+
+## 11. Preparación del piloto del miércoles 21 de octubre de 2026 (sexto bloque, 2026-10-19)
+
+Punto de partida: rama `main`, commit base `12b021c` (igual a `origin/main`), con los cambios sin publicar del quinto bloque (documentación, `IntegrationsDiagnoseCommand`, pruebas de `AgentBookingTest` e `IntegrationReadinessTest` y `docker/ops/local-loop/`), que se conservaron. **Este bloque no hizo commit, push, despliegue ni migración sobre ninguna base compartida** (las migraciones solo se aplicaron a bases desechables). Vocabulario del encabezado: **Local** = circuito con dobles de Meta y n8n; **Real** = servicio de verdad. **Nada de este bloque es Real.**
+
+### 11.1 Qué es el piloto y qué NO es
+
+El piloto del miércoles es **técnico y acotado**: números y contactos autorizados, un Workspace de pruebas, la agenda propia de Ava, WhatsApp (y webchat solo si el n8n real lo permite). No es un lanzamiento: Booker, Delivery, E-commerce, campañas con envío real, Instagram y Messenger **no** se prueban (ver §11.6).
+
+### 11.2 Decisiones D-TEL y D-FALLO: implementación
+
+**D-TEL (teléfono de la reserva).** Hallazgo previo: Ava tiene el número del contacto de WhatsApp (el id de la conversación es el `wa_id` que Meta emite sin «+»), pero por privacidad NO se lo entrega a n8n, así que el workflow no podía reservar sin preguntarlo (F1). Ahora:
+
+| Caso | Comportamiento | Prueba |
+|---|---|---|
+| WhatsApp, el workflow no envía teléfono, el id es un número internacional válido (`PhoneNumber`: 7 a 15 dígitos, prefijo de país real, planes +1/+7 de 11) | Ava usa ese número como teléfono de la reserva (y del pedido). No va a n8n, ni vuelve en la respuesta, ni a la auditoría, ni a la traza, ni a los logs | `AgentBookingTest::test_on_whatsapp_a_booking_without_phone_...`, `AgentOrderTest::test_a_whatsapp_order_without_phone_...` |
+| El workflow SÍ envía un teléfono | Se respeta tal cual (puede reservar para otra persona) | `..._a_phone_the_workflow_does_send_is_kept...` |
+| WhatsApp, id que no es un número válido (`12345`, `abc-123-xyz`, 18 dígitos, `0573…`) | No se inventa nada: `422 contact_required`, no se crea cita ni cliente | `..._whatsapp_id_that_is_not_a_valid_international_number...` |
+| Webchat (el id es un identificador de visitante, aunque parezca un número) | Nunca se toma como teléfono: `422 contact_required` con el dato que falta (teléfono o correo, o ambos si el Workspace los exige: `require_phone` es verdadero por defecto). Servicios, horarios, listar, cancelar y reprogramar no piden datos | `..._webchat_asks_for_a_phone_or_an_email...`, `..._workspace_rule_that_asks_for_an_email...` |
+| Reintento, misma reserva con o sin el número, y otra reserva de la misma persona | Una sola cita (`replayed`), un solo cliente | `..._retries_and_a_second_booking...` |
+| Mismo número en otro Workspace | Cliente y cita distintos, cada uno en su Workspace | `..._same_whatsapp_number_in_another_workspace...` |
+
+Límites reconocidos: el `wa_id` es el identificador de WhatsApp y normalmente coincide con el teléfono, pero Meta documenta casos de países en que difiere en un dígito (por ejemplo México `521…` y Argentina `549…`); Ava no corrige ni reescribe nada (no hace conversiones ambiguas), lo usa tal cual y por eso un aviso enviado a ese número llega por WhatsApp pero el «teléfono» mostrado puede no ser el marcable. No se tocó ningún identificador histórico, ni la política de vínculo de clientes (deduplicación por teléfono normalizado dentro del Workspace). Ver `docs/privacidad.md` §3.13.
+
+**D-FALLO (fallo definitivo de la IA).** Antes: el contacto quedaba sin respuesta y la conversación seguía en «IA atendiendo» (F3). Ahora, cuando una ejecución termina en `failed` (o se descarta por `stale`: el mensaje esperó más de 10 minutos porque la cola estuvo detenida):
+
+1. `ConversationControl::handOverAfterFailure` mueve la conversación a «Pendiente de agente» **solo si** la IA todavía la tiene y con la misma `handling_version` que vio la ejecución. Una conversación ya pendiente o en atención no se toca (la persona mantiene su agente y su versión), una resuelta no se reabre, una cuyo control cambió después no se toca. Queda `control_result = escalated` (o `not_escalated`), el motivo `La IA no pudo responder (<código>)…` en la bandeja y el evento «Asistente (automático)» en la auditoría del Workspace.
+2. Se escribe una alerta operativa `ai_failure_handed_to_human` (`OperationalAlert`, canal de log `alerts`): Workspace, asistente, conversación, ejecución, código, tipo de fallo (`FailureKind`: transient, timeout, invalid_response, auth, configuration, queue, definitive), causa del último intento e intentos. Sin texto del mensaje, sin número del contacto, sin credenciales. Va a `storage/logs/alerts.log` y a los canales de `ALERT_LOG_CHANNELS` (producción: `stderr`). **No hay alerta externa (correo, Slack, SMS) configurada**: requiere decidir el destino (ver §11.7).
+3. Si el negocio definió `CHATBOT_FAILURE_NOTICE`, el contacto recibe **ese único texto** (un intento, por el canal de la conversación; si el canal falla queda `failed`/`unconfirmed` como cualquier mensaje). Vacío por defecto: no se envía nada, no se promete plazo y no se confirma ninguna reserva ni cambio. Nunca se dice que la operación se completó.
+4. Idempotencia: la transición `running → failed` es una actualización condicional y el traspaso solo cuenta si el servicio de control realmente movió la conversación; un job repetido, un evento duplicado de Meta o `executions:recover` no crean otra alerta, otro aviso ni otra asignación. Un respaldo de `executions:recover` completa un traspaso que una caída dejó a medias (solo ejecuciones falladas de la última hora). Un fallo no puede tumbar a quien lo reporta: el traspaso captura sus propias excepciones.
+5. Aislamiento: el traspaso parte de la ejecución (Workspace y asistente propios); un fallo en un Workspace no toca a otro.
+
+Clases de fallo (códigos fijos; `executions:list --show=ID` explica cada uno):
+
+| Código | Tipo | ¿Reintenta? | Qué hacer |
+|---|---|---|---|
+| `unreachable`, `request_failed`, `n8n_unavailable` (408/425/429/5xx) | transient | Sí (3 intentos, esperas de 10 s y 60 s) → `retries_exhausted` | Revisar que n8n esté arriba |
+| `timeout` (nuevo: cURL 28) | timeout | Sí | Workflow lento o detenido; revisar `N8N_EXECUTION_TIMEOUT` |
+| `invalid_response` | invalid_response | No | El workflow no cumple §11.3 |
+| `n8n_auth` (nuevo: 401/403) | auth | No | Secreto/firma/ruta del webhook |
+| `not_configured`, `insecure_target`, `unsafe_target` | configuration | No | Variables `N8N_*`, https, IP pública |
+| `n8n_rejected` (otros 4xx) | definitive | No | Ruta del webhook o workflow |
+| `retries_exhausted` | (causa en la alerta) | — | Ver causa |
+| `stale`, `crashed`, `internal_error` | queue | — | Cola/worker detenidos o error de la aplicación |
+
+Recuperación posterior: la conversación sigue pendiente hasta que una persona la toma o la devuelve a la IA (la IA calla mientras tanto; un mensaje nuevo del contacto NO crea otra ejecución ni otra alerta). `executions:recover --retry=ID` solo repite una ejecución cuya conversación sigue con la IA (si no, queda descartada como `superseded`). Pruebas: `AiFailureHandoverTest` (16): 503 repetido, timeout, red caída, respuesta inválida (otro `execution_id`, lista, «Workflow was started»), 401/403, configuración, mensaje demasiado viejo por cola perdida, caídas repetidas del job, evento/job/recuperación repetidos, aviso configurado o ausente, conversación ya atendida/pendiente/resuelta, recuperación tras el fallo, aislamiento entre Workspaces y ausencia de datos personales en logs y alertas. Las pruebas existentes que fijaban el comportamiento anterior (la conversación seguía con la IA tras un fallo) se **actualizaron** al nuevo comportamiento, no se eliminaron ni se omitieron (`ChatbotExecutionTest`, 3 aserciones).
+
+### 11.3 Contrato exacto que debe cumplir el workflow de n8n
+
+**Entrada** (lo que n8n recibe): ver §3.1 (`POST` firmado con `X-Ava-Execution`, `X-Ava-Timestamp`, `X-Ava-Signature: sha256=<HMAC-SHA256 de "{timestamp}.{cuerpo}" con N8N_EXECUTION_SECRET>`). El workflow verifica la firma y rechaza marcas de tiempo con más de 5 minutos de diferencia **antes** de hacer nada.
+
+**Salida válida** (único formato aceptado): HTTP **200**, `Content-Type: application/json`, cuerpo **de hasta 64 KB que sea UN objeto JSON** (no una lista) con:
+
+```json
+{ "execution_id": "<exactamente el valor de la cabecera X-Ava-Execution>", "reply": "texto (opcional, máx. 4000 caracteres)", "handoff": false }
+```
+
+Debe haber `reply` no vacío **o** `handoff: true`. `reply`, si existe, es texto. En el nodo «Respond to Webhook» de n8n elige **Respond With: First Incoming Item** y devuelve un solo ítem. Se rechazan (`invalid_response`, sin reintento, la conversación pasa a una persona):
+
+| Lo que devuelve el workflow | Resultado |
+|---|---|
+| Una lista `[{...}]` («All Incoming Items» con un ítem) | `invalid_response` |
+| `{"message":"Workflow was started"}` («Respond Immediately») | `invalid_response` |
+| Otro `execution_id`, o ninguno | `invalid_response` |
+| Sin `reply` y sin `handoff`, `reply` que no es texto o más de 64 KB | `invalid_response` |
+| 401/403 | `n8n_auth` (sin reintento) |
+| 408/425/429/5xx, sin conexión o tiempo agotado | se reintenta hasta 3 veces y luego `retries_exhausted` |
+
+Ava no relaja esta validación. **n8n nunca envía a WhatsApp**: el envío es de Ava (si el workflow también envía, el contacto recibe dos mensajes).
+
+**Reservas desde el workflow (resumen del contrato; detalle en §3.1 puntos 4 y 5):** usar solo `ava.api_url` y `ava.token` (token de la ejecución, vida corta, solo esa conversación) con `Idempotency-Key` estable por intento; no enviar `channel`, `contact_id`, ids de Workspace ni precios. **Datos de contacto:** en WhatsApp no enviar `customer.phone` salvo que el contacto reserve para otra persona (formato `+573001112233`); en web pedir teléfono o correo antes de reservar y volver a pedirlo ante `422 contact_required`. Decir al contacto **solo** lo que Ava respondió: `201 confirmed:true` = confirmada; `confirmed:false` = por confirmar; `409 slot_unavailable` = ofrecer otro horario; `409 uncertain` = no repetir ni inventar resultado; `422` = corregir con el contacto; `401` = una persona tomó la conversación, terminar sin responder. Si la IA no puede continuar: `handoff:true`.
+
+### 11.4 Circuito local: estado, seguridad y alcance
+
+`MSYS_NO_PATHCONV=1 sh docker/ops/local-loop/run.sh` (Git Bash en Windows; en WSL/Linux sin la variable) **pasó en este bloque con salida 0**, en ~1 minuto, y dejó la base `ccg_ava_e2e` eliminada (la lista de bases quedó `postgres, ccg_ava, template0, template1`). Cubre **15 comprobaciones de `driver.php all`**: mensaje simple; disponibilidad y sin disponibilidad; reserva con reintento de la misma `Idempotency-Key` (una sola cita) y **sin teléfono del workflow (D-TEL: el cliente queda con el número de WhatsApp)**; mismo horario por otro contacto (409, 0 citas nuevas); mismo contacto y horario en otro Workspace (1 cita por Workspace); evento duplicado de Meta; traspaso a persona (0 llamadas a n8n después); n8n 503, respuesta con otro `execution_id`, respuesta como lista y n8n más lento que el límite (**las cuatro ahora terminan con la conversación `pending` y `control_result = escalated`**); firma incorrecta (403, sin conversación); token de ejecución alterado (401); número que no es de nadie (se ignora). Se añadió un resumen de D-FALLO: 4 ejecuciones falladas, 4 traspasos y **4 alertas** escritas en un archivo local desechable (`/tmp/e2e/alerts.log`, nunca el log real).
+**Actualización 2026-10-19 (§13):** el script ya incluye el GET de verificación del webhook (escenario 0) y la caída del trabajador a mitad de una ejecución (escenario 15, con SIGKILL, recuperación antes y después del umbral y una sola respuesta). La caída del job tiene además prueba automática (`AiFailureHandoverTest`, `ChatbotExecutionTest`).
+Revisión de seguridad del circuito: (1) `run.sh` aborta si el contenedor `app` no es `APP_ENV=local` y fija `DB_DATABASE=ccg_ava_e2e` en cada comando; (2) `setup.php`, `worker.php`, `router.php` y `driver.php` se niegan a ejecutarse si `DB_DATABASE` no termina en `_e2e`; (3) el único `DROP DATABASE` es `IF EXISTS ccg_ava_e2e` con nombre literal; (4) no toca `ccg_ava` (solo conexión de lectura de `postgres` para listar/terminar sesiones de `ccg_ava_e2e`); (5) los puertos 8099/9101/9102 son `127.0.0.1` dentro del contenedor y los contactos son números ficticios; (6) `pkill -9 -f "php -S"` mata cualquier servidor embebido de PHP del contenedor de desarrollo (aceptable: el stack de desarrollo usa nginx/php-fpm). Limitación: el script no es portable a Git Bash sin `MSYS_NO_PATHCONV=1` (reescribe `/tmp/...`). **Dobles ≠ servicios reales:** el circuito demuestra el código de Ava, no que Meta, n8n o el workflow de la empresa se comporten igual.
+
+### 11.5 Revisión de seguridad, privacidad y aislamiento (hallazgos de este bloque)
+
+Verificado en código y pruebas (no se encontró una brecha nueva de aislamiento): firma `X-Hub-Signature-256` con `hash_equals` antes de leer, 1 MB máximo y 600/min por IP; el Workspace sale siempre de la integración que Ava guarda para el `phone_number_id`, nunca del cuerpo; token de ejecución acotado a una conversación, a esa ejecución y solo a reservas/pedidos; destinos salientes por `SafeHttpTarget` (sin red interna ni redirecciones); respuesta de n8n limitada a 64 KB; secretos cifrados y fuera de logs; idempotencia por `message_id`, por clave natural de reserva y por clave de pedido; cada herramienta de IA pasa por los módulos del plan y por la conversación del token. Hallazgos nuevos: **(1)** D-TEL y D-FALLO (cerrados arriba). **(2)** Los códigos `timeout` y `n8n_auth` no se distinguían de `unreachable`/`n8n_rejected` (corregido). **(3)** Una caída repetida del job dejaba la ejecución en `running` hasta que `executions:recover` la marcaba `crashed` (≈ 6 intentos): ahora la última ejecución del job la cierra como `internal_error` y traspasa. **(4)** Los avisos de alerta de producción necesitan destino externo (§11.7). **(5)** `C:/Users/` en la raíz del repositorio es una carpeta vacía anterior a este bloque; no se tocó (está vacía y Git la ignora).
+**Controles técnicos implementados** (en `docs/privacidad.md` §3.1–3.14) frente a **decisiones que requieren aprobación de la empresa o revisión jurídica** (no inventadas ni aprobadas aquí): aviso de privacidad y consentimiento del contacto, contrato de tratamiento y subencargados, plazos de retención, alcance de STOP sobre recordatorios, datos de salud, acceso de soporte (D-P1), texto del aviso de fallo (P-FALLO-TEXTO).
+
+### 11.6 Alcance funcional del piloto: qué se puede probar y qué no
+
+| # | Caso del piloto | Estado | Condición |
+|---|---|---|---|
+| 1 | Resolver Workspace y conversación desde el número de WhatsApp | Implementado, probado Local | Meta real |
+| 2 | Preguntas frecuentes con información configurada, sin inventar | Parcial: Ava da instrucciones, reglas de honestidad y datos reales de servicios/horarios; **no existe módulo de documentos de conocimiento**; la calidad la pone el workflow | n8n real + instrucciones cargadas |
+| 3 | Pasar a una persona y devolver a la IA | Implementado, probado Local y en navegador | Meta/n8n real |
+| 4 | Disponibilidad real | Implementado (agenda propia de Ava) | Servicio, profesional y horarios cargados |
+| 5 | Reservar, verificar persistencia, evitar duplicados | Implementado, probado Local y PostgreSQL (8 procesos simultáneos) | Workflow adaptado |
+| 6 | Rechazar horarios ocupados / no ofrecerlos | Implementado, probado | — |
+| 7 | Datos de contacto incompletos | **Implementado (D-TEL)** | El workflow debe pedirlos en web |
+| 8 | n8n o IA caídos | **Implementado (D-FALLO)** | Destino de la alerta y texto de aviso (opcional) |
+| 9 | Trazas | Implementado: `chatbot_executions`, `agent_tool_calls`, auditoría, `executions:list`, `integrations:diagnose` | **Migraciones al día en el servidor** (23 archivos; `agent_tool_calls` exige las dos últimas) |
+| 10 | Aislamiento de datos, herramientas y permisos | Implementado, probado | — |
+| — | Webchat con n8n real | Probado en navegador solo con un n8n de pruebas local | n8n real |
+| — | Avisos y recordatorios de citas por WhatsApp | Implementado Local; **fuera del piloto inicial** | Plantillas aprobadas por Meta |
+| — | Booker, Delivery, E-commerce (flujo de compra), campañas con envío real, Instagram, Messenger | **No listos**: no probar ni ofrecer | Desarrollo y accesos |
+
+### 11.7 Bloqueadores externos y decisiones pendientes
+
+| Id | Bloqueador / decisión | Quién | Efecto |
+|---|---|---|---|
+| B1 | Número de prueba de Meta, `phone_number_id`, App Secret, token permanente y suscripción al campo `messages` | Responsable de Meta | Sin esto no hay prueba real |
+| B2 | Dominio y certificado HTTPS para `APP_URL` | Infraestructura | Meta exige HTTPS |
+| B3 | Instancia de n8n por HTTPS y exportación JSON del workflow real, adaptado a §11.3 y §3.1 | Responsable de n8n | Sin el workflow no se sabe si cumple el contrato |
+| B4 | Registrar el workflow en `config/n8n.php` (`workflows`) | Desarrollo (cambio de código + despliegue) | El catálogo está vacío; asignarlo con `workflows:manage assign` |
+| B5 | Licencia de n8n para este modelo de servicio | Dirección | Riesgo contractual antes de clientes |
+| D1 | Destino de la alerta (Slack, correo, agente de logs) o responsable que revise `alerts.log` y la bandeja «Pendientes» a diario | Responsable del piloto | Hoy la alerta solo existe en el servidor |
+| D2 | Texto aprobado de `CHATBOT_FAILURE_NOTICE` (o dejarlo vacío) | Negocio/jurídico | Sin él el contacto no recibe aviso |
+| D3 | Quién accede a `/horizon` y quién supervisa | Responsable | Hoy nadie entra fuera de local |
+| D4 | Copia programada con `cron` y restauración probada en el servidor real | Infraestructura | Solo probado en desarrollo |
+| D5 | Aviso de privacidad, contrato de tratamiento, retención, STOP, salud, D-P1 | Jurídico/dirección | **Bloquea clientes reales, no el piloto técnico con personas autorizadas** |
+
+### 11.8 Despliegue y primera prueba real: pasos ordenados
+
+**Antes del miércoles (lunes–martes), sin tocar producción:**
+
+| # | Paso | Responsable | Prerrequisito |
+|---|---|---|---|
+| 1 | Revisar el diff y autorizar `git commit` y `git push` (comandos en el informe final) | Tú | Este informe |
+| 2 | Servidor con Docker, DNS y HTTPS (B2); archivo `prod.env` (nunca en Git) con `APP_KEY`, `APP_URL=https://…`, `DB_PASSWORD`, `REDIS_PASSWORD`, `AWS_*`, `REVERB_APP_*`, `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN`, `N8N_EXECUTION_URL`, `N8N_EXECUTION_SECRET`, `ALERT_LOG_CHANNELS`, `CHATBOT_FAILURE_NOTICE` (opcional), `ADMIN_*` solo para sembrar | Infraestructura | B2 |
+| 3 | Adaptar el workflow en una **copia** a §11.3/§3.1 (verificar firma, objeto JSON con `execution_id`, no enviar a WhatsApp, `memory_key`, pedir teléfono en web, tratar 409/401) | Responsable de n8n | B3 |
+| 4 | Registrar el workflow en `config/n8n.php` y publicar esa versión | Desarrollo | B3, B4 |
+| 5 | Meta: webhook `https://<APP_URL>/api/webhooks/whatsapp` con el mismo verify token; números autorizados como testers | Responsable de Meta | B1, B2 |
+| 6 | Decidir D1 y D2; nombrar al responsable de supervisión | Tú | — |
+
+**Miércoles 21, en este orden (cada paso con su verificación):**
+
+1. Copia de seguridad previa si hay datos (`backup.sh` + `restore-check.sh`; en un primer despliegue sin datos, programar el `cron`). Etiquetar la imagen anterior si existe.
+2. `docker compose --env-file prod.env -f docker-compose.prod.yml up -d --build --scale app=1 --scale worker=1` (un solo `scheduler`). Verificar `ps`: todos `healthy`.
+3. `exec app php artisan migrate --force` (23 archivos; **explícito, nunca automático**) y `db:seed --class=RolesAndPermissionsSeeder`, `--class=ModuleCatalogSeeder`, `--class=AdminUserSeeder` (con `ADMIN_*`, que se quitan del archivo después). Cambiar la contraseña del administrador en el primer inicio de sesión.
+4. `exec worker php artisan horizon:terminate` y `exec app php artisan integrations:diagnose`: **sin bloqueos** (código 0).
+5. En Meta, verificar el webhook (GET) y suscribir `messages`. Si falla, no continuar.
+6. En Ava: Workspace de pruebas con plan que incluya Asistentes, Conversaciones y Servicios y Reservas; un servicio, un profesional con horario; chatbot; Integraciones › WhatsApp (`phone_number_id` y token) › «Probar conexión» (debe quedar verificada); activar el canal; `php artisan workflows:manage assign --key=<clave> --chatbot=<id>`.
+7. Pruebas con números autorizados (anotar fecha y resultado, sin datos personales): mensaje simple y respuesta; estados `sent → delivered → read`; mensaje repetido sin duplicar; disponibilidad; reserva completa **sin escribir el teléfono** (D-TEL) y verificar en la agenda; mismo horario por otro número (rechazo); cancelar y reprogramar; traspaso a persona, respuesta humana dentro de 24 h y devolución a la IA; **fallo a propósito**: apagar el workflow de n8n y comprobar que la conversación pasa a «Pendiente», que aparece `ai_failure_handed_to_human` (`docker compose … logs worker | grep ai_failure_handed_to_human`) y que el aviso (si se configuró) llega una sola vez; token de Meta inválido (canal en error y envío `failed` sin repetirse).
+8. `integrations:diagnose`, `executions:list --failed` y `docker compose … ps`; decidir **continuar o detener** con los criterios de §11.9. Registrar lo verificado con servicios reales en este documento (§10.8 paso 7).
+
+### 11.9 Riesgos que impiden empezar y criterios para detener
+
+**Impiden empezar:** `integrations:diagnose` con bloqueos; webhook de Meta sin verificar; workflow sin adaptar (envía por WhatsApp por su cuenta o responde lista/`Immediately`); copia de seguridad sin programar o sin restauración probada si hay datos; nadie nombrado para supervisar; HTTPS ausente; licencia de n8n sin confirmar si habrá contactos que no sean del equipo.
+
+**Detener el piloto** (apagar el asistente del Workspace con `is_active` o el canal, pasar a modo persona, abrir un incidente): una confirmación falsa (cita dicha como hecha que no existe); una cita duplicada; datos de un Workspace visibles en otro; mensajes duplicados al contacto; un traspaso a persona ignorado (la IA responde después); una conversación fallida que no pasa a «Pendiente» o sin alerta; más de una ejecución `failed` sin atender en un día hábil; fallo de la copia dos días seguidos; un mensaje enviado a quien pidió STOP por una campaña; texto de salud guardado sin base acordada.
+
+### 11.10 Validación del sexto bloque
+
+| Comprobación | Resultado |
+|---|---|
+| PHPUnit completo en SQLite (contenedor de desarrollo con GD, `APP_ENV=testing`) | **1337 pruebas, 10 974 aserciones, 0 fallos, 3 omitidas** (las propias de PostgreSQL) |
+| PHPUnit completo en PostgreSQL 16 desechable (`ccg_ava_final_test`, eliminada al terminar) | **1337 pruebas, 10 984 aserciones, 0 fallos, 0 omitidas** |
+| Pruebas nuevas (+24 sobre las 1313 del bloque anterior) | `AiFailureHandoverTest` 16, `AgentBookingTest` +7 (D-TEL), `AgentOrderTest` +1 |
+| Pruebas existentes modificadas (ninguna eliminada ni omitida) | `ChatbotExecutionTest` (3 aserciones que fijaban «la conversación sigue con la IA tras un fallo»), `PublicBookingTest` (1 aserción: `reason` `invalid` → `contact_required`) |
+| Circuito local (`run.sh`) | Salida 0, 2 ejecuciones (antes y después del último ajuste); base `ccg_ava_e2e` eliminada; `ccg_ava` no se tocó |
+| Estilo, JavaScript, compilación | `pint --test` correcto (421 archivos); `npm run test:js` 21/21; `npm run build` salida 0 |
+| Dependencias | `composer audit`: sin avisos; `npm audit`: 0 vulnerabilidades |
+| Configuración, rutas, migraciones | `route:list` 222 rutas; `migrate:status` en la base de desarrollo: 23 ejecutadas = 23 archivos, 0 pendientes (solo lectura); `docker-compose.prod.yml` válido con variables ficticias; `config/logging.php` resuelve el canal `alerts`; `integrations:diagnose` en desarrollo: 0 bloqueos, 3 avisos (faltan `META_*`, `N8N_*` y workflow: esperado) |
+| Grafo | `graphify update .` (AST, sin LLM): 5145 nodos, 17 359 aristas, 233 comunidades; incluye `OperationalAlert`, `FailureKind`, `handOverAfterFailure` y `AiFailureHandoverTest`. El grafo se construye sobre el árbol de trabajo (commit base `12b021c`, sin commit nuevo); los documentos Markdown no se re-extraen semánticamente sin LLM (`graphify label` y `/graphify --update` los refrescan) |
+| NO ejecutado | Meta, n8n y workflow reales; pantallas en navegador (no cambió ninguna); migraciones sobre una base compartida; despliegue; commit y push; `appointments:notify` contra un destino real; `pendientes.md`, `reglas.md` y `PLAN_TRABAJO_AVACHAT.md` no se modificaron por instrucción (siguen listando D-TEL y D-FALLO como pendientes hasta que se autorice actualizarlos) |
+
+## 12. Auditoría de preparación para la API de Booker (Merchant) — 2026-10-19
+
+Evidencia: código y pruebas del repositorio y la respuesta del soporte de Booker (endpoints y flujo). **No se hizo ninguna llamada a Booker, Staging ni producción; no hay credenciales en el repositorio.** Vocabulario como en §0: todo lo de Booker está **Simulado** (`Http::fake`), nada **Real**.
+
+### 12.1 Qué existía
+
+Una integración parcial y madura: tipo `booker` por Workspace (`BookerType`, credenciales `client_id`, `client_secret`, `subscription_key` cifradas y de solo escritura, entorno y un `location_id`), cliente HTTP con token cacheado y renovado una vez, salida solo por `SafeHttpTarget`, errores reducidos a códigos fijos, lecturas con un reintento y escrituras sin reintento, estados de cita `sync_status` (`uncertain` incluido), permisos y módulo `calendar_providers`, auditoría con credenciales enmascaradas y herramientas del asistente (`/api/agent/booking/*`) que ya hablaban con cualquier agenda externa a través de `CalendarProvider`. Pero usaba la **API Customer** (rutas del cliente Ruby de código abierto, `/v4.1/customer/...`) y declaraba horarios, reserva y reprogramación como no soportados. No había sucursales para una agenda externa (las Sedes de Ava son de la agenda interna) y el entorno solo cambiaba el host.
+
+### 12.2 Qué estaba listo, qué faltaba, riesgos
+
+| Requisito | Estado antes | Ahora |
+|---|---|---|
+| Configuración y credenciales por Workspace, sin compartir | Listo | Igual (probado con dos Workspaces: credenciales, token, catálogo y sucursales separados) |
+| Staging y producción separados | Parcial (host por entorno) | Hosts y rutas por configuración/entorno; `3749` rechazado en producción; reserva en producción solo con `BOOKER_MERCHANT_VERIFIED` |
+| Token y renovación | Listo (`client_credentials`, `scope=public`) | Scope por configuración (`BOOKER_SCOPE`); el scope y el lugar del token de la API Merchant **no están confirmados** |
+| Tratamientos con caché | Customer API, 60 s | Merchant `POST /v4.1/merchant/treatments`, 300 s, por sucursal, filtrado en el backend (sin clases, inactivos ni no reservables en línea), paginado |
+| Disponibilidad en tiempo real | No | `POST /v4.1/merchant/availability/1day`, un día por llamada (máx. 7), filtrada por tratamiento y profesional, fechas ISO o `/Date(ms±hhmm)/` |
+| Buscar cliente sin duplicar | No | `POST /v4.1/merchant/customers` por correo, luego teléfono; si Booker devuelve varios, no se adivina: la reserva se rechaza |
+| Crear cita y guardar su id | No | `POST /v4.1/merchant/appointment/create` con el horario tal como lo devolvió Booker, `Customer` existente o nuevo, sin objetos de pago; `confirmed` solo con id de cita; una sola llamada, nunca repetida |
+| Errores, tiempos, reintentos sin duplicar | Listo para Customer | Mismo mecanismo; un 2xx con `ErrorCode` distinto de 0 es rechazo; 2xx sin id de cita, timeout y 5xx = `uncertain` (no se repite hasta verificar) |
+| Filtrar lo que ve el chatbot | Listo | Solo id, nombre, duración, precio, categoría; nunca ids internos de Booker de clientes ni cuerpos de respuesta |
+| Auditoría sin tokens ni datos personales | Listo | Verificado también para el flujo Merchant (`test_no_secret_token_or_customer_datum...`) |
+| Cuatro sucursales | No | `config.locations` (`LocationID | nombre`, hasta 20) por Workspace; con 2 o más, `location_id` es obligatorio en disponibilidad y reserva y solo vale uno configurado; el asistente las lee en `GET /api/agent/booking/locations` |
+| Consultar, cancelar, reprogramar, modificar | Customer API: leer y cancelar (no confirmados por el soporte) | **Merchant: ninguno tiene endpoint confirmado → no implementados** y declarados falsos (`capabilities`); Ava lo dice y la cita sigue activa |
+
+Riesgos encontrados: **(1)** la forma exacta de solicitudes/respuestas de Merchant no está en ninguna fuente que Ava pueda leer (supuestos A1–A4 en `BookerMerchantCalendar`; un supuesto equivocado produce un error cerrado, nunca una reserva falsa); **(2)** el scope del token Merchant y si Booker lee `access_token` del cuerpo o la cabecera `Authorization` (Ava envía ambos); **(3)** `ErrorCode` en cuerpos 200 es un supuesto; **(4)** el nombre de un cliente nuevo se parte en nombre y apellido por el primer espacio; si Booker exige apellido, la reserva se rechazará (`provider`); **(5)** la página pública de reservas no pide sucursal con Booker (con varias, usar el asistente); **(6)** cancelar/reprogramar/leer una cita hecha por Merchant no es posible desde Ava hasta que Booker confirme los endpoints: hoy se hace en Booker; **(7)** `wa_id`/teléfono: el teléfono de WhatsApp se envía a Booker como `CellPhone` si el cliente es nuevo (consentimiento y subencargado: ver `docs/privacidad.md`).
+
+### 12.3 Patrón de integración elegido
+
+Booker NO pasa por n8n ni por el módulo de Integraciones genérico: es una **agenda externa detrás de `CalendarProvider`**, el mismo patrón que ya usan el panel, la página pública y el asistente. n8n solo llama a las herramientas de Ava (`/api/agent/booking/*`) con el token de ejecución, y Ava habla con Booker en el servidor. Así Ava conserva la autoridad (idempotencia, estado real, permisos, aislamiento) y el modelo nunca construye solicitudes a Booker. Se descartó que n8n llame a Booker directamente: duplicaría credenciales fuera de Ava y rompería la idempotencia y la trazabilidad.
+
+### 12.4 Qué se modificó
+
+`BookerMerchantCalendar` (nuevo), `LocationAwareCalendar` (nuevo), `BookerClient` (`merchant()`, scope configurable, `ErrorCode`), `BookerType` (campos `api` y `locations`, regla de `3749`, prueba de conexión Merchant, `calendar()` por modo), `BookerCalendar::serviceOf` (compartido), `BookingManager` (agenda por sucursal, `externalLocations`, guarda `location_name`, no pretende cancelar si la agenda no puede), `AgentBookingController::locations`, `config/integrations.php`, `.env.example`, `docker-compose.prod.yml`, `ChannelIntegrationModal.jsx` (valor inicial `default` del campo), documentación (`reglas.md`, `pendientes.md`, `README.md`, `INFRASTRUCTURE.md`). Sin migraciones: las sucursales viven en la configuración cifrada de la integración y `appointments.location_name` ya existía. Las integraciones guardadas sin `api` siguen en el modo `customer`; un Workspace nuevo elige `merchant` en el formulario.
+
+### 12.5 Qué falta probar en Staging con las credenciales corporativas
+
+1. «Probar conexión» en modo Merchant (token con el scope correcto; ajustar `BOOKER_SCOPE`).
+2. Tratamientos de la ubicación `3749`: forma de la lista, precio, duración, `IsClass`/`AllowCustomersToBookOnline`.
+3. Disponibilidad: aceptar la solicitud (A1) y confirmar la forma de `ItineraryTimeSlotLists` (A2), formato de `StartDateTime` y zona horaria.
+4. Búsqueda de clientes por correo y teléfono (A4) y alta de cliente nuevo (campos y apellido obligatorio).
+5. Crear una cita de prueba en Staging (A3), comprobar que aparece en Booker, que Ava guarda el id y `confirmed`, y repetir el mismo mensaje para ver `replayed` sin segunda cita.
+6. `ErrorCode` en un rechazo real y el comportamiento ante horario ocupado (409 u `ErrorCode`).
+7. Ajustar `BookerMerchantCalendar` a lo observado (es el único lugar) y actualizar `BookerMerchantTest` con respuestas reales anonimizadas.
+
+### 12.6 Lo que depende de Booker para producción
+
+Los `LocationID` reales de las **cuatro sucursales**, habilitados para producción (hoy no hay ninguno confirmado; `3749` es de pruebas y la aplicación lo rechaza en producción), credenciales y Subscription Key de producción, el scope del token Merchant, los endpoints de cancelar/reprogramar/leer (si se quieren desde Ava) y la confirmación de que la reserva no requiere objetos de pago en esas ubicaciones. Después: `BOOKER_MERCHANT_VERIFIED=true`, configurar en Integraciones › Booker las cuatro sucursales (`ID | nombre`) y repetir las pruebas 1 a 6 contra producción con una cita real de bajo riesgo acordada con el cliente.
+
+### 12.7 Veredicto
+
+**Ava está lista para iniciar pruebas de integración en Staging**, sin bloqueos de código conocidos, con estas condiciones: credenciales corporativas de Staging cargadas por un administrador del Workspace de pruebas, plan con `calendar_providers`, y aceptar que los supuestos A1–A4 pueden requerir un ajuste local en una clase. **No está lista para producción**: faltan las pruebas reales, las sucursales habilitadas y la cancelación/reprogramación Merchant.
+
+## 13. Revisión integral previa a la publicación y al despliegue (2026-10-19, séptimo bloque)
+
+Sin llamadas a Booker, Meta ni n8n; sin credenciales; sin migraciones en bases compartidas; sin commit, push ni despliegue. Todo lo de Booker, Meta y n8n sigue **Simulado**.
+
+### 13.1 Estado inicial y bloques
+
+Rama `main`, commit base `12b021c` (igual a `origin/main`). Árbol con **cambios sin publicar de tres bloques**, todos conservados: (1) quinto bloque (diagnóstico de Horizon, pruebas de disponibilidad, circuito local `docker/ops/local-loop/`); (2) sexto bloque, **D-TEL y D-FALLO** (§11); (3) **Booker Merchant** (§12). Los cambios de `reglas.md` y `pendientes.md` del bloque 3 se revisaron: solo tocan el párrafo de Booker de `reglas.md` §7 y tres entradas Booker de `pendientes.md`, son coherentes con el código (modo `customer` intacto, Merchant por Workspace, supuestos A1 a A4, bloqueo de producción) y no hubo que ampliarlos.
+
+| Bloque | Qué se añadió |
+|---|---|
+| 5 | Circuito local (19 escenarios descritos, 15 comprobaciones automáticas), corrección de `integrations:diagnose` (Horizon), prueba de disponibilidad ocupada |
+| 6 | Teléfono de WhatsApp para reservas y pedidos (`contact_required` en web), traspaso a persona y alerta ante fallo definitivo, códigos `timeout` y `n8n_auth`, canal de alertas, recuperación del traspaso |
+| 7a (Booker) | `BookerMerchantCalendar`, sucursales por Workspace, `3749` rechazado en producción, `BOOKER_MERCHANT_VERIFIED`, `ErrorCode`, `cancel` no fingido |
+| 7b (esta revisión) | Ver §13.3 |
+
+### 13.2 Qué funciona y qué sigue siendo hipótesis
+
+| Pieza | Comprobado (código y pruebas) | Hipótesis / no comprobado |
+|---|---|---|
+| Aislamiento, permisos, planes, módulos | Barridos y pruebas por Workspace en SQLite y PostgreSQL | — |
+| Webhook de Meta | Firma, 1 MB, 404 sin configurar, GET de verificación, duplicados, número ajeno (doble) | Comportamiento real de Meta, `biz_opaque_callback_data`, ventana de 24 h |
+| Ejecución n8n | Contrato estricto (§11.3), reintentos, timeouts, 401/403, respuestas inválidas, caída del worker y recuperación (doble) | Workflow real de la empresa; licencia |
+| D-TEL / D-FALLO | Pruebas automáticas y circuito local | Alerta fuera del servidor (no configurada); texto aprobado del aviso |
+| Booker Merchant | Rutas y flujo (confirmados por soporte); peticiones que Ava construye, no repetir escrituras, `uncertain`, aislamiento, secretos fuera de logs (simulado) | Forma de solicitudes y respuestas (A1 a A4), scope del token, dónde va el token, `ErrorCode`, apellido obligatorio |
+| Booker Customer (modo antiguo) | Intacto y con sus pruebas | Igual que antes: solo Ruby client |
+
+Fronteras de Booker (todo en `BookerMerchantCalendar` y `BookerClient::merchant`): CONFIRMADO por soporte = las 4 rutas, la base de Staging, el flujo (caché de tratamientos, releer disponibilidad, buscar cliente, crear con el horario devuelto), campos `LocationID`, `ItineraryTimeSlotList`, `Customer`, `EmployeeID`, `StartDateTime`, sin objetos de pago. HIPÓTESIS = nombres y anidación de la solicitud de disponibilidad (`Itineraries`), de la respuesta (`ItineraryTimeSlotLists`, `Slots`/`SlotList`, `TreatmentTimeSlots`), forma de `Customer` nuevo (`FirstName`, `LastName`, `Email`, `CellPhone`), parámetros de búsqueda (`Email`, `PhoneNumber`), clave del id de la cita, `ErrorCode`/`access_token`, scope. Una hipótesis equivocada produce un error cerrado (`invalid`, `unknown` = "sin confirmar"), nunca una reserva falsa; el ajuste es local a esa clase y a `BookerMerchantTest`.
+
+### 13.3 Defectos encontrados y corrección
+
+1. **El circuito local no cubría el GET de verificación ni la caída del worker** (pendientes del informe anterior): añadidos como escenarios 0 y 15 de `run.sh`/`driver.php` (SIGKILL del worker en plena ejecución; la recuperación antes del umbral no toca nada; con un worker nuevo y pasado el umbral sale UNA respuesta y 2 intentos). Pasa con salida 0.
+2. **Un catálogo de tratamientos vacío se guardaba en caché 5 minutos** (una lectura vacía transitoria ocultaba los servicios): ahora no se cachea lo vacío (`test_an_empty_or_broken_answer...`).
+3. **La página pública de reservas no podía elegir sucursal con Booker** (con varias, la reserva fallaba sin remedio): `PublicBooking::config` ofrece las sucursales configuradas y exige una (`test_the_public_page_offers...`); con producción sin verificar la página dice que no puede reservar.
+4. Pruebas añadidas que faltaban: JSON inválido y cuerpo vacío en disponibilidad; 400/401/409/429/HTML-200 en la creación (certeza vs. incertidumbre, nunca dos escrituras salvo la renovación de token tras un 401, que Booker no procesó); dos contactos por el mismo horario (una cita, un rechazo honesto).
+
+Sin defectos nuevos en el resto: no se tocó código que funcionaba.
+
+### 13.4 Booker Merchant: respuestas a la revisión
+
+Aislamiento y secretos por Workspace, Staging/producción separados (host por entorno; producción exige `BOOKER_MERCHANT_VERIFIED`), token (scope por `BOOKER_SCOPE`, renovación una vez, `access_token` en el cuerpo solo en llamadas Merchant), caché de tratamientos por sucursal, disponibilidad leída justo antes de reservar, horario devuelto sin reconstruir, duplicados (clave conversación + instante, `uncertain` bloquea la repetición), `4xx/5xx/timeout/vacío/JSON inválido/sin id/ErrorCode` cubiertos, sucursales validadas y `3749` rechazado en producción, integración por `CalendarProvider`/`BookingManager`/herramientas del agente con los permisos de `calendar_providers`, modo Customer intacto (las integraciones guardadas sin `api` siguen en él y no se migran). **Limitaciones declaradas:** en Merchant no hay profesionales, cancelar, reprogramar ni leer cita (sin endpoint confirmado; Ava lo rechaza con `unsupported` y la cita sigue activa); el diálogo del personal para crear citas con Booker no tiene selector de sucursal (con varias, usar el asistente o la página pública).
+
+### 13.5 Escenarios del circuito local
+
+Cubre (15 comprobaciones automáticas + 2): GET de verificación (token correcto, incorrecto, modo incorrecto, sin challenge), mensaje simple, disponibilidad y sin disponibilidad, reserva con reintento y sin teléfono del workflow (D-TEL), rechazo de horario ocupado, aislamiento entre Workspaces, evento duplicado, traspaso, n8n 503, respuesta con otro `execution_id`, respuesta como lista, n8n lento, firma incorrecta, token de ejecución alterado, número ajeno y caída del worker con recuperación. **Faltan** (solo en pruebas automáticas, no en el circuito): Booker (se simula con `Http::fake`, el circuito no tiene doble de Booker), alertas por correo/Slack, y el canal web.
+
+### 13.6 Requisitos para conectar Booker Staging
+
+Se puede probar **desde el entorno local**: Ava solo llama a Booker (salida HTTPS); Booker no llama a Ava y no hay webhooks. No hace falta desplegar. Requiere: salida a Internet desde el contenedor `app`, un Workspace con plan que incluya `service_catalog`, `professionals`, `bookings`, `integrations` y `calendar_providers`, y un administrador con `manage-settings` que cargue en Integraciones › Booker: entorno Sandbox, API Merchant, Client ID, Client Secret, Subscription Key y el Location ID de Staging; luego elegir Booker como agenda en la configuración de reservas. Para el asistente de IA completo además n8n y Meta (ver §13.7). Orden de la primera prueba: §12.5.
+
+### 13.7 Requisitos para probar Meta/WhatsApp real
+
+URL pública **HTTPS** (despliegue o túnel) para `https://<dominio>/api/webhooks/whatsapp`; app de Meta con número de prueba, `phone_number_id`, App Secret, token permanente y `META_WEBHOOK_VERIFY_TOKEN` propio; campo `messages` suscrito; números autorizados como testers; `META_APP_SECRET` y `META_WEBHOOK_VERIFY_TOKEN` en el entorno de Ava; n8n por HTTPS con el workflow adaptado (§11.3), `N8N_EXECUTION_URL`/`SECRET`, workflow registrado en `config/n8n.php` y asignado con `workflows:manage assign`; worker (Horizon) y scheduler corriendo.
+
+### 13.8 Bloqueadores
+
+**De despliegue:** servidor con Docker, dominio y HTTPS, archivo de variables, copia programada con restauración probada, nadie definido para Horizon ni para la supervisión, destino de la alerta (§11.7 D1). **Del piloto con contactos reales:** todos los de §11.7 (D5: aviso de privacidad, contrato, retención, STOP, salud, D-P1, texto del aviso de fallo) y, para Booker, los `LocationID` de las cuatro sucursales habilitados para producción y las pruebas reales de §12.5. Nada de lo legal está aprobado por este documento.
+
+### 13.9 Riesgos residuales y criterios de parada
+
+Riesgos: hipótesis de Booker (§13.2); workflow real distinto del contrato; alerta solo local; el diálogo del personal sin sede con Booker multisucursal; Meta sin idempotencia al enviar. Detener y apagar el asistente o la agenda externa ante: una cita comunicada como confirmada que no existe en Booker, una cita duplicada, datos de un Workspace visibles en otro, un `uncertain` de Booker sin verificar más de un día, mensajes duplicados, un traspaso a persona ignorado, ejecuciones `failed` sin atender, o cualquier fuga de un secreto o dato personal a logs.
+
+### 13.10 Secuencia recomendada
+
+1. Revisar el diff y autorizar commit y push (comandos al final del informe).
+2. **Prueba A (sin despliegue):** Booker Staging desde local siguiendo §13.6 y §12.5; ajustar `BookerMerchantCalendar` si las hipótesis fallan; repetir la suite.
+3. Despliegue en servidor de pruebas (§11.8 y `INFRASTRUCTURE.md`): `migrate --force` (23 archivos), seeders, `integrations:diagnose` sin bloqueos.
+4. **Prueba B:** Meta/WhatsApp y n8n reales con números autorizados (§11.8 paso 7) y la reserva por Booker Staging desde WhatsApp.
+5. Cuando Booker habilite las sucursales de producción y se verifique todo: `BOOKER_MERCHANT_VERIFIED=true`, cargar las cuatro sucursales y una cita real de bajo riesgo acordada.
+
+### 13.11 Validación
+
+| Comprobación | Resultado |
+|---|---|
+| PHPUnit SQLite (contenedor con GD) | **1360 pruebas, 11 105 aserciones, 0 fallos, 3 omitidas** (las de PostgreSQL) |
+| PHPUnit PostgreSQL 16 desechable (`ccg_ava_audit_test`, eliminada) | **1360 pruebas, 11 115 aserciones, 0 fallos, 0 omitidas** |
+| Pruebas nuevas de esta revisión | +4 en `BookerMerchantTest` (23 en total) |
+| Circuito local | Salida 0 con los escenarios 0 y 15 nuevos; `ccg_ava_e2e` eliminada; `ccg_ava` no tocada |
+| Pint / `npm run test:js` / `npm run build` | 424 archivos correctos / 21 de 21 / salida 0 |
+| `composer audit` / `npm audit` | Sin avisos / 0 vulnerabilidades |
+| Rutas, migraciones, Docker | 222 rutas; 0 migraciones pendientes (solo lectura sobre desarrollo; 23 archivos); `docker-compose.prod.yml` válido con valores ficticios; `integrations:diagnose` 0 bloqueos, 3 avisos esperados |
+| Graphify | `graphify update .`: 5235 nodos, 17 681 aristas, 253 comunidades |
+| NO ejecutado | Booker, Meta y n8n reales; pantallas en navegador (solo cambió el valor inicial del campo `api` en un modal, no revisado en navegador ni en modo oscuro); despliegue; migraciones en bases compartidas |

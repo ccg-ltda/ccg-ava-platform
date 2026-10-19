@@ -37,6 +37,13 @@ class RunChatbotExecution implements ShouldQueue
             $result = $executions->run($this->executionId);
         } catch (Throwable $e) {
             Log::error('chatbot_execution_error', ['exception' => $e::class, 'execution_id' => $this->executionId]);
+
+            try {
+                $executions->abandonIfExhausted($this->executionId);
+            } catch (Throwable $inner) {
+                Log::error('chatbot_execution_abandon_error', ['exception' => $inner::class, 'execution_id' => $this->executionId]);
+            }
+
             $this->fail(new ChatbotExecutionFailed('internal_error'));
 
             return;

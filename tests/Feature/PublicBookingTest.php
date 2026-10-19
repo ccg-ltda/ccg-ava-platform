@@ -181,7 +181,7 @@ class PublicBookingTest extends TestCase
         $this->enablePublic($this->workspace, ['require_email' => true, 'require_phone' => true]);
 
         $response = $this->postJson($this->api('/appointments'), $this->payload(['customer' => ['name' => 'Laura', 'phone' => '+573001112233']]))->assertStatus(422);
-        $this->assertSame('invalid', $response->json('reason'));
+        $this->assertSame('contact_required', $response->json('reason'));
 
         $this->enablePublic($this->workspace, ['require_email' => false, 'require_phone' => false]);
         $this->postJson($this->api('/appointments'), $this->payload(['customer' => ['name' => 'Laura']]))->assertStatus(422); // at least one way to contact

@@ -76,6 +76,17 @@ x-php: &php
     N8N_EXECUTION_URL: ${N8N_EXECUTION_URL:-}
     N8N_EXECUTION_SECRET: ${N8N_EXECUTION_SECRET:-}
     N8N_EXECUTION_TIMEOUT: ${N8N_EXECUTION_TIMEOUT:-25}
+    # Booker: hosts por entorno y el interruptor que habilita horarios y reserva en PRODUCCIÓN (Staging no lo necesita). Las credenciales son de cada Workspace, no del entorno.
+    BOOKER_STAGING_URL: ${BOOKER_STAGING_URL:-https://api-staging.booker.com}
+    BOOKER_PRODUCTION_URL: ${BOOKER_PRODUCTION_URL:-https://api.booker.com}
+    BOOKER_SCOPE: ${BOOKER_SCOPE:-public}
+    BOOKER_MERCHANT_VERIFIED: ${BOOKER_MERCHANT_VERIFIED:-false}
+    # Operational alerts (the AI failed for good and a conversation was handed to a person): always written to storage/logs/alerts.log of the container
+    # that raised them and, here, to the container log (stderr) so `docker compose logs` keeps them. Add `slack` (with LOG_SLACK_WEBHOOK_URL) only when
+    # a webhook exists: nothing is sent outside the server otherwise. CHATBOT_FAILURE_NOTICE is the ONLY text a contact receives in that case; empty = none.
+    ALERT_LOG_CHANNELS: ${ALERT_LOG_CHANNELS:-stderr}
+    LOG_SLACK_WEBHOOK_URL: ${LOG_SLACK_WEBHOOK_URL:-}
+    CHATBOT_FAILURE_NOTICE: ${CHATBOT_FAILURE_NOTICE:-}
     # First administrator (php artisan db:seed --class=AdminUserSeeder); set them only for that command.
     ADMIN_EMAIL: ${ADMIN_EMAIL:-}
     ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}

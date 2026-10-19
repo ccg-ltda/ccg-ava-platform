@@ -23,8 +23,6 @@ use Throwable;
  */
 class BookerClient
 {
-    private const SCOPE = 'public';
-
     public function __construct(private readonly Integration $integration, private readonly SafeHttpTarget $target) {}
 
     /** @return array<string, mixed> */
@@ -37,6 +35,18 @@ class BookerClient
     public function post(string $path, array $body = [], bool $retry = false): array
     {
         return $this->send('POST', $path, ['json' => $body], $retry);
+    }
+
+    /**
+     * A call of the Merchant API (`config('integrations.booker.merchant.paths')`): a POST that also carries the access token in the body as
+     * `access_token`, next to the Bearer header (the support answer lists the token among the data a call needs; which of the two Booker reads is
+     * confirmed in Staging). The token is injected at send time, so a renewed token is used on the retry. Reads may be repeated, a write never.
+     *
+     * @return array<string, mixed>
+     */
+    public function merchant(string $pathKey, array $body = [], bool $retry = false): array
+    {
+        return $this->send('POST', (string) config("integrations.booker.merchant.paths.{$pathKey}"), ['json' => $body, 'merchant' => true], $retry);
     }
 
     /** @return array<string, mixed> */
@@ -55,7 +65,7 @@ class BookerClient
             'grant_type' => 'client_credentials',
             'client_id' => (string) ($secrets['client_id'] ?? ''),
             'client_secret' => (string) ($secrets['client_secret'] ?? ''),
-            'scope' => self::SCOPE,
+            'scope' => (string) config('integrations.booker.scope', 'public'),
         ]], authorized: false);
 
         $token = $response->json('access_token');
@@ -122,7 +132,7 @@ class BookerClient
                 isset($options['form_params']) => $client->asForm()->post($url, $options['form_params']),
                 $method === 'GET' => $client->get($url, $options['query'] ?? []),
                 $method === 'PUT' => $client->asJson()->put($url, $options['json'] ?? []),
-                default => $client->asJson()->post($url, $options['json'] ?? []),
+                default => $client->asJson()->post($url, ($options['json'] ?? []) + (isset($options['merchant']) ? ['access_token' => $this->token()] : [])),
             };
         } catch (ConnectionException $exception) {
             throw str_contains(strtolower($exception->getMessage()), 'time') ? ProviderException::timeout() : ProviderException::unavailable();
@@ -132,15 +142,21 @@ class BookerClient
             throw ProviderException::unknown();
         }
 
-        return $this->check($response, $authorized);
+        return $this->check($response, $authorized, isset($options['merchant']));
     }
 
     /** @throws ProviderException */
-    private function check(Response $response, bool $authorized): Response
+    private function check(Response $response, bool $authorized, bool $merchant = false): Response
     {
         $status = $response->status();
 
         if ($status >= 200 && $status < 300) {
+            // Booker's older APIs answer 200 with an `ErrorCode` in the body when the operation was refused. The code is a refusal, never a success, and its
+            // text is not kept. (Assumption to confirm in Staging: it only applies to the Merchant API calls.)
+            if ($merchant && is_numeric($response->json('ErrorCode')) && (int) $response->json('ErrorCode') !== 0) {
+                throw ProviderException::invalid();
+            }
+
             return $response;
         }
 

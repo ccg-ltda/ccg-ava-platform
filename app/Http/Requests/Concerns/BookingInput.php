@@ -49,12 +49,23 @@ trait BookingInput
         return app(AgentConversationContext::class)->verifiedPhoneDigits($this);
     }
 
-    /** @return array{name: string, phone: ?string, email: ?string} */
+    /**
+     * D-TEL: on WhatsApp the phone of the person who writes is the id of the conversation, which Ava already holds and the workflow never
+     * receives. When the workflow sends none, that verified number is the booking's phone (nothing is guessed: a phone the workflow does
+     * send is kept as it is, and any other channel, web included, must supply a phone or an email).
+     *
+     * @return array{name: string, phone: ?string, email: ?string}
+     */
     public function customer(): array
     {
         $customer = $this->validated('customer');
+        $verified = $this->verifiedContactDigits();
 
-        if (filled($customer['phone'] ?? null) && trim($customer['phone']) === $this->verifiedContactDigits()) {
+        if (! filled($customer['phone'] ?? null) && $verified !== null) {
+            $customer['phone'] = $verified;
+        }
+
+        if (filled($customer['phone'] ?? null) && trim($customer['phone']) === $verified) {
             $customer['phone'] = '+'.trim($customer['phone']);
         }
 

@@ -297,15 +297,15 @@ class AppointmentService
         $settings = BookingSetting::for($workspace);
 
         if (! filled($customer['phone'] ?? null) && ! filled($customer['email'] ?? null)) {
-            throw BookingException::invalid('Indica un teléfono o un correo para poder contactar a quien reserva.');
+            throw BookingException::contactRequired('Indica un teléfono o un correo para poder contactar a quien reserva.');
         }
 
         if (! $staff && $settings->require_phone && ! filled($customer['phone'] ?? null)) {
-            throw BookingException::invalid('Indica un teléfono de contacto.');
+            throw BookingException::contactRequired('Indica un teléfono de contacto.');
         }
 
         if (! $staff && $settings->require_email && ! filled($customer['email'] ?? null)) {
-            throw BookingException::invalid('Indica un correo de contacto.');
+            throw BookingException::contactRequired('Indica un correo de contacto.');
         }
     }
 

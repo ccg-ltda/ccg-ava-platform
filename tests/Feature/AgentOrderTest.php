@@ -594,4 +594,23 @@ class AgentOrderTest extends TestCase
         $this->post('/orders', ['customer_name' => 'Laura', 'delivery_method' => 'pickup', 'lines' => [['product_id' => $burger->id, 'quantity' => 1]]])->assertSessionHasNoErrors();
         $this->assertSame(1, Order::count());
     }
+
+    // --- D-TEL: the order's phone also comes from the conversation when the workflow has none --------------------------------------
+
+    public function test_a_whatsapp_order_without_phone_takes_the_verified_number_and_webchat_takes_nothing(): void
+    {
+        $burger = $this->product();
+        $this->conversation();
+        $this->conversation('573001112233', null, 'web');
+        $lines = [['product_id' => $burger->id, 'quantity' => 1]];
+        $noPhone = fn (string $channel) => ['channel' => $channel, 'contact_id' => '573001112233', 'delivery_method' => 'pickup', 'customer' => ['name' => 'Laura Pérez'], 'lines' => $lines];
+
+        $response = $this->tool('POST', '', $noPhone('whatsapp'), null, ['Idempotency-Key' => 'wa-1'])->assertCreated();
+        $this->assertSame('+573001112233', Order::sole()->customer_phone);
+        $this->assertStringNotContainsString('573001112233', $response->getContent());
+
+        // On the web the visitor id is not a phone: the order is accepted as before (its contact data are optional) and no number is invented.
+        $this->tool('POST', '', $noPhone('web'), null, ['Idempotency-Key' => 'web-1'])->assertCreated();
+        $this->assertNull(Order::orderByDesc('id')->first()->customer_phone);
+    }
 }

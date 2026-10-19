@@ -81,6 +81,24 @@ return [
             'replace_placeholders' => true,
         ],
 
+        /*
+         * Operational alerts (App\Services\OperationalAlert): something that needs a person soon, such as a conversation handed over
+         * because the AI failed. They always go to `storage/logs/alerts.log` and, when ALERT_LOG_CHANNELS names more channels
+         * (for example `slack` with LOG_SLACK_WEBHOOK_URL set), to those too. Nothing leaves the server unless that is configured.
+         */
+        'alerts' => [
+            'driver' => 'stack',
+            'channels' => array_merge(['alerts_file'], array_filter(explode(',', (string) env('ALERT_LOG_CHANNELS', '')))),
+            'ignore_exceptions' => true,
+        ],
+
+        'alerts_file' => [
+            'driver' => 'single',
+            'path' => env('ALERT_LOG_PATH', storage_path('logs/alerts.log')),
+            'level' => 'warning',
+            'replace_placeholders' => true,
+        ],
+
         'slack' => [
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),

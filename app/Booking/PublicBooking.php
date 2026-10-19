@@ -33,6 +33,8 @@ class PublicBooking
     {
         $setting = BookingSetting::for($workspace);
         $capabilities = $bookings->capabilities($workspace);
+        // An external agenda with several sucursales (Booker) offers the ones the Workspace configured, with the provider's own ids; Ava's agenda, its own sedes.
+        $external = $bookings->externalLocations($workspace);
 
         return [
             'business' => $workspace->name,
@@ -46,9 +48,9 @@ class PublicBooking
             'requireEmail' => $setting->require_email,
             'cancelNoticeHours' => $setting->cancel_notice_hours,
             'maxDays' => (int) config('bookings.public.max_days'),
-            // Only Ava's own agenda has locations; with several the visitor must choose one.
-            'locations' => $capabilities['external'] ? [] : $this->locations->active($workspace)->map(fn ($location) => ['id' => $location->id, 'name' => $location->name, 'address' => $location->address, 'city' => $location->city, 'phone' => $location->phone, 'notes' => $location->notes])->values()->all(),
-            'locationRequired' => ! $capabilities['external'] && $this->locations->required($workspace),
+            // With several locations the visitor must choose one.
+            'locations' => $external ? array_map(fn (array $location) => ['id' => (int) $location['id'], 'name' => $location['name'], 'address' => null, 'city' => null, 'phone' => null, 'notes' => null], $external['locations']) : ($capabilities['external'] ? [] : $this->locations->active($workspace)->map(fn ($location) => ['id' => $location->id, 'name' => $location->name, 'address' => $location->address, 'city' => $location->city, 'phone' => $location->phone, 'notes' => $location->notes])->values()->all()),
+            'locationRequired' => $external ? $external['required'] : (! $capabilities['external'] && $this->locations->required($workspace)),
         ];
     }
 }

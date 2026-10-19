@@ -39,7 +39,11 @@ class AgentBookingController extends Controller
     /** The active locations of the Workspace (empty when none applies): with several, a booking must name one by id. */
     public function locations(Request $request): JsonResponse
     {
-        return $this->run(fn (Workspace $workspace) => [
+        // An external agenda (Booker) serves the locations the Workspace configured for it, with the provider's own ids; Ava's agenda, its own sedes.
+        return $this->run(fn (Workspace $workspace) => ($external = $this->bookings->externalLocations($workspace)) ? [
+            'locations' => array_map(fn (array $location) => ['id' => (int) $location['id'], 'name' => $location['name'], 'address' => null, 'city' => null, 'phone' => null, 'notes' => null], $external['locations']),
+            'required' => $external['required'],
+        ] : [
             'locations' => $this->locations->active($workspace)->map(fn ($location) => ['id' => $location->id, 'name' => $location->name, 'address' => $location->address, 'city' => $location->city, 'phone' => $location->phone, 'notes' => $location->notes])->values()->all(),
             'required' => $this->locations->required($workspace),
         ]);

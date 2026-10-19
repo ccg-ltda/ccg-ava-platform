@@ -780,7 +780,8 @@ class ChatbotExecutionTest extends TestCase
             $this->assertNull($inbound->status, $name);
             $this->assertNull($inbound->failure_reason, $name);
             $this->assertSame(0, $conversation->messages()->where('direction', 'out')->count(), $name);
-            $this->assertSame(Conversation::AI, $conversation->handling, $name);
+            // D-FALLO: a failure the contact would never see is handed to a person (see AiFailureHandoverTest for the whole behavior).
+            $this->assertSame(Conversation::PENDING, $conversation->handling, $name);
         }
     }
 
@@ -824,7 +825,9 @@ class ChatbotExecutionTest extends TestCase
         $this->app->instance(SafeHttpTarget::class, new SafeHttpTarget(fn (string $host) => ['10.0.0.5']));
         $this->assertSame('unsafe_target', $this->runJob($job)->code);
 
+        // The first failure handed the conversation to a person; give it back to the AI as it was so the second check runs the same execution.
         $this->execution()->update(['status' => 'pending']);
+        Conversation::query()->update(['handling' => Conversation::AI, 'handling_version' => $this->execution()->handling_version]);
         $this->app->instance(SafeHttpTarget::class, new SafeHttpTarget(fn (string $host) => ['93.184.216.34']));
         config(['n8n.execution_url' => 'http://n8n.platform.example.com/webhook']);
         $this->app['env'] = 'production';
@@ -1397,6 +1400,9 @@ class ChatbotExecutionTest extends TestCase
         $this->runJob($this->queued());
         $execution = $this->execution();
         $this->assertSame(['failed', 'n8n_rejected'], [$execution->status, $execution->outcome_code]);
+        // The failure handed the conversation to a person, so a retry would be discarded (superseded); it only makes sense while the AI still has it.
+        $this->assertSame(Conversation::PENDING, $this->conversation(Conversation::first()->chatbot)->handling);
+        Conversation::query()->update(['handling' => Conversation::AI, 'handling_version' => $execution->handling_version]);
 
         $answer = true;
         $this->artisan('executions:recover', ['--retry' => $execution->id])->assertSuccessful();

@@ -68,7 +68,7 @@ class AgentCreateOrderRequest extends FormRequest
     {
         $customer = $this->validated('customer');
         $verified = app(AgentConversationContext::class)->verifiedPhoneDigits($this);
-        $phone = filled($customer['phone'] ?? null) ? trim($customer['phone']) : null;
+        $phone = filled($customer['phone'] ?? null) ? trim($customer['phone']) : $verified; // D-TEL: the verified WhatsApp number when the workflow sends none
 
         return [
             'customer_name' => trim($customer['name']),

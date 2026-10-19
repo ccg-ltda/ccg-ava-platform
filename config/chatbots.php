@@ -109,6 +109,13 @@ return [
     /* Requests per minute an automation may make with one chatbot token (every message it reports is one). */
     'agent_per_minute' => 600,
 
+    /*
+     * D-FALLO: the ONLY text Ava sends to a contact when the AI fails for good and the conversation is handed to a person. It is empty by default
+     * (nothing is sent) and must be a text the business has approved: Ava invents none, and it must not promise a time or confirm anything. One message
+     * per failure, never repeated by a retry or a recovery.
+     */
+    'failure_notice' => env('CHATBOT_FAILURE_NOTICE'),
+
     /* Longest text of the instructions of a chatbot, in characters. */
     'instructions_max' => 8000,
 

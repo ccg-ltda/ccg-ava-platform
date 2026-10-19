@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Audit\AuditLogger;
 use App\Chatbots\ChatbotExecutor;
 use App\Chatbots\ExecutionOutcome;
+use App\Chatbots\FailureKind;
 use App\Chatbots\ResolvedWorkflow;
 use App\Chatbots\RunResult;
 use App\Jobs\RunChatbotExecution;
@@ -52,6 +53,7 @@ class ChatbotExecutions
         private readonly AuditLogger $audit,
         private readonly ModuleAccess $modules,
         private readonly ExecutionAccess $access,
+        private readonly OperationalAlert $alerts,
     ) {}
 
     /** Whether the chatbot is switched on, in an active Workspace and Organization whose plan still includes the assistant and the inbox. */
@@ -150,6 +152,19 @@ class ChatbotExecutions
         return $this->complete($execution, $outcome);
     }
 
+    /**
+     * The job crashed on an unexpected error. While the execution still has runs left, recovery will try it again; on its last run it is settled as
+     * failed for good, so the contact is handed to a person instead of waiting for a recovery that would only repeat the crash.
+     */
+    public function abandonIfExhausted(int $id): void
+    {
+        $execution = ChatbotExecution::with('chatbot.workspace')->find($id);
+
+        if ($execution && $execution->status === ChatbotExecution::RUNNING && $execution->attempts >= (int) config('n8n.tries')) {
+            $this->settle($execution, ChatbotExecution::FAILED, 'internal_error');
+        }
+    }
+
     /** Manual recovery of a FAILED execution that stored no reply: it runs again from the start (its checks still apply). */
     public function retryFailed(int $id): bool
     {
@@ -168,19 +183,20 @@ class ChatbotExecutions
      * or running are queued again (claiming is atomic), a stored reply that was never handed over is resumed, and a reply
      * left `sending` (we cannot know whether it went out) is settled as uncertain.
      *
-     * @return array{requeued: int, resumed: int, uncertain: int}
+     * @return array{requeued: int, resumed: int, uncertain: int, handed_over: int}
      */
     public function recover(): array
     {
         $stale = now()->subSeconds((int) config('n8n.timeout') + 60);
         $waiting = now()->subMinutes(5);
-        $counts = ['requeued' => 0, 'resumed' => 0, 'uncertain' => 0];
+        $counts = ['requeued' => 0, 'resumed' => 0, 'uncertain' => 0, 'handed_over' => 0];
 
         // A run that keeps dying (a bug, not a lost job) must not be queued forever.
         ChatbotExecution::with('chatbot.workspace')->where('status', ChatbotExecution::RUNNING)->where('updated_at', '<', $stale)->where('attempts', '>=', (int) config('n8n.tries') + 3)->get()
             ->each(function (ChatbotExecution $execution) {
                 if (ChatbotExecution::whereKey($execution->id)->where('status', ChatbotExecution::RUNNING)->update(['status' => ChatbotExecution::FAILED, 'outcome_code' => 'crashed', 'finished_at' => now()]) === 1) {
                     $this->auditFailure($execution, 'crashed');
+                    $this->handOver($execution, 'crashed');
                 }
             });
 
@@ -200,6 +216,15 @@ class ChatbotExecutions
         ChatbotExecution::where('delivery', ChatbotExecution::DELIVERY_SENDING)->where('updated_at', '<', $stale)
             ->pluck('id')->each(function (int $id) use (&$counts) {
                 $this->settleUnknownSend($id) && $counts['uncertain']++;
+            });
+
+        // Backstop of D-FALLO: an execution that failed for good a moment ago but whose handover did not happen (the process died or the database
+        // failed right after the failure was recorded). Handing over is idempotent, so a conversation that was already moved is simply left alone.
+        ChatbotExecution::with('chatbot.workspace')->whereIn('status', [ChatbotExecution::FAILED, ChatbotExecution::DISCARDED])->whereNull('control_result')
+            ->where(fn ($q) => $q->where('status', ChatbotExecution::FAILED)->orWhere('outcome_code', 'stale'))
+            ->where('finished_at', '>=', now()->subHour())->get()
+            ->each(function (ChatbotExecution $execution) use (&$counts) {
+                $this->handOver($execution, $execution->outcome_code ?? 'unknown') && $counts['handed_over']++;
             });
 
         return $counts;
@@ -285,7 +310,7 @@ class ChatbotExecutions
     private function retryOrFail(ChatbotExecution $execution, ExecutionOutcome $outcome): RunResult
     {
         if ($execution->attempts >= (int) config('n8n.tries')) {
-            return $this->settle($execution, ChatbotExecution::FAILED, 'retries_exhausted');
+            return $this->settle($execution, ChatbotExecution::FAILED, 'retries_exhausted', $outcome->code);
         }
 
         ChatbotExecution::whereKey($execution->id)->where('status', ChatbotExecution::RUNNING)->update(['status' => ChatbotExecution::PENDING, 'outcome_code' => $outcome->code]);
@@ -444,7 +469,7 @@ class ChatbotExecutions
         }
     }
 
-    private function settle(ChatbotExecution $execution, string $status, string $code): RunResult
+    private function settle(ChatbotExecution $execution, string $status, string $code, ?string $cause = null): RunResult
     {
         $changed = ChatbotExecution::whereKey($execution->id)->where('status', ChatbotExecution::RUNNING)->update(['status' => $status, 'outcome_code' => $code, 'finished_at' => now()]) === 1;
 
@@ -452,7 +477,69 @@ class ChatbotExecutions
             $this->auditFailure($execution, $code);
         }
 
+        // A failure the contact would never notice is not allowed to stay silent: a message too old to answer (the queue was stuck) counts as one,
+        // the control rules that discard on purpose do not. The transition above happens once, so the handover below does too.
+        if ($changed && ($status === ChatbotExecution::FAILED || $code === 'stale')) {
+            $this->handOver($execution, $code, $cause);
+        }
+
         return $this->finish($execution, $status === ChatbotExecution::FAILED ? RunResult::failed($code) : RunResult::discarded($code));
+    }
+
+    /**
+     * D-FALLO: the AI could not answer for good. The conversation moves to a person through the control service (only if the AI still has it, as it
+     * was when the execution started), an operational alert is raised and, if the business configured an approved text, the contact gets that one
+     * notice. Everything hangs on the control service really moving the conversation, so a repeated call, a recovery or a duplicate event finds it
+     * already handed over and does nothing more. The Workspace comes from the execution's own chatbot, so a failure never touches another one.
+     * True only when this call moved the conversation.
+     */
+    private function handOver(ChatbotExecution $execution, string $code, ?string $cause = null): bool
+    {
+        try {
+            $execution->loadMissing('chatbot.workspace');
+            $conversation = Conversation::where('workspace_id', $execution->workspace_id)->find($execution->conversation_id);
+            $moved = $conversation !== null && $this->control->handOverAfterFailure($conversation, $execution->handling_version, $code);
+
+            ChatbotExecution::whereKey($execution->id)->whereNull('control_result')->update(['control_result' => $moved ? 'escalated' : 'not_escalated']);
+        } catch (\Throwable $e) {
+            // Never lets the failure it is reporting turn into another one; recovery tries again while the execution is recent.
+            Log::error('chatbot_handover_failed', ['exception' => $e::class, 'execution_id' => $execution->id]);
+
+            return false;
+        }
+
+        if (! $moved) {
+            return false;
+        }
+
+        $this->alerts->raise('ai_failure_handed_to_human', [
+            'workspace' => $execution->workspace_id, 'chatbot' => $execution->chatbot_id, 'conversation' => $execution->conversation_id, 'execution' => $execution->correlation_id,
+            'code' => $code, 'kind' => FailureKind::of($cause ?? $code), 'cause' => $cause, 'attempts' => $execution->attempts,
+        ]);
+        $this->notifyContact($conversation);
+
+        return true;
+    }
+
+    /** The one approved contingency text (`chatbots.failure_notice`), if the business configured it; nothing is invented, promised or confirmed. */
+    private function notifyContact(Conversation $conversation): void
+    {
+        $text = trim((string) config('chatbots.failure_notice'));
+
+        if ($text === '' || $conversation->isDemo()) {
+            return;
+        }
+
+        try {
+            $message = $conversation->messages()->create([
+                'workspace_id' => $conversation->workspace_id, 'direction' => 'out', 'sender' => 'ai', 'type' => 'text',
+                'body' => mb_substr($text, 0, (int) config('n8n.max_reply')), 'status' => Message::PENDING, 'sent_at' => now(),
+            ]);
+            $conversation->forceFill(['last_message_at' => $message->sent_at])->save();
+            $this->delivery->deliver($message);
+        } catch (\Throwable $e) {
+            Log::error('chatbot_failure_notice_failed', ['exception' => $e::class, 'conversation' => $conversation->id]);
+        }
     }
 
     /**

@@ -141,7 +141,7 @@ graphify update .                                             # actualiza el gra
 ```
 
 - **En el anfitrión usa PHPUnit directo:** `php artisan test` lanza un proceso hijo que ignora `-d memory_limit` y con el límite de 128 MB del PHP de Windows se queda sin memoria (`Allowed memory size of 134217728 bytes exhausted`).
-- **Última validación (2026-10-17, tercer bloque):** PHPUnit 1302 pruebas con 0 fallos en SQLite (3 omitidas: las de PostgreSQL) y en PostgreSQL 16 desechable (0 omitidas), ambas dentro del contenedor de desarrollo, que incluye GD; `npm run test:js` 21/21; Pint y `npm run build` correctos; `composer audit` y `npm audit` sin vulnerabilidades; 120 comprobaciones de pantalla (15 pantallas × 390, 820, 960 y 1440 px × claro y oscuro) sin errores de consola ni desborde. Detalle, comandos y límites en `RECOMENDACIONES.md` §7.7, §7.8 y §8.10.
+- **Última validación (2026-10-19, sexto bloque):** PHPUnit 1337 pruebas con 0 fallos en SQLite (3 omitidas: las de PostgreSQL) y en PostgreSQL 16 desechable (0 omitidas), ambas dentro del contenedor de desarrollo, que incluye GD (en el anfitrión o con otro PHP usa los mismos comandos con `DB_CONNECTION=sqlite DB_DATABASE=:memory:`); `npm run test:js` 21/21; Pint (421 archivos) y `npm run build` correctos; `composer audit` y `npm audit` sin vulnerabilidades; circuito local con salida 0. Detalle, comandos y límites en `RECOMENDACIONES.md` §11.10 (las revisiones de pantallas de la validación del 2026-10-17 siguen en §7.7, §7.8 y §8.10; este bloque no cambió ninguna pantalla).
 - **Contra PostgreSQL:** crea una base desechable cuyo nombre acabe en `_test` (`TestDatabaseGuard` se niega a usar cualquier otra) y ejecuta PHPUnit con `DB_CONNECTION=pgsql DB_HOST=127.0.0.1 DB_PORT=5433 DB_DATABASE=<nombre>_test DB_USERNAME=... DB_PASSWORD=...`. Nunca apuntes las pruebas a `ccg_ava`.
 - `tests/TestCase.php` se niega a ejecutar tests contra la base de desarrollo. No hay ESLint ni Prettier; las pruebas de JavaScript cubren la definición del menú, los permisos y las reglas del editor de mensajes, y la interfaz solo se revisa a mano con Playwright (no hay pruebas de navegador automáticas).
 
@@ -157,6 +157,14 @@ Resumen; evidencia, definiciones de «listo», brechas por solución y decisione
 
 **Cuarto bloque (piloto):** flujo Ava–n8n–WhatsApp trazado y probado con servicios simulados (ninguna conexión real validada), comandos programados observables (`integrations:diagnose` distingue «no se ejecuta» de «falla»), copias con prueba de restauración (`make backup`, `make restore-check`), borradores de privacidad pendientes de revisión jurídica (`docs/privacidad.md` Parte III), primer piloto definido y estructura de planes propuesta sin precios. Detalle en `RECOMENDACIONES.md` §9.
 
+**Quinto bloque (circuito local):** `sh docker/ops/local-loop/run.sh` recorre mensaje firmado de Meta → Ava → cola → doble de n8n → herramientas de reservas → persistencia → respuesta → trazas sobre una base desechable, con HTTP y cola reales pero con Meta y n8n SIMULADOS (no prueba servicios reales). Hallazgos F1 a F6, veredictos y pasos de la primera prueba real en `RECOMENDACIONES.md` §10.
+
+**Sexto bloque (preparación del piloto del 21-oct-2026):** D-TEL (en WhatsApp la reserva usa el número de la conversación cuando el workflow no envía teléfono y es un número internacional válido; en web se pide teléfono o correo y Ava responde `422 contact_required` si falta) y D-FALLO (si la IA falla de forma definitiva la conversación pasa a «Pendiente de agente», se escribe una alerta local `ai_failure_handed_to_human` y, solo si el negocio lo configuró, el contacto recibe el texto aprobado `CHATBOT_FAILURE_NOTICE`). El circuito local cubre ambos. Contrato exacto del workflow de n8n, alcance del piloto, bloqueadores, pasos de despliegue y criterios de parada en `RECOMENDACIONES.md` §11. **Nada de esto se ha probado con Meta ni con n8n reales.**
+
+**Revisión integral previa a la publicación (2026-10-19):** estado consolidado, hipótesis de Booker, requisitos de Staging, de Meta/WhatsApp y de despliegue, riesgos y criterios de parada en `RECOMENDACIONES.md` §13.
+
+**Cómo iniciar las pruebas locales:** con el stack de desarrollo levantado (`docker compose up -d`), `sh docker/ops/local-loop/run.sh` (en Git Bash de Windows: `MSYS_NO_PATHCONV=1 sh docker/ops/local-loop/run.sh`); usa una base desechable `ccg_ava_e2e` que crea y elimina, y se niega a correr si el contenedor no es `APP_ENV=local`.
+
 ## Estado de integraciones y módulos
 
 | Parte | Implementado | Validación |
@@ -165,7 +173,8 @@ Resumen; evidencia, definiciones de «listo», brechas por solución y decisione
 | Catálogo de productos, Pedidos y herramientas de pedidos del asistente (Delivery y E-commerce, primera fase) | Sí, sin pagos, cobertura, envío, inventario ni avisos | Pruebas automáticas (SQLite y PostgreSQL); ningún workflow real de n8n las usa todavía |
 | Clientes, Campañas (borradores y simulación), Planes, permisos, aislamiento, privacidad | Sí | Pruebas automáticas (SQLite y PostgreSQL) |
 | WhatsApp (Meta), n8n de la plataforma, n8n por Workspace | Sí | **Solo simulado**: faltan cuentas, workflow y licencia reales |
-| Booker | Parcial: conexión, servicios, profesionales, leer y cancelar | **Solo simulado**; horarios, reservar y reprogramar NO existen |
+| Teléfono de la reserva por WhatsApp (D-TEL) y traspaso a una persona cuando la IA falla (D-FALLO) | Sí | Pruebas automáticas (SQLite y PostgreSQL) y circuito local con dobles; sin alerta externa configurada |
+| Booker | API Merchant (horarios, clientes y creación de cita) más el modo `customer` anterior (servicios, profesionales, leer y cancelar); varias sucursales por Workspace | **Solo simulado**: ninguna llamada real a Booker; pendiente de Staging con credenciales corporativas. Reprogramar no existe; cancelar y leer no existen en modo Merchant |
 | Envío de Campañas y plantillas de Meta | **No** | No hay integración ni envío |
 | Módulos propios de Salud, Delivery y eCommerce | **No** | Categorías vacías |
 

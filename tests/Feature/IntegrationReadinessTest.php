@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Laravel\Horizon\Contracts\MasterSupervisorRepository;
 use Tests\TestCase;
 
 /**
@@ -254,6 +255,58 @@ class IntegrationReadinessTest extends TestCase
         Cache::put('ava:scheduler:heartbeat', now()->subMinutes(10)->timestamp, 60);
         [, $output] = $this->diagnose();
         $this->assertStringContainsString('lleva más de 3 minutos sin latir', $output);
+    }
+
+    public function test_horizon_is_reported_running_only_when_a_master_supervisor_exists(): void
+    {
+        // Regression: the check used class_exists() on an INTERFACE (always false), so it said "not running" even with Horizon up and blocked every production diagnosis.
+        $this->app->detectEnvironment(fn () => 'production');
+        config(['queue.default' => 'redis', 'app.url' => 'https://ava.example.com', 'app.debug' => false]);
+        Cache::put('ava:scheduler:heartbeat', now()->timestamp, 60);
+
+        $this->app->instance(MasterSupervisorRepository::class, $this->masters([]));
+        [$code, $output] = $this->diagnose();
+        $this->assertSame(1, $code);
+        $this->assertStringContainsString('Horizon no está corriendo', $output);
+
+        $this->app->instance(MasterSupervisorRepository::class, $this->masters(['master-1']));
+        [, $output] = $this->diagnose();
+        $this->assertStringContainsString('Horizon corriendo.', $output);
+        $this->assertStringNotContainsString('Horizon no está corriendo', $output);
+    }
+
+    private function masters(array $names): MasterSupervisorRepository
+    {
+        return new class($names) implements MasterSupervisorRepository
+        {
+            public function __construct(private readonly array $names) {}
+
+            public function names()
+            {
+                return $this->names;
+            }
+
+            public function all()
+            {
+                return $this->names;
+            }
+
+            public function find($name)
+            {
+                return null;
+            }
+
+            public function get(array $names)
+            {
+                return [];
+            }
+
+            public function update($master) {}
+
+            public function forget($name) {}
+
+            public function flushExpired() {}
+        };
     }
 
     public function test_the_scheduler_registers_its_own_heartbeat(): void

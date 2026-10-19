@@ -30,7 +30,7 @@ class ExecutionsRecoverCommand extends Command
         }
 
         $counts = $executions->recover();
-        $this->components->info("En cola de nuevo: {$counts['requeued']}. Entregas retomadas: {$counts['resumed']}. Envíos marcados sin confirmar: {$counts['uncertain']}.");
+        $this->components->info("En cola de nuevo: {$counts['requeued']}. Entregas retomadas: {$counts['resumed']}. Envíos marcados sin confirmar: {$counts['uncertain']}. Conversaciones pasadas a una persona por un fallo: {$counts['handed_over']}.");
 
         return self::SUCCESS;
     }
