@@ -6,7 +6,7 @@ use App\Rules\InternationalPhone;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
-/** The operational details of an order that may still change (notes and delivery data). Route middleware: `manage-orders`. */
+/** The operational details of an order that may still change (notes and delivery data). Route middleware: `edit-orders`. */
 class UpdateOrderRequest extends FormRequest
 {
     public function authorize(): bool

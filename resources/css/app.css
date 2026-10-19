@@ -105,7 +105,8 @@
  * the shell is mounted (Hooks/useWorkspaceTheme), so the access screens keep their own light/dark theme.
  * Only the neutral surface and text tokens change; the blue brand surfaces and status colors stay.
  */
-html[data-app-theme='dark'] {
+html[data-app-theme='dark'],
+[data-preview-theme='dark'] {
     color-scheme: dark;
     --color-canvas: #0b1220;
     --color-card: #121c33;

@@ -91,7 +91,7 @@ export default function Show({ chatbot, channels, appearance, agentToken, instru
                     <ChatbotAvatar url={chatbot.avatarUrl} name={chatbot.name} className="size-10" />
                     <Badge tone={chatbot.isActive ? 'green' : 'neutral'}>{chatbot.isActive ? 'Activo' : 'Inactivo'}</Badge>
                 </div>
-                {scope.canManage && (
+                {scope.can?.activate && (
                     <SecondaryButton type="button" onClick={toggle} className={`gap-2 ${chatbot.isActive ? 'text-danger' : ''}`}>
                         <Power className="size-4" aria-hidden="true" />
                         {chatbot.isActive ? 'Desactivar' : 'Activar'}
@@ -102,10 +102,10 @@ export default function Show({ chatbot, channels, appearance, agentToken, instru
             <ReadOnlyWorkspaceNotice scope={scope} what="este chatbot" />
 
             <Tabs tabs={tabs} selectedIndex={selected} onChange={select}>
-                <GeneralTab form={form} chatbot={chatbot} channels={channels} canManage={scope.canManage} avatarMaxKb={avatar.maxKb} onSubmit={save} onEdit={() => select(tabIndex('ia'))} onChannels={() => select(tabIndex('canales'))} />
-                <ChannelsTab chatbot={chatbot} channels={channels} canManage={scope.canManage} workspaceId={scope.readOnly ? scope.workspace.id : undefined} />
-                <AppearanceTab chatbot={chatbot} appearance={appearance} channels={channels} canManage={scope.canManage} canConfigure={auth.user.permissions.includes('manage-settings')} onChannels={() => select(tabIndex('canales'))} />
-                <BehaviorTab form={form} chatbot={chatbot} canManage={scope.canManage} instructionsMax={instructionsMax} avatarMaxKb={avatar.maxKb} onSubmit={save} agentToken={agentToken} />
+                <GeneralTab form={form} chatbot={chatbot} channels={channels} canManage={scope.can?.edit} avatarMaxKb={avatar.maxKb} onSubmit={save} onEdit={() => select(tabIndex('ia'))} onChannels={() => select(tabIndex('canales'))} />
+                <ChannelsTab chatbot={chatbot} channels={channels} canManage={scope.can?.channels} workspaceId={scope.readOnly ? scope.workspace.id : undefined} />
+                <AppearanceTab chatbot={chatbot} appearance={appearance} channels={channels} canManage={scope.can?.channels} canConfigure={auth.user.permissions.includes('manage-integrations')} onChannels={() => select(tabIndex('canales'))} />
+                <BehaviorTab form={form} chatbot={chatbot} canManage={scope.can?.edit} canTokens={scope.can?.tokens} instructionsMax={instructionsMax} avatarMaxKb={avatar.maxKb} onSubmit={save} agentToken={agentToken} />
             </Tabs>
         </>
     );

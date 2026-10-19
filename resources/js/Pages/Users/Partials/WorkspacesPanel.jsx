@@ -16,6 +16,7 @@ import SecondaryButton from '@/Components/SecondaryButton';
 import Select from '@/Components/Select';
 import { TableWrap, Td, Th } from '@/Components/Table';
 import TextInput from '@/Components/TextInput';
+import UserCombobox from '@/Components/UserCombobox';
 import { useToast } from '@/Components/Toast';
 import { roleTone } from '@/config/roles';
 import usePagedList from '@/Hooks/usePagedList';
@@ -45,7 +46,8 @@ function FormModal({ show, title, onClose, onSubmit, processing, submitLabel, ch
 function MembersModal({ workspace, canAdd, listMeta, perPageOptions, onClose }) {
     const { errors } = usePage().props;
     const confirm = useConfirm();
-    const add = useForm({ email: '', role: '' });
+    // The account is chosen in the selector (`user`, only for display); the server receives its id and checks again that it may be added.
+    const add = useForm({ user: null, user_id: '', role: '' });
     // Members page on the server like every list; the Workspaces list keeps its own page and size meanwhile.
     const members = usePagedList({
         tab: 'workspaces',
@@ -60,7 +62,7 @@ function MembersModal({ workspace, canAdd, listMeta, perPageOptions, onClose }) 
 
     const submitAdd = (e) => {
         e.preventDefault();
-        add.post(route('workspaces.members.store', workspace.id), { preserveScroll: true, onSuccess: () => add.reset() });
+        add.transform(({ user, ...payload }) => payload).post(route('workspaces.members.store', workspace.id), { preserveScroll: true, onSuccess: () => add.reset() });
     };
 
     const changeRole = (member, role) =>
@@ -144,8 +146,15 @@ function MembersModal({ workspace, canAdd, listMeta, perPageOptions, onClose }) 
                 {canAdd && (
                     <form onSubmit={submitAdd} className="mt-6 grid gap-3 sm:grid-cols-[1fr_12rem_auto] sm:items-end">
                         <div>
-                            <InputLabel htmlFor="member_email" value="Añadir usuario existente (correo)" />
-                            <TextInput id="member_email" type="email" className={FIELD} value={add.data.email} onChange={(e) => add.setData('email', e.target.value)} invalid={Boolean(add.errors.email)} required />
+                            <InputLabel htmlFor="member_user" value="Añadir usuario existente" />
+                            <UserCombobox
+                                id="member_user"
+                                workspaceId={workspace.id}
+                                className={FIELD}
+                                value={add.data.user}
+                                onChange={(option) => add.setData((previous) => ({ ...previous, user: option, user_id: option ? option.id : '' }))}
+                                invalid={Boolean(add.errors.user_id)}
+                            />
                         </div>
                         <div>
                             <InputLabel htmlFor="member_role" value="Rol" />
@@ -162,7 +171,7 @@ function MembersModal({ workspace, canAdd, listMeta, perPageOptions, onClose }) 
                             Añadir
                         </PrimaryButton>
                         <div className="sm:col-span-3">
-                            <InputError message={add.errors.email || add.errors.role} />
+                            <InputError message={add.errors.user_id || add.errors.email || add.errors.role} />
                         </div>
                     </form>
                 )}

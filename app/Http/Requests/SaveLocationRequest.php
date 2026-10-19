@@ -8,7 +8,7 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-/** Create / update of a location (sede) of the ACTIVE Workspace. Authorization is the `workspace.permission:manage-services` route middleware. */
+/** Create / update of a location (sede) of the ACTIVE Workspace. Authorization is the `workspace.permission:create-locations` / `edit-locations` route middleware. */
 class SaveLocationRequest extends FormRequest
 {
     public function authorize(): bool

@@ -6,6 +6,7 @@ use App\Audit\AuditLogger;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\WorkspaceAdministration;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -17,6 +18,9 @@ use Illuminate\Validation\ValidationException;
  */
 class WorkspaceMemberController extends Controller
 {
+    /** How many accounts the selector lists at once; more are reached by typing. */
+    public const ELIGIBLE_LIMIT = 30;
+
     public function __construct(
         private readonly WorkspaceAdministration $administration,
         private readonly AuditLogger $audit,
@@ -27,18 +31,25 @@ class WorkspaceMemberController extends Controller
     {
         $this->authorizeWorkspace($request, $workspace);
 
+        // The account comes from the selector (`user_id`); a correo is still accepted. Either way the server decides again who may be added.
         $data = $request->validate([
-            'email' => ['required', 'string', 'email', Rule::exists('users', 'email')],
+            'user_id' => ['required_without:email', 'nullable', 'integer', Rule::exists('users', 'id')],
+            'email' => ['required_without:user_id', 'nullable', 'string', 'email', Rule::exists('users', 'email')],
             'role' => ['required', 'string', Rule::in($this->assignable($request, $workspace))],
-        ], ['email.exists' => 'No existe un usuario con ese correo.']);
+        ], ['email.exists' => 'No existe un usuario con ese correo.', 'user_id.exists' => 'Ese usuario no existe.']);
 
-        $user = User::where('email', $data['email'])->firstOrFail();
+        $user = isset($data['user_id']) ? User::findOrFail($data['user_id']) : User::where('email', $data['email'])->firstOrFail();
+        $field = isset($data['user_id']) ? 'user_id' : 'email';
 
         if ($workspace->users()->whereKey($user->id)->exists()) {
-            throw ValidationException::withMessages(['email' => 'Este usuario ya pertenece al Workspace.']);
+            throw ValidationException::withMessages([$field => 'Este usuario ya pertenece al Workspace.']);
         }
 
-        $this->administration->assertMayReceive($workspace, $user, 'email');
+        if (! $user->is_active) {
+            throw ValidationException::withMessages([$field => 'Esta cuenta está desactivada: actívala antes de añadirla a un Workspace.']);
+        }
+
+        $this->administration->assertMayReceive($workspace, $user, $field);
 
         $workspace->users()->attach($user->id, ['role' => $data['role']]);
         $this->audit->record('created', 'membership', $user->id, $user->name, [
@@ -47,6 +58,32 @@ class WorkspaceMemberController extends Controller
         ], $workspace);
 
         return $this->back('Miembro añadido correctamente', $workspace);
+    }
+
+    /**
+     * Feeds the selector of the add-member form: the accounts that may be added to THIS Workspace (WorkspaceAdministration::eligibleUsers), found by
+     * name or email, a few at a time. It exists only for who may add existing accounts (superusers who administer the Workspace), and it never names an
+     * account outside the rule: a member, an inactive account or an internal account of the platform are simply not there.
+     */
+    public function eligible(Request $request, Workspace $workspace): JsonResponse
+    {
+        $this->authorizeWorkspace($request, $workspace);
+
+        $request->validate(['q' => ['nullable', 'string', 'max:100']]);
+        $term = trim((string) $request->query('q', ''));
+        $like = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($term)).'%';
+
+        $found = $this->administration->eligibleUsers($workspace)
+            ->when($term !== '', fn ($query) => $query->where(fn ($q) => $q
+                ->whereRaw("lower(users.name) like ? escape '!'", [$like])
+                ->orWhereRaw("lower(users.email) like ? escape '!'", [$like])))
+            ->orderBy('users.name')->orderBy('users.id')
+            ->limit(self::ELIGIBLE_LIMIT + 1)->get(['users.id', 'users.name', 'users.email']);
+
+        return response()->json([
+            'data' => $found->take(self::ELIGIBLE_LIMIT)->map(fn (User $user) => ['id' => $user->id, 'name' => $user->name, 'email' => $user->email])->values(),
+            'hasMore' => $found->count() > self::ELIGIBLE_LIMIT,
+        ], 200, ['Cache-Control' => 'private, no-store']);
     }
 
     public function update(Request $request, Workspace $workspace, User $user): RedirectResponse

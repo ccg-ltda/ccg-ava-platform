@@ -58,10 +58,10 @@ class LandingPageTest extends TestCase
         $modules = array_keys(config('modules.implemented'));
 
         $this->assertSame('chatbots.index', $landing->route(['manage-users', 'view-chatbots', 'view-conversations'], $modules));
-        $this->assertSame('users.index', $landing->route(['manage-users', 'manage-settings'], $modules));
-        $this->assertSame('audit.index', $landing->route(['manage-settings'], $modules));
-        $this->assertSame('settings.index', $landing->route(['manage-settings'], ['settings', 'integrations']));
-        $this->assertSame('services.index', $landing->route(['view-bookings', 'manage-users'], $modules), 'Operación comes before Administración, as in the menu');
+        $this->assertSame('users.index', $landing->route(['manage-users', 'view-settings'], $modules));
+        $this->assertSame('audit.index', $landing->route(['view-audit', 'view-settings'], $modules));
+        $this->assertSame('settings.index', $landing->route(['view-settings', 'view-integrations'], ['settings', 'integrations']));
+        $this->assertSame('services.index', $landing->route(['view-services', 'manage-users'], $modules), 'Operación comes before Administración, as in the menu');
         $this->assertSame('profile.edit', $landing->route([], $modules));
     }
 
@@ -78,7 +78,7 @@ class LandingPageTest extends TestCase
     /** @return array<string, array{string}> */
     public static function permissions(): array
     {
-        return collect(['view-dashboard', 'view-users', 'view-chatbots', 'manage-chatbots', 'view-conversations', 'reply-conversations', 'manage-conversations', 'manage-settings', 'manage-users'])
+        return collect(['view-dashboard', 'view-users', 'view-chatbots', 'edit-chatbots', 'view-conversations', 'reply-conversations', 'manage-conversations', 'view-settings', 'view-audit', 'view-integrations', 'manage-users'])
             ->mapWithKeys(fn (string $permission) => [$permission => [$permission]])->all();
     }
 

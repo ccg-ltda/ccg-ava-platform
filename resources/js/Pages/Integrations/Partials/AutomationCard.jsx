@@ -1,11 +1,12 @@
 import { Link, router, usePage } from '@inertiajs/react';
-import { PlugZap, Settings2, Unplug, Workflow } from 'lucide-react';
+import { PlugZap, Settings2, Unplug, Workflow, X } from 'lucide-react';
 import { useState } from 'react';
 import Alert from '@/Components/Alert';
 import Badge from '@/Components/Badge';
 import Card from '@/Components/Card';
 import { useConfirm } from '@/Components/ConfirmDialog';
 import CopyBlock from '@/Components/CopyBlock';
+import Modal from '@/Components/Modal';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import N8nConfigModal from './N8nConfigModal';
@@ -124,7 +125,7 @@ function Connection({ connection, readOnly, onConfigure }) {
 function Workflow_({ automation, newToken, readOnly, workspaceId }) {
     const confirm = useConfirm();
     const { auth } = usePage().props;
-    const canGenerate = !readOnly && auth.user.permissions.includes('manage-chatbots');
+    const canGenerate = !readOnly && auth.user.permissions.includes('manage-agent-tokens');
     const state = WORKFLOW[automation.state];
 
     const generate = async (chatbot) => {
@@ -209,45 +210,97 @@ function Workflow_({ automation, newToken, readOnly, workspaceId }) {
     );
 }
 
-/**
- * n8n as an integration. Two separate things, never mixed: (1) Ava -> n8n, the instance address and API Key Ava uses
- * to reach the n8n API, verified only by a real test; (2) n8n -> Ava, the token of each chatbot and the addresses the
- * workflow uses. Neither says anything about WhatsApp, which is configured on its own.
- */
-export default function AutomationCard({ automation, newToken, readOnly, workspaceId }) {
-    const [configuring, setConfiguring] = useState(false);
+/** The detail of n8n: the three steps (connect, configure the workflow, where the conversations appear), in a wide dialog with its own scroll. */
+function N8nPanel({ automation, newToken, readOnly, workspaceId, onClose, onConfigure }) {
     const { connection } = automation;
     const state = CONNECTION[connection.state];
 
     return (
-        <Card className="space-y-5 p-5 sm:p-6">
-            <div className="flex flex-wrap items-start gap-3">
+        <Modal show onClose={onClose} maxWidth="4xl" scrollable>
+            <div className="flex min-h-0 flex-1 flex-col">
+                <header className="flex shrink-0 items-start justify-between gap-3 border-b border-line p-4 sm:px-6">
+                    <div className="flex min-w-0 items-center gap-3">
+                        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/15 text-accent-blue">
+                            <Workflow className="size-5" aria-hidden="true" />
+                        </span>
+                        <div className="min-w-0">
+                            <h2 className="text-lg font-bold text-ink">Configuración de n8n</h2>
+                            <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                                <Badge tone={state.tone}>{state.label}</Badge>
+                                {readOnly && <span className="text-xs text-ink-muted">Solo lectura</span>}
+                            </div>
+                        </div>
+                    </div>
+                    <button type="button" onClick={onClose} aria-label="Cerrar" className="rounded-md p-1.5 text-ink-muted hover:bg-canvas focus-visible:outline-2 focus-visible:outline-primary">
+                        <X className="size-5" aria-hidden="true" />
+                    </button>
+                </header>
+
+                <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 sm:px-6" tabIndex={0} aria-label="Configuración de n8n">
+                    <Step number="1" title="Conecta tu n8n con Ava">
+                        <Connection connection={connection} readOnly={readOnly} onConfigure={onConfigure} />
+                    </Step>
+
+                    <Step number="2" title="Configura tu workflow de n8n">
+                        <Workflow_ automation={automation} newToken={newToken} readOnly={readOnly} workspaceId={workspaceId} />
+                    </Step>
+
+                    <Step number="3" title="Dónde verás las conversaciones">
+                        <p className="text-sm text-ink-muted">
+                            Conectar n8n no conecta WhatsApp, y configurar WhatsApp no conecta n8n: cada pieza se configura por separado. Cuando ambas estén listas y tu workflow envíe los mensajes a Ava, aparecerán en <strong className="text-ink">Asistentes → tu chatbot → Canales → WhatsApp → Conversaciones</strong>. Ava no crea conversaciones por su cuenta: solo muestra los mensajes que n8n le envía de verdad.
+                        </p>
+                    </Step>
+                </div>
+
+                <footer className="flex shrink-0 justify-end border-t border-line p-4 sm:px-6">
+                    <SecondaryButton type="button" onClick={onClose}>
+                        Cerrar
+                    </SecondaryButton>
+                </footer>
+            </div>
+        </Modal>
+    );
+}
+
+/**
+ * n8n as an integration, as a compact card like the channels'. Two separate things live behind its panel, never mixed: (1) Ava -> n8n, the instance
+ * address and API Key Ava uses to reach the n8n API, verified only by a real test; (2) n8n -> Ava, the token of each chatbot and the addresses the
+ * workflow uses. The badge says what Ava can really show: nothing saved, saved but untested, tested, or the last test failed. Neither says anything
+ * about WhatsApp, which is configured on its own.
+ */
+export default function AutomationCard({ automation, newToken, readOnly, workspaceId }) {
+    const [configuring, setConfiguring] = useState(false);
+    // A token just generated is shown once: the panel opens on its own so it is not lost behind the card.
+    const [open, setOpen] = useState(Boolean(newToken));
+    const { connection } = automation;
+    const state = CONNECTION[connection.state];
+    const configured = connection.state !== 'not_configured';
+
+    return (
+        <Card className="flex h-full flex-col p-5">
+            <div className="flex items-start gap-3">
                 <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/15 text-accent-blue">
                     <Workflow className="size-5" aria-hidden="true" />
                 </span>
-                <div className="min-w-[14rem] flex-1">
+                <div className="min-w-0 flex-1">
                     <h3 className="text-base font-bold text-ink">n8n</h3>
-                    <p className="text-sm text-ink-muted">
-                        La herramienta de automatización que conecta tus chatbots con WhatsApp y con la IA. Ava le entrega la identidad y las instrucciones del chatbot; n8n no guarda otra copia.
-                    </p>
+                    <p className="text-sm text-ink-muted">Automatización que conecta tus chatbots con WhatsApp y la IA.</p>
                 </div>
                 <Badge tone={state.tone}>{state.label}</Badge>
             </div>
 
-            <Step number="1" title="Conecta tu n8n con Ava">
-                <Connection connection={connection} readOnly={readOnly} onConfigure={() => setConfiguring(true)} />
-            </Step>
+            <p className="mt-3 text-xs text-ink-muted">
+                {configured ? connection.lastTest ? connection.lastTest.message : 'Guardada, pero todavía no probada.' : 'Aún no hay una instancia de n8n conectada.'}
+            </p>
 
-            <Step number="2" title="Configura tu workflow de n8n">
-                <Workflow_ automation={automation} newToken={newToken} readOnly={readOnly} workspaceId={workspaceId} />
-            </Step>
+            <div className="mt-auto flex justify-end pt-4">
+                <SecondaryButton type="button" onClick={() => setOpen(true)} className="gap-2">
+                    <Settings2 className="size-4" aria-hidden="true" />
+                    {readOnly ? 'Ver configuración' : configured ? 'Gestionar configuración' : 'Configurar'}
+                </SecondaryButton>
+            </div>
 
-            <Step number="3" title="Dónde verás las conversaciones">
-                <p className="text-sm text-ink-muted">
-                    Conectar n8n no conecta WhatsApp, y configurar WhatsApp no conecta n8n: cada pieza se configura por separado. Cuando ambas estén listas y tu workflow envíe los mensajes a Ava, aparecerán en <strong className="text-ink">Asistentes → tu chatbot → Canales → WhatsApp → Conversaciones</strong>. Ava no crea conversaciones por su cuenta: solo muestra los mensajes que n8n le envía de verdad.
-                </p>
-            </Step>
-
+            {open && <N8nPanel automation={automation} newToken={newToken} readOnly={readOnly} workspaceId={workspaceId} onClose={() => setOpen(false)} onConfigure={() => setConfiguring(true)} />}
             {configuring && <N8nConfigModal connection={connection} onClose={() => setConfiguring(false)} />}
         </Card>
     );

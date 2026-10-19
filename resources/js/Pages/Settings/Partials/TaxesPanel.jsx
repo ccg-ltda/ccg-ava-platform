@@ -5,12 +5,36 @@ import InputLabel from '@/Components/InputLabel';
 import Select from '@/Components/Select';
 import TextInput from '@/Components/TextInput';
 import Toggle from '@/Components/Toggle';
-import SettingsSection from './SettingsSection';
+import SettingsSection, { Fact } from './SettingsSection';
 
 /** Impuestos: fiscal country and the main tax. Country defaults are starting values the user can change. */
-export default function TaxesPanel({ form, onSave, catalog }) {
+export default function TaxesPanel({ settings, form, onSave, catalog, section }) {
     const { data, setData, errors } = form;
     const country = catalog.taxCountries.find((item) => item.code === data.tax_country);
+    const savedCountry = catalog.taxCountries.find((item) => item.code === settings.tax_country);
+
+    // Only what is configured: nothing is assumed about rates or obligations the Workspace has not set.
+    const summary = (
+        <div className="space-y-4">
+            <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <Fact label="País fiscal">{savedCountry ? `${savedCountry.flag} ${savedCountry.name}` : null}</Fact>
+                <Fact label="Impuesto principal">{settings.tax_enabled ? `${settings.tax_name || 'Impuesto'} · ${settings.tax_rate}%` : 'No se aplica impuesto'}</Fact>
+                <Fact label="Moneda">{settings.currency}</Fact>
+                <Fact label="Autoridad fiscal">{savedCountry?.authority}</Fact>
+            </dl>
+            {savedCountry && (
+                <div className="rounded-lg border border-line bg-canvas/60 p-4 text-sm">
+                    <p className="flex items-center gap-2 font-bold text-ink">
+                        <Landmark className="size-4 text-primary" aria-hidden="true" />
+                        Facturación en {savedCountry.name}
+                    </p>
+                    <p className="mt-1 text-ink-muted">{savedCountry.system}</p>
+                    {savedCountry.note && <p className="mt-2 text-ink-muted">{savedCountry.note}</p>}
+                    <p className="mt-2 text-xs text-ink-muted">Solo informativo: la facturación electrónica y las integraciones fiscales aún no están implementadas.</p>
+                </div>
+            )}
+        </div>
+    );
 
     // Picking a country loads its suggested currency and tax; both stay editable afterwards.
     const chooseCountry = (code) => {
@@ -27,7 +51,7 @@ export default function TaxesPanel({ form, onSave, catalog }) {
     };
 
     return (
-        <SettingsSection title="Impuestos" description="País fiscal y el impuesto principal que aplica tu negocio." form={form} onSave={onSave}>
+        <SettingsSection title="Impuestos y facturación" description="País fiscal y el impuesto principal que aplica tu negocio." form={form} onSave={onSave} summary={summary} {...section}>
             <div>
                 <InputLabel htmlFor="settings_tax_country" value="País fiscal" />
                 <Select

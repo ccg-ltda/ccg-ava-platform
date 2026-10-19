@@ -18,7 +18,7 @@ use Inertia\Response as InertiaResponse;
 
 /**
  * Auditoría: who changed what, where and when, in the active Workspace (a superuser may widen the view). The
- * page and the PDF share the same filters and the same query. Every action requires `manage-settings`.
+ * page and the PDF share the same filters and the same query. The page needs `view-audit` and the PDF export `export-audit` too.
  */
 class AuditController extends Controller
 {

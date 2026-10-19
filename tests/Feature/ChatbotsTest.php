@@ -93,7 +93,7 @@ class ChatbotsTest extends TestCase
     {
         $this->actAs('supervisor');
         $this->assertContains('view-chatbots', Role::findByName('supervisor', 'web')->permissions->pluck('name')->all());
-        $this->assertNotContains('manage-chatbots', Role::findByName('supervisor', 'web')->permissions->pluck('name')->all());
+        $this->assertNotContains('edit-chatbots', Role::findByName('supervisor', 'web')->permissions->pluck('name')->all());
         $this->get('/chatbots')->assertInertia(fn (AssertableInertia $page) => $page
             ->where('auth.user.permissions', fn ($permissions) => in_array('view-chatbots', $permissions->all(), true)));
     }

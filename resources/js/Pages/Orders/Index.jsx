@@ -185,7 +185,7 @@ function NewOrderModal({ form: options, methods, currency, onClose }) {
 }
 
 /** Pedidos of E-commerce and Delivery: registered orders with their state; moving them along the flow happens inside each order. */
-export default function Index({ schemaPending, orders, filters, perPageOptions, counts, statuses, methods, currency, form: formOptions, notifier }) {
+export default function Index({ schemaPending, orders, filters, perPageOptions, counts, statuses, methods, currency, form: formOptions, notifier, canDetail }) {
     const [creating, setCreating] = useState(false);
     const [search, setSearch] = useState(filters.search ?? '');
     const firstRender = useRef(true);
@@ -277,9 +277,13 @@ export default function Index({ schemaPending, orders, filters, perPageOptions, 
                                     {orders.data.map((order) => (
                                         <tr key={order.id} className="transition-colors duration-150 hover:bg-canvas/70">
                                             <Td>
-                                                <Link href={route('orders.show', order.id)} className="font-mono text-sm font-bold text-ink hover:text-primary">
-                                                    #{order.number}
-                                                </Link>
+                                                {canDetail ? (
+                                                    <Link href={route('orders.show', order.id)} className="font-mono text-sm font-bold text-ink hover:text-primary">
+                                                        #{order.number}
+                                                    </Link>
+                                                ) : (
+                                                    <span className="font-mono text-sm font-bold text-ink">#{order.number}</span>
+                                                )}
                                             </Td>
                                             <Td className="font-medium text-ink">{order.customerName}</Td>
                                             <Td className="text-ink-muted">

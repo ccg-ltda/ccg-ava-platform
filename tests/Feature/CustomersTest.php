@@ -201,7 +201,7 @@ class CustomersTest extends TestCase
         $this->get('/customers')->assertOk();
         $this->post('/customers', $this->payload())->assertForbidden();
 
-        Role::findByName('cliente', 'web')->givePermissionTo('manage-customers');
+        Role::findByName('cliente', 'web')->givePermissionTo('create-customers');
         $this->post('/customers', $this->payload())->assertSessionHasNoErrors();
     }
 

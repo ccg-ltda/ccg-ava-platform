@@ -26,7 +26,7 @@ const ORIGINS = [{ value: '', label: 'Todos los orígenes' }, { value: 'admin', 
 const STATUSES = [{ value: '', label: 'Todos los estados' }, { value: 'requested', label: 'Por confirmar' }, { value: 'confirmed', label: 'Confirmadas' }, { value: 'completed', label: 'Realizadas' }, { value: 'no_show', label: 'No asistió' }, { value: 'cancelled', label: 'Canceladas' }, { value: 'failed', label: 'Rechazadas' }];
 
 /** The agenda: appointments of the chosen days grouped by day, with the actions each one allows. */
-export default function AgendaPanel({ appointments, filters, options, capabilities, today, canOperate }) {
+export default function AgendaPanel({ appointments, filters, options, capabilities, today, can }) {
     const [dialog, setDialog] = useState(null); // {} = new, an appointment = reschedule
     const [cancelling, setCancelling] = useState(null);
 
@@ -37,7 +37,7 @@ export default function AgendaPanel({ appointments, filters, options, capabiliti
 
     const days = appointments.reduce((groups, appointment) => ({ ...groups, [appointment.date]: [...(groups[appointment.date] ?? []), appointment] }), {});
     const started = (appointment) => new Date(appointment.startsAt) <= new Date();
-    const canCreate = canOperate && capabilities.connected && capabilities.availability && capabilities.book;
+    const canCreate = can.create && capabilities.connected && capabilities.availability && capabilities.book;
 
     return (
         <div className="space-y-4">
@@ -122,19 +122,19 @@ export default function AgendaPanel({ appointments, filters, options, capabiliti
                                             {appointment.active && appointment.customerConfirmed && <Badge tone="green">Cliente confirmó</Badge>}
                                             {appointment.active && !appointment.customerConfirmed && appointment.notifications?.some((item) => item.kind === 'reminder' && ['sent', 'delivered', 'read'].includes(item.status)) && <Badge tone="amber">Sin respuesta</Badge>}
                                         </div>
-                                        {canOperate && appointment.active && (
+                                        {(can.edit || can.cancel) && appointment.active && (
                                             <div className="flex items-center gap-0.5">
-                                                {!appointment.external && !appointment.customerConfirmed && <IconButton icon={UserCheck} label="Registrar que el cliente confirmó" context={appointment.service} onClick={() => act(appointment, 'bookings.customer-confirmation')} />}
-                                                {appointment.status === 'requested' && !appointment.external && <IconButton icon={Check} label="Confirmar" context={appointment.service} onClick={() => act(appointment, 'bookings.status', { status: 'confirmed' })} />}
-                                                {appointment.status === 'confirmed' && !appointment.external && started(appointment) && (
+                                                {can.edit && !appointment.external && !appointment.customerConfirmed && <IconButton icon={UserCheck} label="Registrar que el cliente confirmó" context={appointment.service} onClick={() => act(appointment, 'bookings.customer-confirmation')} />}
+                                                {can.edit && appointment.status === 'requested' && !appointment.external && <IconButton icon={Check} label="Confirmar" context={appointment.service} onClick={() => act(appointment, 'bookings.status', { status: 'confirmed' })} />}
+                                                {can.edit && appointment.status === 'confirmed' && !appointment.external && started(appointment) && (
                                                     <>
                                                         <IconButton icon={Check} label="Marcar como realizada" context={appointment.service} onClick={() => act(appointment, 'bookings.status', { status: 'completed' })} />
                                                         <IconButton icon={UserX} label="Marcar como no asistió" context={appointment.service} tone="danger" onClick={() => act(appointment, 'bookings.status', { status: 'no_show' })} />
                                                     </>
                                                 )}
-                                                {capabilities.reschedule && appointment.provider === 'internal' && <IconButton icon={CalendarClock} label="Reprogramar" context={appointment.service} onClick={() => setDialog(appointment)} />}
-                                                {appointment.external && <IconButton icon={RefreshCw} label="Consultar estado en la agenda externa" context={appointment.service} onClick={() => act(appointment, 'bookings.refresh')} />}
-                                                <IconButton icon={Ban} label="Cancelar" context={appointment.service} tone="danger" onClick={() => setCancelling(appointment)} />
+                                                {can.edit && capabilities.reschedule && appointment.provider === 'internal' && <IconButton icon={CalendarClock} label="Reprogramar" context={appointment.service} onClick={() => setDialog(appointment)} />}
+                                                {can.edit && appointment.external && <IconButton icon={RefreshCw} label="Consultar estado en la agenda externa" context={appointment.service} onClick={() => act(appointment, 'bookings.refresh')} />}
+                                                {can.cancel && <IconButton icon={Ban} label="Cancelar" context={appointment.service} tone="danger" onClick={() => setCancelling(appointment)} />}
                                             </div>
                                         )}
                                     </li>

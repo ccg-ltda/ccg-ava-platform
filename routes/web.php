@@ -60,27 +60,33 @@ Route::middleware(['auth', 'workspace'])->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::put('/profile/communications', [LegalController::class, 'updateCommunications'])->name('profile.communications');
+    // The photo of the signed-in account only (the route has no id): shown on the profile and in the top bar, replaced or removed by its owner.
+    Route::get('/profile/photo', [ProfileController::class, 'photo'])->name('profile.photo');
+    Route::post('/profile/photo', [ProfileController::class, 'storePhoto'])->middleware('throttle:10,1')->name('profile.photo.store');
+    Route::delete('/profile/photo', [ProfileController::class, 'destroyPhoto'])->middleware('throttle:10,1')->name('profile.photo.destroy');
 
     Route::get('/settings', [SettingsController::class, 'index'])
-        ->middleware(['workspace.module:settings', 'workspace.permission:manage-settings'])->name('settings.index');
+        ->middleware(['workspace.module:settings', 'workspace.permission:view-settings'])->name('settings.index');
     Route::post('/settings', [SettingsController::class, 'update'])
-        ->middleware(['workspace.module:settings', 'workspace.permission:manage-settings'])->name('settings.update');
+        ->middleware(['workspace.module:settings', 'workspace.permission:view-settings', 'workspace.permission:edit-settings'])->name('settings.update');
     Route::get('/workspace/logo', WorkspaceLogoController::class)->name('workspace.logo');
     // Text search behind the Workspace selector (what it may find depends on the purpose; see the controller).
     Route::get('/workspaces/search', WorkspaceSearchController::class)->middleware('throttle:60,1')->name('workspaces.search');
-    // Integrations belong to the active Workspace; `manage-settings` governs them like the rest of Configuraciones.
-    Route::middleware(['workspace.module:integrations', 'workspace.permission:manage-settings'])->prefix('integrations')->name('integrations.')->group(function () {
+    // Integrations belong to the active Workspace. Opening the page is `view-integrations`; each change has its own permission on top (create / edit,
+    // activate and disconnect, test, remove a test connection), so a role gets exactly the ones it needs.
+    Route::middleware(['workspace.module:integrations', 'workspace.permission:view-integrations'])->prefix('integrations')->name('integrations.')->group(function () {
         Route::get('/', [IntegrationController::class, 'index'])->name('index');
-        Route::post('/', [IntegrationController::class, 'store'])->name('store');
-        Route::put('/n8n', [IntegrationController::class, 'updateN8n'])->name('n8n.update');
-        Route::delete('/n8n', [IntegrationController::class, 'disconnectN8n'])->name('n8n.destroy');
-        Route::put('/providers/{provider}', [IntegrationController::class, 'updateProvider'])->where('provider', '[a-z_]+')->middleware('workspace.module:calendar_providers')->name('providers.update');
-        Route::put('/channels/{channel}', [IntegrationController::class, 'updateChannel'])->where('channel', '[a-z_]+')->name('channels.update');
-        Route::put('/{integration}', [IntegrationController::class, 'update'])->whereNumber('integration')->name('update');
-        Route::post('/{integration}/activate', [IntegrationController::class, 'activate'])->whereNumber('integration')->name('activate');
-        Route::post('/{integration}/deactivate', [IntegrationController::class, 'deactivate'])->whereNumber('integration')->name('deactivate');
+        Route::post('/', [IntegrationController::class, 'store'])->middleware('workspace.permission:manage-integrations')->name('store');
+        Route::put('/n8n', [IntegrationController::class, 'updateN8n'])->middleware('workspace.permission:manage-integrations')->name('n8n.update');
+        Route::delete('/n8n', [IntegrationController::class, 'disconnectN8n'])->middleware('workspace.permission:activate-integrations')->name('n8n.destroy');
+        Route::put('/providers/{provider}', [IntegrationController::class, 'updateProvider'])->where('provider', '[a-z_]+')->middleware(['workspace.module:calendar_providers', 'workspace.permission:manage-integrations'])->name('providers.update');
+        Route::put('/channels/{channel}', [IntegrationController::class, 'updateChannel'])->where('channel', '[a-z_]+')->middleware('workspace.permission:manage-integrations')->name('channels.update');
+        Route::put('/{integration}', [IntegrationController::class, 'update'])->whereNumber('integration')->middleware('workspace.permission:manage-integrations')->name('update');
+        Route::post('/{integration}/activate', [IntegrationController::class, 'activate'])->whereNumber('integration')->middleware('workspace.permission:activate-integrations')->name('activate');
+        Route::post('/{integration}/deactivate', [IntegrationController::class, 'deactivate'])->whereNumber('integration')->middleware('workspace.permission:activate-integrations')->name('deactivate');
+        Route::delete('/{integration}', [IntegrationController::class, 'destroy'])->whereNumber('integration')->middleware('workspace.permission:delete-integrations')->name('destroy');
         // Each test is a real outbound request: keep it from being used to hammer a third party.
-        Route::post('/{integration}/test', [IntegrationController::class, 'test'])->whereNumber('integration')->middleware('throttle:20,1')->name('test');
+        Route::post('/{integration}/test', [IntegrationController::class, 'test'])->whereNumber('integration')->middleware(['workspace.permission:test-integrations', 'throttle:20,1'])->name('test');
     });
 
     // Conversations hold what the contacts wrote: reading them is `view-conversations`; attending them (take, write, give
@@ -94,7 +100,7 @@ Route::middleware(['auth', 'workspace'])->group(function () {
             Route::post('/{conversation}/messages', [ConversationActionController::class, 'message'])->whereNumber('conversation')->middleware('throttle:60,1')->name('messages.store');
         });
         // Demo bench (404 outside demo environments): generate / reset / clean scenarios and simulate traffic on DEMO conversations.
-        Route::middleware('workspace.permission:manage-conversations')->group(function () {
+        Route::middleware('workspace.permission:use-conversation-demo')->group(function () {
             Route::post('/demo/{action}', [DemoConversationController::class, 'manage'])->where('action', 'generate|reset|clean')->name('demo');
             Route::post('/{conversation}/simulate/incoming', [DemoConversationController::class, 'incoming'])->whereNumber('conversation')->name('simulate.incoming');
             Route::post('/{conversation}/simulate/ai-reply', [DemoConversationController::class, 'aiReply'])->whereNumber('conversation')->name('simulate.ai-reply');
@@ -104,7 +110,8 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         Route::post('/{conversation}/assign', [ConversationActionController::class, 'assign'])->whereNumber('conversation')->middleware('workspace.permission:manage-conversations')->name('assign');
     });
 
-    // Chatbots belong to the active Workspace. Reading needs `view-chatbots`; changing anything needs `manage-chatbots`.
+    // Chatbots belong to the active Workspace. Reading needs `view-chatbots`; each change has its own permission (create, edit, activate, channels and
+    // appearance, access token).
     Route::middleware('workspace.module:assistants')->prefix('chatbots')->name('chatbots.')->group(function () {
         Route::middleware('workspace.permission:view-chatbots')->group(function () {
             Route::get('/', [ChatbotController::class, 'index'])->name('index');
@@ -114,129 +121,115 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         // The conversations of a channel hold what the contacts wrote: their own permission.
         Route::get('/{chatbot}/channels/{channel}/conversations', [ConversationController::class, 'index'])
             ->whereNumber('chatbot')->where('channel', '[a-z_]+')->middleware(['workspace.module:conversations', 'workspace.permission:view-conversations'])->name('conversations');
-        Route::middleware('workspace.permission:manage-chatbots')->group(function () {
-            Route::post('/', [ChatbotController::class, 'store'])->name('store');
+        Route::middleware('workspace.permission:view-chatbots')->group(function () {
+            Route::post('/', [ChatbotController::class, 'store'])->middleware('workspace.permission:create-chatbots')->name('store');
             // POST (not PUT) because the form may carry the avatar file.
-            Route::post('/{chatbot}', [ChatbotController::class, 'update'])->whereNumber('chatbot')->name('update');
-            Route::post('/{chatbot}/activate', [ChatbotController::class, 'activate'])->whereNumber('chatbot')->name('activate');
-            Route::post('/{chatbot}/deactivate', [ChatbotController::class, 'deactivate'])->whereNumber('chatbot')->name('deactivate');
-            Route::post('/{chatbot}/agent-token', [ChatbotController::class, 'generateAgentToken'])->whereNumber('chatbot')->middleware('throttle:10,1')->name('agent-token.generate');
-            Route::delete('/{chatbot}/agent-token', [ChatbotController::class, 'revokeAgentToken'])->whereNumber('chatbot')->name('agent-token.revoke');
-            Route::put('/{chatbot}/channels/{channel}', [ChatbotController::class, 'updateChannel'])->whereNumber('chatbot')->where('channel', '[a-z_]+')->name('channels.update');
-            Route::put('/{chatbot}/channels/{channel}/appearance', [ChannelAppearanceController::class, 'update'])->whereNumber('chatbot')->where('channel', '[a-z_]+')->name('channels.appearance.update');
+            Route::post('/{chatbot}', [ChatbotController::class, 'update'])->whereNumber('chatbot')->middleware('workspace.permission:edit-chatbots')->name('update');
+            Route::post('/{chatbot}/activate', [ChatbotController::class, 'activate'])->whereNumber('chatbot')->middleware('workspace.permission:activate-chatbots')->name('activate');
+            Route::post('/{chatbot}/deactivate', [ChatbotController::class, 'deactivate'])->whereNumber('chatbot')->middleware('workspace.permission:activate-chatbots')->name('deactivate');
+            Route::post('/{chatbot}/agent-token', [ChatbotController::class, 'generateAgentToken'])->whereNumber('chatbot')->middleware(['workspace.permission:manage-agent-tokens', 'throttle:10,1'])->name('agent-token.generate');
+            Route::delete('/{chatbot}/agent-token', [ChatbotController::class, 'revokeAgentToken'])->whereNumber('chatbot')->middleware('workspace.permission:manage-agent-tokens')->name('agent-token.revoke');
+            Route::put('/{chatbot}/channels/{channel}', [ChatbotController::class, 'updateChannel'])->whereNumber('chatbot')->where('channel', '[a-z_]+')->middleware('workspace.permission:manage-chatbot-channels')->name('channels.update');
+            Route::put('/{chatbot}/channels/{channel}/appearance', [ChannelAppearanceController::class, 'update'])->whereNumber('chatbot')->where('channel', '[a-z_]+')->middleware('workspace.permission:manage-chatbot-channels')->name('channels.appearance.update');
         });
     });
 
-    // Catálogo de productos and Pedidos (E-commerce and Delivery). Reading is `view-catalog` / `view-orders`; changing the catalog is `manage-catalog`; placing,
-    // editing and cancelling an order is `manage-orders`; moving it along the flow is `process-orders` (cancelling is re-checked inside as `manage-orders`).
+    // Catálogo de productos and Pedidos (E-commerce and Delivery). Reading is `view-catalog` / `view-orders` (an order's detail is `view-order-details`); every change
+    // has its own permission (create / edit / activate a product; create, edit and cancel an order); moving an order along the flow is `process-orders`
+    // (cancelling is `cancel-orders`, re-checked inside).
     Route::middleware(['workspace.module:product_catalog', 'workspace.permission:view-catalog'])->prefix('catalog')->name('catalog.')->group(function () {
         Route::get('/', [ProductController::class, 'index'])->name('index');
-        Route::middleware('workspace.permission:manage-catalog')->group(function () {
-            Route::post('/', [ProductController::class, 'store'])->name('store');
-            Route::put('/{product}', [ProductController::class, 'update'])->whereNumber('product')->name('update');
-            Route::post('/{product}/activate', [ProductController::class, 'activate'])->whereNumber('product')->name('activate');
-            Route::post('/{product}/deactivate', [ProductController::class, 'deactivate'])->whereNumber('product')->name('deactivate');
-        });
+        Route::post('/', [ProductController::class, 'store'])->middleware('workspace.permission:create-products')->name('store');
+        Route::put('/{product}', [ProductController::class, 'update'])->whereNumber('product')->middleware('workspace.permission:edit-products')->name('update');
+        Route::post('/{product}/activate', [ProductController::class, 'activate'])->whereNumber('product')->middleware('workspace.permission:activate-products')->name('activate');
+        Route::post('/{product}/deactivate', [ProductController::class, 'deactivate'])->whereNumber('product')->middleware('workspace.permission:activate-products')->name('deactivate');
     });
 
     Route::middleware(['workspace.module:orders', 'workspace.permission:view-orders'])->prefix('orders')->name('orders.')->group(function () {
         Route::get('/', [OrderController::class, 'index'])->name('index');
-        Route::get('/{order}', [OrderController::class, 'show'])->whereNumber('order')->name('show');
-        Route::middleware('workspace.permission:manage-orders')->group(function () {
-            Route::post('/', [OrderController::class, 'store'])->middleware('throttle:60,1')->name('store');
-            Route::put('/{order}', [OrderController::class, 'update'])->whereNumber('order')->name('update');
-        });
-        Route::post('/{order}/status', [OrderController::class, 'transition'])->whereNumber('order')->middleware('workspace.permission:process-orders,manage-orders')->name('transition');
+        Route::get('/{order}', [OrderController::class, 'show'])->whereNumber('order')->middleware('workspace.permission:view-order-details')->name('show');
+        Route::post('/', [OrderController::class, 'store'])->middleware(['workspace.permission:create-orders', 'throttle:60,1'])->name('store');
+        Route::put('/{order}', [OrderController::class, 'update'])->whereNumber('order')->middleware('workspace.permission:edit-orders')->name('update');
+        Route::post('/{order}/status', [OrderController::class, 'transition'])->whereNumber('order')->middleware('workspace.permission:process-orders,cancel-orders')->name('transition');
     });
 
-    // Servicios y Reservas. Reading is `view-bookings`; configuring the catalog, professionals, schedules and rules is `manage-services`;
-    // operating appointments is `manage-bookings`. Each page also needs its own module in the plan of the Workspace.
-    Route::middleware(['workspace.module:service_catalog', 'workspace.permission:view-bookings'])->prefix('services')->name('services.')->group(function () {
+    // Servicios y Reservas. Each resource has its own permissions: reading (`view-services`, `view-professionals`, `view-locations`, `view-bookings`) and every
+    // change (create / edit / activate; availability; appointments: create, edit, cancel; rules and public page). Each page also needs its own module in the plan.
+    Route::middleware(['workspace.module:service_catalog', 'workspace.permission:view-services'])->prefix('services')->name('services.')->group(function () {
         Route::get('/', [ServiceController::class, 'index'])->name('index');
-        Route::middleware('workspace.permission:manage-services')->group(function () {
-            Route::post('/', [ServiceController::class, 'store'])->name('store');
-            Route::put('/{service}', [ServiceController::class, 'update'])->whereNumber('service')->name('update');
-            Route::post('/{service}/activate', [ServiceController::class, 'activate'])->whereNumber('service')->name('activate');
-            Route::post('/{service}/deactivate', [ServiceController::class, 'deactivate'])->whereNumber('service')->name('deactivate');
-        });
+        Route::post('/', [ServiceController::class, 'store'])->middleware('workspace.permission:create-services')->name('store');
+        Route::put('/{service}', [ServiceController::class, 'update'])->whereNumber('service')->middleware('workspace.permission:edit-services')->name('update');
+        Route::post('/{service}/activate', [ServiceController::class, 'activate'])->whereNumber('service')->middleware('workspace.permission:activate-services')->name('activate');
+        Route::post('/{service}/deactivate', [ServiceController::class, 'deactivate'])->whereNumber('service')->middleware('workspace.permission:activate-services')->name('deactivate');
     });
 
-    // Sedes: where the business attends. Same permissions as the catalog; the module is `locations`.
-    Route::middleware(['workspace.module:locations', 'workspace.permission:view-bookings'])->prefix('locations')->name('locations.')->group(function () {
+    // Sedes: where the business attends; the module is `locations`.
+    Route::middleware(['workspace.module:locations', 'workspace.permission:view-locations'])->prefix('locations')->name('locations.')->group(function () {
         Route::get('/', [LocationController::class, 'index'])->name('index');
-        Route::middleware('workspace.permission:manage-services')->group(function () {
-            Route::post('/', [LocationController::class, 'store'])->name('store');
-            Route::put('/{location}', [LocationController::class, 'update'])->whereNumber('location')->name('update');
-            Route::post('/{location}/activate', [LocationController::class, 'activate'])->whereNumber('location')->name('activate');
-            Route::post('/{location}/deactivate', [LocationController::class, 'deactivate'])->whereNumber('location')->name('deactivate');
-        });
+        Route::post('/', [LocationController::class, 'store'])->middleware('workspace.permission:create-locations')->name('store');
+        Route::put('/{location}', [LocationController::class, 'update'])->whereNumber('location')->middleware('workspace.permission:edit-locations')->name('update');
+        Route::post('/{location}/activate', [LocationController::class, 'activate'])->whereNumber('location')->middleware('workspace.permission:activate-locations')->name('activate');
+        Route::post('/{location}/deactivate', [LocationController::class, 'deactivate'])->whereNumber('location')->middleware('workspace.permission:activate-locations')->name('deactivate');
     });
 
-    Route::middleware(['workspace.module:professionals', 'workspace.permission:view-bookings'])->prefix('professionals')->name('professionals.')->group(function () {
+    Route::middleware(['workspace.module:professionals', 'workspace.permission:view-professionals'])->prefix('professionals')->name('professionals.')->group(function () {
         Route::get('/', [ProfessionalController::class, 'index'])->name('index');
-        Route::middleware('workspace.permission:manage-services')->group(function () {
-            Route::post('/', [ProfessionalController::class, 'store'])->name('store');
-            Route::put('/{professional}', [ProfessionalController::class, 'update'])->whereNumber('professional')->name('update');
-            Route::post('/{professional}/activate', [ProfessionalController::class, 'activate'])->whereNumber('professional')->name('activate');
-            Route::post('/{professional}/deactivate', [ProfessionalController::class, 'deactivate'])->whereNumber('professional')->name('deactivate');
-            Route::post('/resources', [BookableResourceController::class, 'store'])->name('resources.store');
-            Route::put('/resources/{resource}', [BookableResourceController::class, 'update'])->whereNumber('resource')->name('resources.update');
-            Route::post('/resources/{resource}/activate', [BookableResourceController::class, 'activate'])->whereNumber('resource')->name('resources.activate');
-            Route::post('/resources/{resource}/deactivate', [BookableResourceController::class, 'deactivate'])->whereNumber('resource')->name('resources.deactivate');
-            Route::post('/exceptions', [ScheduleExceptionController::class, 'store'])->name('exceptions.store');
-            Route::put('/exceptions/{exception}', [ScheduleExceptionController::class, 'update'])->whereNumber('exception')->name('exceptions.update');
-            Route::delete('/exceptions/{exception}', [ScheduleExceptionController::class, 'destroy'])->whereNumber('exception')->name('exceptions.destroy');
-        });
+        Route::post('/', [ProfessionalController::class, 'store'])->middleware('workspace.permission:create-professionals')->name('store');
+        Route::put('/{professional}', [ProfessionalController::class, 'update'])->whereNumber('professional')->middleware('workspace.permission:edit-professionals')->name('update');
+        Route::post('/{professional}/activate', [ProfessionalController::class, 'activate'])->whereNumber('professional')->middleware('workspace.permission:activate-professionals')->name('activate');
+        Route::post('/{professional}/deactivate', [ProfessionalController::class, 'deactivate'])->whereNumber('professional')->middleware('workspace.permission:activate-professionals')->name('deactivate');
+        Route::post('/resources', [BookableResourceController::class, 'store'])->middleware('workspace.permission:create-professionals')->name('resources.store');
+        Route::put('/resources/{resource}', [BookableResourceController::class, 'update'])->whereNumber('resource')->middleware('workspace.permission:edit-professionals')->name('resources.update');
+        Route::post('/resources/{resource}/activate', [BookableResourceController::class, 'activate'])->whereNumber('resource')->middleware('workspace.permission:activate-professionals')->name('resources.activate');
+        Route::post('/resources/{resource}/deactivate', [BookableResourceController::class, 'deactivate'])->whereNumber('resource')->middleware('workspace.permission:activate-professionals')->name('resources.deactivate');
+        Route::post('/exceptions', [ScheduleExceptionController::class, 'store'])->middleware('workspace.permission:manage-availability')->name('exceptions.store');
+        Route::put('/exceptions/{exception}', [ScheduleExceptionController::class, 'update'])->whereNumber('exception')->middleware('workspace.permission:manage-availability')->name('exceptions.update');
+        Route::delete('/exceptions/{exception}', [ScheduleExceptionController::class, 'destroy'])->whereNumber('exception')->middleware('workspace.permission:manage-availability')->name('exceptions.destroy');
     });
 
     Route::middleware(['workspace.module:bookings', 'workspace.permission:view-bookings'])->prefix('bookings')->name('bookings.')->group(function () {
         Route::get('/', [BookingController::class, 'index'])->name('index');
         Route::get('/availability', [BookingController::class, 'availability'])->middleware('throttle:120,1')->name('availability');
-        Route::put('/settings', [BookingController::class, 'updateSettings'])->middleware('workspace.permission:manage-services')->name('settings.update');
-        Route::put('/settings/notifications', [BookingController::class, 'updateNotifications'])->middleware('workspace.permission:manage-services')->name('settings.notifications');
-        Route::post('/settings/public-key', [BookingController::class, 'rotateKey'])->middleware(['workspace.permission:manage-services', 'throttle:10,1'])->name('settings.rotate-key');
-        Route::middleware('workspace.permission:manage-bookings')->group(function () {
-            Route::post('/', [BookingController::class, 'store'])->middleware('throttle:60,1')->name('store');
-            Route::post('/{appointment}/status', [BookingController::class, 'status'])->whereNumber('appointment')->name('status');
-            Route::post('/{appointment}/reschedule', [BookingController::class, 'reschedule'])->whereNumber('appointment')->name('reschedule');
-            Route::post('/{appointment}/cancel', [BookingController::class, 'cancel'])->whereNumber('appointment')->name('cancel');
-            Route::post('/{appointment}/refresh', [BookingController::class, 'refresh'])->whereNumber('appointment')->name('refresh');
-            Route::post('/{appointment}/customer-confirmation', [BookingController::class, 'customerConfirmation'])->whereNumber('appointment')->name('customer-confirmation');
-        });
+        Route::put('/settings', [BookingController::class, 'updateSettings'])->middleware('workspace.permission:manage-booking-settings')->name('settings.update');
+        Route::put('/settings/notifications', [BookingController::class, 'updateNotifications'])->middleware('workspace.permission:manage-booking-settings')->name('settings.notifications');
+        Route::post('/settings/public-key', [BookingController::class, 'rotateKey'])->middleware(['workspace.permission:manage-booking-settings', 'throttle:10,1'])->name('settings.rotate-key');
+        Route::post('/', [BookingController::class, 'store'])->middleware(['workspace.permission:create-bookings', 'throttle:60,1'])->name('store');
+        Route::post('/{appointment}/status', [BookingController::class, 'status'])->whereNumber('appointment')->middleware('workspace.permission:edit-bookings')->name('status');
+        Route::post('/{appointment}/reschedule', [BookingController::class, 'reschedule'])->whereNumber('appointment')->middleware('workspace.permission:edit-bookings')->name('reschedule');
+        Route::post('/{appointment}/cancel', [BookingController::class, 'cancel'])->whereNumber('appointment')->middleware('workspace.permission:cancel-bookings')->name('cancel');
+        Route::post('/{appointment}/refresh', [BookingController::class, 'refresh'])->whereNumber('appointment')->middleware('workspace.permission:edit-bookings')->name('refresh');
+        Route::post('/{appointment}/customer-confirmation', [BookingController::class, 'customerConfirmation'])->whereNumber('appointment')->middleware('workspace.permission:edit-bookings')->name('customer-confirmation');
     });
 
-    // Clientes: the customer records of the Workspace. Reading is `view-customers`; creating and editing is `manage-customers`.
+    // Clientes: the customer records of the Workspace. The list is `view-customers`, a record's detail `view-customer-details`; create, edit, activate and
+    // anonymize each have their own permission.
     Route::middleware(['workspace.module:customers', 'workspace.permission:view-customers'])->prefix('customers')->name('customers.')->group(function () {
         Route::get('/', [CustomerController::class, 'index'])->name('index');
-        Route::get('/{customer}', [CustomerController::class, 'show'])->whereNumber('customer')->name('show');
-        Route::middleware('workspace.permission:manage-customers')->group(function () {
-            Route::post('/', [CustomerController::class, 'store'])->middleware('throttle:60,1')->name('store');
-            Route::put('/{customer}', [CustomerController::class, 'update'])->whereNumber('customer')->name('update');
-            Route::post('/{customer}/activate', [CustomerController::class, 'activate'])->whereNumber('customer')->name('activate');
-            Route::post('/{customer}/deactivate', [CustomerController::class, 'deactivate'])->whereNumber('customer')->name('deactivate');
-            Route::post('/{customer}/anonymize', [CustomerController::class, 'anonymize'])->whereNumber('customer')->middleware('throttle:20,1')->name('anonymize');
-        });
+        Route::get('/{customer}', [CustomerController::class, 'show'])->whereNumber('customer')->middleware('workspace.permission:view-customer-details')->name('show');
+        Route::post('/', [CustomerController::class, 'store'])->middleware(['workspace.permission:create-customers', 'throttle:60,1'])->name('store');
+        Route::put('/{customer}', [CustomerController::class, 'update'])->whereNumber('customer')->middleware('workspace.permission:edit-customers')->name('update');
+        Route::post('/{customer}/activate', [CustomerController::class, 'activate'])->whereNumber('customer')->middleware('workspace.permission:activate-customers')->name('activate');
+        Route::post('/{customer}/deactivate', [CustomerController::class, 'deactivate'])->whereNumber('customer')->middleware('workspace.permission:activate-customers')->name('deactivate');
+        Route::post('/{customer}/anonymize', [CustomerController::class, 'anonymize'])->whereNumber('customer')->middleware(['workspace.permission:anonymize-customers', 'throttle:20,1'])->name('anonymize');
     });
 
-    // Campañas: templates and campaigns. Reading is `view-campaigns`; everything that changes them is `manage-campaigns`. Nothing here sends a message.
+    // Campañas: templates and campaigns. The list is `view-campaigns`, a campaign's detail `view-campaign-details`; every change has its own permission. Nothing here sends a message.
     Route::middleware(['workspace.module:campaigns', 'workspace.permission:view-campaigns'])->prefix('campaigns')->name('campaigns.')->group(function () {
         Route::get('/', [CampaignController::class, 'index'])->name('index');
-        Route::get('/{campaign}', [CampaignController::class, 'show'])->whereNumber('campaign')->name('show');
-        Route::middleware('workspace.permission:manage-campaigns')->group(function () {
-            Route::post('/', [CampaignController::class, 'store'])->name('store');
-            Route::put('/{campaign}', [CampaignController::class, 'update'])->whereNumber('campaign')->name('update');
-            Route::post('/{campaign}/prepare', [CampaignController::class, 'prepare'])->whereNumber('campaign')->middleware('throttle:20,1')->name('prepare');
-            Route::post('/{campaign}/simulate', [CampaignController::class, 'simulate'])->whereNumber('campaign')->middleware('throttle:20,1')->name('simulate');
-            Route::post('/{campaign}/cancel', [CampaignController::class, 'cancel'])->whereNumber('campaign')->name('cancel');
-            Route::post('/templates', [MessageTemplateController::class, 'store'])->name('templates.store');
-            Route::put('/templates/{template}', [MessageTemplateController::class, 'update'])->whereNumber('template')->name('templates.update');
-            Route::post('/templates/{template}/activate', [MessageTemplateController::class, 'activate'])->whereNumber('template')->name('templates.activate');
-            Route::post('/templates/{template}/deactivate', [MessageTemplateController::class, 'deactivate'])->whereNumber('template')->name('templates.deactivate');
-        });
+        Route::get('/{campaign}', [CampaignController::class, 'show'])->whereNumber('campaign')->middleware('workspace.permission:view-campaign-details')->name('show');
+        Route::post('/', [CampaignController::class, 'store'])->middleware('workspace.permission:create-campaigns')->name('store');
+        Route::put('/{campaign}', [CampaignController::class, 'update'])->whereNumber('campaign')->middleware('workspace.permission:edit-campaigns')->name('update');
+        Route::post('/{campaign}/prepare', [CampaignController::class, 'prepare'])->whereNumber('campaign')->middleware(['workspace.permission:prepare-campaigns', 'throttle:20,1'])->name('prepare');
+        Route::post('/{campaign}/simulate', [CampaignController::class, 'simulate'])->whereNumber('campaign')->middleware(['workspace.permission:prepare-campaigns', 'throttle:20,1'])->name('simulate');
+        Route::post('/{campaign}/cancel', [CampaignController::class, 'cancel'])->whereNumber('campaign')->middleware('workspace.permission:cancel-campaigns')->name('cancel');
+        Route::post('/templates', [MessageTemplateController::class, 'store'])->middleware('workspace.permission:manage-campaign-templates')->name('templates.store');
+        Route::put('/templates/{template}', [MessageTemplateController::class, 'update'])->whereNumber('template')->middleware('workspace.permission:manage-campaign-templates')->name('templates.update');
+        Route::post('/templates/{template}/activate', [MessageTemplateController::class, 'activate'])->whereNumber('template')->middleware('workspace.permission:manage-campaign-templates')->name('templates.activate');
+        Route::post('/templates/{template}/deactivate', [MessageTemplateController::class, 'deactivate'])->whereNumber('template')->middleware('workspace.permission:manage-campaign-templates')->name('templates.deactivate');
     });
 
-    // Auditoría reads the change history of the active Workspace; `manage-settings` governs it like the other admin pages.
-    Route::middleware(['workspace.module:audit', 'workspace.permission:manage-settings'])->prefix('audit')->name('audit.')->group(function () {
+    // Auditoría reads the change history of the active Workspace (`view-audit`); the PDF export is its own permission.
+    Route::middleware(['workspace.module:audit', 'workspace.permission:view-audit'])->prefix('audit')->name('audit.')->group(function () {
         Route::get('/', [AuditController::class, 'index'])->name('index');
         Route::get('/export', [AuditController::class, 'export'])->middleware(['workspace.permission:export-audit', 'throttle:10,1'])->name('export');
     });
@@ -272,6 +265,7 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         Route::post('/organizations/{organization}/deactivate', [OrganizationController::class, 'deactivate'])->middleware('can:manage-workspaces')->name('organizations.deactivate');
         Route::post('/organizations/{organization}/activate', [OrganizationController::class, 'activate'])->middleware('can:manage-workspaces')->name('organizations.activate');
         Route::post('/workspaces/{workspace}/members', [WorkspaceMemberController::class, 'store'])->middleware(['can:manage-workspaces', 'workspace.permission:assign-roles'])->name('workspaces.members.store');
+        Route::get('/workspaces/{workspace}/eligible-users', [WorkspaceMemberController::class, 'eligible'])->middleware(['can:manage-workspaces', 'workspace.permission:assign-roles', 'throttle:60,1'])->name('workspaces.members.eligible');
         Route::put('/workspaces/{workspace}/members/{user}', [WorkspaceMemberController::class, 'update'])->middleware('workspace.permission:assign-roles')->name('workspaces.members.update');
         Route::delete('/workspaces/{workspace}/members/{user}', [WorkspaceMemberController::class, 'destroy'])->middleware('workspace.permission:assign-roles')->name('workspaces.members.destroy');
     });

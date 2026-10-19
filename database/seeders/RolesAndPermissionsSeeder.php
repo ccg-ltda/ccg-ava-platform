@@ -47,41 +47,29 @@ class RolesAndPermissionsSeeder extends Seeder
         // Reset cached roles and permissions
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
-        // Create Permissions
-        Permission::firstOrCreate(['name' => 'manage-users']);
-        $this->createPermissionsReplacing('manage-users', ['create-users', 'edit-users', 'assign-roles', 'deactivate-users']);
-        Permission::firstOrCreate(['name' => 'manage-settings']);
-        $this->createPermissionsReplacing('manage-settings', ['export-audit']);
-        Permission::firstOrCreate(['name' => 'view-dashboard']);
-        Permission::firstOrCreate(['name' => 'view-users']);
-        Permission::firstOrCreate(['name' => 'view-chatbots']);
-        Permission::firstOrCreate(['name' => 'manage-chatbots']);
-        Permission::firstOrCreate(['name' => 'view-conversations']);
-        Permission::firstOrCreate(['name' => 'reply-conversations']);
-        Permission::firstOrCreate(['name' => 'manage-conversations']);
-        // Servicios y Reservas: read the agenda, operate appointments and customers, and configure the catalog, schedules and rules.
-        Permission::firstOrCreate(['name' => 'view-bookings']);
-        Permission::firstOrCreate(['name' => 'manage-bookings']);
-        Permission::firstOrCreate(['name' => 'manage-services']);
-        // Clientes and Campañas: read, and manage. Only `admin` receives them by default; a superuser hands them to other roles.
-        Permission::firstOrCreate(['name' => 'view-customers']);
-        Permission::firstOrCreate(['name' => 'manage-customers']);
-        Permission::firstOrCreate(['name' => 'view-campaigns']);
-        Permission::firstOrCreate(['name' => 'manage-campaigns']);
-        // Catálogo y Pedidos: read, manage, and move orders along the flow. Only `admin` receives them by default; a superuser hands them to other roles.
-        foreach (['view-catalog', 'manage-catalog', 'view-orders', 'manage-orders', 'process-orders'] as $name) {
-            Permission::firstOrCreate(['name' => $name]);
+        // Permissions that were split into finer ones: roles holding the broad one receive the fine ones the first time, then the
+        // broad one is retired when no route uses it any more (config/permissions.php `legacy`). The permissions a database already
+        // has are never recreated or renamed.
+        foreach (config('permissions.legacy') as $broad => $split) {
+            // On a fresh database the broad permission does not exist and nothing needs expanding; an existing one is only read.
+            if (! Permission::where('name', $broad)->where('guard_name', 'web')->exists()) {
+                continue;
+            }
+
+            $this->createPermissionsReplacing($broad, $split['grants']);
         }
-        // Commercial administration of Ava Platform: they only operate inside the administrative Workspace
-        // (EnsurePlatformAdministration) and are never granted automatically (see PLATFORM_PERMISSIONS below).
-        foreach (self::PLATFORM_PERMISSIONS as $name) {
+
+        // Every permission of the catalog exists (config/permissions.php is the single list; nothing here repeats it).
+        foreach (array_keys(config('permissions.permissions')) as $name) {
             Permission::firstOrCreate(['name' => $name]);
         }
 
-        foreach (self::PRIVATE_DATA_PERMISSIONS as $name) {
-            Permission::firstOrCreate(['name' => $name]);
+        // A retired broad permission leaves the catalog only after its holders received the fine ones above.
+        foreach (config('permissions.legacy') as $broad => $split) {
+            if ($split['retire'] && ! array_key_exists($broad, config('permissions.permissions'))) {
+                Permission::where('name', $broad)->where('guard_name', 'web')->get()->each->delete();
+            }
         }
-
         // Create Roles
         $adminRole = Role::firstOrCreate(['name' => 'admin']);
         $supervisorRole = Role::firstOrCreate(['name' => 'supervisor']);

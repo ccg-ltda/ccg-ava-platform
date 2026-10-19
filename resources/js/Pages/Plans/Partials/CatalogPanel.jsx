@@ -1,5 +1,5 @@
 import { router, useForm } from '@inertiajs/react';
-import { FolderPlus, Package, Pencil, Plus, Power } from 'lucide-react';
+import { FolderPlus, Pencil, Plus, Power } from 'lucide-react';
 import { useState } from 'react';
 import Alert from '@/Components/Alert';
 import Badge from '@/Components/Badge';
@@ -16,6 +16,7 @@ import Textarea from '@/Components/Textarea';
 import TextInput from '@/Components/TextInput';
 import { useToast } from '@/Components/Toast';
 import ImplementationBadge from './ImplementationBadge';
+import { modulesBySection } from './ModuleChecklist';
 
 function NameDescriptionFields({ form, prefix, nameLabel }) {
     return (
@@ -54,7 +55,8 @@ function FormModal({ show, title, form, onClose, onSubmit, submitLabel, children
 }
 
 /**
- * Catálogo de módulos tab: the modules plans are built from, grouped by category. Registering a module or a category only
+ * Catálogo de módulos tab: the modules plans are built from, organized like the application menu (General, Operación, Administración; the server says where each
+ * one sits), with the categories (the commercial or organizational label of each module) managed in their own card. Registering a module or a category only
  * reserves its place; whether a module works comes from the platform's code (the badge), never from this screen. Nothing is deleted.
  */
 export default function CatalogPanel({ catalog }) {
@@ -125,58 +127,71 @@ export default function CatalogPanel({ catalog }) {
                 </SecondaryButton>
                 <PrimaryButton type="button" onClick={() => openModule()} className="gap-2" disabled={categoryOptions.length === 0}>
                     <Plus className="size-4" aria-hidden="true" />
-                    Registrar módulo
+                    Registrar módulo pendiente
                 </PrimaryButton>
             </div>
 
-            {catalog.map((category) => (
-                <Card key={category.id} className="overflow-hidden">
-                    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line p-4 sm:px-6">
-                        <div className="min-w-0">
-                            <h2 className="flex flex-wrap items-center gap-2 text-base font-bold text-ink">
-                                {category.name}
-                                <Badge tone={category.isActive ? 'green' : 'neutral'}>{category.isActive ? 'Activa' : 'Inactiva'}</Badge>
-                            </h2>
-                            {category.description && <p className="mt-0.5 text-sm text-ink-muted">{category.description}</p>}
-                        </div>
-                        <div className="flex items-center gap-1">
-                            {category.isActive && <IconButton icon={Plus} label="Registrar módulo aquí" context={category.name} onClick={() => openModule({}, category.id)} />}
-                            <IconButton icon={Pencil} label="Editar categoría" context={category.name} onClick={() => openCategory(category)} />
-                            <IconButton icon={Power} label={category.isActive ? 'Desactivar' : 'Activar'} context={category.name} tone={category.isActive ? 'danger' : 'primary'} onClick={() => toggle(category, 'category')} />
-                        </div>
+            <Card className="overflow-hidden">
+                <div className="border-b border-line p-4 sm:px-6">
+                    <h2 className="text-base font-bold text-ink">Categorías</h2>
+                    <p className="mt-0.5 text-sm text-ink-muted">Agrupan los módulos por solución u organización (por ejemplo Servicios y Reservas). Los módulos de abajo se muestran como en el menú de la aplicación; la categoría es una etiqueta más.</p>
+                </div>
+                <ul className="divide-y divide-line">
+                    {catalog.map((category) => (
+                        <li key={category.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 sm:px-6">
+                            <div className="min-w-0">
+                                <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-ink">
+                                    {category.name}
+                                    <Badge tone={category.isActive ? 'green' : 'neutral'}>{category.isActive ? 'Activa' : 'Inactiva'}</Badge>
+                                    <span className="text-xs font-normal text-ink-muted">{category.modules.length} {category.modules.length === 1 ? 'módulo' : 'módulos'}</span>
+                                </p>
+                                {category.description && <p className="truncate text-xs text-ink-muted">{category.description}</p>}
+                            </div>
+                            <div className="flex items-center gap-1">
+                                {category.isActive && <IconButton icon={Plus} label="Registrar módulo aquí" context={category.name} onClick={() => openModule({}, category.id)} />}
+                                <IconButton icon={Pencil} label="Editar categoría" context={category.name} onClick={() => openCategory(category)} />
+                                <IconButton icon={Power} label={category.isActive ? 'Desactivar' : 'Activar'} context={category.name} tone={category.isActive ? 'danger' : 'primary'} onClick={() => toggle(category, 'category')} />
+                            </div>
+                        </li>
+                    ))}
+                </ul>
+            </Card>
+
+            {modulesBySection(catalog).map(({ section, modules }) => (
+                <Card key={section.key} className="overflow-hidden">
+                    <div className="border-b border-line p-4 sm:px-6">
+                        <h2 className="flex flex-wrap items-center gap-2 text-base font-bold text-ink">
+                            {section.name}
+                            <span className="text-xs font-medium text-ink-muted">{modules.length} {modules.length === 1 ? 'módulo' : 'módulos'}</span>
+                        </h2>
+                        {section.description && <p className="mt-0.5 text-sm text-ink-muted">{section.description}</p>}
                     </div>
 
-                    {category.modules.length === 0 ? (
-                        <p className="flex items-center gap-2 p-4 text-sm text-ink-muted sm:px-6">
-                            <Package className="size-4" aria-hidden="true" />
-                            Sin módulos registrados todavía.
-                        </p>
-                    ) : (
-                        <ul className="divide-y divide-line">
-                            {category.modules.map((module) => (
-                                <li key={module.id} className="flex flex-wrap items-start justify-between gap-3 p-4 sm:px-6">
-                                    <div className="min-w-0">
-                                        <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-ink">
-                                            {module.name}
-                                            <ImplementationBadge implemented={module.implemented} />
-                                            <Badge tone="violet">{module.group.name}</Badge>
-                                            {module.alsoFor.length > 0 && <Badge tone="blue">También en {module.alsoFor.map((solution) => solution.name).join(', ')}</Badge>}
-                                            {!module.isActive && <Badge tone="neutral">Inactivo</Badge>}
-                                        </p>
-                                        {module.description && <p className="mt-0.5 text-sm text-ink-muted">{module.description}</p>}
-                                        <p className="mt-1 text-xs text-ink-muted">
-                                            <code className="rounded bg-canvas px-1.5 py-0.5">{module.key}</code> · en {module.plansCount} {module.plansCount === 1 ? 'plan' : 'planes'}
-                                            {module.requires.length > 0 && <> · necesita {module.requires.map((required) => required.name).join(', ')}</>}
-                                        </p>
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                        <IconButton icon={Pencil} label="Editar" context={module.name} onClick={() => openModule(module)} />
-                                        <IconButton icon={Power} label={module.isActive ? 'Desactivar' : 'Activar'} context={module.name} tone={module.isActive ? 'danger' : 'primary'} onClick={() => toggle(module, 'module')} />
-                                    </div>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
+                    <ul className="divide-y divide-line">
+                        {modules.map((module) => (
+                            <li key={module.id} className="flex flex-wrap items-start justify-between gap-3 p-4 sm:px-6">
+                                <div className="min-w-0">
+                                    <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-ink">
+                                        {module.name}
+                                        <ImplementationBadge implemented={module.implemented} />
+                                        <Badge tone="neutral" className="normal-case tracking-normal">{module.category.name}</Badge>
+                                        <Badge tone="violet">{module.group.name}</Badge>
+                                        {module.alsoFor.length > 0 && <Badge tone="blue">También en {module.alsoFor.map((solution) => solution.name).join(', ')}</Badge>}
+                                        {!module.isActive && <Badge tone="neutral">Inactivo</Badge>}
+                                    </p>
+                                    {module.description && <p className="mt-0.5 text-sm text-ink-muted">{module.description}</p>}
+                                    <p className="mt-1 text-xs text-ink-muted">
+                                        <code className="rounded bg-canvas px-1.5 py-0.5">{module.key}</code> · en {module.plansCount} {module.plansCount === 1 ? 'plan' : 'planes'}
+                                        {module.requires.length > 0 && <> · necesita {module.requires.map((required) => required.name).join(', ')}</>}
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <IconButton icon={Pencil} label="Editar" context={module.name} onClick={() => openModule(module)} />
+                                    <IconButton icon={Power} label={module.isActive ? 'Desactivar' : 'Activar'} context={module.name} tone={module.isActive ? 'danger' : 'primary'} onClick={() => toggle(module, 'module')} />
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
                 </Card>
             ))}
 

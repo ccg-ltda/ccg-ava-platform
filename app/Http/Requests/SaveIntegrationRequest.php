@@ -9,7 +9,7 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 /**
- * Create / update of an integration. Authorization is the `workspace.permission:manage-settings` route middleware;
+ * Create / update of an integration. Authorization is the `workspace.permission:manage-integrations` route middleware;
  * here the integration being edited is looked up INSIDE the active Workspace (another Workspace's id is a 404).
  */
 class SaveIntegrationRequest extends FormRequest

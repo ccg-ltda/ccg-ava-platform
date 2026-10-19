@@ -1,11 +1,13 @@
 import { Monitor, Moon, Sun } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import Badge from '@/Components/Badge';
 import ImageField from '@/Components/ImageField';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import TextInput from '@/Components/TextInput';
 import { brandVariables, contrastWithWhite, isHexColor } from '@/lib/theme';
-import SettingsSection from './SettingsSection';
+import AppearancePreview from './AppearancePreview';
+import SettingsSection, { Fact } from './SettingsSection';
 
 const MODES = [
     { value: 'light', icon: Sun },
@@ -90,11 +92,45 @@ function ColorField({ form, palette }) {
 }
 
 /** Appearance: logo, primary color and light / dark / system mode. */
-export default function AppearancePanel({ form, onSave, catalog }) {
+export default function AppearancePanel({ settings, form, onSave, catalog, section }) {
     const { data, setData } = form;
+    const modeLabel = (value) => catalog.appearances.find((mode) => mode.value === value)?.label;
+
+    // The preview shows the saved values in the summary and the values being edited in the form, and never touches the real theme.
+    const summary = (
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+            <dl className="grid content-start gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                <Fact label="Nombre">{settings.name}</Fact>
+                <Fact label="Logo">
+                    {settings.logo_url ? <img src={settings.logo_url} alt="Logo del Workspace" className="mt-1 h-12 max-w-40 rounded object-contain" /> : null}
+                </Fact>
+                <Fact label="Color principal">
+                    <span className="inline-flex items-center gap-2">
+                        <span className="size-5 rounded-full ring-1 ring-line" style={{ backgroundColor: settings.primary_color }} aria-hidden="true" />
+                        <span className="font-mono uppercase">{settings.primary_color}</span>
+                    </span>
+                </Fact>
+                <Fact label="Modo de apariencia">{modeLabel(settings.appearance)}</Fact>
+            </dl>
+            <AppearancePreview name={settings.name} color={settings.primary_color} appearance={settings.appearance} logoUrl={settings.logo_url} />
+        </div>
+    );
+
+    // A chosen file is previewed from a temporary local URL, released when it changes or the form closes.
+    const [chosenUrl, setChosenUrl] = useState(null);
+    useEffect(() => {
+        if (!data.logo) {
+            setChosenUrl(null);
+            return undefined;
+        }
+        const url = URL.createObjectURL(data.logo);
+        setChosenUrl(url);
+        return () => URL.revokeObjectURL(url);
+    }, [data.logo]);
+    const editingLogo = chosenUrl ?? (data.remove_logo ? null : data.logo_url);
 
     return (
-        <SettingsSection title="Apariencia" description="Personaliza la identidad de tu Workspace sin salirte del estilo de Ava." form={form} onSave={onSave}>
+        <SettingsSection title="Apariencia" description="Personaliza la identidad de tu Workspace sin salirte del estilo de Ava." form={form} onSave={onSave} summary={summary} {...section}>
             <LogoField form={form} />
             <ColorField form={form} palette={catalog.palette} />
 
@@ -125,6 +161,11 @@ export default function AppearancePanel({ form, onSave, catalog }) {
                 </div>
                 <p className="mt-2 text-xs text-ink-muted">«Sistema» sigue el modo claro u oscuro del dispositivo de cada usuario.</p>
             </fieldset>
+
+            <div>
+                <p className="mb-2 text-sm font-medium text-ink">Vista previa con estos ajustes</p>
+                <AppearancePreview name={data.name} color={data.primary_color} appearance={data.appearance} logoUrl={editingLogo} />
+            </div>
         </SettingsSection>
     );
 }

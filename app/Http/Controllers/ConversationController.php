@@ -85,12 +85,12 @@ class ConversationController extends Controller
                 'chatbots' => $viewing->chatbots()->orderBy('name')->get(['id', 'name'])->map(fn (Chatbot $c) => ['value' => $c->id, 'label' => $c->name])->all(),
             ],
             // The demo tools: only in a demo environment, and managed only from the administrative Workspace itself.
-            'demo' => $this->demo->enabled() ? ['canManage' => ! $foreign && $viewing->isAdministrative() && in_array('manage-conversations', $permissions, true)] + $this->demo->counts($viewing) : null,
+            'demo' => $this->demo->enabled() ? ['canManage' => ! $foreign && $viewing->isAdministrative() && in_array('use-conversation-demo', $permissions, true)] + $this->demo->counts($viewing) : null,
             // Saved filters are the user's own in their Workspace and belong to the shared inbox: not offered on a channel's page nor on another Workspace seen read only.
             'savedFilters' => $bot || $foreign ? null : $this->saved->for($request->user(), $viewing, 'conversations'),
             'reportEndpoint' => url('/api/agent/messages'),
-            'canConfigure' => ! $foreign && in_array('manage-settings', $permissions, true),
-            'scope' => $this->scopeProps($request, $viewing, $foreign, 'manage-chatbots'),
+            'canConfigure' => ! $foreign && in_array('manage-integrations', $permissions, true),
+            'scope' => $this->scopeProps($request, $viewing, $foreign, 'edit-chatbots'),
             // Only when looking at another Workspace: whether its private content is locked and how a platform administrator unlocks it.
             'privateAccess' => $foreign ? [
                 'locked' => $locked,

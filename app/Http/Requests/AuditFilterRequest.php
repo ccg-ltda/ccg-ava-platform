@@ -7,7 +7,7 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 /**
- * Filters of Auditoría (the page and the PDF share them). Authorization is the `workspace.permission:manage-settings`
+ * Filters of Auditoría (the page and the PDF share them). Authorization is the `workspace.permission:view-audit`
  * route middleware. The Workspace parameter is only honored for a superuser working inside the administrative Workspace
  * (WorkspaceScope); anyone else who sends it is refused, and everyone else is limited to the session's Workspace.
  */

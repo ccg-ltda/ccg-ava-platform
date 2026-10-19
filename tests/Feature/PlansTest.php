@@ -183,12 +183,61 @@ class PlansTest extends TestCase
 
         $this->put("/plans/{$plan->id}", ['name' => 'Nuevo nombre', 'description' => ''])->assertSessionHasNoErrors();
         $this->put("/plans/{$plan->id}", ['name' => 'Plataforma completa'])->assertSessionHasErrors('name');
-        $this->put("/plans/{$plan->id}", ['name' => 'Nuevo nombre', 'module_ids' => [$this->moduleId('audit')]])->assertSessionHasNoErrors();
-
         $plan->refresh();
         $this->assertSame('Nuevo nombre', $plan->name);
         $this->assertNull($plan->description);
+        // The data alone (no modules sent) never touches the modules of the plan.
         $this->assertSame(['dashboard'], $plan->modules()->pluck('modules.key')->all());
+    }
+
+    public function test_the_plan_editor_saves_exactly_the_data_and_the_modules_it_shows(): void
+    {
+        $plan = $this->plan('Editable', ['dashboard', 'customers']);
+        $this->platformAdmin();
+
+        // The index hands the editor what the plan has saved: that is what it opens with.
+        $this->get('/plans')->assertInertia(fn (AssertableInertia $page) => $page->where('plans', fn ($plans) => collect($plans)->firstWhere('id', $plan->id)['moduleIds'] === $plan->modules()->pluck('modules.id')->all()));
+
+        $chosen = [$this->moduleId('dashboard'), $this->moduleId('audit'), $this->moduleId('settings')];
+        $this->put("/plans/{$plan->id}", ['name' => 'Editable 2', 'description' => 'Con auditoría', 'module_ids' => $chosen])->assertSessionHasNoErrors();
+
+        $plan->refresh();
+        $this->assertSame(['Editable 2', 'Con auditoría'], [$plan->name, $plan->description]);
+        $this->assertEqualsCanonicalizing($chosen, $plan->modules()->pluck('modules.id')->all());
+        $this->assertDatabaseHas('audit_logs', ['resource_type' => 'plan', 'resource_id' => $plan->id]);
+    }
+
+    public function test_the_plan_editor_is_all_or_nothing(): void
+    {
+        $plan = $this->plan('Atómico', ['dashboard']);
+        $this->platformAdmin();
+
+        // A module that needs another one cannot be saved alone: neither the name nor the modules change.
+        $this->put("/plans/{$plan->id}", ['name' => 'Otro nombre', 'module_ids' => [$this->moduleId('campaigns')]])->assertSessionHasErrors('module_ids');
+
+        $plan->refresh();
+        $this->assertSame('Atómico', $plan->name);
+        $this->assertSame(['dashboard'], $plan->modules()->pluck('modules.key')->all());
+    }
+
+    public function test_the_catalog_organizes_modules_like_the_sidebar_and_says_what_each_one_needs(): void
+    {
+        $this->platformAdmin();
+
+        $this->get('/plans?tab=modulos')->assertInertia(fn (AssertableInertia $page) => $page->where('catalog', function ($catalog) {
+            $modules = collect($catalog)->flatMap(fn ($category) => $category['modules'])->keyBy('key');
+
+            $this->assertSame('General', $modules['dashboard']['section']['name']);
+            $this->assertSame('Operación', $modules['customers']['section']['name']);
+            $this->assertSame('Operación', $modules['locations']['section']['name']);
+            $this->assertSame('Administración', $modules['settings']['section']['name']);
+            $this->assertSame('Administración', $modules['calendar_providers']['section']['name']);
+            $this->assertNotEmpty($modules['users_roles']['hint']);
+            // A module registered from the UI (no page) takes the default section; a hint exists only where the code says so.
+            $this->assertNull($modules['customers']['hint']);
+
+            return true;
+        }));
     }
 
     public function test_modules_are_replaced_and_the_same_module_serves_several_plans(): void

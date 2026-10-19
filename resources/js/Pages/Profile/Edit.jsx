@@ -1,29 +1,34 @@
 import { Head } from '@inertiajs/react';
-import Card from '@/Components/Card';
+import { useState } from 'react';
 import PageHeader from '@/Components/PageHeader';
 import AppLayout from '@/Layouts/AppLayout';
-import CommunicationsForm from './Partials/CommunicationsForm';
-import UpdatePasswordForm from './Partials/UpdatePasswordForm';
-import UpdateProfileInformationForm from './Partials/UpdateProfileInformationForm';
+import AccountSection from './Partials/AccountSection';
+import PrivacySection from './Partials/PrivacySection';
+import ProfileHero from './Partials/ProfileHero';
+import SecuritySection from './Partials/SecuritySection';
 
-export default function Edit({ mustVerifyEmail, status, marketing, accepted, legalAvailable }) {
+/**
+ * Mi perfil: a profile card (photo, name, email, role and the state of the account) and three compact sections — account, security and privacy —
+ * each a summary with its own «Editar» that opens only its form (one at a time) and returns to the summary when saved or cancelled. Nothing here can
+ * read or change another person's account; the password is only ever shown as configured.
+ */
+export default function Edit({ mustVerifyEmail, status, account, photoUrl, photoRules, marketing, accepted, legalAvailable, legalReviewed }) {
+    const [editing, setEditing] = useState(null); // 'account' | 'password' | 'privacy' | null
+    const section = (id) => ({ editing: editing === id, onEdit: () => setEditing(id), onClose: () => setEditing(null) });
+
     return (
         <>
             <Head title="Mi perfil" />
 
-            <PageHeader title="Mi perfil" description="Datos de tu cuenta y seguridad." />
+            <PageHeader title="Mi perfil" description="Tu cuenta, tu seguridad y tus preferencias de privacidad." />
 
-            <Card className="p-4 sm:p-8">
-                <UpdateProfileInformationForm mustVerifyEmail={mustVerifyEmail} status={status} className="max-w-xl" />
-            </Card>
+            <ProfileHero account={account} photoUrl={photoUrl} photoRules={photoRules} marketing={marketing} legalAvailable={legalAvailable} onEditAccount={() => setEditing('account')} />
 
-            <Card delay={80} className="p-4 sm:p-8">
-                <UpdatePasswordForm className="max-w-xl" />
-            </Card>
-
-            <Card delay={160} className="p-4 sm:p-8">
-                <CommunicationsForm marketing={marketing} accepted={accepted} available={legalAvailable} className="max-w-xl" />
-            </Card>
+            <div className="grid items-start gap-6 lg:grid-cols-2">
+                <AccountSection account={account} mustVerifyEmail={mustVerifyEmail} status={status} {...section('account')} />
+                <SecuritySection account={account} {...section('password')} />
+                <PrivacySection className="lg:col-span-2" marketing={marketing} accepted={accepted} available={legalAvailable} reviewed={legalReviewed} {...section('privacy')} />
+            </div>
         </>
     );
 }

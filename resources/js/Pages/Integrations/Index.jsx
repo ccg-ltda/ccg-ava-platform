@@ -2,6 +2,7 @@ import { Head, router } from '@inertiajs/react';
 import { Plug, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useConfirm } from '@/Components/ConfirmDialog';
+import useAccess from '@/Hooks/useAccess';
 import EmptyState from '@/Components/EmptyState';
 import PageHeader from '@/Components/PageHeader';
 import PrimaryButton from '@/Components/PrimaryButton';
@@ -21,6 +22,14 @@ import IntegrationFormModal from './Partials/IntegrationFormModal';
 export default function Index({ channels, providers = [], integrations, catalog, automation, newToken, scope }) {
     const confirm = useConfirm();
     const readOnly = scope.readOnly;
+    // Each change has its own permission; the server enforces them, this only offers what the role can do.
+    const { permissions } = useAccess();
+    const can = {
+        edit: permissions.includes('manage-integrations'),
+        test: permissions.includes('test-integrations'),
+        toggle: permissions.includes('activate-integrations'),
+        remove: permissions.includes('delete-integrations'),
+    };
     const [editing, setEditing] = useState(null); // null = closed, 'new' = creating, otherwise the integration
     const [configuring, setConfiguring] = useState(null); // the channel being configured
     const [configuringProvider, setConfiguringProvider] = useState(null); // the external agenda being configured
@@ -38,6 +47,16 @@ export default function Index({ channels, providers = [], integrations, catalog,
         if (confirmed) {
             router.post(route(deactivating ? 'integrations.deactivate' : 'integrations.activate', integration.id), {}, { preserveScroll: true });
         }
+    };
+
+    // Retiring a connection deletes its row (and the credentials in it); only an inactive generic connection can be retired, and the audit log keeps who did it.
+    const remove = async (integration) => {
+        const confirmed = await confirm({
+            description: `«${integration.name}» se retirará de este Workspace junto con la configuración y las credenciales guardadas. No se puede deshacer; el historial de Auditoría conserva el registro de quién la creó y quién la retiró.`,
+            confirmLabel: 'Retirar conexión',
+        });
+
+        if (confirmed) router.delete(route('integrations.destroy', integration.id), { preserveScroll: true });
     };
 
     // A channel test only reads from the provider (it changes nothing there), so it needs no confirmation.
@@ -74,7 +93,7 @@ export default function Index({ channels, providers = [], integrations, catalog,
 
             <PageHeader title="Integraciones" description="Conecta Ava con otros servicios. Cada Workspace configura las suyas.">
                 <WorkspaceViewSelector scope={scope} routeName="integrations.index" id="integrations_workspace" />
-                {!readOnly && (
+                {!readOnly && can.edit && (
                     <PrimaryButton type="button" onClick={() => setEditing('new')} className="gap-2">
                         <Plus className="size-4" aria-hidden="true" />
                         Nueva integración
@@ -91,7 +110,9 @@ export default function Index({ channels, providers = [], integrations, catalog,
                     </h2>
                     <p className="text-sm text-ink-muted">Quién ejecuta el flujo de cada chatbot.</p>
                 </div>
-                <AutomationCard automation={automation} newToken={newToken} readOnly={readOnly} workspaceId={readOnly ? scope.workspace.id : undefined} />
+                <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                    <AutomationCard automation={automation} newToken={newToken} readOnly={readOnly} workspaceId={readOnly ? scope.workspace.id : undefined} />
+                </div>
             </section>
 
             <section aria-labelledby="channels-heading" className="space-y-4">
@@ -108,6 +129,7 @@ export default function Index({ channels, providers = [], integrations, catalog,
                             channel={channel}
                             delay={index * 50}
                             readOnly={readOnly}
+                            can={can}
                             testing={testingId === `channel-${channel.key}`}
                             onTest={() => testChannel(channel)}
                             onConfigure={() => setConfiguring(channel)}
@@ -121,9 +143,9 @@ export default function Index({ channels, providers = [], integrations, catalog,
                 <section aria-labelledby="agendas-heading" className="space-y-4">
                     <div>
                         <h2 id="agendas-heading" className="text-lg font-bold text-ink">
-                            Agendas externas
+                            Servicios externos
                         </h2>
-                        <p className="text-sm text-ink-muted">Una agenda externa puede ser la fuente de verdad de tus citas en lugar de la agenda de Ava. Se elige en Agenda y reservas → Configuración.</p>
+                        <p className="text-sm text-ink-muted">Proveedores de terceros que cada Workspace conecta por su cuenta. Hoy son agendas (Booker): una agenda externa puede ser la fuente de verdad de tus citas en lugar de la agenda de Ava, y se elige en Agenda y reservas → Configuración.</p>
                     </div>
                     <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
                         {providers.map((provider, index) => (
@@ -132,6 +154,7 @@ export default function Index({ channels, providers = [], integrations, catalog,
                                 channel={provider}
                                 delay={index * 50}
                                 readOnly={readOnly}
+                                can={can}
                                 testing={testingId === `channel-${provider.key}`}
                                 onTest={() => testChannel(provider)}
                                 onConfigure={() => setConfiguringProvider(provider)}
@@ -152,7 +175,7 @@ export default function Index({ channels, providers = [], integrations, catalog,
 
                 {integrations.length === 0 ? (
                     <EmptyState icon={Plug} title="Todavía no hay conexiones API" description={readOnly ? 'Este Workspace no tiene conexiones API.' : 'Crea la primera para conectar este Workspace con un servicio externo.'}>
-                        {!readOnly && (
+                        {!readOnly && can.edit && (
                             <PrimaryButton type="button" onClick={() => setEditing('new')} className="gap-2">
                                 <Plus className="size-4" aria-hidden="true" />
                                 Nueva integración
@@ -168,9 +191,11 @@ export default function Index({ channels, providers = [], integrations, catalog,
                                 delay={index * 50}
                                 testing={testingId === integration.id}
                                 readOnly={readOnly}
+                                can={can}
                                 onEdit={() => setEditing(integration)}
                                 onTest={() => test(integration)}
                                 onToggle={() => toggle(integration)}
+                                onRemove={() => remove(integration)}
                             />
                         ))}
                     </div>

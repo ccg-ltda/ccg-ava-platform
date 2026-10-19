@@ -86,7 +86,7 @@ class DashboardTest extends TestCase
     {
         $this->get('/dashboard')->assertRedirect('/login');
         $this->seedRoleCatalog();
-        Role::findOrCreate('sin-dashboard', 'web')->syncPermissions(['manage-settings']);
+        Role::findOrCreate('sin-dashboard', 'web')->syncPermissions(['view-settings']);
         $this->actAs('sin-dashboard');
 
         $this->get('/dashboard')->assertForbidden();
@@ -340,7 +340,7 @@ class DashboardTest extends TestCase
         // `cliente` only has `view-dashboard`: aggregated figures, nothing that identifies a conversation, an event or a connection.
         $client = $this->props();
         $this->assertSame(1, $client['kpis']['data']['conversations']['value']);
-        $this->assertSame(['conversations' => false, 'assistants' => false, 'settings' => false], $client['can']);
+        $this->assertSame(['conversations' => false, 'assistants' => false, 'integrations' => false, 'audit' => false], $client['can']);
         foreach (['attention', 'integrations', 'recentConversations', 'recentActivity'] as $section) {
             $this->assertNull($client[$section], $section);
         }
@@ -462,7 +462,7 @@ class DashboardTest extends TestCase
         $this->assertSame(['failedExecutions' => 0], $props['attention']['data']);
         $this->assertNull($props['recentConversations']);
         $this->assertNull($props['integrations']);
-        $this->assertSame(['conversations' => false, 'assistants' => true, 'settings' => false], $props['can']);
+        $this->assertSame(['conversations' => false, 'assistants' => true, 'integrations' => false, 'audit' => false], $props['can']);
         $this->assertStringNotContainsString('contacto-reservado', json_encode($props));
     }
 

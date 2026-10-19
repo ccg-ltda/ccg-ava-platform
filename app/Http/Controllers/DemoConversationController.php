@@ -16,7 +16,7 @@ use Illuminate\Validation\Rule;
 
 /**
  * The demo bench inside the inbox: generate / reset / clean the scenarios, and simulate traffic on a DEMO conversation.
- * Every route needs `manage-conversations`; nothing exists outside the environments of config/demo.php (404) and the
+ * Every route needs `use-conversation-demo`; nothing exists outside the environments of config/demo.php (404) and the
  * generator only works in the administrative Workspace of the session. Simulation acts only on conversations marked as
  * demo of the ACTIVE Workspace, and never calls a provider.
  */

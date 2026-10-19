@@ -11,6 +11,7 @@ use App\Services\ListPagination;
 use App\Services\ModuleCatalog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -64,9 +65,16 @@ class PlanController extends Controller
         return redirect()->route('plans.show', $plan)->with('success', 'Plan creado correctamente');
     }
 
+    /** Name and description, and the modules too when the editor sends them (it always does): the plan is saved exactly as the form shows it. */
     public function update(SavePlanRequest $request, Plan $plan): RedirectResponse
     {
-        $this->catalog->updatePlan($plan, $request->validated());
+        DB::transaction(function () use ($request, $plan) {
+            $this->catalog->updatePlan($plan, $request->validated());
+
+            if ($request->has('module_ids')) {
+                $this->catalog->syncModules($plan, $request->moduleIds());
+            }
+        });
 
         return back()->with('success', 'Plan actualizado correctamente');
     }
@@ -101,6 +109,7 @@ class PlanController extends Controller
             'description' => $plan->description,
             'isActive' => $plan->is_active,
             'isDefault' => $plan->isDefault(),
+            'moduleIds' => $plan->modules()->pluck('modules.id')->all(),
             'modulesCount' => $plan->modules_count,
             'workspacesCount' => $workspacesCount,
             // Modules of the plan that are NOT operative because a module they need is not in the plan.

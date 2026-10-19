@@ -9,7 +9,7 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
-/** Create / update of a product of the ACTIVE Workspace. Authorization is the `workspace.permission:manage-catalog` route middleware. */
+/** Create / update of a product of the ACTIVE Workspace. Authorization is the `workspace.permission:create-products` / `edit-products` route middleware. */
 class SaveProductRequest extends FormRequest
 {
     public function authorize(): bool

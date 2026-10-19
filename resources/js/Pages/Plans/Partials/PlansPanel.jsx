@@ -25,7 +25,7 @@ export default function PlansPanel({ plans, catalog, filters }) {
     const first = useRef(true);
 
     const create = useForm({ name: '', description: '', module_ids: [] });
-    const edit = useForm({ name: '', description: '' });
+    const edit = useForm({ name: '', description: '', module_ids: [] });
     const [creating, setCreating] = useState(false);
     const [editing, setEditing] = useState(null);
 
@@ -58,7 +58,8 @@ export default function PlansPanel({ plans, catalog, filters }) {
     const openEdit = (plan) => {
         setEditing(plan);
         edit.clearErrors();
-        edit.setData({ name: plan.name, description: plan.description ?? '' });
+        // The editor opens with what the plan has saved: its data and its modules.
+        edit.setData({ name: plan.name, description: plan.description ?? '', module_ids: plan.moduleIds ?? [] });
     };
 
     const submitEdit = (e) => {
@@ -154,7 +155,7 @@ export default function PlansPanel({ plans, catalog, filters }) {
             )}
 
             <PlanFormModal show={creating} title="Nuevo plan" form={create} catalog={catalog} submitLabel="Crear plan" onClose={() => setCreating(false)} onSubmit={submitCreate} />
-            <PlanFormModal show={Boolean(editing)} title="Editar plan" form={edit} submitLabel="Guardar cambios" onClose={() => setEditing(null)} onSubmit={submitEdit} />
+            <PlanFormModal show={Boolean(editing)} title="Editar plan" form={edit} catalog={catalog} submitLabel="Guardar cambios" onClose={() => setEditing(null)} onSubmit={submitEdit} />
         </Card>
     );
 }

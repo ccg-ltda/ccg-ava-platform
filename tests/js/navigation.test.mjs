@@ -131,3 +131,41 @@ test('navigation unfolds the section it arrives at but never folds the one the u
     // A section the user folded while on its page stays folded until navigation changes the page.
     assert.equal(openAfterNavigation(openAfterToggle(true), false), false);
 });
+
+// --- what the menu and the quick links of the Dashboard offer depends on the plan AND on the role, never on a plan name ---------------------------------
+
+const labelsOf = (access) => visibleNavigation(access).flatMap((section) => section.items).map((item) => item.label);
+const allPermissions = navigation.flatMap((s) => s.items).map((i) => i.permission).filter(Boolean);
+
+test('a plan without Sedes or Campañas does not offer them, whatever the role holds', () => {
+    const health = ['dashboard', 'assistants', 'conversations', 'reports', 'service_catalog', 'professionals', 'bookings', 'customers', 'users_roles', 'settings'];
+    const offered = labelsOf({ permissions: allPermissions, modules: health, platform: false });
+
+    assert.ok(!offered.includes('Sedes') && !offered.includes('Campañas') && !offered.includes('Pedidos') && !offered.includes('Catálogo'));
+    ['Servicios', 'Profesionales', 'Agenda', 'Clientes'].forEach((label) => assert.ok(offered.includes(label), `${label} is in the plan`));
+});
+
+test('a module in the plan is not offered to a role without its permission, and permissions are independent per resource', () => {
+    const modules = navigation.flatMap((s) => s.items).map((i) => i.module).filter(Boolean);
+
+    assert.deepEqual(labelsOf({ permissions: [], modules, platform: false }), []);
+    // Seeing the list of services does not open professionals, locations or the agenda.
+    assert.deepEqual(labelsOf({ permissions: ['view-services'], modules, platform: false }), ['Servicios']);
+    assert.deepEqual(labelsOf({ permissions: ['view-locations', 'view-professionals'], modules, platform: false }), ['Sedes', 'Profesionales']);
+    // Operation permissions never open a page by themselves.
+    assert.deepEqual(labelsOf({ permissions: ['create-customers', 'edit-customers', 'create-bookings'], modules, platform: false }), []);
+});
+
+test('the quick links are drawn from the same definition as the menu', () => {
+    const panels = source('Pages/Dashboard/Partials/Panels.jsx');
+
+    assert.match(panels, /visibleNavigation\(useAccess\(\)\)/);
+    assert.doesNotMatch(panels, /Sedes|Campañas|health|salud/i, 'no plan or module name is written by hand in the quick links');
+});
+
+test('the platform entries only exist for the platform administration', () => {
+    const modules = navigation.flatMap((s) => s.items).map((i) => i.module).filter(Boolean);
+
+    assert.ok(!labelsOf({ permissions: allPermissions, modules, platform: false }).includes('Planes'));
+    assert.ok(labelsOf({ permissions: allPermissions, modules, platform: true }).includes('Planes'));
+});

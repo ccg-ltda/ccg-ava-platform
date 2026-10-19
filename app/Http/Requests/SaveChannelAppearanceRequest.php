@@ -8,7 +8,7 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
- * Saves the look of one channel of a chatbot. Authorization is the `workspace.permission:manage-chatbots` route
+ * Saves the look of one channel of a chatbot. Authorization is the `workspace.permission:manage-chatbot-channels` route
  * middleware; the chatbot is looked up INSIDE the active Workspace (another Workspace's id is a 404) and a channel
  * without visual configuration, or not available yet, is a 404 too.
  */

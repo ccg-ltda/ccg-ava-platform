@@ -381,6 +381,9 @@ class CampaignsTest extends TestCase
 
         Role::findByName('cliente', 'web')->givePermissionTo('view-campaigns');
         $campaign = $this->draft();
+        // The list does not open a campaign: its detail is its own permission.
+        $this->get("/campaigns/{$campaign->id}")->assertForbidden();
+        Role::findByName('cliente', 'web')->givePermissionTo('view-campaign-details');
         $this->get('/campaigns')->assertOk();
         $this->get("/campaigns/{$campaign->id}")->assertOk();
         $this->post('/campaigns', $this->payload())->assertForbidden();

@@ -15,7 +15,7 @@ use Inertia\Response;
 
 /**
  * Catálogo de productos: what the Workspace sells (E-commerce and Delivery). Never deleted, only deactivated: an inactive product is no longer offered for
- * new orders, and the orders that used it keep their own copy of its name, sku and price. Reading is `view-catalog`, changing is `manage-catalog`.
+ * new orders, and the orders that used it keep their own copy of its name, sku and price. Reading is `view-catalog`; `create-products`, `edit-products` and `activate-products` change it.
  */
 class ProductController extends Controller
 {

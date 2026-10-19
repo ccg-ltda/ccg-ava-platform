@@ -9,7 +9,7 @@ use Illuminate\Foundation\Http\FormRequest;
 
 /**
  * Connects (or changes) the n8n instance of the ACTIVE Workspace, taken from the request context and never from the
- * client. Authorization is the `workspace.permission:manage-settings` route middleware.
+ * client. Authorization is the `workspace.permission:manage-integrations` route middleware.
  */
 class SaveN8nIntegrationRequest extends FormRequest
 {

@@ -17,7 +17,7 @@ use Inertia\Response;
 /**
  * Sedes: the places where the business attends. They belong to Ava's own agenda (an external agenda has its own locations, so with one
  * chosen the page is read only and says so). Never deleted, only deactivated, so the appointments made there keep their history.
- * Reading is `view-bookings`, changing is `manage-services` (the same permissions as the catalog and the professionals they organize).
+ * Reading is `view-locations`; creating, editing and activating are `create-locations`, `edit-locations` and `activate-locations`.
  */
 class LocationController extends Controller
 {

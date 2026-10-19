@@ -10,7 +10,7 @@ use Illuminate\Validation\Rule;
 
 /**
  * Places an order from the admin. It carries ONLY what the person typed: which products and how many. Prices, totals, currency, number, state and the
- * Workspace are never read from here: OrderService takes them from the catalog and the session. Authorization is the `workspace.permission:manage-orders` route middleware.
+ * Workspace are never read from here: OrderService takes them from the catalog and the session. Authorization is the `workspace.permission:create-orders` route middleware.
  */
 class CreateOrderRequest extends FormRequest
 {

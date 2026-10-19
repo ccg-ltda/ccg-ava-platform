@@ -31,7 +31,8 @@ abstract class TestCase extends BaseTestCase
      */
     protected function seedRoleCatalog(): void
     {
-        $permissions = collect(['manage-users', 'create-users', 'edit-users', 'assign-roles', 'deactivate-users', 'manage-settings', 'export-audit', 'view-dashboard', 'view-users', 'view-chatbots', 'manage-chatbots', 'view-conversations', 'reply-conversations', 'manage-conversations', 'view-bookings', 'manage-bookings', 'manage-services', 'view-customers', 'manage-customers', 'view-campaigns', 'manage-campaigns', 'view-catalog', 'manage-catalog', 'view-orders', 'manage-orders', 'process-orders', 'manage-plans', 'manage-modules', 'access-private-data'])
+        // The catalog of config/permissions.php: a permission a test needs always exists, and a typo in a test name fails loudly.
+        $permissions = collect(array_keys(config('permissions.permissions')))
             ->each(fn (string $name) => Permission::findOrCreate($name, 'web'));
 
         // `admin` never holds the commercial permissions: only `plataforma` does (as in the seeder).

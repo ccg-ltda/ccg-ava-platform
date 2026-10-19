@@ -4,15 +4,8 @@ import { ChevronDown, LogOut, Menu as MenuIcon, User } from 'lucide-react';
 import { isOffered, topTabs } from '@/config/navigation';
 import useAccess from '@/Hooks/useAccess';
 import { roleTone } from '@/config/roles';
+import Avatar from './Avatar';
 import Badge from './Badge';
-
-const initials = (name = '') =>
-    name
-        .split(' ')
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((part) => part[0].toUpperCase())
-        .join('');
 
 /** Navy top bar: brand, the single "General" tab, user menu and logout. Decoration stays behind the controls. */
 export default function Topbar({ user, role, onMenu }) {
@@ -48,9 +41,7 @@ export default function Topbar({ user, role, onMenu }) {
 
             <Menu as="div" className="relative">
                 <MenuButton className="flex items-center gap-2 rounded-full py-1 pr-2 pl-1 transition-colors duration-150 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-white">
-                    <span className="grid size-8 place-items-center rounded-full bg-white/15 text-xs font-bold ring-1 ring-white/25">
-                        {initials(user?.name)}
-                    </span>
+                    <Avatar name={user?.name} photoUrl={user?.photoUrl} className="size-8 bg-white/15 text-xs ring-1 ring-white/25" />
                     <span className="hidden text-left leading-tight lg:block">
                         <span className="block max-w-40 truncate text-sm font-semibold">{user?.name}</span>
                         <span className="block text-[10px] font-semibold uppercase tracking-wider text-white/70">{role}</span>

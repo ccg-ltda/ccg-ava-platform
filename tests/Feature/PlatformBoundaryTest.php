@@ -354,7 +354,7 @@ class PlatformBoundaryTest extends TestCase
 
     public function test_exporting_the_audit_needs_its_own_permission(): void
     {
-        Role::findOrCreate('auditor', 'web')->syncPermissions(['manage-settings', 'view-dashboard']);
+        Role::findOrCreate('auditor', 'web')->syncPermissions(['view-audit', 'view-dashboard']);
         $this->actIn($this->client, 'auditor');
 
         $this->get('/audit')->assertOk();
@@ -403,22 +403,54 @@ class PlatformBoundaryTest extends TestCase
     public function test_splitting_a_broad_permission_keeps_what_existing_roles_could_do_and_never_re_grants(): void
     {
         $this->app->detectEnvironment(fn () => 'production');
-        // A database from before the split: a custom role holds the broad permissions and the fine ones do not exist yet.
-        Permission::whereIn('name', ['create-users', 'edit-users', 'assign-roles', 'deactivate-users', 'export-audit'])->delete();
-        Role::findOrCreate('legado', 'web')->syncPermissions(['manage-users', 'manage-settings']);
+        // A database from before the split: the broad permissions exist and the fine ones do not.
+        $fine = collect(config('permissions.legacy'))->flatMap(fn ($split) => $split['grants'])->unique()->all();
+        Permission::whereIn('name', $fine)->delete();
+        foreach (collect(config('permissions.legacy'))->filter(fn ($split) => $split['retire'])->keys() as $broad) {
+            Permission::findOrCreate($broad, 'web');
+        }
+        Role::findOrCreate('legado', 'web')->syncPermissions(['manage-users', 'manage-settings', 'manage-customers', 'view-customers', 'manage-services', 'view-bookings']);
+        Role::findOrCreate('lector-de-agenda', 'web')->syncPermissions(['view-bookings']);
 
         app(RolesAndPermissionsSeeder::class)->run();
 
         $legacy = Role::findByName('legado', 'web')->fresh()->permissions->pluck('name');
-        $this->assertTrue($legacy->contains('create-users') && $legacy->contains('assign-roles') && $legacy->contains('export-audit'));
+        // Every ability the broad permissions gave is still there, in its fine form...
+        foreach (['create-users', 'assign-roles', 'export-audit', 'view-settings', 'edit-settings', 'view-integrations', 'manage-integrations', 'view-audit',
+            'create-customers', 'edit-customers', 'anonymize-customers', 'view-customer-details', 'create-services', 'manage-availability', 'create-locations', 'manage-booking-settings',
+            'view-services', 'view-professionals', 'view-locations'] as $permission) {
+            $this->assertTrue($legacy->contains($permission), "legado keeps [{$permission}]");
+        }
+        // ...but a power that did not exist before (removing a connection) is not handed out by the migration, and nothing else leaks.
+        $this->assertFalse($legacy->contains('delete-integrations'));
+        $this->assertFalse($legacy->contains('create-orders'));
+        $this->assertSame(['view-bookings', 'view-locations', 'view-professionals', 'view-services'], Role::findByName('lector-de-agenda', 'web')->fresh()->permissions->pluck('name')->sort()->values()->all());
         $this->assertFalse(Role::findByName('cliente', 'web')->permissions->pluck('name')->contains('create-users'));
 
+        // The broad permissions that no route uses any more are gone, and the database is exactly the catalog.
+        foreach (['manage-settings', 'manage-customers', 'manage-services', 'manage-chatbots', 'manage-bookings', 'manage-campaigns', 'manage-catalog', 'manage-orders'] as $retired) {
+            $this->assertFalse(Permission::where('name', $retired)->exists(), "[{$retired}] is retired");
+        }
+        $this->assertEqualsCanonicalizing(array_keys(config('permissions.permissions')), Permission::pluck('name')->all());
+
         // A superuser takes one away: running the seeder again does not give it back.
-        Role::findByName('legado', 'web')->revokePermissionTo('deactivate-users');
+        Role::findByName('legado', 'web')->revokePermissionTo(['deactivate-users', 'edit-customers']);
         app(RolesAndPermissionsSeeder::class)->run();
-        $this->assertFalse(Role::findByName('legado', 'web')->fresh()->permissions->pluck('name')->contains('deactivate-users'));
+        $after = Role::findByName('legado', 'web')->fresh()->permissions->pluck('name');
+        $this->assertFalse($after->contains('deactivate-users') || $after->contains('edit-customers'));
     }
 
+    public function test_the_seeder_on_a_fresh_database_creates_exactly_the_catalog_and_gives_nobody_a_broad_permission(): void
+    {
+        $this->app->detectEnvironment(fn () => 'production');
+        Permission::query()->delete();
+        Role::query()->delete();
+
+        app(RolesAndPermissionsSeeder::class)->run();
+
+        $this->assertEqualsCanonicalizing(array_keys(config('permissions.permissions')), Permission::pluck('name')->all());
+        $this->assertFalse(Permission::where('name', 'manage-settings')->exists());
+    }
     // --- the consolidated schema -------------------------------------------------------------------------------------
 
     public function test_the_consolidated_create_migrations_contain_what_the_removed_add_migrations_added(): void

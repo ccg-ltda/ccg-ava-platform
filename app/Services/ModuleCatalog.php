@@ -309,6 +309,9 @@ class ModuleCatalog
                     'description' => $module->description,
                     'categoryId' => $module->module_category_id,
                     'group' => $this->groupMeta($this->access->groupOf($module->key, $category->key)),
+                    // Where the module sits in the application menu (General, Operación, Administración): how the catalog and the plan builder organize it.
+                    'section' => $this->sectionMeta($module->key),
+                    'hint' => config("modules.plan_hints.{$module->key}"),
                     'isActive' => $module->is_active,
                     'implemented' => $module->isImplemented(),
                     // Other solutions that reuse this very module (config `also_for`): a label only, it enables nothing.
@@ -321,6 +324,15 @@ class ModuleCatalog
                         ->map(fn (string $key) => ['key' => $key, 'name' => $names[$key] ?? $key])->values()->all(),
                 ])->all(),
             ])->all();
+    }
+
+    /** @return array{key: string, name: string, description: ?string, sort: int} the menu section of a module (config `menu`; a module without a page takes `default_menu_section`) */
+    public function sectionMeta(string $moduleKey): array
+    {
+        $key = config("modules.menu.{$moduleKey}") ?? config('modules.default_menu_section');
+        $key = config("modules.menu_sections.{$key}") ? $key : config('modules.default_menu_section');
+
+        return ['key' => $key, 'name' => config("modules.menu_sections.{$key}.name"), 'description' => config("modules.menu_sections.{$key}.description"), 'sort' => (int) config("modules.menu_sections.{$key}.sort")];
     }
 
     /** @return array{key: string, name: string, sort: int} a conceptual group of config/modules.php, for the catalog screens */

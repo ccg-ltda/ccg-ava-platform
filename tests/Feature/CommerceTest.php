@@ -43,8 +43,8 @@ class CommerceTest extends TestCase
         $this->shop = $this->bookingWorkspace('TIENDA', self::MODULES);
         $this->other = $this->bookingWorkspace('OTRA', self::MODULES);
         $this->shop->settingsOrDefault()->update(['currency' => 'COP']);
-        Role::findOrCreate('operador', 'web')->syncPermissions(['view-orders', 'process-orders']);
-        Role::findOrCreate('lector', 'web')->syncPermissions(['view-orders', 'view-catalog']);
+        Role::findOrCreate('operador', 'web')->syncPermissions(['view-orders', 'view-order-details', 'process-orders']);
+        Role::findOrCreate('lector', 'web')->syncPermissions(['view-orders', 'view-order-details', 'view-catalog']);
     }
 
     private function product(Workspace $workspace, string $name = 'Hamburguesa', string $price = '18500.00', array $extra = []): Product

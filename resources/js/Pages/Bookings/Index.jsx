@@ -72,7 +72,8 @@ function CustomersPanel({ customers, filters, perPageOptions }) {
 /** Agenda y reservas: the calendar of appointments, who booked and the booking rules of the Workspace. */
 export default function Index({ capabilities, filters, appointments, options, customers, settings, perPageOptions, today }) {
     const { permissions } = useAccess();
-    const canOperate = permissions.includes('manage-bookings');
+    // Creating, editing (confirm, reschedule, mark) and cancelling an appointment are independent; the rules and the public page are a fourth.
+    const can = { create: permissions.includes('create-bookings'), edit: permissions.includes('edit-bookings'), cancel: permissions.includes('cancel-bookings') };
     const sections = [
         { id: 'agenda', label: 'Agenda', icon: CalendarDays, count: appointments.length },
         { id: 'clientes', label: 'Clientes', icon: Users, count: customers.meta.total },
@@ -87,9 +88,9 @@ export default function Index({ capabilities, filters, appointments, options, cu
             <PageHeader title="Agenda y reservas" description="Citas, quién reserva y las reglas de reserva de tu negocio." />
 
             <Tabs tabs={sections} selectedIndex={tab} onChange={selectTab}>
-                <AgendaPanel appointments={appointments} filters={filters} options={options} capabilities={capabilities} today={today} canOperate={canOperate} />
+                <AgendaPanel appointments={appointments} filters={filters} options={options} capabilities={capabilities} today={today} can={can} />
                 <CustomersPanel customers={customers} filters={filters} perPageOptions={perPageOptions} />
-                <SettingsPanel settings={settings} capabilities={capabilities} canManage={permissions.includes('manage-services')} />
+                <SettingsPanel settings={settings} capabilities={capabilities} canManage={permissions.includes('manage-booking-settings')} />
             </Tabs>
         </>
     );

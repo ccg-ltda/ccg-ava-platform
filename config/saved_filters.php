@@ -8,7 +8,7 @@
  */
 return [
     'scopes' => [
-        'audit' => ['label' => 'Auditoría', 'permission' => 'manage-settings', 'module' => 'audit'],
+        'audit' => ['label' => 'Auditoría', 'permission' => 'view-audit', 'module' => 'audit'],
         'conversations' => ['label' => 'Conversaciones', 'permission' => 'view-conversations', 'module' => 'conversations'],
     ],
 

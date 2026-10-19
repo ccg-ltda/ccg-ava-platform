@@ -311,6 +311,27 @@ class IntegrationService
         return $integration;
     }
 
+    /**
+     * Retires a connection made by hand, for good. Only a GENERIC connection (the types of `keys()`: not a channel, not n8n, not an external agenda,
+     * which other pieces of the Workspace depend on and which are disconnected, not removed) and only once it is inactive, so nothing live is
+     * dropped by a click. The row holds the configuration and the encrypted credentials, which go with it; the audit log keeps the record
+     * (who created it, who retired it) and is never touched. Nothing else references a generic connection.
+     *
+     * @throws ValidationException
+     */
+    public function remove(Integration $integration): void
+    {
+        if (! in_array($integration->type, $this->types->keys(), true)) {
+            throw ValidationException::withMessages(['status' => 'Esta conexión la usa el propio Workspace (un canal, n8n o una agenda): se desactiva o se desconecta, no se retira.']);
+        }
+
+        if ($integration->is_active) {
+            throw ValidationException::withMessages(['status' => 'Desactiva la conexión antes de retirarla.']);
+        }
+
+        $integration->delete();
+    }
+
     public function setActive(Integration $integration, bool $active): void
     {
         $integration->update(['is_active' => $active]);

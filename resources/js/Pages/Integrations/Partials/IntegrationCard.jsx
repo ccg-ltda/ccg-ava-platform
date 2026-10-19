@@ -1,4 +1,4 @@
-import { CheckCircle2, CircleDashed, Pencil, Plug, PlugZap, Power, XCircle } from 'lucide-react';
+import { CheckCircle2, CircleDashed, Pencil, Plug, PlugZap, Power, Trash2, XCircle } from 'lucide-react';
 import Badge from '@/Components/Badge';
 import Card from '@/Components/Card';
 import IconButton from '@/Components/IconButton';
@@ -30,7 +30,7 @@ function ConnectionState({ lastTest }) {
 }
 
 /** One integration as an independent entity: identity, state, connection health and its three actions. */
-export default function IntegrationCard({ integration, delay, testing, readOnly = false, onEdit, onTest, onToggle }) {
+export default function IntegrationCard({ integration, delay, testing, readOnly = false, can = { edit: true, test: true, toggle: true, remove: false }, onEdit, onTest, onToggle, onRemove }) {
     const { name, provider, description, typeLabel, isActive, summary, lastTest, updatedAt } = integration;
 
     return (
@@ -76,9 +76,10 @@ export default function IntegrationCard({ integration, delay, testing, readOnly 
                 <p className="min-w-0 truncate text-xs text-ink-muted">Actualizada {updatedAt}</p>
                 {!readOnly && (
                     <div className="flex shrink-0 items-center gap-1">
-                        <IconButton icon={Pencil} label="Editar" context={name} onClick={onEdit} />
-                        <IconButton icon={PlugZap} label={testing ? 'Probando...' : 'Probar conexión'} context={name} onClick={onTest} disabled={testing || !isActive} />
-                        <IconButton icon={Power} label={isActive ? 'Desactivar' : 'Activar'} context={name} tone={isActive ? 'danger' : 'primary'} onClick={onToggle} />
+                        {can.edit && <IconButton icon={Pencil} label="Editar" context={name} onClick={onEdit} />}
+                        {can.test && <IconButton icon={PlugZap} label={testing ? 'Probando...' : 'Probar conexión'} context={name} onClick={onTest} disabled={testing || !isActive} />}
+                        {can.toggle && <IconButton icon={Power} label={isActive ? 'Desactivar' : 'Activar'} context={name} tone={isActive ? 'danger' : 'primary'} onClick={onToggle} />}
+                        {can.remove && !isActive && <IconButton icon={Trash2} label="Retirar" context={name} tone="danger" onClick={onRemove} />}
                     </div>
                 )}
             </div>

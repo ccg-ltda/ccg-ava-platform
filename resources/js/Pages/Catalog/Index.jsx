@@ -113,7 +113,10 @@ function ProductModal({ product, locations, currency, onClose }) {
 export default function Index({ schemaPending, products, filters, perPageOptions, categories, locations, currency, total }) {
     const confirm = useConfirm();
     const { permissions } = useAccess();
-    const canManage = permissions.includes('manage-catalog') && !schemaPending;
+    const canCreate = permissions.includes('create-products') && !schemaPending;
+    const canEdit = permissions.includes('edit-products') && !schemaPending;
+    const canToggle = permissions.includes('activate-products') && !schemaPending;
+    const canAct = canEdit || canToggle;
     const [editing, setEditing] = useState(null);
     const [search, setSearch] = useState(filters.search ?? '');
     const firstRender = useRef(true);
@@ -157,7 +160,7 @@ export default function Index({ schemaPending, products, filters, perPageOptions
             <Head title="Catálogo" />
 
             <PageHeader title="Catálogo de productos" description="Lo que vende este Workspace: nombre, SKU, precio y las sedes que lo ofrecen. Nunca se borra: se desactiva.">
-                {canManage && (
+                {canCreate && (
                     <PrimaryButton type="button" onClick={() => setEditing({})} className="gap-2">
                         <Plus className="size-4" aria-hidden="true" />
                         Nuevo producto
@@ -185,7 +188,7 @@ export default function Index({ schemaPending, products, filters, perPageOptions
                                 {filtered ? (
                                     <PrimaryButton type="button" onClick={() => { setSearch(''); router.get(route('catalog.index')); }}>Quitar filtros</PrimaryButton>
                                 ) : (
-                                    canManage && <PrimaryButton type="button" onClick={() => setEditing({})}>Nuevo producto</PrimaryButton>
+                                    canCreate && <PrimaryButton type="button" onClick={() => setEditing({})}>Nuevo producto</PrimaryButton>
                                 )}
                             </EmptyState>
                         </div>
@@ -199,7 +202,7 @@ export default function Index({ schemaPending, products, filters, perPageOptions
                                     <Th>Precio</Th>
                                     <Th>Sedes</Th>
                                     <Th>Estado</Th>
-                                    {canManage && <Th className="text-center">Acciones</Th>}
+                                    {canAct && <Th className="text-center">Acciones</Th>}
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-line">
@@ -216,11 +219,11 @@ export default function Index({ schemaPending, products, filters, perPageOptions
                                         <Td className="whitespace-nowrap">
                                             <Badge tone={product.isActive ? 'green' : 'neutral'}>{product.isActive ? 'Activo' : 'Inactivo'}</Badge>
                                         </Td>
-                                        {canManage && (
+                                        {canAct && (
                                             <Td>
                                                 <div className="flex items-center justify-center gap-1">
-                                                    <IconButton icon={Pencil} label="Editar" context={product.name} onClick={() => setEditing(product)} />
-                                                    <IconButton icon={Power} label={product.isActive ? 'Desactivar' : 'Activar'} context={product.name} tone={product.isActive ? 'danger' : 'primary'} onClick={() => toggle(product)} />
+                                                    {canEdit && <IconButton icon={Pencil} label="Editar" context={product.name} onClick={() => setEditing(product)} />}
+                                                    {canToggle && <IconButton icon={Power} label={product.isActive ? 'Desactivar' : 'Activar'} context={product.name} tone={product.isActive ? 'danger' : 'primary'} onClick={() => toggle(product)} />}
                                                 </div>
                                             </Td>
                                         )}

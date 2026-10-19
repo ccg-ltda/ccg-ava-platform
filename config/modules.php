@@ -48,6 +48,54 @@ return [
 
     'default_group' => 'solutions',
 
+    /*
+     * The STRUCTURE of the application menu, the one the sidebar draws (resources/js/config/navigation.js: General, Operación, Administración).
+     * The catalog and the plan builder organize modules by it, so what a plan includes reads like the menu its Workspace will see. It is
+     * organization only: it grants nothing and says nothing about the commercial solution a module is offered in (that is the category and `also_for`).
+     * `menu` assigns every implemented module to one section (a test keeps it equal to navigation.js); a module registered from the UI, which has no
+     * page, falls in `default_menu_section`.
+     */
+    'menu_sections' => [
+        'general' => ['name' => 'General', 'description' => 'Lo de todos los días: el resumen, los asistentes y las conversaciones.', 'sort' => 10],
+        'operation' => ['name' => 'Operación', 'description' => 'Los módulos funcionales del negocio: reportes, catálogo, pedidos, servicios, agenda, clientes y campañas.', 'sort' => 20],
+        'administration' => ['name' => 'Administración', 'description' => 'La administración interna del Workspace: usuarios, auditoría, configuraciones e integraciones.', 'sort' => 30],
+    ],
+
+    'default_menu_section' => 'operation',
+
+    'menu' => [
+        'dashboard' => 'general',
+        'assistants' => 'general',
+        'conversations' => 'general',
+        'reports' => 'operation',
+        'product_catalog' => 'operation',
+        'orders' => 'operation',
+        'service_catalog' => 'operation',
+        'locations' => 'operation',
+        'professionals' => 'operation',
+        'bookings' => 'operation',
+        'customers' => 'operation',
+        'campaigns' => 'operation',
+        'users_roles' => 'administration',
+        'audit' => 'administration',
+        'settings' => 'administration',
+        'integrations' => 'administration',
+        'calendar_providers' => 'administration', // no page of its own: it is configured in Integraciones
+    ],
+
+    /*
+     * Short notes for whoever builds a plan, true to how the code behaves (nothing commercial is implied): what a Workspace loses if the module is
+     * left out. A plan may still leave it out; the note only helps to decide.
+     */
+    'plan_hints' => [
+        'dashboard' => 'Sin él, el Workspace no tiene resumen de inicio ni accesos rápidos.',
+        'users_roles' => 'Sin él, nadie del Workspace podrá administrar cuentas, roles ni miembros.',
+        'settings' => 'Sin él, el Workspace no podrá cambiar su identidad, formatos, apariencia ni impuestos.',
+        'integrations' => 'Sin él, el Workspace no podrá conectar WhatsApp, n8n ni ningún servicio externo.',
+        'assistants' => 'Necesita Conversaciones para recibir y responder mensajes.',
+        'conversations' => 'Es la bandeja donde se atienden los mensajes que llegan por los canales.',
+    ],
+
     'categories' => [
         'shared' => ['name' => 'Módulos compartidos', 'description' => 'Funciones comunes a todas las soluciones de Ava Platform.', 'sort' => 10],
         'health' => ['name' => 'Salud', 'description' => 'Área para módulos de salud.', 'group' => 'solutions', 'sort' => 20],
@@ -101,17 +149,17 @@ return [
         'assistants' => ['name' => 'Asistentes / AVA Chat', 'description' => 'Asistentes, canales, apariencia y acceso de la automatización.', 'group' => 'shared', 'category' => 'shared', 'route' => 'chatbots.index', 'permission' => 'view-chatbots'],
         'conversations' => ['name' => 'Conversaciones', 'description' => 'Bandeja de conversaciones, atención humana y entorno DEMO.', 'group' => 'shared', 'category' => 'shared', 'route' => 'conversations.index', 'permission' => 'view-conversations'],
         'reports' => ['name' => 'Reportes', 'description' => 'Analítica detallada del Workspace.', 'group' => 'shared', 'category' => 'shared', 'route' => 'reports.index', 'permission' => 'view-dashboard'],
-        'audit' => ['name' => 'Auditoría', 'description' => 'Historial de cambios administrativos y eventos automáticos.', 'group' => 'platform', 'category' => 'shared', 'route' => 'audit.index', 'permission' => 'manage-settings'],
-        'settings' => ['name' => 'Configuraciones', 'description' => 'Identidad, formatos regionales, apariencia e impuestos del Workspace.', 'group' => 'platform', 'category' => 'shared', 'route' => 'settings.index', 'permission' => 'manage-settings'],
-        'integrations' => ['name' => 'Integraciones', 'description' => 'Conexiones del Workspace con servicios externos.', 'group' => 'platform', 'category' => 'shared', 'route' => 'integrations.index', 'permission' => 'manage-settings'],
+        'audit' => ['name' => 'Auditoría', 'description' => 'Historial de cambios administrativos y eventos automáticos.', 'group' => 'platform', 'category' => 'shared', 'route' => 'audit.index', 'permission' => 'view-audit'],
+        'settings' => ['name' => 'Configuraciones', 'description' => 'Identidad, formatos regionales, apariencia e impuestos del Workspace.', 'group' => 'platform', 'category' => 'shared', 'route' => 'settings.index', 'permission' => 'view-settings'],
+        'integrations' => ['name' => 'Integraciones', 'description' => 'Conexiones del Workspace con servicios externos.', 'group' => 'platform', 'category' => 'shared', 'route' => 'integrations.index', 'permission' => 'view-integrations'],
         'users_roles' => ['name' => 'Usuarios y roles', 'description' => 'Cuentas, roles, permisos y membresías.', 'group' => 'platform', 'category' => 'shared', 'route' => 'users.index', 'permission' => 'manage-users'],
-        'service_catalog' => ['name' => 'Catálogo de servicios', 'description' => 'Servicios con duración, precio opcional y tiempo entre citas. Reutilizable por cualquier negocio con citas.', 'group' => 'solutions', 'category' => 'services_bookings', 'also_for' => ['health'], 'route' => 'services.index', 'permission' => 'view-bookings'],
-        'locations' => ['name' => 'Sedes', 'description' => 'Las sedes donde se atiende: dirección, contacto, servicios que ofrece cada una y horarios de los profesionales por sede. Opcional: sin sedes, la agenda funciona igual.', 'group' => 'solutions', 'category' => 'services_bookings', 'also_for' => ['health'], 'route' => 'locations.index', 'permission' => 'view-bookings'],
+        'service_catalog' => ['name' => 'Catálogo de servicios', 'description' => 'Servicios con duración, precio opcional y tiempo entre citas. Reutilizable por cualquier negocio con citas.', 'group' => 'solutions', 'category' => 'services_bookings', 'also_for' => ['health'], 'route' => 'services.index', 'permission' => 'view-services'],
+        'locations' => ['name' => 'Sedes', 'description' => 'Las sedes donde se atiende: dirección, contacto, servicios que ofrece cada una y horarios de los profesionales por sede. Opcional: sin sedes, la agenda funciona igual.', 'group' => 'solutions', 'category' => 'services_bookings', 'also_for' => ['health'], 'route' => 'locations.index', 'permission' => 'view-locations'],
         'product_catalog' => ['name' => 'Catálogo de productos', 'description' => 'Productos con SKU, precio, categoría y las sedes que los ofrecen. Base de E-commerce y Delivery; no son los servicios reservables.', 'group' => 'solutions', 'category' => 'ecommerce', 'also_for' => ['delivery'], 'route' => 'catalog.index', 'permission' => 'view-catalog'],
         'orders' => ['name' => 'Pedidos', 'description' => 'Pedidos con líneas, total calculado por el servidor, estados y trazabilidad. Registra el pedido; no gestiona pagos ni avisa al cliente todavía.', 'group' => 'solutions', 'category' => 'ecommerce', 'also_for' => ['delivery'], 'route' => 'orders.index', 'permission' => 'view-orders'],
-        'professionals' => ['name' => 'Profesionales y disponibilidad', 'description' => 'Profesionales, recursos opcionales, horarios semanales, descansos y días no laborables.', 'group' => 'solutions', 'category' => 'services_bookings', 'also_for' => ['health'], 'route' => 'professionals.index', 'permission' => 'view-bookings'],
+        'professionals' => ['name' => 'Profesionales y disponibilidad', 'description' => 'Profesionales, recursos opcionales, horarios semanales, descansos y días no laborables.', 'group' => 'solutions', 'category' => 'services_bookings', 'also_for' => ['health'], 'route' => 'professionals.index', 'permission' => 'view-professionals'],
         'bookings' => ['name' => 'Agenda y reservas', 'description' => 'Agenda, citas (crear, confirmar, reprogramar, cancelar), clientes, reglas de reserva, reserva web y herramientas de Ava Chat.', 'group' => 'solutions', 'category' => 'services_bookings', 'also_for' => ['health'], 'route' => 'bookings.index', 'permission' => 'view-bookings'],
-        'calendar_providers' => ['name' => 'Proveedores de agenda', 'description' => 'Conecta una agenda externa (Booker) como fuente de verdad en lugar de la agenda de Ava.', 'group' => 'solutions', 'category' => 'services_bookings', 'route' => 'integrations.index', 'permission' => 'manage-settings'],
+        'calendar_providers' => ['name' => 'Proveedores de agenda', 'description' => 'Conecta una agenda externa (Booker) como fuente de verdad en lugar de la agenda de Ava.', 'group' => 'solutions', 'category' => 'services_bookings', 'route' => 'integrations.index', 'permission' => 'manage-integrations'],
         'customers' => ['name' => 'Clientes', 'description' => 'Ficha de cliente por Workspace: contacto, canales, origen, etiquetas, consentimiento y relación con conversaciones y reservas.', 'group' => 'shared', 'category' => 'communication', 'route' => 'customers.index', 'permission' => 'view-customers'],
         'campaigns' => ['name' => 'Campañas', 'description' => 'Plantillas de mensaje y campañas con selección de destinatarios, exclusiones por consentimiento y trazabilidad (sin envío real todavía).', 'group' => 'shared', 'category' => 'communication', 'route' => 'campaigns.index', 'permission' => 'view-campaigns'],
     ],

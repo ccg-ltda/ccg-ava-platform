@@ -15,7 +15,7 @@ import NewChatbotModal from './Partials/NewChatbotModal';
  */
 export default function Index({ chatbots, scope }) {
     const [creating, setCreating] = useState(false);
-    const create = scope.canManage && (
+    const create = scope.can?.create && (
         <PrimaryButton type="button" onClick={() => setCreating(true)} className="gap-2">
             <Plus className="size-4" aria-hidden="true" />
             Nuevo chatbot
@@ -34,7 +34,7 @@ export default function Index({ chatbots, scope }) {
             <ReadOnlyWorkspaceNotice scope={scope} what="los chatbots" />
 
             {chatbots.length === 0 ? (
-                <EmptyState icon={Bot} title="Todavía no hay chatbots" description={scope.canManage ? 'Crea el primero para configurar su identidad y sus canales.' : 'Este Workspace aún no tiene chatbots.'}>
+                <EmptyState icon={Bot} title="Todavía no hay chatbots" description={scope.can?.create ? 'Crea el primero para configurar su identidad y sus canales.' : 'Este Workspace aún no tiene chatbots.'}>
                     {create}
                 </EmptyState>
             ) : (

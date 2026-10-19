@@ -11,7 +11,7 @@ use Inertia\Response;
 
 /**
  * Configuraciones: preferences of the ACTIVE Workspace (taken from the request context, never from the client).
- * Both routes require the `manage-settings` permission of the user's role in that Workspace.
+ * Reading needs `view-settings` and saving `edit-settings` (on top of it) in the user's role in that Workspace.
  */
 class SettingsController extends Controller
 {
@@ -22,6 +22,8 @@ class SettingsController extends Controller
         return Inertia::render('Settings/Index', [
             'settings' => $this->settings->form($request->attributes->get('workspace')),
             'catalog' => $this->settings->catalog(),
+            // Reading the settings (view-settings) does not let anyone change them: the form is offered only with edit-settings.
+            'canEdit' => in_array('edit-settings', $request->attributes->get('workspace_permissions', []), true),
         ]);
     }
 

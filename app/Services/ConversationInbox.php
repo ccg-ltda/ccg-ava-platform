@@ -121,7 +121,7 @@ class ConversationInbox
             'handoffAt' => $conversation->handoff_requested_at ? $settings->formatDate($conversation->handoff_requested_at).' '.$settings->formatTime($conversation->handoff_requested_at) : null,
             'delivery' => $delivery,
             // The demo bench: only on a demo conversation, in a demo environment, for who manages conversations.
-            'simulate' => ! $foreign && $conversation->isDemo() && $this->demo->enabled() && in_array('manage-conversations', $permissions, true),
+            'simulate' => ! $foreign && $conversation->isDemo() && $this->demo->enabled() && in_array('use-conversation-demo', $permissions, true),
             'can' => $foreign ? $this->nothing() : $this->abilities($conversation, $user, $permissions, $delivery['ok']),
             // What was done from this conversation (appointments, orders): never on another Workspace seen read only, and only what the user may open.
             'operations' => $foreign ? [] : $this->operations->for($conversation, $permissions, $settings),

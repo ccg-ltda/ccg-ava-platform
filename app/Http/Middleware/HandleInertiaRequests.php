@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Services\ModuleAccess;
+use App\Services\ProfilePhoto;
 use App\Services\WorkspaceSettingsService;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -39,6 +40,8 @@ class HandleInertiaRequests extends Middleware
                 'user' => fn () => $request->user() ? array_merge($request->user()->toArray(), [
                     'permissions' => $request->attributes->get('workspace_permissions', []),
                     'roles' => ($role = $request->attributes->get('workspace_role')) ? [$role] : [],
+                    // The own photo (a path of this application, versioned), or null: the top bar falls back to the initials.
+                    'photoUrl' => app(ProfilePhoto::class)->url($request->user()),
                 ]) : null,
             ],
             // One-shot messages the UI shows as toasts.

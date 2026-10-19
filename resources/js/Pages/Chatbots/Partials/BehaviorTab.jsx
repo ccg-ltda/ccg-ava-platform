@@ -51,7 +51,7 @@ function Guide() {
  * only place the instructions live; n8n reads them from here), and below it the access token the automation uses.
  * The form belongs to the page; the server validates and stores it for the active Workspace.
  */
-export default function BehaviorTab({ form, chatbot, canManage, instructionsMax, avatarMaxKb, onSubmit, agentToken }) {
+export default function BehaviorTab({ form, chatbot, canManage, canTokens, instructionsMax, avatarMaxKb, onSubmit, agentToken }) {
     const confirm = useConfirm();
     const { data, setData, errors, processing, isDirty } = form;
 
@@ -146,7 +146,7 @@ export default function BehaviorTab({ form, chatbot, canManage, instructionsMax,
                         </p>
                     )}
 
-                    {canManage && (
+                    {canTokens && (
                         <div className="flex flex-wrap gap-2">
                             <PrimaryButton type="button" onClick={generate}>
                                 {agentToken.configured ? 'Generar nuevo token' : 'Generar token'}

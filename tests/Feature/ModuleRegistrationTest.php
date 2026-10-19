@@ -107,7 +107,7 @@ class ModuleRegistrationTest extends TestCase
         $this->assertSame($before, $roles(), 'running it again changes no role');
         $client = array_keys(array_filter(config('permissions.permissions'), fn (array $permission, string $name) => ! ($permission['platform'] ?? false) && $name !== 'access-private-data', ARRAY_FILTER_USE_BOTH));
         $this->assertEqualsCanonicalizing($client, Role::findByName('admin', 'web')->permissions->pluck('name')->all());
-        foreach (['view-catalog', 'manage-catalog', 'view-orders', 'manage-orders', 'process-orders'] as $permission) {
+        foreach (['view-catalog', 'create-products', 'edit-products', 'activate-products', 'view-orders', 'view-order-details', 'create-orders', 'edit-orders', 'cancel-orders', 'process-orders'] as $permission) {
             $this->assertFalse(Role::findByName('cliente', 'web')->hasPermissionTo($permission));
             $this->assertFalse(Role::findByName('supervisor', 'web')->hasPermissionTo($permission));
             $this->assertFalse(Role::findByName('agente', 'web')->hasPermissionTo($permission));

@@ -6,7 +6,7 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-/** A day or range of days (or hours of a day) that cannot be booked, for one professional or the whole business. Route middleware: `manage-services`. */
+/** A day or range of days (or hours of a day) that cannot be booked, for one professional or the whole business. Route middleware: `manage-availability`. */
 class SaveScheduleExceptionRequest extends FormRequest
 {
     public function authorize(): bool

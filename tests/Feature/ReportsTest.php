@@ -54,7 +54,7 @@ class ReportsTest extends TestCase
     public function test_the_page_needs_the_view_dashboard_permission(): void
     {
         $this->seedRoleCatalog();
-        Role::findOrCreate('sin-reportes', 'web')->syncPermissions(['manage-settings']);
+        Role::findOrCreate('sin-reportes', 'web')->syncPermissions(['view-settings']);
         $this->actAs('sin-reportes');
 
         $this->get('/reports')->assertForbidden();

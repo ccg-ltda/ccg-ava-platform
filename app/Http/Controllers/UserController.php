@@ -62,21 +62,33 @@ class UserController extends Controller
         ]);
     }
 
-    /** @return array{groups: array<string, string>, items: list<array<string, mixed>>} */
+    /** @return array{groups: array<string, array<string, mixed>>, items: list<array<string, mixed>>} */
     private function permissionCatalog(): array
     {
         $described = config('permissions.permissions');
+        $groups = config('permissions.groups');
 
         return [
-            'groups' => config('permissions.groups'),
+            // The resource, what it is for, the module of the plan it lives in (shown, not enforced here) and the permission that opens its page.
+            'groups' => collect($groups)->map(fn (array $group) => [
+                'label' => $group['label'],
+                'description' => $group['description'] ?? null,
+                'list' => $group['list'] ?? null,
+                'module' => $group['module'] ?? null,
+                'moduleName' => isset($group['module']) ? config("modules.implemented.{$group['module']}.name") : null,
+            ])->all(),
             // A permission the catalog does not describe is still listed (by its name) so nothing assignable is hidden.
-            'items' => Permission::where('guard_name', 'web')->orderBy('name')->pluck('name')
+            // In the order of the catalog (the permission that opens the page first, then the operations), the rest by name.
+            'items' => Permission::where('guard_name', 'web')->pluck('name')
+                ->sortBy(fn (string $name) => sprintf('%05d%s', ($position = array_search($name, array_keys($described), true)) === false ? 99999 : $position, $name))->values()
                 ->map(fn (string $name) => [
                     'name' => $name,
                     'label' => $described[$name]['label'] ?? $name,
                     'description' => $described[$name]['description'] ?? null,
                     'group' => $described[$name]['group'] ?? 'general',
                     'platform' => (bool) ($described[$name]['platform'] ?? false),
+                    // Every operation of a resource is done from its page: the permission that opens it is needed on top of the operation's own.
+                    'requires' => ($list = $groups[$described[$name]['group'] ?? 'general']['list'] ?? null) !== $name ? $list : null,
                 ])->values()->all(),
         ];
     }
@@ -162,7 +174,17 @@ class UserController extends Controller
     /** @return array<string, mixed> */
     private function permissionsPage(Request $request): array
     {
-        $page = ListPagination::paginate(Permission::with('roles:id,name')->orderBy('name'), $request, 'permissions');
+        // Filters of the permission list (resource and text), applied on the server over the catalog: the page count and the total follow them.
+        $group = (string) $request->query('permission_group', '');
+        $search = Str::lower(Str::ascii(trim((string) $request->query('permission_q', ''))));
+        $described = config('permissions.permissions');
+        $groups = config('permissions.groups');
+        $names = collect($described)
+            ->filter(fn (array $entry, string $name) => ($group === '' || $entry['group'] === $group)
+                && ($search === '' || str_contains(Str::lower(Str::ascii($name.' '.$entry['label'].' '.$entry['description'].' '.($groups[$entry['group']]['label'] ?? ''))), $search)))
+            ->keys()->all();
+
+        $page = ListPagination::paginate(Permission::with('roles:id,name')->whereIn('name', $names)->orderBy('name'), $request, 'permissions');
 
         return [
             'data' => $page->getCollection()->map(fn ($permission) => [
@@ -170,6 +192,8 @@ class UserController extends Controller
                 'roles' => $permission->roles->pluck('name')->all(),
             ])->values(),
             'meta' => ListPagination::meta($page),
+            'filters' => ['group' => $group, 'q' => (string) $request->query('permission_q', '')],
+            'total' => Permission::where('guard_name', 'web')->count(),
         ];
     }
 

@@ -108,7 +108,11 @@ function LocationModal({ location, services, onClose }) {
 export default function Index({ capabilities, locations, services, schemaPending }) {
     const confirm = useConfirm();
     const { permissions } = useAccess();
-    const canManage = permissions.includes('manage-services') && !capabilities.external && !schemaPending;
+    const usable = !capabilities.external && !schemaPending;
+    const canCreate = permissions.includes('create-locations') && usable;
+    const canEdit = permissions.includes('edit-locations') && usable;
+    const canToggle = permissions.includes('activate-locations') && usable;
+    const canAct = canEdit || canToggle;
     const [editing, setEditing] = useState(null);
     const { errors } = usePage().props;
 
@@ -129,7 +133,7 @@ export default function Index({ capabilities, locations, services, schemaPending
             <Head title="Sedes" />
 
             <PageHeader title="Sedes" description="Los lugares donde atiendes. Son opcionales: sin sedes, la agenda funciona igual. Con varias, cada reserva elige una.">
-                {canManage && (
+                {canCreate && (
                     <PrimaryButton type="button" onClick={() => setEditing({})} className="gap-2">
                         <Plus className="size-4" aria-hidden="true" />
                         Nueva sede
@@ -149,7 +153,7 @@ export default function Index({ capabilities, locations, services, schemaPending
                 {locations.length === 0 ? (
                     <div className="p-6">
                         <EmptyState icon={MapPin} title="Todavía no hay sedes" description="Crea la primera si atiendes en más de un lugar. Mientras no haya sedes, las reservas no piden ninguna.">
-                            {canManage && <PrimaryButton type="button" onClick={() => setEditing({})}>Nueva sede</PrimaryButton>}
+                            {canCreate && <PrimaryButton type="button" onClick={() => setEditing({})}>Nueva sede</PrimaryButton>}
                         </EmptyState>
                     </div>
                 ) : (
@@ -160,7 +164,7 @@ export default function Index({ capabilities, locations, services, schemaPending
                                 <Th>Contacto</Th>
                                 <Th>Servicios</Th>
                                 <Th>Estado</Th>
-                                {canManage && <Th className="text-center">Acciones</Th>}
+                                {canAct && <Th className="text-center">Acciones</Th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-line">
@@ -175,11 +179,11 @@ export default function Index({ capabilities, locations, services, schemaPending
                                     <Td className="whitespace-nowrap">
                                         <Badge tone={location.isActive ? 'green' : 'neutral'}>{location.isActive ? 'Activa' : 'Inactiva'}</Badge>
                                     </Td>
-                                    {canManage && (
+                                    {canAct && (
                                         <Td>
                                             <div className="flex items-center justify-center gap-1">
-                                                <IconButton icon={Pencil} label="Editar" context={location.name} onClick={() => setEditing(location)} />
-                                                <IconButton icon={Power} label={location.isActive ? 'Desactivar' : 'Activar'} context={location.name} tone={location.isActive ? 'danger' : 'primary'} onClick={() => toggle(location)} />
+                                                {canEdit && <IconButton icon={Pencil} label="Editar" context={location.name} onClick={() => setEditing(location)} />}
+                                                {canToggle && <IconButton icon={Power} label={location.isActive ? 'Desactivar' : 'Activar'} context={location.name} tone={location.isActive ? 'danger' : 'primary'} onClick={() => toggle(location)} />}
                                             </div>
                                         </Td>
                                     )}

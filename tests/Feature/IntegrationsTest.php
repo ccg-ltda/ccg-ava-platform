@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Integrations\SafeHttpTarget;
+use App\Models\AuditLog;
 use App\Models\Integration;
 use App\Models\Organization;
 use App\Models\User;
@@ -14,6 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Inertia\Testing\AssertableInertia;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 /** Integraciones: generic HTTP/REST connections owned by the active Workspace. */
@@ -293,13 +295,25 @@ class IntegrationsTest extends TestCase
         $this->assertTrue($integration->fresh()->is_active);
     }
 
-    public function test_integrations_have_no_delete_action(): void
+    public function test_an_active_connection_cannot_be_retired(): void
     {
         $this->actAs();
         $integration = $this->makeIntegration();
 
-        $this->delete("/integrations/{$integration->id}")->assertStatus(405);
+        $this->delete("/integrations/{$integration->id}")->assertSessionHas('error');
         $this->assertSame(1, Integration::count());
+    }
+
+    public function test_an_inactive_generic_connection_is_retired_with_its_credentials_and_the_audit_keeps_the_record(): void
+    {
+        $this->actAs();
+        $integration = $this->makeIntegration();
+        $this->post("/integrations/{$integration->id}/deactivate");
+
+        $this->delete("/integrations/{$integration->id}")->assertSessionHas('success');
+
+        $this->assertSame(0, Integration::count());
+        $this->assertDatabaseHas('audit_logs', ['resource_type' => 'integration', 'resource_id' => $integration->id, 'action' => 'deleted']);
     }
 
     // --- isolation and permissions --------------------------------------------------------------------------
@@ -543,5 +557,132 @@ class IntegrationsTest extends TestCase
         $this->post("/integrations/{$integration->id}/test")->assertSessionHas('error');
 
         Http::assertSentCount(1);
+    }
+
+    // --- granular permissions: each change of an integration has its own ------------------------------------------------
+
+    private function roleWith(array $permissions, string $name = 'integrador'): string
+    {
+        $this->seedRoleCatalog();
+        Role::findOrCreate($name, 'web')->syncPermissions(['view-dashboard', ...$permissions]);
+
+        return $name;
+    }
+
+    public function test_reading_the_page_does_not_allow_any_change(): void
+    {
+        $integration = $this->makeIntegrationAs('admin');
+        $this->actAs($this->roleWith(['view-integrations']));
+        Http::fake();
+
+        $this->get('/integrations')->assertOk();
+        $this->post('/integrations', $this->payload(['name' => 'Otra']))->assertForbidden();
+        $this->put("/integrations/{$integration->id}", $this->payload())->assertForbidden();
+        $this->put('/integrations/n8n', ['base_url' => 'https://n8n.example.com', 'api_key' => 'k'])->assertForbidden();
+        $this->post("/integrations/{$integration->id}/deactivate")->assertForbidden();
+        $this->post("/integrations/{$integration->id}/test")->assertForbidden();
+        $this->delete("/integrations/{$integration->id}")->assertForbidden();
+        $this->assertTrue($integration->fresh()->is_active);
+    }
+
+    public function test_each_change_needs_its_own_permission_and_only_that_one(): void
+    {
+        $integration = $this->makeIntegrationAs('admin');
+        Http::fake(['*' => Http::response('ok')]);
+
+        $this->actAs($this->roleWith(['view-integrations', 'manage-integrations'], 'edita'));
+        $this->put("/integrations/{$integration->id}", $this->payload(['name' => 'Renombrada']))->assertSessionHasNoErrors();
+        $this->post("/integrations/{$integration->id}/deactivate")->assertForbidden();
+        $this->post("/integrations/{$integration->id}/test")->assertForbidden();
+        $this->delete("/integrations/{$integration->id}")->assertForbidden();
+
+        $this->actAs($this->roleWith(['view-integrations', 'activate-integrations'], 'enciende'));
+        $this->put("/integrations/{$integration->id}", $this->payload(['name' => 'No debe cambiar']))->assertForbidden();
+        $this->post("/integrations/{$integration->id}/deactivate")->assertSessionHas('success');
+        $this->post("/integrations/{$integration->id}/test")->assertForbidden();
+        $this->delete("/integrations/{$integration->id}")->assertForbidden();
+
+        $this->actAs($this->roleWith(['view-integrations', 'delete-integrations'], 'retira'));
+        $this->post("/integrations/{$integration->id}/activate")->assertForbidden();
+        $this->put("/integrations/{$integration->id}", $this->payload())->assertForbidden();
+        $this->delete("/integrations/{$integration->id}")->assertSessionHas('success');
+        $this->assertSame(0, Integration::count());
+    }
+
+    public function test_testing_a_connection_is_its_own_permission(): void
+    {
+        $integration = $this->makeIntegrationAs('admin');
+        Http::fake(['*' => Http::response('ok')]);
+
+        $this->actAs($this->roleWith(['view-integrations', 'test-integrations'], 'prueba'));
+
+        $this->assertNotSame(403, $this->post("/integrations/{$integration->id}/test")->getStatusCode());
+        $this->post("/integrations/{$integration->id}/deactivate")->assertForbidden();
+        $this->post('/integrations', $this->payload(['name' => 'Otra']))->assertForbidden();
+    }
+
+    public function test_an_operation_without_the_page_permission_opens_nothing(): void
+    {
+        $integration = $this->makeIntegrationAs('admin');
+        $this->actAs($this->roleWith(['manage-integrations', 'activate-integrations', 'test-integrations', 'delete-integrations'], 'sin-pagina'));
+
+        $this->get('/integrations')->assertForbidden();
+        $this->post("/integrations/{$integration->id}/deactivate")->assertForbidden();
+        $this->delete("/integrations/{$integration->id}")->assertForbidden();
+    }
+
+    public function test_only_an_inactive_generic_connection_of_this_workspace_can_be_retired(): void
+    {
+        $this->actAs('admin');
+        $integration = $this->makeIntegration();
+        $workspace = Workspace::orderBy('id')->first();
+        $channel = $workspace->integrations()->create(['name' => 'WhatsApp', 'type' => 'whatsapp', 'is_active' => false, 'config' => [], 'secrets' => []]);
+        $n8n = $workspace->integrations()->create(['name' => 'n8n', 'type' => 'n8n', 'is_active' => false, 'config' => ['base_url' => 'https://n8n.example.com'], 'secrets' => ['api_key' => 'k']]);
+
+        // Active: refused with the reason. Channel and n8n are never retired this way (they are disconnected or deactivated).
+        $this->delete("/integrations/{$integration->id}")->assertSessionHas('error');
+        $this->post("/integrations/{$integration->id}/deactivate");
+        $this->delete("/integrations/{$channel->id}")->assertSessionHas('error');
+        $this->delete("/integrations/{$n8n->id}")->assertSessionHas('error');
+        $this->assertSame(3, Integration::count());
+
+        // Another Workspace's connection does not exist from here.
+        $other = $this->otherWorkspace()->integrations()->create(['name' => 'Ajena', 'type' => 'http', 'is_active' => false, 'config' => [], 'secrets' => []]);
+        $this->delete("/integrations/{$other->id}")->assertNotFound();
+        $this->assertTrue(Integration::whereKey($other->id)->exists());
+
+        $this->delete("/integrations/{$integration->id}")->assertSessionHas('success');
+        $this->assertFalse(Integration::whereKey($integration->id)->exists());
+    }
+
+    public function test_retiring_a_connection_is_audited_without_its_secret(): void
+    {
+        $this->actAs('admin');
+        $integration = $this->makeIntegration();
+        $this->post("/integrations/{$integration->id}/deactivate");
+
+        $this->delete("/integrations/{$integration->id}");
+
+        $log = AuditLog::where('resource_type', 'integration')->where('action', 'deleted')->firstOrFail();
+        $this->assertSame($integration->id, $log->resource_id);
+        $this->assertStringNotContainsString(self::SECRET, json_encode($log->toArray()));
+    }
+
+    public function test_the_page_never_sends_a_secret_and_says_what_each_role_can_do(): void
+    {
+        $this->actAs('admin');
+        $this->makeIntegration();
+
+        $json = $this->get('/integrations')->assertOk()->getContent();
+
+        $this->assertStringNotContainsString(self::SECRET, $json);
+    }
+
+    /** An administrator creates a connection before the test switches to another role. */
+    private function makeIntegrationAs(string $role): Integration
+    {
+        $this->actAs($role);
+
+        return $this->makeIntegration();
     }
 }

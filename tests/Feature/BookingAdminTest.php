@@ -262,8 +262,8 @@ class BookingAdminTest extends TestCase
 
     public function test_reading_operating_and_configuring_are_three_separate_permissions(): void
     {
-        Role::findOrCreate('lector', 'web')->syncPermissions(['view-dashboard', 'view-bookings']);
-        Role::findOrCreate('recepcion', 'web')->syncPermissions(['view-dashboard', 'view-bookings', 'manage-bookings']);
+        Role::findOrCreate('lector', 'web')->syncPermissions(['view-dashboard', 'view-bookings', 'view-services', 'view-professionals']);
+        Role::findOrCreate('recepcion', 'web')->syncPermissions(['view-dashboard', 'view-bookings', 'view-services', 'view-professionals', 'create-bookings', 'edit-bookings', 'cancel-bookings']);
         $service = $this->makeService($this->workspace);
         $professional = $this->makeProfessional($this->workspace, [$service]);
         $appointment = $this->appointment();

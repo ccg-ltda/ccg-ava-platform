@@ -15,13 +15,14 @@ use App\Services\ModuleAccess;
 use App\Services\WorkspaceScope;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
 /**
  * Integraciones: external connections of the ACTIVE Workspace (taken from the request context, never from the
- * client). Every action requires `manage-settings`. Integrations are never deleted: they are deactivated, like
- * users, Workspaces and Organizations. The page lists the global channel catalog with what the Workspace has
+ * client). Every action has its own permission (see routes/web.php). An integration is deactivated, like users, Workspaces and
+ * Organizations; only a generic connection made by hand that is already inactive can be retired for good. The page lists the global channel catalog with what the Workspace has
  * configured for each channel, and the Workspace's generic connections. A superuser of the administrative Workspace
  * may LOOK at one other Workspace (`?workspace=`, read only); changes always apply to the active Workspace.
  */
@@ -111,6 +112,21 @@ class IntegrationController extends Controller
         $this->integrations->setActive($this->find($request, $integration), false);
 
         return $this->back('Integración desactivada correctamente');
+    }
+
+    /** Retires a connection made by hand (an inactive generic one): see IntegrationService::remove for what is and is not allowed. */
+    public function destroy(Request $request, int $integration): RedirectResponse
+    {
+        $integration = $this->find($request, $integration);
+        $name = $integration->name;
+
+        try {
+            $this->integrations->remove($integration);
+        } catch (ValidationException $e) {
+            return $this->back($e->validator->errors()->first(), 'error');
+        }
+
+        return $this->back("La conexión «{$name}» se retiró de este Workspace.");
     }
 
     public function test(Request $request, int $integration): RedirectResponse

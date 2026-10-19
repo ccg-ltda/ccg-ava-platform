@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\ReadsSections;
 use App\Http\Requests\ReportFilterRequest;
 use App\Services\DashboardMetrics;
 use App\Services\ModuleAccess;
+use App\Services\OperationsMetrics;
 use App\Services\WorkspaceReport;
 use App\Services\WorkspaceScope;
 use Inertia\Inertia;
@@ -27,7 +28,7 @@ class ReportController extends Controller
      * What the Workspace's plan does not include is neither computed nor sent: the conversation and message figures need
      * `conversations`, the team figures `users_roles` (the page hides the sections that have no source).
      */
-    public function index(ReportFilterRequest $request, WorkspaceReport $report, DashboardMetrics $metrics, WorkspaceScope $scope, ModuleAccess $access): Response
+    public function index(ReportFilterRequest $request, WorkspaceReport $report, DashboardMetrics $metrics, OperationsMetrics $operations, WorkspaceScope $scope, ModuleAccess $access): Response
     {
         $active = $request->attributes->get('workspace');
         $role = $request->attributes->get('workspace_role');
@@ -41,11 +42,21 @@ class ReportController extends Controller
         $conversations = in_array('conversations', $modules, true);
         $team = in_array('users_roles', $modules, true);
         $analytics = $report->analytics($active, $period, $target, $global, $team);
+        // Agenda, Pedidos and Clientes: only for the ACTIVE Workspace (never for "all" nor another one), only when its plan includes the module AND the role may read
+        // that module (the figures include money and customers, so `view-dashboard` alone is not enough).
+        $own = $target !== null && $target->is($active);
+        $has = fn (string $module, string $permission) => $own && in_array($module, $modules, true) && in_array($permission, $permissions, true);
+        $ops = ['bookings' => $has('bookings', 'view-bookings'), 'orders' => $has('orders', 'view-orders'), 'customers' => $has('customers', 'view-customers')];
 
         return Inertia::render('Reports/Index', ($team ? $report->for($active, $role, $target, $global, in_array('view-users', $permissions, true)) : ['stats' => null, 'roleBreakdown' => null, 'recentUsers' => null])
             + array_merge($analytics, ['metrics' => $conversations ? $analytics['metrics'] : []])
             + [
-                'sources' => ['conversations' => $conversations, 'team' => $team],
+                'sources' => ['conversations' => $conversations, 'team' => $team] + $ops,
+                'operations' => [
+                    'bookings' => $ops['bookings'] ? $this->section('bookings', fn () => $operations->bookings($active, $period)) : null,
+                    'orders' => $ops['orders'] ? $this->section('orders', fn () => $operations->orders($active, $period)) : null,
+                    'customers' => $ops['customers'] ? $this->section('customers', fn () => $operations->customers($active, $period)) : null,
+                ],
                 'figures' => $conversations ? $this->section('figures', fn () => $metrics->comparison($target, $period)) : null,
                 'activity' => $conversations ? $this->section('activity', fn () => $metrics->series($target, $period, $settings)) : null,
                 'channels' => $conversations ? $this->section('channels', fn () => $metrics->channels($target, $period)) : null,

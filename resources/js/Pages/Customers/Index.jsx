@@ -24,7 +24,11 @@ const withAll = (label, map) => [{ value: '', label }, ...Object.entries(map).ma
 export default function Index({ customers, filters, perPageOptions, options, total }) {
     const confirm = useConfirm();
     const { permissions } = useAccess();
-    const canManage = permissions.includes('manage-customers');
+    // Each operation has its own permission: creating, editing, activating and opening a record's detail are independent.
+    const canCreate = permissions.includes('create-customers');
+    const canEdit = permissions.includes('edit-customers');
+    const canToggle = permissions.includes('activate-customers');
+    const canDetail = permissions.includes('view-customer-details');
     const [editing, setEditing] = useState(null);
     const [search, setSearch] = useState(filters.search ?? '');
     const firstRender = useRef(true);
@@ -70,7 +74,7 @@ export default function Index({ customers, filters, perPageOptions, options, tot
             <Head title="Clientes" />
 
             <PageHeader title="Clientes" description="Las personas con las que habla y trabaja este Workspace: contacto, canales, consentimiento y su historial.">
-                {canManage && (
+                {canCreate && (
                     <PrimaryButton type="button" onClick={() => setEditing({})} className="gap-2">
                         <Plus className="size-4" aria-hidden="true" />
                         Nuevo cliente
@@ -122,9 +126,13 @@ export default function Index({ customers, filters, perPageOptions, options, tot
                             {customers.data.map((customer) => (
                                 <tr key={customer.id} className={customer.isActive ? '' : 'opacity-60'}>
                                     <Td>
-                                        <Link href={route('customers.show', customer.id)} className="font-semibold text-ink hover:text-primary">
-                                            {customer.fullName}
-                                        </Link>
+                                        {canDetail ? (
+                                            <Link href={route('customers.show', customer.id)} className="font-semibold text-ink hover:text-primary">
+                                                {customer.fullName}
+                                            </Link>
+                                        ) : (
+                                            <span className="font-semibold text-ink">{customer.fullName}</span>
+                                        )}
                                         {customer.anonymized ? <Badge className="ms-2">Anonimizado</Badge> : !customer.isActive && <Badge className="ms-2">Inactivo</Badge>}
                                     </Td>
                                     <Td className="text-ink-muted">
@@ -146,11 +154,13 @@ export default function Index({ customers, filters, perPageOptions, options, tot
                                     </Td>
                                     <Td className="text-center">
                                         <div className="inline-flex">
-                                            <Link href={route('customers.show', customer.id)} aria-label={`Ver ${customer.fullName}`} className="grid size-9 place-items-center rounded-lg text-primary hover:bg-primary-soft">
-                                                <Eye className="size-[18px]" aria-hidden="true" />
-                                            </Link>
-                                            {canManage && !customer.anonymized && <IconButton icon={Pencil} label="Editar" context={customer.fullName} onClick={() => setEditing(customer)} />}
-                                            {canManage && !customer.anonymized && (
+                                            {canDetail && (
+                                                <Link href={route('customers.show', customer.id)} aria-label={`Ver ${customer.fullName}`} className="grid size-9 place-items-center rounded-lg text-primary hover:bg-primary-soft">
+                                                    <Eye className="size-[18px]" aria-hidden="true" />
+                                                </Link>
+                                            )}
+                                            {canEdit && !customer.anonymized && <IconButton icon={Pencil} label="Editar" context={customer.fullName} onClick={() => setEditing(customer)} />}
+                                            {canToggle && !customer.anonymized && (
                                                 <IconButton icon={Power} label={customer.isActive ? 'Desactivar' : 'Activar'} context={customer.fullName} tone={customer.isActive ? 'danger' : 'primary'} onClick={() => toggle(customer)} />
                                             )}
                                         </div>

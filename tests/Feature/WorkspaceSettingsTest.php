@@ -188,10 +188,10 @@ class WorkspaceSettingsTest extends TestCase
         $this->post('/settings', $this->payload())->assertRedirect('/login');
     }
 
-    public function test_a_custom_role_with_manage_settings_can_use_it(): void
+    public function test_a_custom_role_with_the_settings_permissions_can_use_it(): void
     {
         $this->seedRoleCatalog();
-        Role::findOrCreate('configurador', 'web')->syncPermissions(['manage-settings', 'view-dashboard']);
+        Role::findOrCreate('configurador', 'web')->syncPermissions(['view-settings', 'edit-settings', 'view-dashboard']);
         $this->actAs('configurador');
 
         $this->get('/settings')->assertOk();
@@ -330,5 +330,48 @@ class WorkspaceSettingsTest extends TestCase
         }
 
         $this->assertSame(0, WorkspaceSetting::count());
+    }
+
+    // --- summary and editing: reading the settings is not changing them ----------------------------------------------------
+
+    public function test_a_reader_sees_the_saved_values_without_the_form_and_cannot_save(): void
+    {
+        $this->seedRoleCatalog();
+        Role::findOrCreate('lector', 'web')->syncPermissions(['view-dashboard', 'view-settings']);
+        $this->actAs('lector');
+
+        $this->get('/settings')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->where('canEdit', false)->has('settings.currency'));
+        $this->post('/settings', $this->payload())->assertForbidden();
+    }
+
+    public function test_an_editor_is_offered_the_form_and_saving_returns_the_saved_values(): void
+    {
+        $this->seedRoleCatalog();
+        Role::findOrCreate('editor', 'web')->syncPermissions(['view-dashboard', 'view-settings', 'edit-settings']);
+        $this->actAs('editor');
+
+        $this->get('/settings')->assertInertia(fn (AssertableInertia $page) => $page->where('canEdit', true));
+        $this->post('/settings', $this->payload(['name' => 'Guardado', 'currency' => 'USD']))->assertSessionHasNoErrors();
+        $this->get('/settings')->assertInertia(fn (AssertableInertia $page) => $page->where('settings.name', 'Guardado')->where('settings.currency', 'USD'));
+    }
+
+    public function test_editing_without_the_page_permission_opens_nothing(): void
+    {
+        $this->seedRoleCatalog();
+        Role::findOrCreate('solo-editar', 'web')->syncPermissions(['view-dashboard', 'edit-settings']);
+        $this->actAs('solo-editar');
+
+        $this->get('/settings')->assertForbidden();
+        $this->post('/settings', $this->payload())->assertForbidden();
+    }
+
+    public function test_the_form_that_failed_keeps_nothing_saved_and_reports_the_field(): void
+    {
+        $this->actAs('admin');
+        $before = $this->get('/settings')->viewData('page')['props']['settings'];
+
+        $this->post('/settings', $this->payload(['currency' => 'XXX', 'name' => 'No se guarda']))->assertSessionHasErrors('currency');
+
+        $this->assertSame($before['name'], $this->get('/settings')->viewData('page')['props']['settings']['name']);
     }
 }

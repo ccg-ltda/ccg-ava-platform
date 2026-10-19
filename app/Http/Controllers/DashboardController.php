@@ -22,7 +22,7 @@ class DashboardController extends Controller
      *
      * Aggregated figures (counts and charts) belong to `view-dashboard`, like the team figures of Reportes. Anything that
      * identifies a conversation or an administrative event needs the permission of its own module (`view-conversations`,
-     * `manage-settings`), and the assistants' executions and the connections follow the permission of their pages. Each
+     * `view-audit`), and the assistants' executions and the connections follow the permission of their pages. Each
      * section is computed on its own: one that fails reaches the page as an error, never as a figure of zero.
      *
      * A figure also needs the MODULE it comes from to be in the plan of the Workspace being summarized: what is not
@@ -42,7 +42,9 @@ class DashboardController extends Controller
         $can = [
             'conversations' => $has('conversations') && in_array('view-conversations', $permissions, true),
             'assistants' => $has('assistants') && in_array('view-chatbots', $permissions, true),
-            'settings' => in_array('manage-settings', $permissions, true),
+            // The connections' state and the recent administrative events are what Integraciones and Auditoría show: their own permissions.
+            'integrations' => in_array('view-integrations', $permissions, true),
+            'audit' => in_array('view-audit', $permissions, true),
         ];
 
         return Inertia::render('Dashboard/Index', [
@@ -65,9 +67,9 @@ class DashboardController extends Controller
                 ? $this->section('attention', fn () => $metrics->attention($target, $period, $can['conversations'], $can['assistants']))
                 : null,
             // The state of the connections of ONE Workspace (the "all" view has no single list to show).
-            'integrations' => $can['settings'] && $has('integrations') && $target ? $this->section('integrations', fn () => $metrics->integrations($target, $settings)) : null,
+            'integrations' => $can['integrations'] && $has('integrations') && $target ? $this->section('integrations', fn () => $metrics->integrations($target, $settings)) : null,
             'recentConversations' => $can['conversations'] ? $this->section('recentConversations', fn () => $metrics->recentConversations($target, $settings, mask: ! $target?->is($active))) : null,
-            'recentActivity' => $can['settings'] && $has('audit') ? $this->section('recentActivity', fn () => $metrics->recentActivity($target, $settings)) : null,
+            'recentActivity' => $can['audit'] && $has('audit') ? $this->section('recentActivity', fn () => $metrics->recentActivity($target, $settings)) : null,
             'demo' => $has('conversations') ? $this->section('demo', fn () => $metrics->demoConversations($target)) : null,
         ]);
     }

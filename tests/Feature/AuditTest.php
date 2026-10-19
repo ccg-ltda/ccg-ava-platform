@@ -348,12 +348,12 @@ class AuditTest extends TestCase
         $this->get('/audit?workspace=999999')->assertNotFound();
     }
 
-    public function test_only_users_with_manage_settings_can_see_or_export_the_audit(): void
+    public function test_only_users_with_the_audit_permissions_can_see_or_export_the_audit(): void
     {
         $this->actAs('cliente');
         $this->get('/audit')->assertForbidden();
         $this->get('/audit/export')->assertForbidden();
-        $this->get('/dashboard')->assertInertia(fn (AssertableInertia $page) => $page->where('auth.user.permissions', fn ($permissions) => ! in_array('manage-settings', collect($permissions)->all(), true)));
+        $this->get('/dashboard')->assertInertia(fn (AssertableInertia $page) => $page->where('auth.user.permissions', fn ($permissions) => ! in_array('view-audit', collect($permissions)->all(), true)));
     }
 
     public function test_guests_are_sent_to_login(): void
@@ -365,8 +365,8 @@ class AuditTest extends TestCase
     public function test_the_menu_entry_follows_the_permission(): void
     {
         $this->actAs();
-        $this->get('/audit')->assertInertia(fn (AssertableInertia $page) => $page->where('auth.user.permissions', fn ($permissions) => in_array('manage-settings', collect($permissions)->all(), true)));
-        $this->assertStringContainsString("permission: 'manage-settings'", file_get_contents(resource_path('js/config/navigation.js')));
+        $this->get('/audit')->assertInertia(fn (AssertableInertia $page) => $page->where('auth.user.permissions', fn ($permissions) => in_array('view-audit', collect($permissions)->all(), true)));
+        $this->assertStringContainsString("permission: 'view-audit'", file_get_contents(resource_path('js/config/navigation.js')));
     }
 
     public function test_the_audit_has_no_routes_to_change_or_read_one_event_by_id(): void

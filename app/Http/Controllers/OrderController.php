@@ -20,7 +20,7 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * Pedidos of E-commerce and Delivery. Reading is `view-orders`; placing an order, changing its delivery data and cancelling it is `manage-orders`; moving it
+ * Pedidos of E-commerce and Delivery. Reading is `view-orders` (and `view-order-details` for one order); placing, editing and cancelling an order are `create-orders`, `edit-orders` and `cancel-orders`; moving it
  * along the flow (confirm, prepare, ready, dispatch, deliver) is `process-orders`. Everything starts from the Workspace of the session, and every write goes
  * through OrderService (which owns the prices, the total, the number and the allowed moves). An order is registered, not necessarily paid: Ava does not manage payments.
  */
@@ -60,7 +60,8 @@ class OrderController extends Controller
             'filters' => $filters + ['perPage' => ListPagination::size($request, 'orders')],
             'perPageOptions' => ListPagination::OPTIONS,
             'counts' => $workspace->orders()->selectRaw('status, count(*) as orders_count')->groupBy('status')->pluck('orders_count', 'status')->map(fn ($count) => (int) $count)->all(),
-            'form' => in_array('manage-orders', $request->attributes->get('workspace_permissions', []), true) ? $this->formOptions($request, $workspace) : null,
+            'form' => in_array('create-orders', $request->attributes->get('workspace_permissions', []), true) ? $this->formOptions($request, $workspace) : null,
+            'canDetail' => in_array('view-order-details', $request->attributes->get('workspace_permissions', []), true),
         ]);
     }
 
@@ -80,7 +81,7 @@ class OrderController extends Controller
                 'history' => $model->statusChanges->map(fn (OrderStatusChange $change) => ['id' => $change->id, 'from' => $change->from_status, 'to' => $change->to_status, 'by' => $change->user?->name, 'reason' => $change->reason, 'at' => $change->created_at->toIso8601String()])->all(),
             ],
             'moves' => $this->moves($model, $permissions),
-            'canEdit' => in_array('manage-orders', $permissions, true) && ! in_array($model->status, ['dispatched', 'delivered', 'cancelled'], true),
+            'canEdit' => in_array('edit-orders', $permissions, true) && ! in_array($model->status, ['dispatched', 'delivered', 'cancelled'], true),
             'statuses' => config('orders.statuses'),
             'methods' => config('orders.methods'),
             'notifier' => $this->notifier->available(),
@@ -116,13 +117,13 @@ class OrderController extends Controller
         return back()->with('success', 'Pedido actualizado');
     }
 
-    /** One move of the flow. `cancelled` needs `manage-orders` and a written reason; every other move needs `process-orders`. */
+    /** One move of the flow. `cancelled` needs `cancel-orders` and a written reason; every other move needs `process-orders`. */
     public function transition(Request $request, int $order): RedirectResponse
     {
         $data = $request->validate(['status' => ['required', 'string', 'in:'.implode(',', array_keys(config('orders.statuses')))], 'reason' => ['nullable', 'required_if:status,cancelled', 'string', 'max:'.config('orders.limits.reason')]], [], ['reason' => 'motivo']);
         $model = $request->attributes->get('workspace')->orders()->findOrFail($order);
         $permissions = $request->attributes->get('workspace_permissions', []);
-        $needed = $data['status'] === 'cancelled' ? 'manage-orders' : 'process-orders';
+        $needed = $data['status'] === 'cancelled' ? 'cancel-orders' : 'process-orders';
 
         abort_unless(in_array($needed, $permissions, true), 403);
 
@@ -145,7 +146,7 @@ class OrderController extends Controller
     {
         return collect(config("orders.transitions.{$order->status}", []))
             ->filter(fn (string $to) => ! (($needed = config("orders.method_moves.{$order->status}>{$to}")) && $needed !== $order->delivery_method))
-            ->filter(fn (string $to) => in_array($to === 'cancelled' ? 'manage-orders' : 'process-orders', $permissions, true))
+            ->filter(fn (string $to) => in_array($to === 'cancelled' ? 'cancel-orders' : 'process-orders', $permissions, true))
             ->map(fn (string $to) => ['status' => $to, 'label' => config("orders.statuses.{$to}")])->values()->all();
     }
 

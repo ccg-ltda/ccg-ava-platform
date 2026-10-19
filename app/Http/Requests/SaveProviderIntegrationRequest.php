@@ -10,7 +10,7 @@ use Illuminate\Foundation\Http\FormRequest;
 
 /**
  * Configuration of an external agenda (Booker...) of the ACTIVE Workspace (taken from the request context, never from the client).
- * Authorization is the `workspace.permission:manage-settings` and `workspace.module:calendar_providers` route middleware; the
+ * Authorization is the `workspace.permission:manage-integrations` and `workspace.module:calendar_providers` route middleware; the
  * provider must be one the booking configuration declares and whose integration type describes its own form.
  */
 class SaveProviderIntegrationRequest extends FormRequest

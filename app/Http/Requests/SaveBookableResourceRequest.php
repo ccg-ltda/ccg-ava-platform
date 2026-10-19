@@ -6,7 +6,7 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-/** Create / update of an optional resource (a chair, a room) of the ACTIVE Workspace. Route middleware: `manage-services`. */
+/** Create / update of an optional resource (a chair, a room) of the ACTIVE Workspace. Route middleware: `create-professionals` / `edit-professionals`. */
 class SaveBookableResourceRequest extends FormRequest
 {
     public function authorize(): bool

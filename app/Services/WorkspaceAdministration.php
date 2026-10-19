@@ -72,6 +72,25 @@ class WorkspaceAdministration
         ]);
     }
 
+    /**
+     * The accounts that may be added to `$target` as members, as one query: the SAME rules the add-member action enforces (an active account that is
+     * not a member yet and, for a client Workspace, not an internal account of the platform). The selector of the members form reads this and the
+     * action re-checks it, so what the interface offers can never differ from what the server accepts, and nothing about an account outside it is revealed.
+     *
+     * @return Builder<User>
+     */
+    public function eligibleUsers(Workspace $target): Builder
+    {
+        $adminCode = Workspace::normalizeCode((string) config('workspace.admin_code'));
+
+        return User::query()
+            ->where('users.is_active', true)
+            ->whereDoesntHave('workspaces', fn ($q) => $q->whereKey($target->getKey()))
+            ->when(! $target->isAdministrative(), fn (Builder $q) => $q
+                ->where('users.is_superuser', false)
+                ->whereDoesntHave('workspaces', fn ($w) => $w->where('workspaces.code', $adminCode)));
+    }
+
     public function isInternalAccount(User $user): bool
     {
         return $user->is_superuser

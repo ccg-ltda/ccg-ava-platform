@@ -7,7 +7,7 @@
  *  - `statuses`: the states and how the screen names them.
  *  - `transitions`: the only moves the server accepts. `delivered` and `cancelled` are final: nothing leaves them and no exception exists.
  *  - `methods`: `pickup` (the customer collects it) and `delivery` (somebody takes it to an address). A `delivery` order carries an address.
- *  - `cancel`: leaving the flow for `cancelled` needs a written reason and the permission to cancel (`manage-orders`); every other move needs `process-orders`.
+ *  - `cancel`: leaving the flow for `cancelled` needs a written reason and the permission to cancel (`cancel-orders`); every other move needs `process-orders`.
  *  - `limits`: what one order may hold. The total is always computed by the server from the prices the catalog has at that moment.
  *
  * Not defined yet (so not stored): discounts, taxes, shipping cost, payment state, coverage zones. See RECOMENDACIONES.md before adding any.

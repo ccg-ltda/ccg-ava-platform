@@ -20,7 +20,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Chatbots of the ACTIVE Workspace (taken from the request context, never from the client). Reading needs
- * `view-chatbots`; creating, editing, activating and configuring channels needs `manage-chatbots`. Chatbots are never
+ * `view-chatbots`; each change has its own permission (`create-chatbots`, `edit-chatbots`, `activate-chatbots`, `manage-chatbot-channels`, `manage-agent-tokens`). Chatbots are never
  * deleted: they are deactivated. A superuser of the administrative Workspace may LOOK at one other Workspace
  * (`?workspace=`, read only); every change applies to the active Workspace, so a foreign id is a 404.
  */
@@ -42,7 +42,7 @@ class ChatbotController extends Controller
 
         return Inertia::render('Chatbots/Index', [
             'chatbots' => $this->chatbots->list($viewing, $foreign),
-            'scope' => $this->scopeProps($request, $viewing, $foreign, 'manage-chatbots'),
+            'scope' => $this->scopeProps($request, $viewing, $foreign, ['create' => 'create-chatbots', 'edit' => 'edit-chatbots', 'activate' => 'activate-chatbots', 'channels' => 'manage-chatbot-channels', 'tokens' => 'manage-agent-tokens']),
         ]);
     }
 
@@ -65,7 +65,7 @@ class ChatbotController extends Controller
             ],
             'instructionsMax' => config('chatbots.instructions_max'),
             'avatar' => ['maxKb' => config('chatbots.avatar.max_kb')],
-            'scope' => $this->scopeProps($request, $viewing, $foreign, 'manage-chatbots'),
+            'scope' => $this->scopeProps($request, $viewing, $foreign, ['create' => 'create-chatbots', 'edit' => 'edit-chatbots', 'activate' => 'activate-chatbots', 'channels' => 'manage-chatbot-channels', 'tokens' => 'manage-agent-tokens']),
         ]);
     }
 

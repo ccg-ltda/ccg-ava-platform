@@ -49,7 +49,7 @@ function Connection({ connection }) {
 export default function ChannelsTab({ chatbot, channels, canManage, workspaceId }) {
     const confirm = useConfirm();
     const { auth } = usePage().props;
-    const canConfigure = auth.user.permissions.includes('manage-settings');
+    const canConfigure = auth.user.permissions.includes('manage-integrations');
     const canSeeConversations = auth.user.permissions.includes('view-conversations');
     const [pending, setPending] = useState(null);
 

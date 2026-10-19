@@ -139,7 +139,7 @@ function TemplatesTab({ templates, canManage, onEdit, onCreate }) {
     );
 }
 
-function CampaignsTab({ campaigns, perPageOptions, channels, statuses, canManage, onCreate }) {
+function CampaignsTab({ campaigns, perPageOptions, channels, statuses, canManage, canDetail, onCreate }) {
     const formatDateTime = useFormatDateTime();
     const list = usePagedList({ tab: 'campaigns', section: 'campaigns', only: ['campaigns'], meta: campaigns.meta, perPageOptions, routeName: 'campaigns.index' });
 
@@ -167,9 +167,13 @@ function CampaignsTab({ campaigns, perPageOptions, channels, statuses, canManage
                     {campaigns.data.map((campaign) => (
                         <tr key={campaign.id}>
                             <Td>
-                                <Link href={route('campaigns.show', campaign.id)} className="font-semibold text-ink hover:text-primary">
-                                    {campaign.name}
-                                </Link>
+                                {canDetail ? (
+                                    <Link href={route('campaigns.show', campaign.id)} className="font-semibold text-ink hover:text-primary">
+                                        {campaign.name}
+                                    </Link>
+                                ) : (
+                                    <span className="font-semibold text-ink">{campaign.name}</span>
+                                )}
                             </Td>
                             <Td className="text-ink-muted">{channels[campaign.channel] ?? campaign.channel}</Td>
                             <Td>
@@ -189,7 +193,10 @@ function CampaignsTab({ campaigns, perPageOptions, channels, statuses, canManage
 /** Campañas: reusable templates and the campaigns addressed to customers. Nothing is sent from here (see the notice). */
 export default function Index({ templates, campaigns, perPageOptions, variables, availability, sample, channels, statuses, bodyMax }) {
     const { permissions } = useAccess();
-    const canManage = permissions.includes('manage-campaigns');
+    // Templates and campaigns are separate resources of the page, and a campaign's detail is its own permission.
+    const canTemplates = permissions.includes('manage-campaign-templates');
+    const canCreate = permissions.includes('create-campaigns');
+    const canDetail = permissions.includes('view-campaign-details');
     const [tab, selectTab] = useUrlTab(['templates', 'campaigns']);
     const [editingTemplate, setEditingTemplate] = useState(null);
     const [creatingCampaign, setCreatingCampaign] = useState(false);
@@ -200,18 +207,18 @@ export default function Index({ templates, campaigns, perPageOptions, variables,
             <Head title="Campañas" />
 
             <PageHeader title="Campañas" description="Mensajes reutilizables y campañas dirigidas a tus clientes, solo a quienes autorizaron recibirlos.">
-                {canManage &&
-                    (tab === 0 ? (
-                        <PrimaryButton type="button" className="gap-2" onClick={() => setEditingTemplate({})}>
-                            <Plus className="size-4" aria-hidden="true" />
-                            Nueva plantilla
-                        </PrimaryButton>
-                    ) : (
-                        <PrimaryButton type="button" className="gap-2" onClick={() => setCreatingCampaign(true)}>
-                            <Plus className="size-4" aria-hidden="true" />
-                            Nueva campaña
-                        </PrimaryButton>
-                    ))}
+                {tab === 0 && canTemplates && (
+                    <PrimaryButton type="button" className="gap-2" onClick={() => setEditingTemplate({})}>
+                        <Plus className="size-4" aria-hidden="true" />
+                        Nueva plantilla
+                    </PrimaryButton>
+                )}
+                {tab === 1 && canCreate && (
+                    <PrimaryButton type="button" className="gap-2" onClick={() => setCreatingCampaign(true)}>
+                        <Plus className="size-4" aria-hidden="true" />
+                        Nueva campaña
+                    </PrimaryButton>
+                )}
             </PageHeader>
 
             <Tabs
@@ -222,8 +229,8 @@ export default function Index({ templates, campaigns, perPageOptions, variables,
                     { id: 'campaigns', label: 'Campañas', icon: Megaphone, count: campaigns.meta.total },
                 ]}
             >
-                <TemplatesTab templates={templates} canManage={canManage} onEdit={setEditingTemplate} onCreate={() => setEditingTemplate({})} />
-                <CampaignsTab campaigns={campaigns} perPageOptions={perPageOptions} channels={channels} statuses={statuses} canManage={canManage} onCreate={() => setCreatingCampaign(true)} />
+                <TemplatesTab templates={templates} canManage={canTemplates} onEdit={setEditingTemplate} onCreate={() => setEditingTemplate({})} />
+                <CampaignsTab campaigns={campaigns} perPageOptions={perPageOptions} channels={channels} statuses={statuses} canManage={canCreate} canDetail={canDetail} onCreate={() => setCreatingCampaign(true)} />
             </Tabs>
 
             {editingTemplate && <TemplateModal template={editingTemplate} variables={variables} availability={availability} sample={sample} bodyMax={bodyMax} onClose={() => setEditingTemplate(null)} />}

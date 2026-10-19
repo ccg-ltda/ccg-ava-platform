@@ -10,7 +10,7 @@ Describe cómo encajan las cinco piezas que no deben confundirse y cómo se admi
 | 2 | **Categoría / solución** | Clasificación **abierta** para organizar el catálogo (Servicios y Reservas, eCommerce, Salud, lo que venga). | tabla `module_categories` (se crean desde Planes) | CCG, sin código | No limita qué módulos se combinan ni decide acceso. El código de acceso nunca nombra un tipo de negocio (lo verifica una prueba). |
 | 3 | **Grupo conceptual / de navegación** | Tres grupos de Ava (`groups`: Administración de la plataforma, Capacidades compartidas, Soluciones comerciales) y, aparte, las **secciones del sidebar**. | `config/modules.php` `groups` y `resources/js/config/navigation.js` | Desarrollador | No es código, tabla ni permiso. Un módulo sin grupo declarado toma el de su categoría y, si no, `default_group` (`solutions`). |
 | 4 | **Plan comercial** | Combinación configurable de módulos habilitados para un Workspace cliente. | tablas `plans`, `module_plan`, `workspaces.plan_id` | CCG desde `Desarrollo_DEV` | No da permisos: decide si el módulo **existe** para el Workspace. |
-| 5 | **Permiso del usuario** | Qué puede hacer una persona dentro de los módulos que el Workspace tiene (`view-customers`, `manage-bookings`...). | roles Spatie + `workspace_user.role` | Admins del Workspace (sin escalar) y superusuarios | No habilita un módulo que el plan no incluye. |
+| 5 | **Permiso del usuario** | Qué puede hacer una persona dentro de los módulos que el Workspace tiene (`view-customers`, `create-bookings`, `cancel-orders`...). | roles Spatie + `workspace_user.role` | Admins del Workspace (sin escalar) y superusuarios | No habilita un módulo que el plan no incluye. |
 
 **Regla de oro:** disponibilidad (plan) ≠ autorización (rol). El servidor exige las dos en cada ruta (`workspace.module:<clave>` y luego `workspace.permission:<permiso>`); el menú solo refleja lo que el servidor ya impone, y ocultar una opción nunca sustituye a la protección.
 
@@ -136,7 +136,7 @@ Dependencias de lo que falta: S5 → S4 + WhatsApp real + plantillas (D-19); S6 
 
 | Nivel | Contenido |
 |---|---|
-| **Común (una sola implementación)** | Catálogo de productos, pedido, líneas con instantánea de precio, estados y transiciones, historial, permisos (`view/manage-catalog`, `view/manage/process-orders`), sedes opcionales como punto de operación y Clientes como vínculo opcional. |
+| **Común (una sola implementación)** | Catálogo de productos, pedido, líneas con instantánea de precio, estados y transiciones, historial, permisos (`view-catalog`, `create/edit/activate-products`, `view-orders`, `view-order-details`, `create/edit/cancel/process-orders`), sedes opcionales como punto de operación y Clientes como vínculo opcional. |
 | **Se configura por Workspace** | La moneda (ajuste del Workspace), los productos, qué sedes ofrecen cada producto y el rol de cada persona. |
 | **Solo Delivery (hoy: datos; la lógica está pendiente)** | Dirección, ciudad, referencias y datos de quien recibe (campos del pedido `delivery`); pendientes: zonas de cobertura, tarifas, repartidor y seguimiento. |
 | **Solo E-commerce (pendiente)** | Variantes, stock, transportadora, cambios y devoluciones, promociones. |

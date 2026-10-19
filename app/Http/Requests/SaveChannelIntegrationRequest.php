@@ -11,7 +11,7 @@ use Illuminate\Foundation\Http\FormRequest;
 
 /**
  * Configuration of a channel's integration in the ACTIVE Workspace (taken from the request context, never from
- * the client). Authorization is the `workspace.permission:manage-settings` route middleware; the channel must
+ * the client). Authorization is the `workspace.permission:manage-integrations` route middleware; the channel must
  * exist, be available and use an integration (a channel without credentials has nothing to configure).
  */
 class SaveChannelIntegrationRequest extends FormRequest

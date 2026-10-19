@@ -12,7 +12,7 @@ use Illuminate\Validation\Validator;
 
 /**
  * The confirmations and reminders of the ACTIVE Workspace (one shared capability: the same fields for a clinic and a salon). Route middleware:
- * `manage-services`. Nothing is assumed: no anticipation, text or template exists until the Workspace writes it. What the Workspace cannot do yet
+ * `manage-booking-settings`. Nothing is assumed: no anticipation, text or template exists until the Workspace writes it. What the Workspace cannot do yet
  * (no WhatsApp account, an external agenda) is refused here instead of letting a switch look on while nothing would be sent.
  */
 class SaveBookingNotificationSettingsRequest extends FormRequest

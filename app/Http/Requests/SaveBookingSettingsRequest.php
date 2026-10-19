@@ -6,7 +6,7 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-/** The booking rules of the ACTIVE Workspace. Route middleware: `manage-services`. Whether the chosen agenda is really usable is checked by the controller. */
+/** The booking rules of the ACTIVE Workspace. Route middleware: `manage-booking-settings`. Whether the chosen agenda is really usable is checked by the controller. */
 class SaveBookingSettingsRequest extends FormRequest
 {
     public function authorize(): bool

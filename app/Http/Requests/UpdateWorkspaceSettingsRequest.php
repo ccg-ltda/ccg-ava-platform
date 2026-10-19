@@ -7,7 +7,7 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-/** Configuraciones form. Authorization is the `workspace.permission:manage-settings` route middleware. */
+/** Configuraciones form. Authorization is the `workspace.permission:edit-settings` route middleware. */
 class UpdateWorkspaceSettingsRequest extends FormRequest
 {
     /** @return array<string, ValidationRule|array<mixed>|string> */

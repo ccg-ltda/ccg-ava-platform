@@ -25,18 +25,23 @@ trait ViewsWorkspace
     }
 
     /**
-     * The `scope` prop every such page sends. `canManage` is the permission to change the thing the page is about
-     * (never true while looking at another Workspace).
+     * The `scope` prop every such page sends. `$managePermission` is the permission to change the thing the page is about, or a map
+     * `name => permission` when the page has several operations: `can` then has one flag per name and `canManage` is true when any is. Nothing is
+     * ever true while looking at another Workspace.
      *
      * @return array<string, mixed>
      */
-    protected function scopeProps(Request $request, Workspace $viewing, bool $foreign, string $managePermission): array
+    protected function scopeProps(Request $request, Workspace $viewing, bool $foreign, string|array $managePermission): array
     {
+        $granted = $request->attributes->get('workspace_permissions', []);
+        $can = collect((array) $managePermission)->map(fn (string $permission) => ! $foreign && in_array($permission, $granted, true));
+
         return [
             'workspace' => ['id' => $viewing->id, 'name' => $viewing->name, 'code' => $viewing->code],
             'readOnly' => $foreign,
             'canChoose' => $this->scope->canChoose($request->user(), $request->attributes->get('workspace')),
-            'canManage' => ! $foreign && in_array($managePermission, $request->attributes->get('workspace_permissions', []), true),
+            'canManage' => $can->contains(true),
+            'can' => is_array($managePermission) ? $can->all() : null,
         ];
     }
 }

@@ -12,7 +12,7 @@ use Illuminate\Validation\Validator;
 /**
  * Create / update of a customer of the ACTIVE Workspace. Required: first name and at least ONE way to identify or contact them
  * (phone, email or a channel id): a record nobody can reach or recognise is useless. Everything else is optional.
- * Authorization is the `workspace.permission:manage-customers` route middleware.
+ * Authorization is the `workspace.permission:create-customers` / `edit-customers` route middleware.
  */
 class SaveCustomerRequest extends FormRequest
 {

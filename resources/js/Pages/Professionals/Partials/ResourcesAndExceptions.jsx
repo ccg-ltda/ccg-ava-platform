@@ -35,7 +35,8 @@ function SmallModal({ title, form, onClose, onSubmit, submitLabel, children }) {
 }
 
 /** Optional resources (a chair, a room): a service that lists some is only offered while one of them is free. */
-export function ResourcesPanel({ resources, canManage }) {
+export function ResourcesPanel({ resources, can }) {
+    const canAct = can.edit || can.toggle;
     const confirm = useConfirm();
     const [editing, setEditing] = useState(null);
     const form = useForm({ name: '', kind: '' });
@@ -62,7 +63,7 @@ export function ResourcesPanel({ resources, canManage }) {
         <Card className="overflow-hidden">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line p-4 sm:px-6">
                 <p className="max-w-xl text-sm text-ink-muted">Recursos opcionales (una silla, una sala, un equipo). Solo los necesitas si dos citas no pueden usar lo mismo a la vez.</p>
-                {canManage && (
+                {can.create && (
                     <PrimaryButton type="button" onClick={() => open()} className="gap-2">
                         <Plus className="size-4" aria-hidden="true" />
                         Nuevo recurso
@@ -80,7 +81,7 @@ export function ResourcesPanel({ resources, canManage }) {
                             <Th>Recurso</Th>
                             <Th>Tipo</Th>
                             <Th>Estado</Th>
-                            {canManage && <Th className="text-center">Acciones</Th>}
+                            {canAct && <Th className="text-center">Acciones</Th>}
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-line">
@@ -91,11 +92,11 @@ export function ResourcesPanel({ resources, canManage }) {
                                 <Td>
                                     <Badge tone={resource.isActive ? 'green' : 'neutral'}>{resource.isActive ? 'Activo' : 'Inactivo'}</Badge>
                                 </Td>
-                                {canManage && (
+                                {canAct && (
                                     <Td>
                                         <div className="flex items-center justify-center gap-1">
-                                            <IconButton icon={Pencil} label="Editar" context={resource.name} onClick={() => open(resource)} />
-                                            <IconButton icon={Power} label={resource.isActive ? 'Desactivar' : 'Activar'} context={resource.name} tone={resource.isActive ? 'danger' : 'primary'} onClick={() => toggle(resource)} />
+                                            {can.edit && <IconButton icon={Pencil} label="Editar" context={resource.name} onClick={() => open(resource)} />}
+                                            {can.toggle && <IconButton icon={Power} label={resource.isActive ? 'Desactivar' : 'Activar'} context={resource.name} tone={resource.isActive ? 'danger' : 'primary'} onClick={() => toggle(resource)} />}
                                         </div>
                                     </Td>
                                 )}

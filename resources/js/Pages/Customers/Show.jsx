@@ -47,7 +47,7 @@ export default function Show({ customer, conversations, appointments, campaigns,
 
             <PageHeader title={customer.fullName} description={options.sources[customer.source] ? `Origen: ${options.sources[customer.source]}` : undefined}>
                 {customer.anonymized ? <Badge>Anonimizado</Badge> : !customer.isActive && <Badge>Inactivo</Badge>}
-                {permissions.includes('manage-customers') && !customer.anonymized && (
+                {permissions.includes('edit-customers') && !customer.anonymized && (
                     <SecondaryButton type="button" className="gap-2" onClick={() => setEditing(true)}>
                         <Pencil className="size-4" aria-hidden="true" />
                         Editar
@@ -181,7 +181,7 @@ export default function Show({ customer, conversations, appointments, campaigns,
                 </Card>
             )}
 
-            {permissions.includes('manage-customers') && !customer.anonymized && (
+            {permissions.includes('anonymize-customers') && !customer.anonymized && (
                 <Card className="p-5 sm:p-6">
                     <h2 className="text-base font-bold text-ink">Eliminar datos personales</h2>
                     <p className="mt-1 text-sm text-ink-muted">

@@ -8,7 +8,7 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 /**
- * Create / update of a chatbot. Authorization is the `workspace.permission:manage-chatbots` route middleware; the
+ * Create / update of a chatbot. Authorization is the `workspace.permission:create-chatbots` / `edit-chatbots` route middleware; the
  * chatbot being edited is looked up INSIDE the active Workspace (another Workspace's id is a 404).
  */
 class SaveChatbotRequest extends FormRequest

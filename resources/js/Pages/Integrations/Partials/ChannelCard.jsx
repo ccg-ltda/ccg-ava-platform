@@ -24,7 +24,7 @@ function status(channel) {
  * One channel of the GLOBAL catalog as it stands in the Workspace being shown. The catalog is the same for every
  * Workspace; only this card's state and data are the Workspace's own. Credentials never reach it.
  */
-export default function ChannelCard({ channel, delay, readOnly, testing, onConfigure, onToggle, onTest }) {
+export default function ChannelCard({ channel, delay, readOnly, can = { edit: true, test: true, toggle: true }, testing, onConfigure, onToggle, onTest }) {
     const { label, description, available, unavailable, integration, testable } = channel;
     const { label: stateLabel, tone } = status(channel);
     const Icon = channelIcon(channel.key);
@@ -67,15 +67,15 @@ export default function ChannelCard({ channel, delay, readOnly, testing, onConfi
                     <span className="mt-0.5 block text-xs text-ink-muted">{integration.lastTest.at}</span>
                 </p>
             )}
-            {integration && testable && !readOnly && !integration.lastTest && <p className="mt-3 text-sm text-ink-muted">Conexión sin verificar. Usa «Probar conexión» para comprobarla con el proveedor.</p>}
+            {integration && testable && !readOnly && can.test && !integration.lastTest && <p className="mt-3 text-sm text-ink-muted">Conexión sin verificar. Usa «Probar conexión» para comprobarla con el proveedor.</p>}
 
-            {available && !readOnly && (
+            {available && !readOnly && (integration ? can.edit || can.test || can.toggle : can.edit) && (
                 <div className="mt-4 flex items-center justify-end gap-1 border-t border-line pt-3">
                     {integration ? (
                         <>
-                            <IconButton icon={Pencil} label="Editar" context={label} onClick={onConfigure} />
-                            {testable && <IconButton icon={PlugZap} label={testing ? 'Probando...' : 'Probar conexión'} context={label} onClick={onTest} disabled={testing || !integration.isActive} />}
-                            <IconButton icon={Power} label={integration.isActive ? 'Desactivar' : 'Activar'} context={label} tone={integration.isActive ? 'danger' : 'primary'} onClick={onToggle} />
+                            {can.edit && <IconButton icon={Pencil} label="Editar" context={label} onClick={onConfigure} />}
+                            {can.test && testable && <IconButton icon={PlugZap} label={testing ? 'Probando...' : 'Probar conexión'} context={label} onClick={onTest} disabled={testing || !integration.isActive} />}
+                            {can.toggle && <IconButton icon={Power} label={integration.isActive ? 'Desactivar' : 'Activar'} context={label} tone={integration.isActive ? 'danger' : 'primary'} onClick={onToggle} />}
                         </>
                     ) : (
                         <PrimaryButton type="button" onClick={onConfigure} className="gap-2">

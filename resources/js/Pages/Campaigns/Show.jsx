@@ -71,9 +71,11 @@ export default function Show({ campaign, summary, recipients, picker, delivery, 
     const confirm = useConfirm();
     const formatDateTime = useFormatDateTime();
     const { permissions } = useAccess();
-    const canManage = permissions.includes('manage-campaigns');
+    const canEdit = permissions.includes('edit-campaigns');
+    const canPrepare = permissions.includes('prepare-campaigns');
+    const canCancel = permissions.includes('cancel-campaigns');
     const draft = campaign.status === 'draft';
-    const editable = draft && canManage;
+    const editable = draft && canEdit;
     const variables = Object.keys(availability).map((key) => ({ key, label: availability[key].label }));
     const form = useForm({
         name: campaign.name,
@@ -218,15 +220,15 @@ export default function Show({ campaign, summary, recipients, picker, delivery, 
                     <AudienceSummary summary={summary} exclusions={options.exclusions} frozen={!draft} />
                     {draft && form.isDirty && <Alert tone="warning">Hay cambios sin guardar: la revisión refleja el último borrador guardado.</Alert>}
 
-                    {canManage && (draft || campaign.status === 'prepared') && (
+                    {(canPrepare || canCancel) && (draft || campaign.status === 'prepared') && (
                         <Card className="space-y-3 p-4">
-                            {draft && (
+                            {draft && canPrepare && (
                                 <PrimaryButton type="button" className="w-full gap-2" disabled={form.isDirty || summary.eligible === 0} onClick={() => step('prepare', `Se fijarán ${summary.eligible} destinatarios y la campaña dejará de ser editable. No se enviará ningún mensaje.`, 'Preparar campaña')}>
                                     <ClipboardCheck className="size-4" aria-hidden="true" />
                                     Preparar campaña
                                 </PrimaryButton>
                             )}
-                            {campaign.status === 'prepared' && (
+                            {campaign.status === 'prepared' && canPrepare && (
                                 <PrimaryButton type="button" className="w-full gap-2" onClick={() => step('simulate', 'Se registrará un ensayo sobre los destinatarios fijados. No sale ningún mensaje y solo puede hacerse una vez.', 'Simular')}>
                                     <FlaskConical className="size-4" aria-hidden="true" />
                                     Simular envío
@@ -235,10 +237,12 @@ export default function Show({ campaign, summary, recipients, picker, delivery, 
                             <SecondaryButton type="button" className="w-full" disabled title={delivery.reason}>
                                 Envío real no disponible
                             </SecondaryButton>
-                            <DangerButton type="button" className="w-full gap-2" onClick={() => step('cancel', 'La campaña quedará cancelada y no podrá reactivarse. Su historial se conserva.', 'Cancelar campaña')}>
-                                <Ban className="size-4" aria-hidden="true" />
-                                Cancelar campaña
-                            </DangerButton>
+                            {canCancel && (
+                                <DangerButton type="button" className="w-full gap-2" onClick={() => step('cancel', 'La campaña quedará cancelada y no podrá reactivarse. Su historial se conserva.', 'Cancelar campaña')}>
+                                    <Ban className="size-4" aria-hidden="true" />
+                                    Cancelar campaña
+                                </DangerButton>
+                            )}
                         </Card>
                     )}
                 </div>

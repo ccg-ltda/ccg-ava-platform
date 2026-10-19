@@ -33,7 +33,12 @@ export default function Index({ capabilities, days, professionals, external, ext
     const confirm = useConfirm();
     const { permissions } = useAccess();
     const { errors } = usePage().props;
-    const canManage = permissions.includes('manage-services') && !capabilities.external;
+    const own = !capabilities.external;
+    const canCreate = permissions.includes('create-professionals') && own;
+    const canEdit = permissions.includes('edit-professionals') && own;
+    const canToggle = permissions.includes('activate-professionals') && own;
+    const canAct = canEdit || canToggle;
+    const canAvailability = permissions.includes('manage-availability') && own;
     const [editing, setEditing] = useState(null);
 
     const sections = [
@@ -60,7 +65,7 @@ export default function Index({ capabilities, days, professionals, external, ext
             {list.length === 0 ? (
                 <div className="p-6">
                     <EmptyState icon={Users} title="Todavía no hay profesionales" description={capabilities.external ? 'La agenda externa no devolvió profesionales.' : 'Crea el primero con sus servicios y su horario.'}>
-                        {canManage && <PrimaryButton type="button" onClick={() => setEditing({})}>Nuevo profesional</PrimaryButton>}
+                        {canCreate && <PrimaryButton type="button" onClick={() => setEditing({})}>Nuevo profesional</PrimaryButton>}
                     </EmptyState>
                 </div>
             ) : (
@@ -71,7 +76,7 @@ export default function Index({ capabilities, days, professionals, external, ext
                             {!capabilities.external && <Th>Servicios</Th>}
                             {!capabilities.external && <Th>Horario</Th>}
                             {!capabilities.external && <Th>Estado</Th>}
-                            {canManage && <Th className="text-center">Acciones</Th>}
+                            {canAct && <Th className="text-center">Acciones</Th>}
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-line">
@@ -88,11 +93,11 @@ export default function Index({ capabilities, days, professionals, external, ext
                                         <Badge tone={professional.isActive ? 'green' : 'neutral'}>{professional.isActive ? 'Activo' : 'Inactivo'}</Badge>
                                     </Td>
                                 )}
-                                {canManage && (
+                                {canAct && (
                                     <Td>
                                         <div className="flex items-center justify-center gap-1">
-                                            <IconButton icon={Pencil} label="Editar" context={professional.name} onClick={() => setEditing(professional)} />
-                                            <IconButton icon={Power} label={professional.isActive ? 'Desactivar' : 'Activar'} context={professional.name} tone={professional.isActive ? 'danger' : 'primary'} onClick={() => toggle(professional)} />
+                                            {canEdit && <IconButton icon={Pencil} label="Editar" context={professional.name} onClick={() => setEditing(professional)} />}
+                                            {canToggle && <IconButton icon={Power} label={professional.isActive ? 'Desactivar' : 'Activar'} context={professional.name} tone={professional.isActive ? 'danger' : 'primary'} onClick={() => toggle(professional)} />}
                                         </div>
                                     </Td>
                                 )}
@@ -102,7 +107,7 @@ export default function Index({ capabilities, days, professionals, external, ext
                 </TableWrap>
             )}
         </Card>,
-        ...(capabilities.external ? [] : [<ResourcesPanel key="res" resources={resources} canManage={canManage} />, <ExceptionsPanel key="exc" exceptions={exceptions} professionals={professionals.filter((p) => p.isActive)} canManage={canManage} />]),
+        ...(capabilities.external ? [] : [<ResourcesPanel key="res" resources={resources} can={{ create: canCreate, edit: canEdit, toggle: canToggle }} />, <ExceptionsPanel key="exc" exceptions={exceptions} professionals={professionals.filter((p) => p.isActive)} canManage={canAvailability} />]),
     ];
 
     return (
@@ -110,7 +115,7 @@ export default function Index({ capabilities, days, professionals, external, ext
             <Head title="Profesionales" />
 
             <PageHeader title="Profesionales y disponibilidad" description="Quién presta cada servicio, cuándo trabaja y qué días no se puede reservar.">
-                {canManage && tab === 0 && (
+                {canCreate && tab === 0 && (
                     <PrimaryButton type="button" onClick={() => setEditing({})} className="gap-2">
                         <Plus className="size-4" aria-hidden="true" />
                         Nuevo profesional

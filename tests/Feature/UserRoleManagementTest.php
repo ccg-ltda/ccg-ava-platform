@@ -169,7 +169,7 @@ class UserRoleManagementTest extends TestCase
 
     public function test_routes_are_authorized_by_the_permissions_of_the_workspace_role(): void
     {
-        Role::findOrCreate('settings-only', 'web')->syncPermissions(['manage-settings', 'view-dashboard']);
+        Role::findOrCreate('settings-only', 'web')->syncPermissions(['view-settings', 'view-integrations', 'view-dashboard']);
         $this->actAs('settings-only');
 
         $this->get('/settings')->assertOk();
@@ -240,7 +240,7 @@ class UserRoleManagementTest extends TestCase
 
         $admin = Role::findByName('admin', 'web');
         $this->put('/roles/'.$admin->id, ['permissions' => []])->assertSessionHasErrors('permissions');
-        $this->assertCount(26, $admin->fresh()->permissions);
+        $this->assertCount(count(array_filter(config('permissions.permissions'), fn (array $p, string $n) => ! ($p['platform'] ?? false), ARRAY_FILTER_USE_BOTH)), $admin->fresh()->permissions);
     }
 
     public function test_roles_cannot_be_deleted_even_by_superusers(): void
@@ -259,11 +259,11 @@ class UserRoleManagementTest extends TestCase
     {
         $this->actAs('admin');
         $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('canManageRoles', false)->has('permissionNames', 29));
+            ->where('canManageRoles', false)->has('permissionNames', count(config('permissions.permissions'))));
 
         $this->actAs('admin', superuser: true);
         $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('canManageRoles', true)->has('permissionNames', 29));
+            ->where('canManageRoles', true)->has('permissionNames', count(config('permissions.permissions'))));
     }
 
     // --- isolation ----------------------------------------------------------------------------------------
@@ -370,7 +370,7 @@ class UserRoleManagementTest extends TestCase
         $this->actAs('admin');
 
         $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('permissionNames', 29)->where('canManageRoles', false));
+            ->has('permissionNames', count(config('permissions.permissions')))->where('canManageRoles', false));
         $this->post('/roles', ['name' => 'x', 'permissions' => ['manage-users']])->assertForbidden();
     }
 
@@ -381,5 +381,76 @@ class UserRoleManagementTest extends TestCase
         $this->post('/users', $this->newUserPayload('cliente'))->assertSessionHas('success');
         $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page
             ->where('flash.success', fn ($message) => str_contains((string) $message, 'creado')));
+    }
+
+    // --- the permission editor and the permission list read the catalog by resource ---------------------------------------
+
+    public function test_the_catalog_sent_to_the_editor_groups_by_resource_and_says_what_each_one_needs(): void
+    {
+        $this->actAs('admin', superuser: true);
+
+        $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page->where('permissionCatalog', function ($catalog) {
+            $groups = collect($catalog['groups']);
+            $items = collect($catalog['items'])->keyBy('name');
+
+            $this->assertSame('Clientes', $groups['customers']['label']);
+            $this->assertSame('view-customers', $groups['customers']['list']);
+            $this->assertSame('Clientes', $groups['customers']['moduleName']);
+            $this->assertSame('view-customers', $items['edit-customers']['requires']);
+            $this->assertNull($items['view-customers']['requires'], 'the permission that opens a page needs nothing else');
+            $this->assertNull($items['manage-plans']['requires']);
+            $this->assertTrue($items['manage-plans']['platform']);
+            // Every permission of the database is described: nothing assignable is hidden.
+            $this->assertCount(Permission::count(), $items);
+
+            return true;
+        }));
+    }
+
+    public function test_the_permission_list_is_filtered_by_resource_and_by_text_on_the_server(): void
+    {
+        $this->actAs('admin', superuser: true);
+        $total = Permission::count();
+
+        $this->get('/users?permissions_per_page=100&permission_group=customers')->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('permissions.data', fn ($rows) => collect($rows)->pluck('name')->sort()->values()->all() === collect(config('permissions.permissions'))->filter(fn ($p) => $p['group'] === 'customers')->keys()->sort()->values()->all())
+            ->where('permissions.total', $total));
+
+        // The text looks in the name, the label, the description and the resource, ignoring case and accents.
+        $this->get('/users?permissions_per_page=100&permission_q=ANONIMIZAR')->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('permissions.data', fn ($rows) => collect($rows)->pluck('name')->all() === ['anonymize-customers'])
+            ->where('permissions.meta.total', 1)->where('permissions.total', $total));
+
+        $this->get('/users?permissions_per_page=100&permission_group=customers&permission_q=detalle')->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('permissions.data', fn ($rows) => collect($rows)->pluck('name')->all() === ['view-customer-details']));
+
+        $this->get('/users?permission_group=nope')->assertInertia(fn (AssertableInertia $page) => $page->where('permissions.data', []));
+    }
+
+    public function test_the_role_scope_is_readable_without_the_permission_names_being_truncated(): void
+    {
+        $this->actAs('admin');
+
+        $this->get('/users?roles_per_page=100')->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('roles.data', function ($roles) {
+                $admin = collect($roles)->firstWhere('name', 'admin');
+                // The page gets the complete list of the role: the summary by resource is built from it on the client.
+                $this->assertGreaterThan(60, count($admin['permissions']));
+                $this->assertContains('edit-customers', $admin['permissions']);
+
+                return true;
+            }));
+    }
+
+    public function test_a_role_keeps_exactly_the_combination_it_was_given(): void
+    {
+        $this->actAs('admin', superuser: true);
+        $role = Role::findOrCreate('combinado', 'web');
+
+        $this->put('/roles/'.$role->id, ['permissions' => ['view-customers', 'create-customers']])->assertSessionHasNoErrors();
+
+        // Selecting one never grants another: no view of the detail, no edit, no remove.
+        $this->assertEqualsCanonicalizing(['view-customers', 'create-customers'], $role->fresh()->permissions->pluck('name')->all());
+        $this->assertDatabaseHas('audit_logs', ['resource_type' => 'role', 'resource_id' => $role->id]);
     }
 }

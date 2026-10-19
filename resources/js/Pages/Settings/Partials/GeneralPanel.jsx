@@ -2,16 +2,23 @@ import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import Textarea from '@/Components/Textarea';
 import TextInput from '@/Components/TextInput';
-import SettingsSection from './SettingsSection';
+import SettingsSection, { Fact } from './SettingsSection';
 
 const DESCRIPTION_MAX = 500;
 
 /** General: how the Workspace is called and described. Codes and IDs are never shown. */
-export default function GeneralPanel({ form, onSave }) {
+export default function GeneralPanel({ settings, form, onSave, section }) {
     const { data, setData, errors } = form;
 
+    const summary = (
+        <dl className="grid gap-3 sm:grid-cols-2">
+            <Fact label="Nombre del Workspace">{settings.name}</Fact>
+            <Fact label="Descripción" className="sm:col-span-2">{settings.description}</Fact>
+        </dl>
+    );
+
     return (
-        <SettingsSection title="General" description="El nombre y la descripción con los que se identifica tu Workspace." form={form} onSave={onSave}>
+        <SettingsSection title="General" description="El nombre y la descripción con los que se identifica tu Workspace." form={form} onSave={onSave} summary={summary} {...section}>
             <div>
                 <InputLabel htmlFor="settings_name" value="Nombre del Workspace" />
                 <TextInput id="settings_name" className="mt-1" value={data.name} onChange={(e) => setData('name', e.target.value)} invalid={Boolean(errors.name)} maxLength={255} />

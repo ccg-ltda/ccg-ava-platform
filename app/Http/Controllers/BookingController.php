@@ -31,7 +31,7 @@ use Inertia\Response;
 
 /**
  * Agenda y reservas: the calendar of appointments, who books, the booking rules and the actions on an appointment. Reading is
- * `view-bookings`, operating appointments `manage-bookings` and the rules `manage-services`. Everything starts from the Workspace of
+ * `view-bookings`; creating, editing and cancelling appointments are `create-bookings`, `edit-bookings` and `cancel-bookings`, and the rules and the public page `manage-booking-settings`. Everything starts from the Workspace of
  * the session and goes through BookingManager, so it works on whichever agenda is the Workspace's source of truth.
  */
 class BookingController extends Controller

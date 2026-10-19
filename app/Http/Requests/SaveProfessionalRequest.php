@@ -12,7 +12,7 @@ use Illuminate\Validation\Validator;
 /**
  * Create / update of a professional of the ACTIVE Workspace: who they are, which services they perform and their weekly
  * schedule as a flat list of intervals (ISO weekday, local times; a break is the gap between two intervals of a day).
- * Authorization is the `workspace.permission:manage-services` route middleware.
+ * Authorization is the `workspace.permission:create-professionals` / `edit-professionals` route middleware.
  */
 class SaveProfessionalRequest extends FormRequest
 {
