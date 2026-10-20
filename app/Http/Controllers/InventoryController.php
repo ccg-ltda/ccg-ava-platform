@@ -60,6 +60,27 @@ class InventoryController extends Controller
         return back()->with('success', 'Stock mínimo guardado correctamente');
     }
 
+    /**
+     * Turns the stock control of a product on or off from its management page. Turning it on invents nothing (the stock stays to be registered, location by
+     * location); turning it off keeps the stocks and the whole history. Needs `adjust-inventory`, like every change of the inventory.
+     */
+    public function control(Request $request, int $product): RedirectResponse
+    {
+        abort_unless($this->schema->inventoryReady(), 409, 'Falta aplicar la última migración de la base de datos.');
+
+        $model = $request->attributes->get('workspace')->products()->findOrFail($product);
+        $tracks = $request->validate(['tracks_inventory' => ['required', 'boolean']])['tracks_inventory'];
+
+        if ($model->tracks_inventory === (bool) $tracks) {
+            return back();
+        }
+
+        $model->update(['tracks_inventory' => (bool) $tracks]);
+
+        return back()->with('success', $tracks ? 'Control de inventario activado' : 'Control de inventario desactivado')
+            ->with('warning', $tracks ? 'Registra las existencias iniciales de cada sede: hasta entonces el producto no se puede pedir.' : 'El producto ya no se bloquea por falta de stock. Sus existencias y su historial se conservan.');
+    }
+
     /** The product (of the active Workspace) and the location the request is about. @return array{0: Product, 1: ?int} */
     private function target(Request $request, int $product): array
     {

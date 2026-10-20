@@ -13,21 +13,54 @@ export const LEVELS = {
 /** The look of a level; `null` (a product without stock control) has none: it is not «out of stock». */
 export const levelOf = (level) => LEVELS[level] ?? null;
 
-/** What to say of a product in the list for the consulted place. `stock` is the `stock` object of the product (see CatalogInventory::stockView). */
+/** The wording of a stock that is not a quantity. */
+export const STATES = {
+    untracked: 'No controlado',
+    unconfigured: 'Sin configurar',
+    empty: 'Sin existencias',
+};
+
+/**
+ * What to say of a product in the list for the consulted place. `stock` is the `stock` object of the product (see CatalogInventory::stockView).
+ * - no stock control: «No controlado» (it is not «out of stock»);
+ * - control on and a quantity configured in the place (0 included: «Sin existencias»): the quantity of THAT place;
+ * - control on and no stock row in the place: «Sin configurar» (nothing is invented as 0);
+ * - every place: one line per place (see `placeLines`), never one summed number.
+ */
 export function stockSummary(stock) {
-    if (!stock || !stock.tracked) return { kind: 'untracked', text: 'Sin control de inventario', quantity: null };
+    if (!stock || !stock.tracked) return { kind: 'untracked', text: STATES.untracked, quantity: null };
 
-    if (stock.unavailableHere) return { kind: 'unavailable', text: 'Sin inventario en esta sede', quantity: null };
+    if (stock.unavailableHere) return { kind: 'unavailable', text: STATES.unconfigured, hint: 'Sin existencias registradas en esta sede', quantity: null };
 
-    if (stock.stocks.length === 0) return { kind: 'pending', text: 'Inventario pendiente de configurar', quantity: null };
+    if (stock.stocks.length === 0) return { kind: 'pending', text: STATES.unconfigured, hint: 'Registra las existencias iniciales', quantity: null };
 
-    if (stock.total.scope === 'all') {
-        const places = stock.total.places;
+    if (stock.total.scope === 'all') return { kind: 'places', quantity: null, text: 'Por sede' };
 
-        return { kind: 'total', quantity: stock.total.quantity, text: `Total de ${places === 1 ? '1 sede' : `${places} sedes`}`, scope: 'all' };
-    }
+    const quantity = stock.selected?.quantity ?? stock.total.quantity;
 
-    return { kind: 'place', quantity: stock.selected?.quantity ?? stock.total.quantity, text: 'En esta sede', scope: 'one' };
+    return { kind: 'place', quantity, text: 'En esta sede', empty: quantity <= 0 };
+}
+
+/**
+ * One line per place for the «every place» view: each location (or the general inventory) with its own quantity and level, «Sin configurar» for the ones with
+ * control on but no stock row. `locations` are the active locations of the Workspace; a stock of an inactive location is kept with its name.
+ */
+export function placeLines(stock, locations) {
+    const byLocation = new Map(stock.stocks.map((row) => [row.locationId, row]));
+    const lines = locations.map((location) => ({ key: location.id, name: location.name, row: byLocation.get(location.id) ?? null }));
+
+    stock.stocks.filter((row) => row.locationId === null || !locations.some((location) => location.id === row.locationId)).forEach((row) => lines.push({ key: row.locationId ?? 'general', name: row.location, row }));
+
+    return lines;
+}
+
+/** «Sedes: Principal, Sede Norte»: only the places with inventory configured, from real data; '' when there is none. */
+export function configuredPlaces(stock) {
+    if (!stock?.tracked || stock.stocks.length === 0) return '';
+
+    const names = stock.stocks.map((row) => row.location);
+
+    return `${stock.stocks.every((row) => row.locationId === null) ? 'Inventario' : names.length === 1 ? 'Sede' : 'Sedes'}: ${names.join(', ')}`;
 }
 
 /** "3 unidades" / "1 unidad". */

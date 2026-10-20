@@ -110,6 +110,8 @@ class OperationsMetrics
                 // A product is low or out PER LOCATION: the count is of stocks (product in a location), so two locations of one product count twice.
                 'low' => (int) $low($stocks())->count(),
                 'out' => (int) $stocks()->where('inventory_stocks.quantity', '<=', 0)->count(),
+                // Control on but not one stock row yet: pending to configure, neither low nor out.
+                'unconfigured' => (int) $workspace->products()->where('is_active', true)->where('tracks_inventory', true)->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('inventory_stocks')->whereColumn('inventory_stocks.product_id', 'products.id'))->count(),
                 'entries' => $sumOf('entry'),
                 'sold' => -$sumOf('sale'),
             ],

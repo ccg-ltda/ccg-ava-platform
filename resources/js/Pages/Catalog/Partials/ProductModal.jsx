@@ -1,5 +1,4 @@
-import { router, useForm } from '@inertiajs/react';
-import { Plus } from 'lucide-react';
+import { Link, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 import Alert from '@/Components/Alert';
 import { useConfirm } from '@/Components/ConfirmDialog';
@@ -7,6 +6,7 @@ import ImageField from '@/Components/ImageField';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import Modal from '@/Components/Modal';
+import PriceInput from '@/Components/PriceInput';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SearchableSelect from '@/Components/SearchableSelect';
 import SecondaryButton from '@/Components/SecondaryButton';
@@ -15,71 +15,32 @@ import Textarea from '@/Components/Textarea';
 import TextInput from '@/Components/TextInput';
 import Toggle from '@/Components/Toggle';
 import { emptyStocks, stocksPayload } from '@/lib/inventory';
-import { normalize } from '@/lib/permissions';
 
-/** The category is chosen from the Workspace's own list; a new one is created in place and selected, and a name that already exists (in any capitalization) just selects that one. */
+/** The category is chosen from the active categories of the Workspace; they are created in the «Categorías» tab of the catalog, never typed here. */
 function CategoryField({ value, onChange, categories, error }) {
-    const [adding, setAdding] = useState(false);
-    const [name, setName] = useState('');
-    const [problem, setProblem] = useState(null);
-    const [saving, setSaving] = useState(false);
-
-    const create = () => {
-        const wanted = name.trim();
-
-        if (!wanted) return setProblem('Escribe el nombre de la categoría.');
-
-        router.post(route('catalog.categories.store'), { name: wanted }, {
-            preserveState: true,
-            preserveScroll: true,
-            onStart: () => setSaving(true),
-            onFinish: () => setSaving(false),
-            onError: (errors) => setProblem(errors.name ?? 'No se pudo crear la categoría.'),
-            onSuccess: (page) => {
-                const found = page.props.categories.find((category) => normalize(category.name) === normalize(wanted));
-
-                if (found) onChange(found.id);
-                setName('');
-                setProblem(null);
-                setAdding(false);
-            },
-        });
-    };
-
     return (
         <div>
             <InputLabel htmlFor="product_category" value="Categoría (opcional)" />
-            <SearchableSelect
-                id="product_category"
-                className="mt-1"
-                value={value}
-                onChange={onChange}
-                options={[{ value: '', label: 'Sin categoría' }, ...categories.map((category) => ({ value: category.id, label: category.name }))]}
-                placeholder="Escribe para buscar o elige"
-                invalid={Boolean(error)}
-            />
-            <InputError message={error} className="mt-1" />
-            {!adding ? (
-                <button type="button" onClick={() => setAdding(true)} className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-accent-blue hover:underline focus-visible:outline-2 focus-visible:outline-primary">
-                    <Plus className="size-3.5" aria-hidden="true" />
-                    Nueva categoría
-                </button>
+            {categories.length > 0 ? (
+                <SearchableSelect
+                    id="product_category"
+                    className="mt-1"
+                    value={value}
+                    onChange={onChange}
+                    options={[{ value: '', label: 'Sin categoría' }, ...categories.map((category) => ({ value: category.id, label: category.name }))]}
+                    placeholder="Escribe para buscar o elige"
+                    invalid={Boolean(error)}
+                />
             ) : (
-                <div className="mt-2 rounded-lg border border-line bg-canvas/50 p-3">
-                    <InputLabel htmlFor="new_category" value="Nombre de la categoría" />
-                    <div className="mt-1 flex flex-wrap gap-2">
-                        <TextInput id="new_category" className="min-w-0 flex-1" value={name} maxLength={80} placeholder="Ej. Cuidado facial" onChange={(event) => setName(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && (event.preventDefault(), create())} invalid={Boolean(problem)} />
-                        <PrimaryButton type="button" onClick={create} disabled={saving}>
-                            Crear
-                        </PrimaryButton>
-                        <SecondaryButton type="button" onClick={() => { setAdding(false); setProblem(null); setName(''); }}>
-                            Cancelar
-                        </SecondaryButton>
-                    </div>
-                    <InputError message={problem} className="mt-1" />
-                    <p className="mt-1 text-xs text-ink-muted">Si ya existe una con ese nombre, se usa esa: no se duplican.</p>
-                </div>
+                <p className="mt-1 rounded-lg border border-dashed border-line px-3 py-2 text-sm text-ink-muted">
+                    Aún no hay categorías. Créalas en la pestaña{' '}
+                    <Link href={`${route('catalog.index')}?tab=categorias`} className="font-semibold text-accent-blue hover:underline">
+                        Categorías
+                    </Link>{' '}
+                    del catálogo.
+                </p>
             )}
+            <InputError message={error} className="mt-1" />
         </div>
     );
 }
@@ -227,13 +188,13 @@ export default function ProductModal({ product, locations, categories, currency,
                         )}
                         <div>
                             <InputLabel htmlFor="product_price" value={`Precio de venta (${currency})`} />
-                            <TextInput id="product_price" type="number" min={0} step="0.01" inputMode="decimal" className="mt-1" placeholder="Ej. 24900" value={data.price} onChange={(e) => setData('price', e.target.value)} invalid={Boolean(errors.price)} />
+                            <PriceInput id="product_price" className="mt-1" placeholder="Ej. 24.900" value={data.price} onChange={(value) => setData('price', value)} invalid={Boolean(errors.price)} />
                             <InputError message={errors.price} className="mt-1" />
                         </div>
                         {ready && (
                             <div>
                                 <InputLabel htmlFor="product_cost" value={`Coste unitario (${currency}, opcional)`} />
-                                <TextInput id="product_cost" type="number" min={0} step="0.01" inputMode="decimal" className="mt-1" placeholder="Ej. 12000" value={data.cost} onChange={(e) => setData('cost', e.target.value)} invalid={Boolean(errors.cost)} />
+                                <PriceInput id="product_cost" className="mt-1" placeholder="Ej. 12.000" value={data.cost} onChange={(value) => setData('cost', value)} invalid={Boolean(errors.cost)} />
                                 <p className="mt-1 text-xs text-ink-muted">Lo que te cuesta a ti. No se muestra a los clientes.</p>
                                 <InputError message={errors.cost} className="mt-1" />
                             </div>
@@ -260,8 +221,8 @@ export default function ProductModal({ product, locations, categories, currency,
                                     checked={data.tracks_inventory}
                                     onChange={(value) => setData('tracks_inventory', value)}
                                     disabled={!inventory.canAdjust}
-                                    label="Controlar el inventario de este producto"
-                                    description={inventory.canAdjust ? 'Lleva la existencia de cada sede, avisa cuando baja del mínimo y la descuenta al confirmar una venta.' : 'Solo quien puede ajustar el inventario cambia esto.'}
+                                    label="Controlar inventario"
+                                    description={inventory.canAdjust ? 'Activa esta opción para controlar las existencias de este producto, configurar cantidades por sede y evitar ventas que superen el stock disponible' : 'Solo quien puede ajustar el inventario cambia esto.'}
                                 />
                                 <InputError message={errors.tracks_inventory} className="mt-1" />
                             </div>

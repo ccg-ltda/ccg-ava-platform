@@ -73,7 +73,7 @@ class SaveProductRequest extends FormRequest
 
             // A free-text category is not a valid one any more: the category is chosen from the Workspace's list.
             if (app(CommerceSchema::class)->inventoryReady() && filled($this->input('category')) && ! $this->filled('category_id')) {
-                $validator->errors()->add('category_id', 'Elige una categoría de la lista o crea una nueva.');
+                $validator->errors()->add('category_id', 'Elige una categoría de la lista. Las categorías nuevas se crean en la pestaña «Categorías» del catálogo.');
             }
 
             $locations = collect($this->input('stocks', []))->pluck('location_id');

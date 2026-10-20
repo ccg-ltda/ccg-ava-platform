@@ -21,6 +21,7 @@ return [
         'professional' => ['label' => 'Profesionales', 'noun' => 'el profesional'],
         'location' => ['label' => 'Sedes', 'noun' => 'la sede'],
         'product' => ['label' => 'Catálogo de productos', 'noun' => 'el producto'],
+        'product_category' => ['label' => 'Categorías de productos', 'noun' => 'la categoría de productos'],
         'order' => ['label' => 'Pedidos', 'noun' => 'el pedido'],
         'bookable_resource' => ['label' => 'Recursos de reserva', 'noun' => 'el recurso'],
         'schedule_exception' => ['label' => 'Excepciones de horario', 'noun' => 'la excepción de horario'],

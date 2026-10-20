@@ -6,7 +6,7 @@ export const money = (value, currency) => {
     const amount = Number(value);
     const hasCents = Math.round(amount * 100) % 100 !== 0;
 
-    return new Intl.NumberFormat('es', { style: 'currency', currency, maximumFractionDigits: 2, ...(hasCents ? { minimumFractionDigits: 2 } : {}) }).format(amount);
+    return new Intl.NumberFormat('es', { style: 'currency', currency, useGrouping: 'always', maximumFractionDigits: 2, ...(hasCents ? { minimumFractionDigits: 2 } : {}) }).format(amount);
 };
 
 /** "16/10/26, 14:05" for an ISO moment, in the browser's own timezone. */

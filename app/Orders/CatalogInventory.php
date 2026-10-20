@@ -82,17 +82,20 @@ class CatalogInventory
     }
 
     /**
-     * «out»: stock control and nothing on hand in the consulted place (no row there counts: it is not available). «low»: something on hand but at or below the
-     * minimum of that place. «ok»: on hand and above it. «untracked»: no stock control.
+     * «unconfigured»: stock control and NO stock row in the consulted place (nothing was ever registered there: it is not zero, it is pending). «out»: stock
+     * control and a stock row with nothing on hand (a configured zero). «low»: something on hand but at or below the minimum of that place. «ok»: on hand and
+     * above it. «untracked»: no stock control.
      */
     private function availability(Builder $query, string $availability, array $place): Builder
     {
+        $configured = $this->stockExists($place);
         $onHand = $this->stockExists($place, fn ($q) => $q->where('inventory_stocks.quantity', '>', 0));
         $low = $this->stockExists($place, fn ($q) => $q->where('inventory_stocks.quantity', '>', 0)->where('inventory_stocks.min_quantity', '>', 0)->whereColumn('inventory_stocks.quantity', '<=', 'inventory_stocks.min_quantity'));
 
         return match ($availability) {
             'untracked' => $query->where('tracks_inventory', false),
-            'out' => $query->where('tracks_inventory', true)->whereNotExists($onHand),
+            'unconfigured' => $query->where('tracks_inventory', true)->whereNotExists($configured),
+            'out' => $query->where('tracks_inventory', true)->whereExists($configured)->whereNotExists($onHand),
             'low' => $query->where('tracks_inventory', true)->whereExists($low),
             'ok' => $query->where('tracks_inventory', true)->whereExists($onHand)->whereNotExists($low),
             default => $query,
@@ -100,14 +103,15 @@ class CatalogInventory
     }
 
     /**
-     * The compact summary above the list, for the consulted place: products with stock control, with low stock and out of stock, and the units on hand.
+     * The compact summary above the list, for the consulted place: products with stock control, with low stock, out of stock (a configured zero) and still to
+     * configure (control on, no stock row in the place), and the units on hand. The three conditions never overlap: a product without a row is not «out».
      *
-     * @return array{tracked: int, low: int, out: int, units: int}
+     * @return array{tracked: int, low: int, out: int, unconfigured: int, units: int}
      */
     public function summary(Workspace $workspace, array $place): array
     {
         if (! $this->schema->inventoryReady()) {
-            return ['tracked' => 0, 'low' => 0, 'out' => 0, 'units' => 0];
+            return ['tracked' => 0, 'low' => 0, 'out' => 0, 'unconfigured' => 0, 'units' => 0];
         }
 
         $base = fn () => Product::where('workspace_id', $workspace->id)->where('is_active', true)->where('tracks_inventory', true);
@@ -119,6 +123,7 @@ class CatalogInventory
             'tracked' => $base()->count(),
             'low' => $this->availability($base(), 'low', $place)->count(),
             'out' => $this->availability($base(), 'out', $place)->count(),
+            'unconfigured' => $this->availability($base(), 'unconfigured', $place)->count(),
             'units' => (int) $units,
         ];
     }
@@ -144,7 +149,9 @@ class CatalogInventory
         $consulted = $rows->filter(fn (array $row) => $place['id'] === null && ! $place['general'] || $row['locationId'] === $place['id']);
         $selected = ($place['id'] !== null || $place['general']) ? $consulted->first() : null;
         $level = match (true) {
-            $consulted->isEmpty() || $consulted->sum('quantity') <= 0 => InventoryStock::OUT,
+            // No row at all is «pending» (no level): only a configured zero is out of stock.
+            $consulted->isEmpty() => null,
+            $consulted->sum('quantity') <= 0 => InventoryStock::OUT,
             $consulted->contains(fn (array $row) => $row['level'] === InventoryStock::LOW) => InventoryStock::LOW,
             default => InventoryStock::OK,
         };

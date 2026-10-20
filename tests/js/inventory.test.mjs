@@ -1,13 +1,13 @@
 // Run with `npm run test:js`. The words and the rules of the inventory screens.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { emptyStocks, levelOf, signed, stockSummary, stocksPayload, units } from '../../resources/js/lib/inventory.js';
+import { configuredPlaces, emptyStocks, levelOf, placeLines, signed, stockSummary, stocksPayload, units } from '../../resources/js/lib/inventory.js';
 
 const tracked = (overrides = {}) => ({ tracked: true, stocks: [{ locationId: 1, quantity: 10 }], selected: null, total: { quantity: 10, places: 1, scope: 'all' }, level: 'ok', unavailableHere: false, ...overrides });
 
 test('a product without stock control is not «out of stock»: it has no level and no quantity', () => {
     assert.equal(levelOf(null), null);
-    assert.deepEqual(stockSummary({ tracked: false }), { kind: 'untracked', text: 'Sin control de inventario', quantity: null });
+    assert.deepEqual(stockSummary({ tracked: false }), { kind: 'untracked', text: 'No controlado', quantity: null });
     assert.equal(stockSummary(null).kind, 'untracked');
 });
 
@@ -16,16 +16,25 @@ test('the three levels have their own label and tone', () => {
     assert.deepEqual([levelOf('low').label, levelOf('out').label], ['Stock bajo', 'Agotado']);
 });
 
-test('a total over every location says how many locations it adds up and is never presented as available everywhere', () => {
-    const all = stockSummary(tracked({ total: { quantity: 13, places: 2, scope: 'all' } }));
-    assert.deepEqual([all.kind, all.quantity, all.text], ['total', 13, 'Total de 2 sedes']);
-    assert.equal(stockSummary(tracked({ total: { quantity: 4, places: 1, scope: 'all' } })).text, 'Total de 1 sede');
+test('every-place view never sums the places into one number: it lists each place with its own state', () => {
+    const stock = tracked({ stocks: [{ locationId: 1, location: 'Principal', quantity: 5, min: 2, level: 'ok' }, { locationId: 2, location: 'Norte', quantity: 0, min: 0, level: 'out' }], total: { quantity: 5, places: 2, scope: 'all' } });
+    assert.deepEqual([stockSummary(stock).kind, stockSummary(stock).quantity], ['places', null]);
+
+    const lines = placeLines(stock, [{ id: 1, name: 'Principal' }, { id: 2, name: 'Norte' }, { id: 3, name: 'Sur' }]);
+    assert.deepEqual(lines.map((line) => [line.name, line.row?.quantity ?? 'sin configurar']), [['Principal', 5], ['Norte', 0], ['Sur', 'sin configurar']]);
+    assert.equal(configuredPlaces(stock), 'Sedes: Principal, Norte');
+    assert.equal(configuredPlaces(tracked({ stocks: [{ locationId: 1, location: 'Principal' }] })), 'Sede: Principal');
+    assert.equal(configuredPlaces(tracked({ stocks: [{ locationId: null, location: 'Inventario general' }] })), 'Inventario: Inventario general');
+    assert.equal(configuredPlaces(tracked({ stocks: [] })), '');
+    assert.equal(configuredPlaces({ tracked: false, stocks: [] }), '');
 });
 
-test('a consulted location shows its own quantity, and a location without a stock row is unavailable there', () => {
+test('a consulted location shows its own quantity (zero is «Sin existencias», not pending); no row there is «Sin configurar»', () => {
     const one = stockSummary(tracked({ selected: { quantity: 3 }, total: { quantity: 3, places: 1, scope: 'one' } }));
-    assert.deepEqual([one.kind, one.quantity, one.text], ['place', 3, 'En esta sede']);
-    assert.equal(stockSummary(tracked({ unavailableHere: true, selected: null })).kind, 'unavailable');
+    assert.deepEqual([one.kind, one.quantity, one.empty], ['place', 3, false]);
+    assert.equal(stockSummary(tracked({ selected: { quantity: 0 }, total: { quantity: 0, places: 1, scope: 'one' } })).empty, true);
+    const missing = stockSummary(tracked({ unavailableHere: true, selected: null }));
+    assert.deepEqual([missing.kind, missing.text], ['unavailable', 'Sin configurar']);
     assert.equal(stockSummary(tracked({ stocks: [] })).kind, 'pending', 'control on but nothing configured yet');
 });
 

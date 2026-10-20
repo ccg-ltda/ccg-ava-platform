@@ -1,5 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { Boxes, Eye, MapPin, Package, PackageX, Pencil, Plus, TriangleAlert } from 'lucide-react';
+import { Boxes, MapPin, Package, PackageX, Pencil, Plus, Settings2, SlidersHorizontal, Tag, TriangleAlert } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import Alert from '@/Components/Alert';
 import Badge from '@/Components/Badge';
@@ -13,10 +13,14 @@ import SearchInput from '@/Components/SearchInput';
 import Select from '@/Components/Select';
 import StatusSwitch from '@/Components/StatusSwitch';
 import { TableWrap, Td, Th } from '@/Components/Table';
+import Tabs from '@/Components/Tabs';
 import { money } from '@/config/orders';
 import useAccess from '@/Hooks/useAccess';
 import usePagedList from '@/Hooks/usePagedList';
+import useUrlTab from '@/Hooks/useUrlTab';
 import AppLayout from '@/Layouts/AppLayout';
+import { configuredPlaces } from '@/lib/inventory';
+import CategoriesPanel from './Partials/CategoriesPanel';
 import ProductModal from './Partials/ProductModal';
 import StockInfo, { ProductThumb } from './Partials/StockInfo';
 
@@ -25,6 +29,7 @@ const AVAILABILITY = [
     { value: 'ok', label: 'Con existencias' },
     { value: 'low', label: 'Stock bajo' },
     { value: 'out', label: 'Agotados' },
+    { value: 'unconfigured', label: 'Sin configurar' },
     { value: 'untracked', label: 'Sin control de inventario' },
 ];
 
@@ -49,13 +54,13 @@ function StateBadge({ product }) {
     return <Badge tone={product.isActive ? 'green' : 'red'}>{product.isActive ? 'Activo' : 'Inactivo'}</Badge>;
 }
 
-/** Ver / Editar, always visible and reachable with the keyboard. */
+/** Gestionar (the product detail: data, stock per sede, entries, adjustments, history) / Editar, always visible and reachable with the keyboard. */
 function RowActions({ product, canEdit, onEdit }) {
     return (
         <div className="flex items-center justify-end gap-1 whitespace-nowrap">
-            <Link href={route('catalog.show', product.id)} aria-label={`Ver ${product.name}`} className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-accent-blue hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-primary">
-                <Eye className="size-4" aria-hidden="true" />
-                Ver
+            <Link href={route('catalog.show', product.id)} aria-label={`Gestionar ${product.name}`} className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-accent-blue hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-primary">
+                <Settings2 className="size-4" aria-hidden="true" />
+                Gestionar
             </Link>
             {canEdit && (
                 <button type="button" onClick={() => onEdit(product)} aria-label={`Editar ${product.name}`} className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-ink-muted hover:bg-canvas hover:text-ink focus-visible:outline-2 focus-visible:outline-primary">
@@ -68,13 +73,15 @@ function RowActions({ product, canEdit, onEdit }) {
 }
 
 /** Catálogo de productos and its inventory: what the Workspace sells and how much of it is where. Never deleted, only deactivated. */
-export default function Index({ schemaPending, products, filters, perPageOptions, categories, locations, currency, total, inventory }) {
+export default function Index({ schemaPending, categoryAdmin, products, filters, perPageOptions, categories, locations, currency, total, inventory }) {
     const confirm = useConfirm();
     const { permissions } = useAccess();
     const canCreate = permissions.includes('create-products') && !schemaPending;
     const canEdit = permissions.includes('edit-products') && !schemaPending;
     const canToggle = permissions.includes('activate-products') && !schemaPending;
     const [editing, setEditing] = useState(null);
+    const [tab, selectTab] = useUrlTab(['catalogo', 'categorias']);
+    const tabs = [{ id: 'catalogo', label: 'Catálogo', icon: Package, count: total }, { id: 'categorias', label: 'Categorías', icon: Tag, count: categoryAdmin?.data.length }];
     const [search, setSearch] = useState(filters.search ?? '');
     const firstRender = useRef(true);
     const showStock = Boolean(inventory?.canView);
@@ -82,7 +89,7 @@ export default function Index({ schemaPending, products, filters, perPageOptions
 
     const list = usePagedList({
         section: 'products',
-        only: ['products', 'filters', 'categories', 'inventory'],
+        only: ['products', 'filters', 'categories', 'inventory', 'categoryAdmin'],
         meta: products.meta,
         perPageOptions,
         routeName: 'catalog.index',
@@ -117,29 +124,8 @@ export default function Index({ schemaPending, products, filters, perPageOptions
         if (confirmed) router.post(route(product.isActive ? 'catalog.deactivate' : 'catalog.activate', product.id), {}, { preserveScroll: true });
     };
 
-    return (
+    const catalogPanel = (
         <>
-            <Head title="Catálogo" />
-
-            <PageHeader title="Catálogo de productos" description="Lo que vende este Workspace y cuánto hay de cada producto en cada sede. Nunca se borra: se desactiva.">
-                {canCreate && (
-                    <PrimaryButton type="button" onClick={() => setEditing({})} className="gap-2">
-                        <Plus className="size-4" aria-hidden="true" />
-                        Nuevo producto
-                    </PrimaryButton>
-                )}
-            </PageHeader>
-
-            {schemaPending && (
-                <Alert tone="warning">
-                    El catálogo todavía no está disponible en este entorno: falta aplicar la última migración de la base de datos. Un administrador debe ejecutar <code>php artisan migrate</code>.
-                </Alert>
-            )}
-
-            {!schemaPending && !inventory.ready && (
-                <Alert tone="info">El inventario todavía no está disponible en este entorno: falta aplicar la última migración de la base de datos. El catálogo sigue funcionando como siempre.</Alert>
-            )}
-
             {!schemaPending && showStock && inventory.summary && (
                 <section aria-label="Resumen del inventario" className="space-y-2">
                     <p className="flex flex-wrap items-center gap-1.5 text-sm text-ink-muted">
@@ -147,11 +133,12 @@ export default function Index({ schemaPending, products, filters, perPageOptions
                         Resumen de <strong className="text-ink">{inventory.placeLabel}</strong>
                         {filters.place === '' && locations.length > 0 && <span>(cada sede se cuenta por separado)</span>}
                     </p>
-                    <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
                         <Figure icon={Boxes} label="Productos con control de inventario" value={inventory.summary.tracked} />
                         <Figure icon={Package} label="Unidades en existencia" value={inventory.summary.units} hint={filters.place === '' && locations.length > 0 ? 'Suma de todas las sedes' : undefined} />
                         <Figure icon={TriangleAlert} label="Con stock bajo" value={inventory.summary.low} tone={inventory.summary.low > 0 ? 'text-accent-amber' : 'text-ink'} />
-                        <Figure icon={PackageX} label="Agotados" value={inventory.summary.out} tone={inventory.summary.out > 0 ? 'text-danger' : 'text-ink'} />
+                        <Figure icon={PackageX} label="Agotados" hint="Con existencia registrada en cero" value={inventory.summary.out} tone={inventory.summary.out > 0 ? 'text-danger' : 'text-ink'} />
+                        <Figure icon={SlidersHorizontal} label="Sin configurar" hint="Control activo, sin existencias registradas" value={inventory.summary.unconfigured} tone={inventory.summary.unconfigured > 0 ? 'text-accent-amber' : 'text-ink'} />
                     </div>
                 </section>
             )}
@@ -187,13 +174,14 @@ export default function Index({ schemaPending, products, filters, perPageOptions
                                             <div className="min-w-0 flex-1">
                                                 <p className="font-semibold break-words text-ink">{product.name}</p>
                                                 <p className="text-xs text-ink-muted">{[product.sku, product.category].filter(Boolean).join(' · ') || 'Sin SKU ni categoría'}</p>
+                                                {showStock && configuredPlaces(product.stock) && <p className="text-xs text-ink-muted">{configuredPlaces(product.stock)}</p>}
                                                 <p className="mt-1 text-sm font-semibold text-ink">{money(product.price, currency)}</p>
                                             </div>
                                             <span className="self-start">
                                                 <StateBadge product={product} />
                                             </span>
                                         </div>
-                                        {showStock && <StockInfo stock={product.stock} />}
+                                        {showStock && <StockInfo stock={product.stock} locations={locations} />}
                                         <div className="flex flex-wrap items-center justify-between gap-2">
                                             {canToggle ? (
                                                 <button type="button" onClick={() => toggle(product)} className="text-xs font-semibold text-ink-muted underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-primary">
@@ -231,6 +219,7 @@ export default function Index({ schemaPending, products, filters, perPageOptions
                                                                 {product.name}
                                                             </Link>
                                                             <p className="font-mono text-xs text-ink-muted">{product.sku ?? 'Sin SKU'}</p>
+                                                            {showStock && configuredPlaces(product.stock) && <p className="text-xs text-ink-muted">{configuredPlaces(product.stock)}</p>}
                                                         </div>
                                                     </div>
                                                 </Td>
@@ -238,7 +227,7 @@ export default function Index({ schemaPending, products, filters, perPageOptions
                                                 <Td className="whitespace-nowrap font-medium text-ink">{money(product.price, currency)}</Td>
                                                 {showStock && (
                                                     <Td>
-                                                        <StockInfo stock={product.stock} />
+                                                        <StockInfo stock={product.stock} locations={locations} />
                                                     </Td>
                                                 )}
                                                 <Td className="whitespace-nowrap">
@@ -257,6 +246,33 @@ export default function Index({ schemaPending, products, filters, perPageOptions
                     <Pagination noun="productos" {...list.paginationProps} />
                 </Card>
             )}
+        </>
+    );
+
+    return (
+        <>
+            <Head title="Catálogo" />
+
+            <PageHeader title="Catálogo de productos" description="Lo que vende este Workspace y cuánto hay de cada producto en cada sede. Nunca se borra: se desactiva.">
+                {canCreate && (
+                    <PrimaryButton type="button" onClick={() => setEditing({})} className="gap-2">
+                        <Plus className="size-4" aria-hidden="true" />
+                        Nuevo producto
+                    </PrimaryButton>
+                )}
+            </PageHeader>
+
+            {schemaPending && (
+                <Alert tone="warning">
+                    El catálogo todavía no está disponible en este entorno: falta aplicar la última migración de la base de datos. Un administrador debe ejecutar <code>php artisan migrate</code>.
+                </Alert>
+            )}
+
+            {!schemaPending && !inventory.ready && (
+                <Alert tone="info">El inventario todavía no está disponible en este entorno: falta aplicar la última migración de la base de datos. El catálogo sigue funcionando como siempre.</Alert>
+            )}
+
+            {!schemaPending && (categoryAdmin ? <Tabs tabs={tabs} selectedIndex={tab} onChange={selectTab}>{catalogPanel}<CategoriesPanel admin={categoryAdmin} /></Tabs> : catalogPanel)}
 
             {editing && <ProductModal product={editing} locations={locations} categories={categories} currency={currency} inventory={inventory} canActivate={canToggle} onClose={() => setEditing(null)} />}
         </>

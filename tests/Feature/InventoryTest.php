@@ -114,7 +114,7 @@ class InventoryTest extends TestCase
     public function test_the_same_category_written_in_another_capitalization_or_spacing_is_never_a_duplicate(): void
     {
         $this->post('/catalog/categories', ['name' => 'Cuidado facial'])->assertSessionHasNoErrors();
-        $this->post('/catalog/categories', ['name' => '  cuidado   FACIAL '])->assertSessionHasNoErrors()->assertSessionHas('warning');
+        $this->post('/catalog/categories', ['name' => '  cuidado   FACIAL '])->assertSessionHasErrors('name');
         $this->post('/catalog/categories', ['name' => '   '])->assertSessionHasErrors('name');
 
         $this->assertSame(1, ProductCategory::where('workspace_id', $this->workspace->id)->count());
@@ -221,7 +221,7 @@ class InventoryTest extends TestCase
         $this->get('/catalog?place='.$this->norte->id)->assertInertia(fn (AssertableInertia $page) => $page
             ->where('inventory.placeLabel', 'Norte')->where('products.data.0.stock.selected.quantity', 3)->where('products.data.0.stock.total.scope', 'one'));
         $this->get('/catalog?place='.$third->id)->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('products.data.0.stock.selected', null)->where('products.data.0.stock.unavailableHere', true)->where('products.data.0.stock.level', 'out'));
+            ->where('products.data.0.stock.selected', null)->where('products.data.0.stock.unavailableHere', true)->where('products.data.0.stock.level', null));
         // «Every location» labels the total as the sum of the stocks that exist, never as available everywhere.
         $this->get('/catalog')->assertInertia(fn (AssertableInertia $page) => $page
             ->where('inventory.placeLabel', 'Todas las sedes')->where('products.data.0.stock.total.quantity', 13)->where('products.data.0.stock.total.scope', 'all')->where('products.data.0.stock.total.places', 2));
@@ -557,17 +557,21 @@ class InventoryTest extends TestCase
         InventoryStock::where('product_id', $low->id)->where('location_id', $this->centro->id)->update(['min_quantity' => 5]);
         $out = $this->tracked(0, 4, ['name' => 'Gamma', 'sku' => 'GA-1', 'category_id' => $cat->id, 'category' => $cat->name]);
         $inactive = $this->tracked(7, 0, ['name' => 'Delta', 'sku' => 'DE-1', 'is_active' => false]);
+        $zero = $this->tracked(5, 0, ['name' => 'Zeta', 'sku' => 'ZE-1']);
+        app(InventoryService::class)->adjust($zero, $this->centro->id, 0, $this->admin, 'Conteo');
         $plain = $this->product(['name' => 'Epsilon', 'sku' => 'EP-1']);
         $names = fn (string $query) => collect($this->get("/catalog?{$query}")->assertOk()->viewData('page')['props']['products']['data'])->pluck('name')->sort()->values()->all();
         $centro = 'place='.$this->centro->id;
 
-        $this->assertSame(['Alfa', 'Beta', 'Delta', 'Epsilon', 'Gamma'], $names(''));
+        $this->assertSame(['Alfa', 'Beta', 'Delta', 'Epsilon', 'Gamma', 'Zeta'], $names(''));
         $this->assertSame(['Beta'], $names("{$centro}&availability=low"), 'at or below the minimum of the consulted location');
-        $this->assertSame(['Gamma'], $names("{$centro}&availability=out"), 'nothing on hand in the consulted location');
+        $this->assertSame(['Zeta'], $names("{$centro}&availability=out"), 'a configured zero in the consulted location');
+        $this->assertSame(['Gamma'], $names("{$centro}&availability=unconfigured"), 'control on and no stock row in the consulted location is pending, not out');
         $this->assertSame(['Alfa', 'Delta'], $names("{$centro}&availability=ok"));
         $this->assertSame(['Epsilon'], $names('availability=untracked'));
         $this->assertSame(['Beta'], $names('availability=low'), 'with every location: some location is low');
-        $this->assertSame([], $names('availability=out'), 'with every location: Gamma has units in Norte, so it is not out');
+        $this->assertSame(['Zeta'], $names('availability=out'), 'with every location: Gamma has units in Norte and is not out; Zeta has a row at zero');
+        $this->assertSame([], $names('availability=unconfigured'), 'with every location: every tracked product has some row');
         $this->assertSame(['Alfa', 'Gamma'], $names("category={$cat->id}"));
         $this->assertSame(['Delta'], $names('status=inactive'));
         $this->assertSame(['Gamma'], $names('search=ga-1'));
@@ -577,7 +581,7 @@ class InventoryTest extends TestCase
         $this->assertNotContains($inactive->name, $names("{$centro}&availability=out"));
 
         $this->get("/catalog?{$centro}")->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('inventory.summary.tracked', 3)->where('inventory.summary.low', 1)->where('inventory.summary.out', 1)->where('inventory.summary.units', 23)); // active tracked: 20 + 3 + 0
+            ->where('inventory.summary.tracked', 4)->where('inventory.summary.low', 1)->where('inventory.summary.out', 1)->where('inventory.summary.unconfigured', 1)->where('inventory.summary.units', 23)); // active tracked: 20 + 3 + 0 + 0 (Gamma has no row here)
     }
 
     public function test_without_locations_the_general_stock_is_used_and_orders_without_a_location_draw_from_it(): void
@@ -635,7 +639,7 @@ class InventoryTest extends TestCase
         $inventory = $props['operations']['inventory']['data'];
 
         $this->assertTrue($props['sources']['inventory']);
-        $this->assertSame(['tracked' => 3, 'units' => 16 + 6 + 3 + 2, 'low' => 1, 'out' => 1, 'entries' => 20 + 6 + 3 + 3 + 2 + 9, 'sold' => 4], $inventory['kpis'], 'only active products with stock control count for the alerts and the units');
+        $this->assertSame(['tracked' => 3, 'units' => 16 + 6 + 3 + 2, 'low' => 1, 'out' => 1, 'unconfigured' => 0, 'entries' => 20 + 6 + 3 + 3 + 2 + 9, 'sold' => 4], $inventory['kpis'], 'only active products with stock control count for the alerts and the units');
         $this->assertSame(['Centro' => 19, 'Norte' => 8], collect($inventory['byLocation'])->pluck('value', 'label')->all(), 'each location is counted on its own');
         $this->assertSame(['Cuidado facial' => 22, 'Sin categoría' => 5], collect($inventory['byCategory'])->pluck('value', 'label')->all(), 'by the normalized category');
         $this->assertContains($low->name, array_column($inventory['attention'], 'name'));

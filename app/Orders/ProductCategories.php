@@ -2,10 +2,13 @@
 
 namespace App\Orders;
 
+use App\Models\Product;
 use App\Models\ProductCategory;
 use App\Models\Workspace;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * The valid categories of the products of a Workspace. The ONLY place that creates one: the same text with another capitalization or spacing resolves to the
@@ -35,6 +38,52 @@ class ProductCategories
     public function options(Workspace $workspace): Collection
     {
         return ProductCategory::where('workspace_id', $workspace->id)->where('is_active', true)->orderBy('name')->get();
+    }
+
+    /**
+     * The categories of the administration tab (active and inactive) with how many products use each, optionally filtered by text (any capitalization or accent).
+     *
+     * @return Collection<int, ProductCategory>
+     */
+    public function administration(Workspace $workspace, string $search = ''): Collection
+    {
+        $needle = self::normalize($search);
+
+        return ProductCategory::where('workspace_id', $workspace->id)->withCount('products')
+            ->when($needle !== '', fn ($q) => $q->where('normalized_name', 'like', '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $needle).'%'))
+            ->orderByDesc('is_active')->orderBy('name')->limit(500)->get();
+    }
+
+    /**
+     * Renames a category. The name keeps the capitalization the person wrote; the same name as ANOTHER category of the Workspace (in any capitalization or
+     * spacing) is refused, and the copy of the name that the products keep (`products.category`) follows, in one transaction. Products stay linked by id.
+     *
+     * @throws ValidationException
+     */
+    public function rename(ProductCategory $category, string $name): ProductCategory
+    {
+        $normalized = self::normalize($name);
+
+        if ($normalized === '') {
+            throw ValidationException::withMessages(['name' => 'Escribe el nombre de la categoría.']);
+        }
+
+        $taken = fn () => ProductCategory::where('workspace_id', $category->workspace_id)->where('normalized_name', $normalized)->whereKeyNot($category->id)->exists();
+
+        if ($taken()) {
+            throw ValidationException::withMessages(['name' => 'Ya existe una categoría con ese nombre.']);
+        }
+
+        try {
+            DB::transaction(function () use ($category, $name, $normalized) {
+                $category->update(['name' => self::clean($name), 'normalized_name' => $normalized]);
+                Product::where('workspace_id', $category->workspace_id)->where('category_id', $category->id)->update(['category' => $category->name]);
+            });
+        } catch (UniqueConstraintViolationException) {
+            throw ValidationException::withMessages(['name' => 'Ya existe una categoría con ese nombre.']);
+        }
+
+        return $category;
     }
 
     /** The existing category with that name (any spelling), or null. */

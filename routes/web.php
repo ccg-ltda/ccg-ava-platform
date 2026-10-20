@@ -21,6 +21,7 @@ use App\Http\Controllers\ModuleController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\OrganizationController;
 use App\Http\Controllers\PlanController;
+use App\Http\Controllers\ProductCategoryController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProfessionalController;
 use App\Http\Controllers\ProfileController;
@@ -139,8 +140,13 @@ Route::middleware(['auth', 'workspace'])->group(function () {
     Route::middleware(['workspace.module:product_catalog', 'workspace.permission:view-catalog'])->prefix('catalog')->name('catalog.')->group(function () {
         Route::get('/', [ProductController::class, 'index'])->name('index');
         Route::post('/', [ProductController::class, 'store'])->middleware('workspace.permission:create-products')->name('store');
-        // A category is chosen from the Workspace's own list; creating one is part of creating or editing products (the same permissions).
-        Route::post('/categories', [ProductController::class, 'storeCategory'])->middleware(['workspace.permission:create-products,edit-products', 'throttle:60,1'])->name('categories.store');
+        // Categories (tab «Categorías»): a product chooses one from the Workspace's own list. Creating needs create or edit products; renaming and switching one off, edit products.
+        Route::prefix('categories')->name('categories.')->group(function () {
+            Route::post('/', [ProductCategoryController::class, 'store'])->middleware(['workspace.permission:create-products,edit-products', 'throttle:60,1'])->name('store');
+            Route::put('/{category}', [ProductCategoryController::class, 'update'])->whereNumber('category')->middleware('workspace.permission:edit-products')->name('update');
+            Route::post('/{category}/activate', [ProductCategoryController::class, 'activate'])->whereNumber('category')->middleware('workspace.permission:edit-products')->name('activate');
+            Route::post('/{category}/deactivate', [ProductCategoryController::class, 'deactivate'])->whereNumber('category')->middleware('workspace.permission:edit-products')->name('deactivate');
+        });
         Route::get('/{product}', [ProductController::class, 'show'])->whereNumber('product')->name('show');
         Route::get('/{product}/image', [ProductController::class, 'image'])->whereNumber('product')->name('image');
         Route::put('/{product}', [ProductController::class, 'update'])->whereNumber('product')->middleware('workspace.permission:edit-products')->name('update');
@@ -149,6 +155,7 @@ Route::middleware(['auth', 'workspace'])->group(function () {
             Route::post('/receive', [InventoryController::class, 'receive'])->middleware('throttle:60,1')->name('receive');
             Route::post('/adjust', [InventoryController::class, 'adjust'])->middleware('throttle:60,1')->name('adjust');
             Route::put('/minimum', [InventoryController::class, 'minimum'])->name('minimum');
+            Route::put('/control', [InventoryController::class, 'control'])->name('control');
         });
         Route::post('/{product}/activate', [ProductController::class, 'activate'])->whereNumber('product')->middleware('workspace.permission:activate-products')->name('activate');
         Route::post('/{product}/deactivate', [ProductController::class, 'deactivate'])->whereNumber('product')->middleware('workspace.permission:activate-products')->name('deactivate');

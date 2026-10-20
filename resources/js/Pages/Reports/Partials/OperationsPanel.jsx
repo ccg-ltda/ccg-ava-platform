@@ -107,7 +107,8 @@ function Inventory({ data, loading }) {
                 <MetricCard label="Productos con control" hint="Activos con inventario" value={k.tracked} icon={Boxes} tone="blue" />
                 <MetricCard label="Unidades en existencia" hint="Suma de las existencias de todas las sedes" value={k.units} icon={PackageCheck} tone="green" delay={60} />
                 <MetricCard label="Con stock bajo" hint="Producto y sede en o bajo su mínimo" value={k.low} icon={TriangleAlert} tone="amber" delay={120} />
-                <MetricCard label="Agotados" hint="Producto y sede sin existencias" value={k.out} icon={PackageX} tone="red" delay={180} />
+                <MetricCard label="Agotados" hint="Producto y sede con existencia registrada en cero" value={k.out} icon={PackageX} tone="red" delay={180} />
+                <MetricCard label="Sin configurar" hint="Control activo y sin existencias registradas" value={k.unconfigured ?? 0} icon={Boxes} tone="amber" delay={210} />
                 <MetricCard label="Entradas del periodo" hint="Unidades que entraron" value={k.entries} icon={PackageCheck} tone="green" delay={240} />
                 <MetricCard label="Vendidas en el periodo" hint="Unidades descontadas por ventas confirmadas" value={k.sold} icon={ShoppingCart} tone="violet" delay={300} />
             </Cards>

@@ -51,12 +51,13 @@ class ProductController extends Controller
             'search' => trim((string) $request->query('search', '')),
             'category' => trim((string) $request->query('category', '')),
             'status' => in_array($request->query('status'), ['active', 'inactive'], true) ? $request->query('status') : '',
-            'availability' => $canInventory && in_array($request->query('availability'), ['low', 'out', 'ok', 'untracked'], true) ? $request->query('availability') : '',
+            'availability' => $canInventory && in_array($request->query('availability'), ['low', 'out', 'ok', 'untracked', 'unconfigured'], true) ? $request->query('availability') : '',
         ];
+        $categorySearch = trim((string) $request->query('category_search', ''));
         $empty = ['data' => [], 'meta' => ['current_page' => 1, 'last_page' => 1, 'per_page' => ListPagination::OPTIONS[0], 'total' => 0, 'from' => 0, 'to' => 0]];
 
         if (! $ready) {
-            return Inertia::render('Catalog/Index', ['schemaPending' => true, 'products' => $empty, 'filters' => $filters + ['perPage' => ListPagination::OPTIONS[0], 'place' => ''], 'perPageOptions' => ListPagination::OPTIONS, 'categories' => [], 'locations' => [], 'currency' => $workspace->settingsOrDefault()->currency, 'total' => 0, 'inventory' => ['ready' => false]]);
+            return Inertia::render('Catalog/Index', ['categoryAdmin' => null, 'schemaPending' => true, 'products' => $empty, 'filters' => $filters + ['perPage' => ListPagination::OPTIONS[0], 'place' => ''], 'perPageOptions' => ListPagination::OPTIONS, 'categories' => [], 'locations' => [], 'currency' => $workspace->settingsOrDefault()->currency, 'total' => 0, 'inventory' => ['ready' => false]]);
         }
 
         $locations = $this->catalog->locations($workspace);
@@ -78,6 +79,13 @@ class ProductController extends Controller
                 'place' => $place['value'], 'placeLabel' => $place['general'] ? 'Inventario general' : ($place['id'] ? $locations->firstWhere('id', $place['id'])->name : 'Todas las sedes'),
                 'config' => ['maxKb' => config('orders.image.max_kb')],
             ],
+            // The administration tab: every category (active or not) with the products that use it, and what this person may do with them.
+            'categoryAdmin' => $inventory ? [
+                'search' => $categorySearch,
+                'data' => $this->categories->administration($workspace, $categorySearch)->map(fn ($category) => ['id' => $category->id, 'name' => $category->name, 'isActive' => $category->is_active, 'products' => $category->products_count])->values()->all(),
+                'canCreate' => $this->can($request, 'create-products') || $this->can($request, 'edit-products'),
+                'canEdit' => $this->can($request, 'edit-products'),
+            ] : null,
         ]);
     }
 
@@ -91,9 +99,15 @@ class ProductController extends Controller
         $canInventory = $inventory && $this->can($request, 'view-inventory');
         $place = ['value' => '', 'id' => null, 'general' => false];
         $movements = null;
+        $movementPlace = '';
 
         if ($canInventory) {
-            $page = ListPagination::paginate(InventoryMovement::where('workspace_id', $workspace->id)->where('product_id', $model->id)->with(['user:id,name', 'order:id,number'])->orderByDesc('id'), $request, 'movements');
+            // The history of one location when asked (`movement_place` = its id, or `general`); anything else is the whole history of the product.
+            $movementPlace = (string) $request->query('movement_place', '');
+            $movementPlace = $movementPlace === CatalogInventory::GENERAL || ($movementPlace !== '' && ctype_digit($movementPlace) && $locations->contains('id', (int) $movementPlace)) ? $movementPlace : '';
+            $page = ListPagination::paginate(InventoryMovement::where('workspace_id', $workspace->id)->where('product_id', $model->id)
+                ->when($movementPlace === CatalogInventory::GENERAL, fn ($q) => $q->whereNull('location_id'))->when(ctype_digit($movementPlace), fn ($q) => $q->where('location_id', (int) $movementPlace))
+                ->with(['user:id,name', 'order:id,number'])->orderByDesc('id'), $request, 'movements');
             $movements = ['data' => $page->getCollection()->map(fn (InventoryMovement $movement) => $this->catalog->movementRow($movement, $locations))->values()->all(), 'meta' => ListPagination::meta($page)];
         }
 
@@ -101,6 +115,7 @@ class ProductController extends Controller
             'product' => array_merge($this->summary($model, $locations, $place, $canInventory, $this->openOrders([$model->id])[$model->id] ?? 0), ['cost' => $inventory && $model->cost !== null && $this->can($request, 'edit-products') ? (float) $model->cost : null]),
             'locations' => $locations->map(fn ($location) => ['id' => $location->id, 'name' => $location->name])->values()->all(),
             'movements' => $movements,
+            'movementPlace' => $movementPlace,
             'categories' => $inventory ? $this->categories->options($workspace)->map(fn ($category) => ['id' => $category->id, 'name' => $category->name])->values()->all() : [],
             'perPageOptions' => ListPagination::OPTIONS,
             'currency' => $workspace->settingsOrDefault()->currency,
@@ -155,29 +170,6 @@ class ProductController extends Controller
     public function deactivate(Request $request, int $product): RedirectResponse
     {
         return $this->toggle($request, $product, false);
-    }
-
-    /** Creates a category for the Workspace's products (or returns the one that already has that name, in any capitalization). */
-    public function storeCategory(Request $request): RedirectResponse
-    {
-        if (! $this->schema->inventoryReady()) {
-            return back()->with('error', 'Falta aplicar la última migración de la base de datos: un administrador debe ejecutar «php artisan migrate».');
-        }
-
-        $data = $request->validate(['name' => ['required', 'string', 'max:80']], [], ['name' => 'el nombre de la categoría']);
-        $workspace = $request->attributes->get('workspace');
-
-        if (ProductCategories::normalize($data['name']) === '') {
-            return back()->withErrors(['name' => 'Escribe el nombre de la categoría.']);
-        }
-
-        [$category, $created] = $this->categories->ensure($workspace, $data['name']);
-
-        if ($created) {
-            $this->audit->record('created', 'product_category', $category->id, $category->name, [AuditLogger::change('Nombre', null, $category->name)], $workspace);
-        }
-
-        return back()->with($created ? 'success' : 'warning', $created ? 'Categoría creada correctamente' : "Ya existía la categoría «{$category->name}»: se usará esa.");
     }
 
     /** The picture of a product, only to the members of its Workspace (the bucket stays private). */
