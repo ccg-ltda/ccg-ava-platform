@@ -24,6 +24,12 @@ abstract class TestCase extends BaseTestCase
         $connection = config('database.default');
 
         TestDatabaseGuard::assertSafe($connection, config("database.connections.{$connection}.database"));
+        TestDatabaseGuard::assertSafeServices([
+            'cache' => config('cache.default'),
+            'queue' => config('queue.default'),
+            'session' => config('session.driver'),
+            'broadcast' => config('broadcasting.default'),
+        ]);
     }
 
     /**

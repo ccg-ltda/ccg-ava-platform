@@ -7,6 +7,7 @@ use App\Models\Chatbot;
 use App\Models\ChatbotExecution;
 use App\Models\Conversation;
 use App\Models\Customer;
+use App\Models\InventoryStock;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Workspace;
@@ -122,13 +123,60 @@ class AgentOrderTest extends TestCase
         $this->product('Retirado', '1.00', ['is_active' => false]);
         $this->product('Ajeno', '99.00', [], $this->bookingWorkspace('OTRA', self::MODULES));
 
-        $response = $this->tool('GET', '/products')->assertOk()->assertJsonPath('stockTracked', false)->assertJsonPath('truncated', false);
+        $response = $this->tool('GET', '/products')->assertOk()->assertJsonPath('stockTracked', true)->assertJsonPath('truncated', false);
         $this->assertSame(['Gaseosa', 'Hamburguesa'], collect($response->json('products'))->pluck('name')->all());
         $response->assertJsonPath('products.1.price', '18500.00')->assertJsonPath('products.1.currency', 'COP')->assertJsonPath('products.1.sku', 'HAM-1');
 
         $this->tool('GET', '/products?q=gaseo')->assertOk()->assertJsonCount(1, 'products');
         $this->tool('GET', '/products?category=Comida')->assertOk()->assertJsonPath('products.0.name', 'Hamburguesa');
         $this->tool('GET', '/products?q=%25')->assertOk()->assertJsonCount(0, 'products');
+    }
+
+    public function test_the_assistant_is_not_offered_products_that_cannot_be_sold_in_the_consulted_place(): void
+    {
+        $centro = $this->shop->locations()->create(['name' => 'Centro']);
+        $norte = $this->shop->locations()->create(['name' => 'Norte']);
+        $free = $this->product('Sin control', '1000.00');
+        $inStock = $this->product('Con existencias', '2000.00', ['tracks_inventory' => true]);
+        $sold = $this->product('Agotado', '3000.00', ['tracks_inventory' => true]);
+        $elsewhere = $this->product('Solo en Norte', '4000.00', ['tracks_inventory' => true]);
+        $none = $this->product('Sin configurar', '5000.00', ['tracks_inventory' => true]);
+        InventoryStock::create(['workspace_id' => $this->shop->id, 'product_id' => $inStock->id, 'location_id' => $centro->id, 'quantity' => 4, 'min_quantity' => 4]);
+        InventoryStock::create(['workspace_id' => $this->shop->id, 'product_id' => $sold->id, 'location_id' => $centro->id, 'quantity' => 0, 'min_quantity' => 0]);
+        InventoryStock::create(['workspace_id' => $this->shop->id, 'product_id' => $elsewhere->id, 'location_id' => $norte->id, 'quantity' => 9, 'min_quantity' => 0]);
+
+        $response = $this->tool('GET', '/products?location_id='.$centro->id)->assertOk()->assertJsonPath('stockTracked', true);
+        $names = collect($response->json('products'))->pluck('name')->all();
+        $this->assertSame(['Con existencias', 'Sin control'], $names);
+
+        $byName = collect($response->json('products'))->keyBy('name');
+        $this->assertSame(['controlled' => false], $byName['Sin control']['stock']);
+        $this->assertSame(['controlled' => true, 'state' => 'low', 'units' => 4], $byName['Con existencias']['stock']);
+
+        // In another location the stock is another one; with several locations and none named, the assistant is told the answer depends on it.
+        $this->assertSame(['Sin control', 'Solo en Norte'], collect($this->tool('GET', '/products?location_id='.$norte->id)->assertOk()->json('products'))->pluck('name')->all());
+        $any = collect($this->tool('GET', '/products')->assertOk()->json('products'))->keyBy('name');
+        $this->assertCount(5, $any);
+        $this->assertSame(['controlled' => true, 'state' => 'location_required'], $any['Agotado']['stock']);
+        $this->assertNotNull($none->id);
+
+        // A hidden product is also refused when ordered, so the list and the order agree.
+        $conversation = $this->conversation();
+        $this->tool('POST', '', $this->order([['product_id' => $sold->id, 'quantity' => 1]], ['location_id' => $centro->id]), null, ['Idempotency-Key' => 'agotado-1'])->assertStatus(422);
+    }
+
+    public function test_without_locations_the_general_stock_decides_what_the_assistant_offers(): void
+    {
+        $shop = $this->bookingWorkspace('SOLA', ['dashboard', 'assistants', 'conversations', 'product_catalog', 'orders']);
+        [, $token] = $this->bot($shop);
+        $on = $this->product('Hay', '1000.00', ['tracks_inventory' => true], $shop);
+        $off = $this->product('No hay', '1000.00', ['tracks_inventory' => true], $shop);
+        InventoryStock::create(['workspace_id' => $shop->id, 'product_id' => $on->id, 'location_id' => null, 'quantity' => 2, 'min_quantity' => 0]);
+        InventoryStock::create(['workspace_id' => $shop->id, 'product_id' => $off->id, 'location_id' => null, 'quantity' => 0, 'min_quantity' => 0]);
+
+        $response = $this->withToken($token)->getJson('/api/agent/orders/products')->assertOk();
+        $this->assertSame(['Hay'], collect($response->json('products'))->pluck('name')->all());
+        $this->assertSame(['controlled' => true, 'state' => 'ok', 'units' => 2], $response->json('products.0.stock'));
     }
 
     public function test_the_catalog_can_be_read_by_location_and_a_foreign_or_inactive_location_is_refused(): void

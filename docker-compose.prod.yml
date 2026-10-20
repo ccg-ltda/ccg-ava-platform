@@ -30,8 +30,9 @@ x-php: &php
     # Maintenance mode must be shared between replicas (the default "file" driver is per container).
     APP_MAINTENANCE_DRIVER: cache
     APP_MAINTENANCE_STORE: redis
-    # Replicas sit behind the `proxy` service: trust its X-Forwarded-* headers (https URLs, client IP).
-    TRUSTED_PROXIES: ${TRUSTED_PROXIES:-*}
+    # Replicas sit behind the `proxy` service (and the load balancer in front of it): trust X-Forwarded-* only from private ranges (Docker network, VPC).
+    # A public "*" would let any visitor choose the client IP (X-Forwarded-For) and escape every per-IP rate limit; set an explicit list if your balancer has public IPs.
+    TRUSTED_PROXIES: ${TRUSTED_PROXIES:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
     RUN_MIGRATIONS: "false"
     DB_CONNECTION: pgsql
     DB_HOST: ${DB_HOST:-postgres}

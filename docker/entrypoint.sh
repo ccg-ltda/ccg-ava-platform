@@ -1,7 +1,7 @@
 #!/bin/sh
 # Shared entrypoint for every role. Behaviour is driven by environment variables:
 #   COMPOSER_INSTALL=true   run `composer install` first (development, code is bind-mounted)
-#   RUN_MIGRATIONS=true     run `php artisan migrate --force` (development only; never in production)
+#   RUN_MIGRATIONS=true     run `php artisan migrate --force` and, with APP_ENV=local, sync the module catalog and permissions (development only; never in production)
 #   OPTIMIZE=true           cache config/routes/views/events (production)
 set -e
 cd /var/www/html
@@ -23,6 +23,13 @@ fi
 
 if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
     php artisan migrate --force
+
+    # Permissions and modules live in code (config/permissions.php, config/modules.php), not in migrations: without this a development database
+    # keeps the catalog it had when it was last seeded (ccg_ava stayed at 29 of 82 permissions). Both seeders are idempotent. Local only.
+    if [ "${APP_ENV:-production}" = "local" ]; then
+        php artisan db:seed --class=ModuleCatalogSeeder --force || echo "ModuleCatalogSeeder failed (continuing)"
+        php artisan db:seed --class=RolesAndPermissionsSeeder --force || echo "RolesAndPermissionsSeeder failed (continuing)"
+    fi
 fi
 
 exec "$@"

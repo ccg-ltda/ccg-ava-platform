@@ -6,10 +6,12 @@ use App\Audit\AuditLogger;
 use App\Booking\Locations;
 use App\Http\Requests\AgentCreateOrderRequest;
 use App\Models\Conversation;
+use App\Models\InventoryStock;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Workspace;
 use App\Orders\CommerceSchema;
+use App\Orders\InventoryService;
 use App\Orders\OrderException;
 use App\Orders\OrderNotifier;
 use App\Orders\OrderService;
@@ -40,6 +42,7 @@ class AgentOrderController extends Controller
         private readonly OrderNotifier $notifier,
         private readonly AuditLogger $audit,
         private readonly AgentToolTrace $trace,
+        private readonly InventoryService $inventory,
     ) {}
 
     /** What the assistant needs before it asks anything: the currency, the delivery methods, the locations and whether the customer will be told of changes. */
@@ -68,6 +71,12 @@ class AgentOrderController extends Controller
                 throw OrderException::unavailable('Esa sede no está disponible.');
             }
 
+            $locationsOn = $this->locations->enabled($workspace);
+            $inventory = $this->inventory->ready();
+            // The place whose stock answers: the named location, or the general stock of a Workspace without locations. With locations and none named, it is unknown.
+            $placeKnown = ! $locationsOn || $location !== null;
+            $placeId = $locationsOn && $location !== null ? (int) $location : null;
+
             $products = $workspace->products()->where('is_active', true)
                 ->when(filled($request->query('q')), fn ($q) => $q->where(fn ($w) => $w->whereRaw("lower(name) like ? escape '!'", [$like])->orWhereRaw("lower(coalesce(category, '')) like ? escape '!'", [$like])->orWhereRaw("lower(coalesce(sku, '')) like ? escape '!'", [$like])))
                 ->when(filled($request->query('category')), fn ($q) => $q->where('category', (string) $request->query('category')))
@@ -75,16 +84,33 @@ class AgentOrderController extends Controller
                 ->when($location !== null && $this->locations->enabled($workspace), fn ($q) => $q->where(fn ($w) => $w
                     ->whereNotExists(fn ($sub) => $sub->select(DB::raw(1))->from('location_product')->whereColumn('location_product.product_id', 'products.id'))
                     ->orWhereExists(fn ($sub) => $sub->select(DB::raw(1))->from('location_product')->whereColumn('location_product.product_id', 'products.id')->where('location_product.location_id', (int) $location))))
+                // What cannot be sold in that place is not offered: a product with stock control needs units there (OrderService refuses the order otherwise).
+                ->when($inventory && $placeKnown, fn ($q) => $q->where(fn ($w) => $w->where('tracks_inventory', false)->orWhereExists(fn ($sub) => $sub->select(DB::raw(1))->from('inventory_stocks')->whereColumn('inventory_stocks.product_id', 'products.id')->where('inventory_stocks.quantity', '>', 0)
+                    ->when($placeId === null, fn ($x) => $x->whereNull('inventory_stocks.location_id'), fn ($x) => $x->where('inventory_stocks.location_id', $placeId)))))
                 ->orderBy('name')->limit(self::PRODUCT_LIMIT + 1)->get();
+            $shown = $products->take(self::PRODUCT_LIMIT);
+            $stocks = $inventory && $placeKnown
+                ? InventoryStock::where('workspace_id', $workspace->id)->whereIn('product_id', $shown->pluck('id'))->when($placeId === null, fn ($q) => $q->whereNull('location_id'), fn ($q) => $q->where('location_id', $placeId))->get()->keyBy('product_id')
+                : collect();
             $currency = $workspace->settingsOrDefault()->currency;
 
             return [
-                'products' => $products->take(self::PRODUCT_LIMIT)->map(fn (Product $product) => ['id' => $product->id, 'sku' => $product->sku, 'name' => $product->name, 'description' => $product->description, 'category' => $product->category, 'price' => number_format((float) $product->price, 2, '.', ''), 'currency' => $currency])->values()->all(),
+                'products' => $shown->map(fn (Product $product) => ['id' => $product->id, 'sku' => $product->sku, 'name' => $product->name, 'description' => $product->description, 'category' => $product->category, 'price' => number_format((float) $product->price, 2, '.', ''), 'currency' => $currency, 'stock' => $this->stock($product, $stocks->get($product->id), $inventory && $placeKnown)])->values()->all(),
                 'truncated' => $products->count() > self::PRODUCT_LIMIT,
-                // Ava does not keep stock: "available" only means active in the catalog. The assistant must not promise units.
-                'stockTracked' => false,
+                // Whether Ava keeps stock for the products that have stock control (each product says its own state in `stock`). The assistant promises only the `units` it is told.
+                'stockTracked' => $inventory,
             ];
         }, ready: false);
+    }
+
+    /** What the assistant may say about the stock of a product in the consulted place. @return array<string, mixed> */
+    private function stock(Product $product, ?InventoryStock $stock, bool $placeKnown): array
+    {
+        return match (true) {
+            ! $product->tracks_inventory || ! $this->inventory->ready() => ['controlled' => false],
+            ! $placeKnown => ['controlled' => true, 'state' => 'location_required'],
+            default => ['controlled' => true, 'state' => $stock?->level() ?? InventoryStock::OUT, 'units' => $stock?->quantity ?? 0],
+        };
     }
 
     /** The orders of THIS conversation (most recent first), with the state Ava has right now. */

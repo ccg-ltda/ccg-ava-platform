@@ -4,7 +4,7 @@ Actualiza este archivo al terminar cada tarea. Reglas en `reglas.md`; análisis,
 
 ## A. Estado actual
 
-- **Fecha:** 2026-10-19. **Commit base revisado:** `4d2dfff` (igual a `origin/main` al empezar). **Commit final:** ninguno; los cambios de esta depuración quedan sin confirmar.
+- **Fecha:** 2026-10-20. **Commit base:** `dbbcf05`. **Commit final:** ninguno; los cambios de las auditorías de `RECOMENDACIONES.md` §24 y §25 quedan sin confirmar (permisos de `ccg_ava` sincronizados: 82; herramientas de pedidos con inventario por sede; `TRUSTED_PROXIES` seguro por defecto; guardia de pruebas contra Redis compartido; `npm audit` sin vulnerabilidades).
 - **Estado funcional:** el ciclo funcional está implementado: acceso por Workspace, roles, módulos y planes, asistentes y canales, conversaciones con atención humana, ejecuciones iniciadas por Ava (Meta → Ava → n8n → respuesta), D-TEL y D-FALLO, Clientes y Campañas (sin envío), Servicios y Reservas (agenda propia, sedes, avisos de citas), Catálogo y Pedidos, trazabilidad de las herramientas del asistente, Booker (modo `customer` y modo `merchant`) y el circuito local de pruebas.
 - **Qué NO está probado nunca:** ningún servicio real. Meta, n8n y Booker (Staging o producción) no se han llamado desde ninguna prueba; tampoco hay un entorno de producción.
 - **Niveles de evidencia** (mismo vocabulario que `RECOMENDACIONES.md`):
@@ -39,7 +39,7 @@ Ninguno se ejecuta sin orden expresa. Cada uno enlaza con el análisis de `RECOM
 
 | Id | Qué falta | Condición |
 |---|---|---|
-| M1 | Sembrar `ccg_ava`: `php artisan db:seed --class=RolesAndPermissionsSeeder --force` (procedimiento con copia, comparación y reversión en `RECOMENDACIONES.md` §19; **no ejecutado**) | Autorización expresa y copia previa de la base. La administración interna ya funciona sin hacerlo; los roles de clientes reciben 403 en rutas con permisos nuevos hasta entonces (P13) |
+| M1 | ~~Sembrar `ccg_ava`~~ **Hecho (2026-10-20):** ensayo en transacción con rollback, copia previa y ejecución real: 29 → 82 permisos, roles conservados (`RECOMENDACIONES.md` §25). Falta revisar a mano los roles de clientes reales cuando existan | Autorización expresa y copia previa de la base. La administración interna ya funciona sin hacerlo; los roles de clientes reciben 403 en rutas con permisos nuevos hasta entonces (P13) |
 | M2 | ~~Revisar la transición de roles y el efecto de guardar un rol con permisos antiguos~~ **Corregido (2026-10-20):** guardar un rol ya no descarta lo que el editor no muestra (`RoleController::update`; `PlatformPermissionBoundaryTest`). Queda solo comprobar los roles reales de `ccg_ava` después de M1 | Después de M1 |
 | M3 | ~~Confirmar `use-conversation-demo` como exclusivo de plataforma~~ **Cerrado (2026-10-20):** los permisos de plataforma no cuentan en un Workspace cliente (`PlatformAccess::withinWorkspace`), un administrador de cliente no puede usarlos ni repartir un rol que los lleve y `manage-conversations` ya no lo concede por migración. Ver `RECOMENDACIONES.md` §19 | — |
 | M4 | ~~Verificar los comandos de demostración~~ **Verificado (2026-10-20), sin defecto:** `demo:data clean --confirm=<código>` y `demo:conversations reset\|clean --confirm=<código>`; sin `--confirm` no se elimina nada y nada los ejecuta solo. Nunca ejecutarlos sin orden expresa. Riesgo conocido: parte de la limpieza reconoce por prefijo de nombre/SKU | Nunca ejecutar sin orden expresa |

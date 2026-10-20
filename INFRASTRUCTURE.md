@@ -80,7 +80,7 @@ Todo sale de `.env` (ver `.env.example`). El cableado de arquitectura (pgsql, dr
 | `REDIS_PASSWORD` | Obligatoria en producción |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_BUCKET`, `AWS_ENDPOINT`, `AWS_DEFAULT_REGION`, `AWS_URL`, `AWS_USE_PATH_STYLE_ENDPOINT` | Almacenamiento S3 (MinIO o Spaces) |
 | `REVERB_APP_ID`, `REVERB_APP_KEY`, `REVERB_APP_SECRET` | Websockets |
-| `TRUSTED_PROXIES` | `*` o lista de IPs cuando hay balanceador delante |
+| `TRUSTED_PROXIES` | Lista de IPs o rangos CIDR de los proxies confiables. Por defecto en producción: los rangos privados `10.0.0.0/8,172.16.0.0/12,192.168.0.0/16` (red de Docker y VPC). No uses `*`: confía en `X-Forwarded-For` de cualquiera y permite falsificar la IP de los límites de tasa (comprobado) |
 | `APP_PORT`, `VITE_PORT`, `DB_FORWARD_PORT`, `MINIO_PORT` | Puertos del host (desarrollo) |
 | `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN`, `N8N_EXECUTION_URL`, `N8N_EXECUTION_SECRET`, `N8N_EXECUTION_TIMEOUT` | Integración con Meta y con el n8n de la plataforma (vacío = no configurado) |
 | `BOOKER_STAGING_URL`, `BOOKER_PRODUCTION_URL`, `BOOKER_SCOPE`, `BOOKER_MERCHANT_VERIFIED` | Booker: hosts por entorno, scope del token y el interruptor que habilita horarios y reserva en producción (`false` hasta verificarlos en Staging). Las credenciales de Booker son de cada Workspace (cifradas en la base), no variables de entorno |
@@ -108,7 +108,7 @@ El bucket de MinIO es **privado** (`MINIO_DEFAULT_BUCKETS` sin `:public`): los a
    docker compose --env-file prod.env -f docker-compose.prod.yml exec app php artisan migrate --force
    ```
    Repite `--scale` en cada `up`; si no, Compose vuelve a 1 réplica. `scheduler` debe quedarse en 1.
-4. TLS: pon un DigitalOcean Load Balancer (o Caddy/Traefik) delante del servicio `proxy` y deja `TRUSTED_PROXIES=*`. El `proxy` conserva `X-Forwarded-Proto`.
+4. TLS: pon un DigitalOcean Load Balancer (o Caddy/Traefik) delante del servicio `proxy` y deja `TRUSTED_PROXIES` con su valor por defecto (rangos privados) si el balanceador te llega por la red privada, o con la lista exacta de sus IPs si no. Nunca `*`. El `proxy` conserva `X-Forwarded-Proto`.
 5. Tras cada despliegue: `docker compose ... exec worker php artisan horizon:terminate` para que Horizon cargue el código nuevo.
 6. Integraciones reales: el compose reenvía `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN`, `N8N_EXECUTION_URL`, `N8N_EXECUTION_SECRET` (y `N8N_EXECUTION_TIMEOUT`, `WHATSAPP_GRAPH_URL`, `WHATSAPP_GRAPH_VERSION`, `WORKSPACE_ADMIN_CODE`, `ADMIN_*`) desde tu archivo de variables; la imagen no trae `.env`, así que una variable que no esté ahí no existe en producción. El scheduler escribe un latido cada minuto: `integrations:diagnose` lo lee (y consulta Horizon y la cola), y en producción lo bloquea si falta. Siembra roles y catálogo (`db:seed --class=RolesAndPermissionsSeeder`, `--class=ModuleCatalogSeeder`) y comprueba con `exec app php artisan integrations:diagnose`. Ejecuciones fallidas: `exec app php artisan executions:list --failed`. Detalle y pasos en `RECOMENDACIONES.md` (§3.2 y §4).
 

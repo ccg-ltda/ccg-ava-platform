@@ -46,4 +46,19 @@ class TestDatabaseGuardTest extends TestCase
 
         TestDatabaseGuard::assertSafe($connection, $database);
     }
+
+    public function test_it_allows_services_that_do_not_use_the_shared_redis(): void
+    {
+        TestDatabaseGuard::assertSafeServices(['cache' => 'array', 'queue' => 'sync', 'session' => 'array', 'broadcast' => 'null']);
+
+        $this->addToAssertionCount(1);
+    }
+
+    public function test_it_refuses_the_shared_redis_for_cache_queue_or_session(): void
+    {
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('shared Redis as cache, queue');
+
+        TestDatabaseGuard::assertSafeServices(['cache' => 'redis', 'queue' => 'redis', 'session' => 'array', 'broadcast' => 'null']);
+    }
 }

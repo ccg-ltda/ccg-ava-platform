@@ -137,7 +137,7 @@ Ava hace `POST {N8N_EXECUTION_URL}/{webhook_path}` con las cabeceras `X-Ava-Exec
 5b. **Contacto de la cita (D-TEL, resuelta el 2026-10-19; ver §11.2):** Ava NO entrega el teléfono del contacto al workflow. En **WhatsApp** el workflow reserva **sin** `customer.phone` y Ava usa el id de la conversación como teléfono si es un número internacional válido (un `customer.phone` que el workflow sí envíe se respeta). En **web** (o si el id de WhatsApp no es un número válido) el workflow DEBE pedir teléfono o correo en el chat (el Workspace puede exigir ambos: `require_phone` es verdadero por defecto) y enviarlo en `customer.phone` (formato `+573001112233`) o `customer.email`; si falta, Ava responde `422` con `reason: "contact_required"` y un `message` que dice qué dato falta: el workflow lo pide al contacto y reintenta, sin inventarlo. Las operaciones que no necesitan datos de contacto (servicios, horarios, listar, cancelar, reprogramar) nunca lo piden. **Forma de la respuesta (F2):** el último nodo debe responder UN objeto JSON (modo «First Incoming Item»), nunca una lista ni «Immediately»; copiar el `execution_id` de la cabecera `X-Ava-Execution`. Formato exacto en §11.3.
 6. **Transferencia a una persona:** `handoff: true` en la respuesta (el token de ejecución solo llega a reservas).
 7. **Instrucciones:** vienen en `chatbot.instructions`; Ava es la única fuente (no duplicarlas en n8n).
-8. **Pedidos (Delivery y E-commerce; `ava.tools.orders` y `/api/agent/config` → `orders` lo anuncian solo si el plan incluye Catálogo de productos y Pedidos):** llamar a `ava.api_url` con `Authorization: Bearer <ava.token>` en `GET /orders/options` (moneda, formas de entrega, sedes, qué NO hace Ava), `GET /orders/products?q=&category=&location_id=` (productos ACTIVOS con el precio de ese momento; `stockTracked: false`: Ava no controla inventario, no prometer unidades), `POST /orders` y `GET /orders?number=` (los pedidos de ESA conversación). **Crear:** enviar solo `customer {name, phone?, email?}`, `delivery_method` (`pickup`|`delivery`), `delivery_address` (obligatoria a domicilio), `delivery_city?`, `delivery_reference?`, `recipient_name?`, `recipient_phone?`, `location_id?`, `notes?` y `lines [{product_id, quantity}]`; **nunca precios, totales, moneda, número ni estado** (se ignoran: el total lo calcula Ava con el catálogo). El teléfono nuevo lleva `+` y país, salvo el del propio contacto de WhatsApp. **Idempotencia:** la clave es la ejecución (token de ejecución) o la cabecera `Idempotency-Key` (1 a 128 caracteres imprimibles, sin espacios; obligatoria con un token permanente: sin ella `422 idempotency_key_required`, mal formada `422 idempotency_key_invalid`). Ava guarda solo el digest de la conversación + la clave y el digest del CONTENIDO del pedido (nunca la clave que envió el llamante). Misma clave y mismo contenido (el orden de las líneas y un producto repetido en dos líneas no cambian el contenido; en recogida se ignoran los datos de entrega) = reintento: `200 replayed: true` y el mismo pedido. **Misma clave con otro contenido = `409 idempotency_conflict` y no se crea nada**: con el token de ejecución una ejecución solo puede crear UN pedido; para otro pedido hace falta otro mensaje del contacto. Una petición rechazada (422) no consume la clave. **Respuestas:** `201` creado; `200` repetido; `409 idempotency_conflict` (la clave ya se usó con otro contenido); `422 invalid` (producto inactivo, ajeno o inexistente, falta dirección, teléfono sin país...: corregir con el contacto, no reintentar igual); `404 not_found` (la conversación no existe: reportar antes su mensaje); `503 not_ready` (falta aplicar la migración en ese entorno); `401` (el token murió porque una persona tomó la conversación) → terminar sin responder. Decir al contacto el número, el estado y el total que devuelve Ava, y **no prometer** avisos de cambios de estado (`customerNotified: false`), cobertura ni costo de envío (`delivery.coverageChecked: false`, `shippingCost: null`), pagos ni inventario. El asistente **no puede** cancelar ni cambiar el estado de un pedido: si el contacto lo pide, `handoff`.
+8. **Pedidos (Delivery y E-commerce; `ava.tools.orders` y `/api/agent/config` → `orders` lo anuncian solo si el plan incluye Catálogo de productos y Pedidos):** llamar a `ava.api_url` con `Authorization: Bearer <ava.token>` en `GET /orders/options` (moneda, formas de entrega, sedes, qué NO hace Ava), `GET /orders/products?q=&category=&location_id=` (productos ACTIVOS con el precio de ese momento; desde 2026-10-20 no incluye los que tienen control de inventario y ninguna existencia en la sede indicada, y cada producto trae `stock {controlled, state, units}`; con sedes y sin `location_id` el estado es `location_required`: pedir la sede antes de prometer unidades), `POST /orders` y `GET /orders?number=` (los pedidos de ESA conversación). **Crear:** enviar solo `customer {name, phone?, email?}`, `delivery_method` (`pickup`|`delivery`), `delivery_address` (obligatoria a domicilio), `delivery_city?`, `delivery_reference?`, `recipient_name?`, `recipient_phone?`, `location_id?`, `notes?` y `lines [{product_id, quantity}]`; **nunca precios, totales, moneda, número ni estado** (se ignoran: el total lo calcula Ava con el catálogo). El teléfono nuevo lleva `+` y país, salvo el del propio contacto de WhatsApp. **Idempotencia:** la clave es la ejecución (token de ejecución) o la cabecera `Idempotency-Key` (1 a 128 caracteres imprimibles, sin espacios; obligatoria con un token permanente: sin ella `422 idempotency_key_required`, mal formada `422 idempotency_key_invalid`). Ava guarda solo el digest de la conversación + la clave y el digest del CONTENIDO del pedido (nunca la clave que envió el llamante). Misma clave y mismo contenido (el orden de las líneas y un producto repetido en dos líneas no cambian el contenido; en recogida se ignoran los datos de entrega) = reintento: `200 replayed: true` y el mismo pedido. **Misma clave con otro contenido = `409 idempotency_conflict` y no se crea nada**: con el token de ejecución una ejecución solo puede crear UN pedido; para otro pedido hace falta otro mensaje del contacto. Una petición rechazada (422) no consume la clave. **Respuestas:** `201` creado; `200` repetido; `409 idempotency_conflict` (la clave ya se usó con otro contenido); `422 invalid` (producto inactivo, ajeno o inexistente, falta dirección, teléfono sin país...: corregir con el contacto, no reintentar igual); `404 not_found` (la conversación no existe: reportar antes su mensaje); `503 not_ready` (falta aplicar la migración en ese entorno); `401` (el token murió porque una persona tomó la conversación) → terminar sin responder. Decir al contacto el número, el estado y el total que devuelve Ava, y **no prometer** avisos de cambios de estado (`customerNotified: false`), cobertura ni costo de envío (`delivery.coverageChecked: false`, `shippingCost: null`), pagos ni inventario. El asistente **no puede** cancelar ni cambiar el estado de un pedido: si el contacto lo pide, `handoff`.
 9. **Reglas de honestidad:** `ava.guidelines` (y `guidelines` en `/api/agent/config`) son las reglas que el asistente no debe romper (no inventar precios, horarios ni confirmaciones; confirmar solo lo que Ava responde con éxito; no prometer lo que Ava no hace). Ava no ejecuta el modelo: incorporarlas al prompt del workflow es responsabilidad del workflow.
 
 ### 3.2 Pasos cuando haya credenciales (WhatsApp + n8n de la plataforma)
@@ -1152,3 +1152,203 @@ Base: `main` = `369f2b2`. Sin commit, despliegue, llamadas externas ni migració
 **Administración del Catálogo (2026-10-20).** Pestañas Catálogo/Categorías, «Gestionar» y precios colombianos: reglas en `reglas.md` («Administración del Catálogo»). Límites: la concurrencia de `lockForUpdate`/restricciones CHECK solo se verifica en PostgreSQL real (las pruebas PHPUnit usan SQLite en memoria y se omiten las de PG); no hay devoluciones parciales ni borrado de categorías por diseño; un cambio de nombre de categoría actualiza la copia `products.category` por la restricción de compatibilidad con consultas antiguas.
 
 **Clasificación de existencias.** Ver `reglas.md` («Clasificación de existencias»); pendiente de validación de concurrencia: `pendientes.md` M14.
+
+## 24. Auditoría integral previa al sistema de licencias (2026-10-20, decimoctavo bloque)
+
+> **Actualización posterior (§25):** varios hallazgos de esta sección ya se corrigieron el mismo día (H1, H2, H3, H5, M1) y una afirmación era errónea: `axios` NO es una dependencia sin uso, es el cliente HTTP de `@inertiajs/core` y no debe retirarse. Léase junto con §25.
+
+Intervención de **solo diagnóstico y documentación**: no se cambió código, `.env`, base de datos ni dependencias. Estado de referencia: commit `dbbcf05`, árbol limpio al empezar, 0 migraciones pendientes (`migrate:status` sobre `ccg_ava`, solo lectura).
+
+### 24.1 Validaciones ejecutadas (resultados reales)
+
+| Comando | Resultado |
+|---|---|
+| PHPUnit en el contenedor (SQLite en memoria, con las variables de `make test`) | 1598 pasadas, 5 omitidas, 0 fallos (14 910 aserciones, 937 s). Las omitidas son las de PostgreSQL |
+| `npm run test:js` | 53/53 |
+| `vendor/bin/pint --test` | correcto |
+| `npm run build` | correcto (7,8 s) |
+| `composer audit` | sin avisos |
+| `npm audit` | **2 altas** (antes documentado como limpio): `follow-redirects` 1.16.0 (llega por `axios`; ningún archivo propio de `resources/` lo importa, pero lo usa `@inertiajs/core`) y `vite` 8.2.0–8.2.2 (`launch-editor`, solo servidor de desarrollo en Windows). Arreglo disponible con `npm audit fix`; no se aplicó |
+| PHPUnit contra PostgreSQL, `InventoryConcurrencyTest`, concurrencia | **No ejecutados**: exigen una base `*_test` y crearla no está autorizado (M14) |
+| Navegador (responsive, modo oscuro, accesibilidad) | **No ejecutado** en esta intervención |
+
+**Incidente de método (corregido, sin daño comprobado).** El primer intento de PHPUnit omitió forzar `CACHE_STORE`, `QUEUE_CONNECTION` y `SESSION_DRIVER` (el contenedor trae Redis; `make test` sí los fuerza). Esa corrida (interrumpida con `pkill`) escribió ~1000 claves de caché en el Redis de desarrollo, encoló jobs de prueba que el `worker` de desarrollo ejecutó contra `ccg_ava` y provocó reinicios de Horizon. Comprobado después: ninguna tabla de `ccg_ava` cambió (`updated_at` máximos anteriores a la corrida; `appointment_notifications` y `chatbot_executions` vacías), 0 trabajos fallidos, worker y scheduler sanos. Quedan claves de caché y límites de tasa de prueba que caducan solos. **Regla:** ejecutar siempre `make test` o todos los `-e` de su `TEST_ENV`; `TestDatabaseGuard` protege la base pero no Redis.
+
+### 24.2 Hechos comprobados del repositorio
+
+- 283 archivos PHP en `app/`, 46 controladores, 99 archivos de prueba (~1474 casos), 184 `.jsx`, 218 líneas de `route:list`, 25 migraciones, 17 módulos implementados, 82 permisos en `config/permissions.php`.
+- No hay `app/Policies`, eventos ni listeners; la autorización es por middleware (`workspace.module`, `workspace.permission`, `workspace.platform`) y no hay *route model binding* de modelos de negocio: cada controlador resuelve por `$workspace->relación()->findOrFail()`. Muestreo de `Modelo::find/where/query` sin Workspace: solo jobs y comandos internos (ids que ya vienen de filas propias) y `Plan`/`Module` (catálogo global).
+- No existe ninguna pieza de facturación, suscripción, prueba gratuita, límite de uso ni pasarela (búsqueda en `app`, `config`, `database`, `routes`: solo coincide la *Subscription Key* de Booker).
+- No existe registro público ni verificación de correo por código: `/register` no existe, `User` no implementa `MustVerifyEmail` y `User::booted` y `UserController` marcan `email_verified_at` al crear la cuenta.
+- La base de desarrollo `ccg_ava` NO coincide con el código: tiene 29 permisos (el catálogo tiene 82; M1 sin ejecutar), el plan «Plataforma completa» tiene 17 módulos (la documentación dice 8) y un Workspace sin `plan_id` (el administrativo).
+
+### 24.3 Matriz de módulos y soluciones
+
+Estado: **R** reutilizable, **C** configurable por Workspace, **I** incompleto, **N** inexistente.
+
+| Capacidad (archivos) | Estado comprobado | Soluciones | Limitaciones / acción |
+|---|---|---|---|
+| Asistentes, canales, widget, WhatsApp (`ChatbotService`, `WebWidget`, `WhatsAppInbound`) | R; solo simulado contra Meta/n8n | todas | Ningún servicio real probado (P10). Instagram/Messenger no existen |
+| Conversaciones y atención humana (`ConversationControl`, `ConversationInbox`) | R | todas | Sondeo en vez de tiempo real; sin notas internas |
+| Servicios, Profesionales, Agenda, Sedes (`app/Booking/*`) | R/C; agenda propia validada; concurrencia de 8 procesos probada a mano en PostgreSQL | Salud, Servicios y Reservas | Booker Merchant: sin cancelar/reprogramar/leer ni profesionales; sin prueba real |
+| Avisos de citas (`AppointmentNotifier`) | R/C; Meta real sin validar | Salud, Servicios y Reservas | Plantillas Meta sin comprobar (D-19) |
+| Catálogo + inventario por sede (`app/Orders/*`) | R/C | E-commerce, Delivery | Concurrencia de stock sin prueba real (M14) |
+| Pedidos (`OrderService`) | R/C | E-commerce, Delivery | Sin pagos, impuestos, envío, cobertura ni avisos; `delivered` final, sin devoluciones |
+| Clientes / Campañas | Clientes R; Campañas I (simulación, sin envío: `UnavailableCampaignDispatcher`) | todas | Envío real exige integración probada |
+| Base de conocimiento / FAQ | **N** (D-20) | todas | Necesaria para atención de preguntas frecuentes |
+| Cobertura y tarifas de entrega | **N** | Delivery | Capacidad nueva real |
+| Historia clínica | **N** a propósito (D-07) | Salud | Fuera de alcance |
+| Licencias, límites, suscripciones | **N** | todas | Ver 24.6 |
+
+**Personalizado:** la arquitectura ya lo permite: un plan es una combinación libre de módulos (`ModuleCatalog`, `ModuleAccess`, `config/modules.php`), las categorías son etiquetas y no hay lógica por tipo de negocio (lo vigila `ModuleArchitectureTest`). Falta lo comercial (precio, límites, periodicidad), no lo técnico. **No se recomienda crear módulos por nombre comercial.** Los únicos que aportan capacidad real son: *Base de conocimiento* (FAQ consultable por el asistente), *Cobertura y tarifas de entrega* (Delivery) y, con integración probada, el despachador real de *Campañas*.
+
+### 24.4 Capacidades conversacionales: qué ejecuta AvaChat hoy
+
+Verificado en `routes/api.php`, `AgentBookingController` y `AgentOrderController`. Ava decide y valida; n8n solo ejecuta; el contacto solo toca lo de SU conversación.
+
+| Operación | ¿Ejecutable por el asistente? | Detalle |
+|---|---|---|
+| Consultar servicios, profesionales, sedes | Sí | `GET /api/agent/booking/*` |
+| Disponibilidad real y alternativas | Sí | `AvailabilityCalculator` es el único; devuelve varios horarios en una ventana de días |
+| Reservar | Sí | `BookingManager::request` idempotente; estado real (`confirmed` solo si la agenda confirmó); bloqueo de fila + restricción de exclusión en PostgreSQL |
+| Reprogramar / cancelar | Sí, con reglas | `assertSelfService` aplica `cancel_notice_hours`; solo citas de la conversación |
+| Confirmar asistencia del cliente | Sí | No cambia el estado de la cita |
+| Estado de una reserva | Parcial | Solo citas hechas desde esa conversación y vigentes; no halla citas creadas por el personal o la página pública para el mismo contacto |
+| Derivar a persona | Sí | `handoff`; D-FALLO si la IA falla |
+| Consultar productos y precio | Sí | Precio del momento; **no** expone existencias (`stockTracked: false` es obsoleto: el inventario existe) |
+| Crear pedido | Sí | Idempotente; total calculado por el servidor; valida existencias de productos con control |
+| Estado de pedido | Sí, solo de su conversación | |
+| Cancelar o cambiar un pedido | **No** (por diseño) | Solo `handoff` |
+| Cobertura, envío, pagos, seguimiento | **No** | La API lo declara |
+| Disponibilidad con Booker | Solo modo Merchant en Staging | Sin verificar |
+
+Ninguna de estas herramientas se ha llamado desde un n8n real; el workflow adaptado no existe (P8).
+
+### 24.5 Hallazgos de seguridad y calidad
+
+Gravedad: M media, B baja. No se encontraron hallazgos altos.
+
+| Id | Grav. | Hallazgo | Evidencia | Recomendación |
+|---|---|---|---|---|
+| H1 | M | `docker-compose.prod.yml` define `TRUSTED_PROXIES: ${TRUSTED_PROXIES:-*}`: confía en cualquier proxy; si el contenedor es alcanzable sin balanceador, `X-Forwarded-For` falsificable evita los límites por IP (login, widget, reservas públicas) | `docker-compose.prod.yml:34` | Exigir la variable (`:?`) con la red del balanceador |
+| H2 | M | `npm audit`: 2 altas (`follow-redirects` vía `axios`, `vite` 8.2.x) | `npm audit` | Resuelto en §25 con `npm audit fix` |
+| H3 | M | La API de pedidos del asistente anuncia `stockTracked: false` y ofrece productos agotados; la creación los rechaza tarde | `AgentOrderController.php:85` | Exponer disponibilidad por sede y filtrar; actualizar `AgentOrderTest:125` |
+| H4 | M | Sin límites de uso: nada limita mensajes, chatbots, usuarios o sedes por Workspace | ausencia en `config/*` | Bloque de licencias (24.6) |
+| H5 | M | Entornos divergentes: `ccg_ava` sin los 82 permisos (M1) y con plan por defecto de 17 módulos | consulta de solo lectura | Autorizar M1 con copia; decidir el contenido del plan por defecto |
+| H6 | B | `Message::find`/`Conversation::find` sin Workspace en jobs | `app/Jobs/SendAgentMessage.php:25` | Aceptable (ids internos); filtrar por consistencia al tocar |
+| H7 | B | Citas del asistente atadas a la conversación, no a la identidad del contacto | `AgentBookingController::owned` | Decisión de producto |
+| H8 | B | Fuente tipográfica desde Bunny (CDN externo) | `vite.config.js` | Valorar autohospedar por privacidad |
+| H9 | B | `Services/index.js` y `Hooks/index.js` casi vacíos; `inspire` en `routes/console.php`; `postcss.config.js`/`autoprefixer` junto a `@tailwindcss/vite` (inferencia: redundante) | archivos | Limpieza candidata |
+| H10 | B | Sanctum y Reverb instalados sin uso (sin `config/sanctum.php`, sin eventos de difusión ni Echo) y Reverb corre como contenedor | `composer.json`, `docker-compose.yml` | Mantener si habrá tiempo real; si no, retirar |
+| H11 | B | `CLAUDE.md` y `AGENTS.md` mandan `composer require laravel/boost` (no está en `composer.json`), contrario a la regla de no instalar sin autorización | `CLAUDE.md`, `AGENTS.md` | Decidir: retirar el bloque o instalar |
+
+No se encontraron: SQL con entrada del usuario sin parámetros (muestreo de los 46 `whereRaw`/`DB::raw`), `env()` fuera de `config/` (salvo `TRUSTED_PROXIES`, documentado), `dd/dump/console.log`, ni clases PHP o componentes JS sin referencia (los 12 comandos sin referencia directa se autodescubren). No se verificó en navegador accesibilidad, modo oscuro ni responsive.
+
+### 24.6 Licenciamiento SaaS: arquitectura propuesta (sin implementar)
+
+**Se reutiliza:** `Organization → Workspace → plan_id`, `Plan`/`Module`/`module_plan` y `ModuleAccess` (punto único de disponibilidad, ya aplicado en rutas, API del agente, widget, webhook y colas), `PlatformAccess` y `workspace.platform` (administración solo desde `Desarrollo_DEV`), `AuditLogger`, `legal_acceptances` (versión, fecha, IP; hoy por usuario), `MailAvailability` y la recuperación de contraseña (correo en cola con límites), `OperationalAlert`, el scheduler con `ScheduledCommandMonitor` y los datos ya existentes (`messages`, `chatbot_executions`, `workspace_user`, sedes) como base de medición.
+
+**Piezas nuevas (propuesta):**
+1. *Registro y alta guiada*: ruta pública con límites; verificación de correo por código (hash, expiración, intentos, reenvío limitado); crea Organization + Workspace + primer administrador en una transacción. Hoy `User::booted` verifica el correo al crear: hay que separar ese comportamiento.
+2. *Catálogo comercial*: soluciones y ofertas (plan base + periodicidad mensual/anual con precio independiente + moneda + vigencia); Starter, Pro y Custom son filas, no código. Los módulos siguen en `module_plan`.
+3. *Derechos (entitlements)*: límites por oferta (usuarios, administradores, sedes, canales, chatbots, mensajes/mes) con un servicio único que consulten `ModuleAccess`, `UserController`, `ChatbotService`, `IntegrationService` y el recuento de mensajes; aplicado en el servidor.
+4. *Suscripción*: estado (prueba / activa / en gracia / suspendida / cancelada), periodo, renovación, excepciones individuales (precio conservado), contadores de uso por periodo y cargos por ampliaciones.
+5. *Condiciones aceptadas*: registrar por Workspace/suscripción la oferta, el precio y la versión de términos aceptados; avisos de cambio de precio con antelación configurable y aceptación cuando corresponda.
+6. *Suspensión y reactivación*: período de gracia configurable desde administración; la suspensión debe fallar cerrada en `ModuleAccess` y `EnsureWorkspaceContext` conservando datos; reactivar no toca datos.
+7. *Pagos*: interfaz `PaymentGateway` (crear cobro, webhook firmado e idempotente, estados, reembolso). Requisitos de la futura pasarela: webhooks firmados e idempotentes, cobros recurrentes con tokenización (sin guardar datos de tarjeta), COP, facturación electrónica DIAN, conciliación y reintentos de cobro.
+
+**Orden de dependencias:** decisión de precios y límites (E4) → entitlements y medición → suscripción y estados → registro y verificación → pagos. No hay que sustituir nada existente.
+
+### 24.7 Limpieza candidata (no ejecutada; requiere aprobación)
+
+| Candidato | Motivo | Riesgo |
+|---|---|---|
+| ~~`axios`~~ | **Descartado (§25):** lo exige `@inertiajs/core` y `laravel-precognition`; no se retira | — |
+| `postcss.config.js`, `autoprefixer`, `postcss`, `@tailwindcss/postcss` | Tailwind ya entra por `@tailwindcss/vite` (inferencia) | Medio: comprobar estilos |
+| `laravel/breeze` (dev), `laravel/sanctum` | Sin uso (auth propia; Sanctum sin config) | Bajo |
+| Reverb (servicio y paquete) | Sin eventos ni Echo | Medio: haría falta para tiempo real (F3) |
+| `Services/index.js`, `Hooks/index.js` | Casi vacíos | Bajo |
+| `inspire` en `routes/console.php` | Plantilla de Laravel | Nulo |
+| Bloque Boost en `CLAUDE.md`/`AGENTS.md` | Ver H11 | Decisión del equipo |
+
+### 24.8 Discrepancias documentales
+
+Corregidas: `README.md` (82 permisos en vez de 80; dependencias de módulos completas; inventario por sede; filas de Catálogo, Pedidos y Sedes; resultado de validación), `docs/modulos-y-planes.md` (el stock ya existe).
+
+Sin corregir (`reglas.md`, `pendientes.md` y `PLAN_TRABAJO_AVACHAT.md` no se modifican sin aprobación): `reglas.md` §7 dice que la única dependencia es `assistants → conversations` (hay seis); §17 afirma que quedan enlaces «Regístrese aquí» sin uso y que no hay capa de servicios (ya no es cierto); §6b no lista las migraciones posteriores al 2026-10-16. `pendientes.md` §A cita el commit `4d2dfff` y la fecha 2026-10-19 (HEAD es `dbbcf05`) y conserva entradas «sin commit» ya confirmadas. `PLAN_TRABAJO_AVACHAT.md` §3.1 lista permisos `manage-*` ya retirados.
+
+### 24.9 Decisiones necesarias antes de implementar licencias
+
+Precios y moneda; contenido de Starter/Pro/Custom por solución; límites y qué cuenta como mensaje; prueba gratuita por plan o por cliente; duración del período de gracia; política de cambio de precio (antelación y aceptación); pasarela de pago y facturación electrónica; autorizar M1 y alinear `ccg_ava`; revisión jurídica de términos (E6b).
+
+## 25. Cierre técnico previo a los planes SaaS (2026-10-20, decimonoveno bloque)
+
+### 25.1 Permisos: 82 frente a 29 (causa raíz demostrada)
+
+**Causa.** Los permisos viven en código (`config/permissions.php`, 82) y llegan a la base solo cuando se ejecuta `RolesAndPermissionsSeeder`; no están en migraciones. `ccg_ava` se sembró por última vez el 2026-10-16 (todas las filas de `permissions` tienen esa fecha, 29 en total). Después los permisos amplios se dividieron en finos (`config/permissions.php` `legacy`) y nadie volvió a sembrar: el entorno de desarrollo solo ejecuta `migrate` al arrancar y `make dev-sync` es manual. El sembrador estaba correcto (ensayo y `RolesSeederTest`/`LegacyRoleTransitionTest`); no había duplicados, filtros, caché ni consultas defectuosas. La lista de la interfaz sale del catálogo en código (`RoleCatalog::visiblePermissions`), pero lo que cada rol *tiene* sale de la base, de modo que los roles de clientes solo conservaban los 10 amplios antiguos.
+
+| Categoría | Cantidad | Detalle |
+|---|---|---|
+| Definidos en código | 82 | `config/permissions.php` (11 son de plataforma: 9 de planes y módulos, `access-private-data`, `use-conversation-demo`) |
+| En la base **antes** | 29 | 19 coincidían con el código y 10 eran amplios retirados: `manage-bookings`, `manage-campaigns`, `manage-catalog`, `manage-chatbots`, `manage-customers`, `manage-modules`, `manage-orders`, `manage-plans`, `manage-services`, `manage-settings` |
+| Faltaban | 63 | los finos (`view-*`, `create-*`, `edit-*`, `activate-*`, etc.) y los de inventario |
+| Duplicados / nombres inconsistentes | 0 | `group by name having count > 1` vacío; ningún permiso de la base ajeno al catálogo salvo los 10 amplios |
+| En la base **después** | 82 | idénticos al catálogo (comparación de listas ordenadas) |
+| Visibles en la interfaz | 82 para la administración de plataforma, 71 para el resto | los 11 de plataforma solo los ve la administración de `Desarrollo_DEV` (`RoleCatalog::visiblePermissions`) |
+| Asignación a roles, antes → después | admin 26 → 72, agente 3 → 6, plataforma 3 → 10, supervisor 3 → 3, cliente 1 → 1, soporte 3 → 3 | `admin` no recibe los 9 comerciales ni `access-private-data` (82 − 10 = 72); `agente` recibe `take/release/resolve-conversations` (tenía `reply-conversations`); `plataforma` recibe los 9 finos que equivalen a los dos amplios que tenía |
+
+**Cómo se corrigió (reproducible y sin pérdida).**
+1. Copia de las tablas `roles`, `permissions`, `role_has_permissions`, `model_has_*`, `workspace_user` y `users` (183 líneas de `INSERT`, guardadas en el directorio temporal de la sesión).
+2. **Ensayo en transacción con rollback** del sembrador completo sobre `ccg_ava`: 29 → 82 permisos, ningún rol perdía nada salvo los amplios retirados, 5 usuarios antes y después, y el estado volvió idéntico.
+3. Ejecución real de `php artisan db:seed --class=RolesAndPermissionsSeeder --force`. Segunda ejecución: sin cambios (idempotente). Registros afectados: **+63 filas en `permissions`, −10 filas en `permissions` (amplios retirados, con sus filas de `role_has_permissions`), +54 −8 (`admin`), +3 (`agente`) y +9 −2 (`plataforma`) asignaciones**. Usuarios (5), membresías (4), Workspaces, planes y roles (6): sin cambios.
+4. `integrations:diagnose` ya no avisa de permisos que faltan.
+5. **Causa del proceso:** `docker/entrypoint.sh` ahora ejecuta `ModuleCatalogSeeder` y `RolesAndPermissionsSeeder` tras `migrate` cuando `RUN_MIGRATIONS=true` y `APP_ENV=local` (ambos idempotentes), para que una base de desarrollo no vuelva a quedar atrasada. Producción no lo hace (sigue siendo un paso explícito, `INFRASTRUCTURE.md`); el cambio solo se aplica al reconstruir la imagen o reiniciar `app`.
+
+Los permisos nuevos de `admin` no concedieron nada indiscriminadamente: `admin` es el rol protegido por diseño que recibe todo el catálogo salvo los reservados, y los demás roles recibieron únicamente la división de lo que ya tenían.
+
+### 25.2 Seguridad y aislamiento
+
+- **`TRUSTED_PROXIES` (corregido).** Con Laravel 13 el valor `*` confía en `0.0.0.0/0`; se comprobó con Symfony `Request`: con `X-Forwarded-For: 6.6.6.6, 203.0.113.9, 10.1.2.3` y `*` el IP del cliente es `6.6.6.6` (falsificable, evita los límites por IP de login, widget y reservas públicas) y con los rangos privados es `203.0.113.9` (el real). `docker-compose.prod.yml` ahora usa por defecto `10.0.0.0/8,172.16.0.0/12,192.168.0.0/16` (la red de Docker y la VPC del balanceador); si el balanceador llega por IP pública hay que listarla en `TRUSTED_PROXIES`. `INFRASTRUCTURE.md` y `.env.example` dicen que no se use `*`. No se probó contra un balanceador real.
+- **Orden de middleware.** `bootstrap/app.php` pone la autorización antes de `SubstituteBindings` y no hay *route model binding* de modelos de negocio; `AuthorizationBeforeBindingTest` y `WorkspaceIsolationSweepTest` pasan.
+- **Módulos y permisos en backend.** `EffectivePermissionsTest` recorre todas las rutas protegidas; `ModuleArchitectureTest` falla si una ruta con sesión no está detrás de `workspace.module` o declarada `core`. Pasan.
+- **Pruebas específicas ejecutadas (283 casos, 3572 aserciones, 0 fallos):** `GranularPermissionsTest`, `EffectivePermissionsTest`, `LegacyRoleTransitionTest`, `PlatformPermissionBoundaryTest`, `RolesSeederTest`, `InternalAdministrationTest`, `PlatformBoundaryTest`, `WorkspaceIsolationSweepTest`, `ModuleArchitectureTest`, `ModuleAvailabilityTest`, `UserRoleManagementTest`, `WorkspaceAccessTest`, `PrivacyTest`, `AgentApiTest`.
+
+### 25.3 Inventario y pedidos del asistente
+
+`stockTracked: false` estaba **obsoleto** (el inventario por sede existe desde 2026-10-20): el asistente ofrecía productos con control de inventario y sin existencias, y la creación del pedido los rechazaba después. Corregido en `AgentOrderController::products`: un producto con control de inventario sin existencias en la sede consultada (o en el inventario general de un Workspace sin sedes) ya no se ofrece; cada producto lleva `stock {controlled, state, units}`; con sedes y sin `location_id` el estado es `location_required` (no se promete nada); `stockTracked` es `true` cuando el inventario está migrado. Un producto sin control se ofrece como siempre. Pruebas nuevas en `AgentOrderTest` (por sede, agotado, sin configurar, otra sede, Workspace sin sedes, y el pedido de un producto oculto sigue rechazado). La creación del pedido ya validaba existencias por sede y la venta se descuenta al confirmar, bajo bloqueo (`InventoryService`); **la concurrencia sigue sin probarse en PostgreSQL** (M14).
+
+### 25.4 Dependencias
+
+- `npm audit` pasó de 2 altas a **0**: `npm audit fix` actualizó 7 paquetes de `package-lock.json` (`vite` 8.2.x → 8.3.4, `follow-redirects` 1.16.0 → 1.16.1, `rolldown` y sus binarios); `package.json` no cambió. `npm run build` y `npm run test:js` (53/53) pasan. Reinicia el contenedor `node` para que el servidor Vite de desarrollo use la versión nueva.
+- **Corrección a §24:** `axios` NO se debe retirar: lo declaran `@inertiajs/core` y `laravel-precognition` (`npm ls axios`). `follow-redirects` solo lo usa el adaptador de Node de axios, no el paquete que va al navegador; el aviso era de riesgo bajo en ejecución y de desarrollo en `vite`.
+- `composer audit`: sin avisos. No se retiró ningún paquete de Composer, Sanctum, Breeze ni Reverb (siguen como candidatos de §24.7, sin verificar todos sus usos ni su compatibilidad).
+
+### 25.5 Redis: revisión de solo lectura del incidente de la auditoría anterior
+
+- **Qué se ejecutó:** `docker compose exec app php artisan test` con solo las variables de base de datos. El contenedor trae `APP_ENV=local`, `CACHE_STORE=redis`, `SESSION_DRIVER=redis` y `QUEUE_CONNECTION=redis`; las variables reales ganan a `phpunit.xml`, así que la corrida usó el Redis de desarrollo (`make test` fuerza `array`/`sync`; `TestDatabaseGuard` solo protegía la base de datos).
+- **Evidencia:** el worker ejecutó `SendAppointmentNotification` y `RunChatbotExecution` entre 21:56 y 22:01 UTC y Horizon registró 60 trabajos recientes; en `ccg_ava` no cambió ninguna tabla (los `updated_at` máximos son anteriores; `appointment_notifications` y `chatbot_executions` tienen 0 filas), `queue:failed` está vacío, la cola `default` mide 0, worker y scheduler están sanos. Los jobs buscaban filas por id que no existían en `ccg_ava`, por lo que no hicieron nada.
+- **Restos:** `db0` tiene ~2350 claves, todas con caducidad salvo las de Horizon (muestra de 300 claves de caché: 0 sin TTL); son contadores de límites de tasa y caché de prueba, y caducan solas. No se borró nada.
+- **Prevención implementada:** `TestDatabaseGuard::assertSafeServices` (llamado desde `TestCase::refreshApplication`) rechaza arrancar una prueba si caché, cola, sesión o difusión apuntan a `redis`. Comprobado: la misma orden del incidente falla ahora con «Refusing to run tests with the shared Redis as cache, queue, session». Pruebas unitarias nuevas en `TestDatabaseGuardTest`.
+
+### 25.6 Preparación para los planes de mañana (estado comprobado, nada implementado)
+
+| Pieza | Estado | Nota para mañana |
+|---|---|---|
+| Plan por Workspace y `ModuleAccess` | Existe | Punto único; hay que añadirle estado de suscripción (suspensión que falla cerrada) |
+| Plan por defecto | `ccg_ava`: 17 módulos; el código dice 8 | Decidir el contenido antes de crear ofertas |
+| Planes sin precio, periodo, límites ni oferta | No existe | Tablas nuevas (propuesta §24.6) |
+| Límites y medición de uso | No existe | Contar usuarios, sedes, chatbots, canales y mensajes (`messages`) con un servicio único |
+| Suscripción, estados, gracia, renovación | No existe | Estados: prueba, activa, gracia, suspendida, cancelada |
+| Registro público y verificación por código | No existe | `User::booted` y `UserController` marcan `email_verified_at` al crear |
+| Correo | `MAIL_MAILER=log` en desarrollo; recuperación de contraseña implementada con simulación | El código de verificación exige un proveedor real (P11) |
+| Aceptación de términos | `legal_acceptances` por usuario (apagada: `LEGAL_ACCEPTANCE_REQUIRED=false`, textos en borrador) | Se necesita aceptación por oferta/precio a nivel Workspace |
+| Auditoría | Existe (`AuditLogger`) | Reutilizable para cambios de plan y precio |
+| Pasarela de pago | No existe | Solo interfaz `PaymentGateway`; requisitos en §24.6 |
+| Migraciones | 0 pendientes en `ccg_ava` (incluida la legal; `pendientes.md` P12 describe otros entornos) | |
+
+**Decisiones que debes confirmar antes de implementar:** precios y moneda; contenido de Starter/Pro/Custom por solución; límites y qué cuenta como mensaje; prueba gratuita por plan o por cliente; duración de la gracia; política de cambio de precio; pasarela y facturación electrónica; contenido del plan por defecto; proveedor de correo real; textos legales definitivos.
+
+### 25.7 Pendiente y no verificado
+
+- No ejecutado: PostgreSQL desechable (`InventoryConcurrencyTest`, concurrencia de reservas y stock; requiere autorizar una base `*_test`, M14), comprobación visual en navegador (la pantalla de permisos se verificó por pruebas automáticas y por la lista de la base, **no visualmente**), prueba del `TRUSTED_PROXIES` detrás de un balanceador real, integración real con n8n/Meta/Booker (siguen **solo simuladas**).
+- El contenedor `app` conserva el `entrypoint` anterior hasta reconstruirlo; el servidor Vite del contenedor `node` hasta reiniciarlo.

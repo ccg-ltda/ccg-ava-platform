@@ -139,7 +139,7 @@ Dependencias de lo que falta: S5 → S4 + WhatsApp real + plantillas (D-19); S6 
 | **Común (una sola implementación)** | Catálogo de productos, pedido, líneas con instantánea de precio, estados y transiciones, historial, permisos (`view-catalog`, `create/edit/activate-products`, `view-orders`, `view-order-details`, `create/edit/cancel/process-orders`), sedes opcionales como punto de operación y Clientes como vínculo opcional. |
 | **Se configura por Workspace** | La moneda (ajuste del Workspace), los productos, qué sedes ofrecen cada producto y el rol de cada persona. |
 | **Solo Delivery (hoy: datos; la lógica está pendiente)** | Dirección, ciudad, referencias y datos de quien recibe (campos del pedido `delivery`); pendientes: zonas de cobertura, tarifas, repartidor y seguimiento. |
-| **Solo E-commerce (pendiente)** | Variantes, stock, transportadora, cambios y devoluciones, promociones. |
+| **Solo E-commerce (pendiente)** | Variantes, transportadora, cambios y devoluciones, promociones. (El inventario por sede ya existe en el Catálogo y lo usan ambas soluciones; la herramienta del asistente aún no lo expone.) |
 | **Todavía no existe en ninguna** | Pagos, descuentos, impuestos, costo de envío, avisos al cliente (`OrderNotifier` sin canal), integración con tiendas externas (D-25). |
 
 Una empresa que contrata Salud y E-commerce tiene DOS Workspaces: el código no comparte filas entre ellos.
