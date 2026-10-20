@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\User;
+use App\Models\Workspace;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Spatie\Permission\Models\Role;
@@ -58,10 +59,13 @@ class RoleCatalog
      * Roles the actor may assign: those whose permissions the actor already holds (no privilege
      * escalation). Superusers acting inside the administrative Workspace may assign any role.
      *
+     * The DEMO permission is inert inside a client Workspace (PlatformAccess::inertInClients), so it is not counted on the role when it is
+     * handed out there: the shared role `admin` carries it in the catalog and must stay assignable by a client's administrator.
+     *
      * @param  list<string>  $actorPermissions
      * @return Collection<int, Role>
      */
-    public function assignableBy(User $actor, array $actorPermissions): Collection
+    public function assignableBy(User $actor, array $actorPermissions, ?Workspace $in = null): Collection
     {
         $roles = $this->all();
 
@@ -70,7 +74,7 @@ class RoleCatalog
         }
 
         return $roles
-            ->filter(fn (Role $role) => $role->permissions->pluck('name')->diff($actorPermissions)->isEmpty())
+            ->filter(fn (Role $role) => $role->permissions->pluck('name')->diff($in?->isAdministrative() === false ? app(PlatformAccess::class)->inertInClients() : [])->diff($actorPermissions)->isEmpty())
             ->values();
     }
 }

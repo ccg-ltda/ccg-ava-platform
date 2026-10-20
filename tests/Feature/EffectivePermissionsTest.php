@@ -6,6 +6,7 @@ use App\Models\Customer;
 use App\Models\Module;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Services\PlatformAccess;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Middleware\ThrottleRequests;
@@ -83,7 +84,9 @@ class EffectivePermissionsTest extends TestCase
                 && $middleware->contains(fn ($m) => str_starts_with($m, 'workspace.permission:'))
                 && ! $middleware->contains(fn ($m) => str_starts_with($m, 'can:') || str_starts_with($m, 'workspace.platform:'))
                 // Support access (another Workspace's private data) is its own, separately tested boundary.
-                && collect($this->requirements($route))->flatten()->intersect($special)->isEmpty();
+                && collect($this->requirements($route))->flatten()->intersect($special)->isEmpty()
+                // A platform permission (the DEMO bench) only counts in the administrative Workspace; PlatformPermissionBoundaryTest covers it.
+                && collect($this->requirements($route))->flatten()->intersect(app(PlatformAccess::class)->platformOnly())->isEmpty();
         })->values()->all();
     }
 

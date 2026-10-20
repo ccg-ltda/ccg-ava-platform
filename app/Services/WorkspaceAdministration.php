@@ -25,7 +25,7 @@ class WorkspaceAdministration
 {
     public const MANAGE_PERMISSION = 'manage-users';
 
-    public function __construct(private readonly RoleCatalog $catalog) {}
+    public function __construct(private readonly RoleCatalog $catalog, private readonly PlatformAccess $platform) {}
 
     /** @return Builder<Workspace> */
     public function administrable(User $actor): Builder
@@ -114,15 +114,17 @@ class WorkspaceAdministration
         $role = $actor->roleInWorkspace($workspace);
 
         // A role missing from the catalog grants nothing (EnsureWorkspaceContext closes such a session).
-        return $role
+        $granted = $role
             ? Role::with('permissions:id,name')->where('name', $role)->where('guard_name', 'web')->first()?->permissions->pluck('name')->all() ?? []
             : [];
+
+        return $this->platform->withinWorkspace($granted, $workspace);
     }
 
     /** @return Collection<int, Role> roles the actor may hand out inside the Workspace (no escalation) */
     public function assignableRoles(User $actor, Workspace $workspace): Collection
     {
-        return $this->catalog->assignableBy($actor, $this->permissionsIn($actor, $workspace));
+        return $this->catalog->assignableBy($actor, $this->permissionsIn($actor, $workspace), $workspace);
     }
 
     /**

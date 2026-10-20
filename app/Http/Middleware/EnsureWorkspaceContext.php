@@ -61,7 +61,7 @@ class EnsureWorkspaceContext
         $user->actingIn($workspace);
         $request->attributes->set('workspace', $workspace);
         $request->attributes->set('workspace_role', $role);
-        $permissions = $catalogRole->permissions->pluck('name')->all();
+        $permissions = $this->platform->withinWorkspace($catalogRole->permissions->pluck('name')->all(), $workspace);
 
         // The internal administration (a superuser with the role `admin` inside the administrative Workspace) always holds the whole catalog, resolved
         // here and not from the rows of the permission tables: see PlatformAccess. Everyone else is limited by exactly what their role has saved.

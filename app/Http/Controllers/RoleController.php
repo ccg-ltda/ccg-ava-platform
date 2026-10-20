@@ -60,7 +60,11 @@ class RoleController extends Controller
         ]);
 
         $before = $role->permissions()->pluck('name')->all();
-        $role->syncPermissions(Permission::whereIn('name', $data['permissions'] ?? [])->where('guard_name', 'web')->get());
+        // The editor only shows, and the request only accepts, the permissions this person may see. What the role holds beyond that (a broad permission
+        // that a pending RolesAndPermissionsSeeder run has not split yet, or one the catalog no longer describes) is not theirs to remove here: saving
+        // keeps it, so an edit can never silently take an ability the role still has.
+        $untouched = array_values(array_diff($before, $this->catalog->visiblePermissions($request->user())));
+        $role->syncPermissions(Permission::whereIn('name', [...($data['permissions'] ?? []), ...$untouched])->where('guard_name', 'web')->get());
         $after = $role->permissions()->pluck('name')->all();
         $added = array_diff($after, $before);
         $removed = array_diff($before, $after);

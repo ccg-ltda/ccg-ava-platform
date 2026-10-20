@@ -188,7 +188,7 @@ class InternalAdministrationTest extends TestCase
 
         $props = $this->actingAs($this->internal)->withSession(['workspace_id' => $this->client->id])->props('/dashboard');
 
-        $this->assertEqualsCanonicalizing(Role::findByName('admin', 'web')->permissions->pluck('name')->all(), $props['auth']['user']['permissions']);
+        $this->assertEqualsCanonicalizing(array_values(array_diff(Role::findByName('admin', 'web')->permissions->pluck('name')->all(), app(PlatformAccess::class)->platformOnly())), $props['auth']['user']['permissions']);
         $this->assertEqualsCanonicalizing(['dashboard', 'customers'], $props['modules']);
         $this->get(route('plans.index'))->assertForbidden();
         $this->get(route('settings.index'))->assertForbidden(); // the module is not in the plan, though the role holds the permission

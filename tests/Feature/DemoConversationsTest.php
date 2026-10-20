@@ -288,11 +288,11 @@ class DemoConversationsTest extends TestCase
         $this->post("/conversations/{$demo->id}/simulate/incoming", ['body' => 'x'])->assertForbidden();
         $this->get("/conversations?c={$demo->id}")->assertInertia(fn (AssertableInertia $page) => $page->where('selected.simulate', false));
 
-        // A client Workspace's admin: refused to generate (not administrative) and cannot reach the other Workspace's data.
+        // A client Workspace admin: refused (the DEMO permission is the platform's) and cannot reach the other Workspace's data.
         $this->signIn($clientAdmin, $client)->get('/conversations')->assertInertia(fn (AssertableInertia $page) => $page->where('demo.canManage', false)->has('conversations', 0));
-        $this->post('/conversations/demo/generate')->assertSessionHas('error');
-        $this->post('/conversations/demo/clean')->assertSessionHas('error');
-        $this->post("/conversations/{$demo->id}/simulate/incoming", ['body' => 'x'])->assertNotFound();
+        $this->post('/conversations/demo/generate')->assertForbidden();
+        $this->post('/conversations/demo/clean')->assertForbidden();
+        $this->post("/conversations/{$demo->id}/simulate/incoming", ['body' => 'x'])->assertForbidden();
         $this->assertSame(11, Conversation::count());
     }
 

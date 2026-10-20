@@ -166,10 +166,11 @@ class WorkspaceIsolationSweepTest extends TestCase
         $this->asAttacker()->post("/conversations/{$id}/resolve")->assertNotFound();
         $this->asAttacker()->post("/conversations/{$id}/messages", ['body' => 'hola'])->assertNotFound();
         $this->asAttacker()->post("/conversations/{$id}/assign", ['user_id' => $this->attacker->id])->assertNotFound();
-        $this->asAttacker()->post("/conversations/{$id}/simulate/incoming", ['body' => 'x'])->assertNotFound();
-        $this->asAttacker()->post("/conversations/{$id}/simulate/ai-reply")->assertNotFound();
-        $this->asAttacker()->post("/conversations/{$id}/simulate/handoff")->assertNotFound();
-        $this->asAttacker()->post("/conversations/{$id}/messages/{$this->message->id}/simulate-status", ['status' => 'read'])->assertNotFound();
+        // The DEMO bench is the platform's: a client's administrator is refused before the id is even looked at.
+        $this->asAttacker()->post("/conversations/{$id}/simulate/incoming", ['body' => 'x'])->assertForbidden();
+        $this->asAttacker()->post("/conversations/{$id}/simulate/ai-reply")->assertForbidden();
+        $this->asAttacker()->post("/conversations/{$id}/simulate/handoff")->assertForbidden();
+        $this->asAttacker()->post("/conversations/{$id}/messages/{$this->message->id}/simulate-status", ['status' => 'read'])->assertForbidden();
 
         $fresh = $this->conversation->fresh();
         $this->assertSame('ai', $fresh->handling);

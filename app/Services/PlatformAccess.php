@@ -34,6 +34,31 @@ class PlatformAccess
         return array_keys(array_filter(config('permissions.permissions'), fn (array $permission) => $permission['platform'] ?? false));
     }
 
+    /**
+     * The permissions that count inside a Workspace: those of the platform administration only operate in the administrative one, so in a client
+     * Workspace they are dropped whatever the role holds. The same list decides what the request is allowed, what the interface shows and which roles
+     * an administrator already covers (a client's administrator can never hand out, or use, what is not theirs to hold).
+     *
+     * @param  list<string>  $permissions
+     * @return list<string>
+     */
+    public function withinWorkspace(array $permissions, Workspace $workspace): array
+    {
+        return $workspace->isAdministrative() ? $permissions : array_values(array_diff($permissions, $this->platformOnly()));
+    }
+
+    /**
+     * The platform permissions a shared role may carry without being the platform's: the DEMO bench is the only one that is neither commercial nor the
+     * private-data access, and it is inert in a client Workspace. The role `admin` holds it in the catalog, so counting it would stop every client's
+     * administrator from assigning `admin`; a role with a commercial or support permission stays above a client's administrator.
+     *
+     * @return list<string>
+     */
+    public function inertInClients(): array
+    {
+        return array_values(array_diff($this->platformOnly(), $this->commercial(), $this->privateData()));
+    }
+
     /** @return list<string> the commercial administration (plans and modules): never given to a role by a seeder, only to the internal administration */
     public function commercial(): array
     {

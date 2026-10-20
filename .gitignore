@@ -31,3 +31,5 @@ Thumbs.db
 /docs/referencias/
 /.playwright-mcp/
 /docs
+prod.env
+*.env

@@ -163,7 +163,8 @@ return [
      * runs nothing is granted again, so a superuser's decision to take one away is kept. `retire` removes the broad permission afterwards
      * (it is no longer used by any route): its assignments are already expanded, and Spatie detaches the rows it leaves. A permission whose
      * operation did not exist before (for example `delete-integrations`) is NOT listed in `grants`: nobody gains a new power by migration;
-     * `admin` receives every permission in any case.
+     * `admin` receives every permission in any case. The `grants` of a broad permission that a client's role can hold never name a `platform` permission
+     * (the role would receive it by migration): a superuser of the administrative Workspace assigns those explicitly.
      */
     'legacy' => [
         'reply-conversations' => ['grants' => ['take-conversations', 'release-conversations', 'resolve-conversations'], 'retire' => false],
@@ -172,7 +173,6 @@ return [
         'manage-users' => ['grants' => ['create-users', 'edit-users', 'assign-roles', 'deactivate-users'], 'retire' => false],
         'manage-settings' => ['grants' => ['view-settings', 'edit-settings', 'view-integrations', 'manage-integrations', 'test-integrations', 'activate-integrations', 'view-audit', 'export-audit'], 'retire' => true],
         'manage-chatbots' => ['grants' => ['create-chatbots', 'edit-chatbots', 'activate-chatbots', 'manage-chatbot-channels', 'manage-agent-tokens'], 'retire' => true],
-        'manage-conversations' => ['grants' => ['use-conversation-demo'], 'retire' => false],
         'view-bookings' => ['grants' => ['view-services', 'view-professionals', 'view-locations'], 'retire' => false],
         'manage-bookings' => ['grants' => ['create-bookings', 'edit-bookings', 'cancel-bookings'], 'retire' => true],
         'manage-services' => ['grants' => ['manage-booking-settings', 'create-services', 'edit-services', 'activate-services', 'create-professionals', 'edit-professionals', 'activate-professionals', 'manage-availability', 'create-locations', 'edit-locations', 'activate-locations'], 'retire' => true],
