@@ -45,7 +45,7 @@ Ninguno se ejecuta sin orden expresa. Cada uno enlaza con el análisis de `RECOM
 | M4 | Recordar el formato de la limpieza manual de demostración: `demo:data clean --confirm=<código>` y `demo:conversations reset\|clean --confirm=<código>`; sin `--confirm` no se elimina nada, y nada los ejecuta solo | Nunca ejecutar sin orden expresa |
 | M5 | Integraciones reales de Booker, Meta, n8n y correo (§C) | Credenciales y autorizaciones |
 | M6 | Textos legales definitivos y aplicar la migración legal (P12) en `ccg_ava` | Revisión jurídica y autorización |
-| M7 | Ejecutar `/graphify --update` en el asistente para completar la parte semántica de los documentos (el grafo de código ya está actualizado) | Ninguna |
+| M7 | ~~Ejecutar `/graphify --update`~~ **Hecho (2026-10-19):** skill instalado (`graphify install --platform claude`) y actualización semántica ejecutada sobre los 13 documentos detectados (`README`, `RECOMENDACIONES`, `pendientes`, `reglas`, `AGENTS`, `CLAUDE`, `INFRASTRUCTURE`, `PLAN_TRABAJO_AVACHAT`, `docs/modulos-y-planes`, `docs/privacidad`, los dos `docker-compose` y `robots.txt`). No hay imágenes ni PDF en el corpus rastreado; los `.docx`/`.xlsx` de `docs/` y `docs/referencias/` están ignorados por Git y no se procesaron. Repetir tras cambios grandes de documentación | — |
 
 ## C. Integraciones externas pendientes
 
