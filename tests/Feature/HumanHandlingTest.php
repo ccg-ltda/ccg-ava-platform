@@ -275,6 +275,55 @@ class HumanHandlingTest extends TestCase
         $this->assertSame('ai', $conversation->fresh()->handling);
     }
 
+    public function test_every_action_on_a_conversation_has_its_own_permission_and_none_grants_another(): void
+    {
+        $workspace = $this->workspace('WS_A');
+        [$bot] = $this->liveBot($workspace);
+        $this->seedRoleCatalog();
+        $actions = ['take' => 'take-conversations', 'release' => 'release-conversations', 'resolve' => 'resolve-conversations'];
+        $n = 0;
+
+        foreach ($actions as $action => $permission) {
+            Role::findOrCreate("solo-{$action}", 'web')->syncPermissions(['view-conversations', $permission]);
+            $this->signIn($this->member($workspace, "solo-{$action}"), $workspace);
+
+            foreach (array_keys($actions) as $attempt) {
+                $conversation = $this->conversation($bot, '5730099'.str_pad((string) ++$n, 5, '0', STR_PAD_LEFT));
+                $status = $this->post("/conversations/{$conversation->id}/{$attempt}")->getStatusCode();
+
+                $attempt === $action
+                    ? $this->assertNotSame(403, $status, "[{$permission}] must allow to {$attempt}")
+                    : $this->assertSame(403, $status, "[{$permission}] must not allow to {$attempt}");
+            }
+
+            // Writing to the contact and assigning are separate permissions too.
+            $this->post("/conversations/{$conversation->id}/messages", ['body' => 'hola'])->assertForbidden();
+            $this->post("/conversations/{$conversation->id}/assign", ['user_id' => 1])->assertForbidden();
+        }
+
+        Role::findOrCreate('solo-reply', 'web')->syncPermissions(['view-conversations', 'reply-conversations']);
+        $this->signIn($this->member($workspace, 'solo-reply'), $workspace);
+        $conversation = $this->conversation($bot, '573009999999');
+        foreach (array_keys($actions) as $attempt) {
+            $this->post("/conversations/{$conversation->id}/{$attempt}")->assertForbidden();
+        }
+        $this->assertNotSame(403, $this->post("/conversations/{$conversation->id}/messages", ['body' => 'hola'])->getStatusCode());
+        $this->post("/conversations/{$conversation->id}/assign", ['user_id' => 1])->assertForbidden();
+        $this->assertSame('ai', $conversation->fresh()->handling, 'a denied action changes nothing');
+    }
+
+    public function test_the_conversation_screen_offers_exactly_the_actions_the_role_can_do(): void
+    {
+        $workspace = $this->workspace('WS_A');
+        [$bot] = $this->liveBot($workspace);
+        $conversation = $this->conversation($bot);
+        $this->seedRoleCatalog();
+        Role::findOrCreate('solo-take', 'web')->syncPermissions(['view-conversations', 'take-conversations']);
+
+        $this->signIn($this->member($workspace, 'solo-take'), $workspace)->get("/conversations?c={$conversation->id}")
+            ->assertInertia(fn ($page) => $page->where('selected.can', fn ($can) => collect($can)->only(['take', 'reply', 'release', 'resolve', 'assign'])->all() === ['take' => true, 'reply' => false, 'release' => false, 'resolve' => false, 'assign' => false]));
+    }
+
     public function test_without_the_view_permission_nothing_is_reachable(): void
     {
         $workspace = $this->workspace('WS_A');

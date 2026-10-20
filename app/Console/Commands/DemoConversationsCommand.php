@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Exceptions\DemoNotAllowed;
+use App\Models\Workspace;
 use App\Services\DemoConversations;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
@@ -10,9 +11,10 @@ use Illuminate\Console\Command;
 
 /**
  * Generates, resets or removes the demo scenarios of Conversations in the administrative Workspace. Refuses to run
- * outside the environments of config/demo.php; `clean` removes only conversations marked as demo.
+ * outside the environments of config/demo.php; `reset` and `clean` remove only conversations marked as demo, and only when the person confirms the
+ * Workspace by typing its code (`--confirm=DESARROLLO_DEV`).
  */
-#[Signature('demo:conversations {action : generate, reset or clean}')]
+#[Signature('demo:conversations {action : generate, reset or clean} {--confirm= : code of the Workspace whose demo conversations may be removed (required by reset and clean)}')]
 #[Description('Generate, reset or clean the demo scenarios of Conversations (administrative Workspace, local only)')]
 class DemoConversationsCommand extends Command
 {
@@ -30,6 +32,12 @@ class DemoConversationsCommand extends Command
 
         if (! $workspace) {
             $this->error('No existe el Workspace administrativo; créalo antes (WorkspaceSeeder).');
+
+            return self::FAILURE;
+        }
+
+        if ($action !== 'generate' && Workspace::normalizeCode((string) $this->option('confirm')) !== $workspace->code) {
+            $this->error("Para eliminar las conversaciones demo escribe el código del Workspace: --confirm={$workspace->code}. No se eliminó nada.");
 
             return self::FAILURE;
         }

@@ -27,13 +27,13 @@ export function normalize(text) {
         .toLowerCase();
 }
 
-/** Whether a catalog item matches a search text (label, description, group name or technical name). */
+/** Whether a catalog item matches a search text (label, description or group name; the technical identifier is never shown, so it is not searched). */
 export function matchesSearch(item, group, query) {
     const needle = normalize(query).trim();
 
     if (!needle) return true;
 
-    return [item.label, item.description, item.name, group?.label].some((text) => normalize(text).includes(needle));
+    return [item.label, item.description, group?.label].some((text) => normalize(text).includes(needle));
 }
 
 /**

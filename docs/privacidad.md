@@ -29,7 +29,7 @@
 ## 3. Controles técnicos implementados
 
 1. **Aislamiento por Workspace** en consultas, rutas, API, tareas y selección masiva: toda consulta parte del Workspace de la sesión; claves foráneas compuestas impiden enlazar filas de otro Workspace (verificado en PostgreSQL). Probado en `WorkspaceIsolationSweepTest`, `CustomersTest`, `CampaignsTest` y `PrivacyTest`.
-2. **Separación entre administrar y mirar datos privados.** Los permisos comerciales (`manage-plans`, `manage-modules`) no dan acceso a datos de clientes. Ser superusuario tampoco: ver conversaciones de *otro* Workspace exige además `access-private-data` (rol `soporte`, sin asignar a nadie por defecto, ni siquiera a `admin`) y un **acceso temporal** abierto con un motivo escrito.
+2. **Separación entre administrar y mirar datos privados.** Los permisos comerciales (los de los grupos `plans` y `modules`: `view-plans`, `edit-plans`, `view-modules`...) no dan acceso a datos de clientes. Ser superusuario tampoco: ver conversaciones de *otro* Workspace exige además `access-private-data` (rol `soporte`, sin asignar a nadie por defecto, ni siquiera a `admin`) y un **acceso temporal** abierto con un motivo escrito.
 3. **Acceso temporal de soporte** (`support_accesses`): un Workspace, un tipo de dato, motivo obligatorio (mínimo 15 caracteres), vigencia 30 minutos, revocable, solo lectura, contactos enmascarados, sin búsqueda por contacto. Quedan en la **auditoría del Workspace consultado**: la apertura (quién, tipo, motivo, vencimiento) y cada consulta (una por conversación cada pocos minutos), sin guardar el contenido leído.
 4. **Auditoría sin datos personales de contactos:** los registros de conversaciones y clientes se identifican por `#id`, no por nombre o número; los cambios de nombre, teléfono, correo y notas de un cliente se auditan como «cambió» sin guardar el valor; los registros antiguos que tuvieran un nombre se muestran como `#id`.
 5. **Enmascaramiento entre Workspaces:** el Dashboard de otro Workspace nombra a sus contactos solo como `••••1234`; Reportes y Auditoría ocultan el correo completo y la IP de quien actuó en otro Workspace.
@@ -121,7 +121,7 @@ Estado verificado en el código. «Fase» = cuándo se cierra el hueco que queda
 
 ## 9. Arquitectura objetivo
 
-1. **Dos planos de permiso, no uno.** *Administrar la plataforma* (`manage-plans`, `manage-modules` y, a futuro, permisos de panel y de configuración) frente a *acceder a datos privados* (`access-private-data`). Ningún permiso del primer plano da acceso al segundo, y **ser superusuario no concede ninguno de los del segundo plano**. (Hoy es así para N3; N1 y N2 todavía se obtienen por ser superusuario en `Desarrollo_DEV`.)
+1. **Dos planos de permiso, no uno.** *Administrar la plataforma* (los permisos de planes y módulos y, a futuro, permisos de panel y de configuración) frente a *acceder a datos privados* (`access-private-data`). Ningún permiso del primer plano da acceso al segundo, y **ser superusuario no concede ninguno de los del segundo plano**. (Hoy es así para N3; N1 y N2 todavía se obtienen por ser superusuario en `Desarrollo_DEV`.)
 2. **Agregado por defecto.** Reportes, Dashboard y supervisión técnica de otros Workspaces usan solo agregados o identificadores enmascarados (N0/N1).
 3. **Acceso excepcional de soporte** (N3), con estas propiedades, ya implementadas para conversaciones (Fase 0) y por extender a otros tipos solo si hace falta:
    - **Temporal** (vigencia corta, nunca indefinida) y **revocable**;

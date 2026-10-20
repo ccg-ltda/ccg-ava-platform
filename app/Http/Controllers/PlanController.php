@@ -17,8 +17,8 @@ use Inertia\Response;
 
 /**
  * Planes: the commercial plans of CCG (the modules a Workspace may use). Only superusers inside the administrative
- * Workspace reach it (`workspace.platform`): the page opens with `manage-plans` or `manage-modules` and shows only the part
- * its permission allows. Plans are never deleted, only deactivated, and the rules live in ModuleCatalog.
+ * Workspace reach it (`workspace.platform`): the page opens with `view-plans` or `view-modules` and shows only the part
+ * its permission allows; every operation (create, edit, activate, assign) has its own permission too. Plans are never deleted, only deactivated, and the rules live in ModuleCatalog.
  */
 class PlanController extends Controller
 {
@@ -28,10 +28,7 @@ class PlanController extends Controller
     {
         $search = trim((string) $request->query('search', ''));
         $counts = $this->catalog->workspaceCounts();
-        $can = [
-            'plans' => EnsurePlatformAdministration::allows($request, EnsurePlatformAdministration::PLANS),
-            'modules' => EnsurePlatformAdministration::allows($request, EnsurePlatformAdministration::MODULES),
-        ];
+        $can = $this->abilities($request);
 
         return Inertia::render('Plans/Index', [
             'can' => $can,
@@ -47,9 +44,33 @@ class PlanController extends Controller
         ]);
     }
 
+    /**
+     * What this person may do on the page: which parts open and which operations each part offers. The routes enforce every one of them; this only
+     * lets the page offer what will work.
+     *
+     * @return array<string, bool>
+     */
+    private function abilities(Request $request): array
+    {
+        $allows = fn (string $permission) => EnsurePlatformAdministration::allows($request, $permission);
+
+        return [
+            'plans' => $allows('view-plans'),
+            'modules' => $allows('view-modules'),
+            'createPlan' => $allows('create-plans'),
+            'editPlan' => $allows('edit-plans'),
+            'activatePlan' => $allows('activate-plans'),
+            'assignPlan' => $allows('assign-plans'),
+            'createModule' => $allows('create-modules'),
+            'editModule' => $allows('edit-modules'),
+            'activateModule' => $allows('activate-modules'),
+        ];
+    }
+
     public function show(Request $request, Plan $plan): Response
     {
         return Inertia::render('Plans/Show', [
+            'can' => $this->abilities($request),
             'plan' => $this->summary($plan->loadCount('modules'), $this->catalog->workspacesOf($plan)->count())
                 + ['moduleIds' => $plan->modules()->pluck('modules.id')->all()],
             'catalog' => $this->catalog->grouped(),

@@ -66,7 +66,7 @@ class ListPaginationTest extends TestCase
     {
         $this->actAsSuperuser();
 
-        $this->get('/users?permissions_per_page=20&permission_q=manage-users')->assertInertia(fn (AssertableInertia $page) => $page
+        $this->get('/users?permissions_per_page=20&permission_q=acceder%20a%20usuarios')->assertInertia(fn (AssertableInertia $page) => $page
             ->where('permissions.data', fn ($rows) => collect($rows)->firstWhere('name', 'manage-users')['roles'] === ['admin'])
             ->has('permissionRoles', 6)->has('permissionNames', count(config('permissions.permissions'))));
     }

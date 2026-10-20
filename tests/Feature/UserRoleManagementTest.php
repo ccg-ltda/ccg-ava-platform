@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Organization;
 use App\Models\User;
 use App\Models\Workspace;
+use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia;
 use Spatie\Permission\Models\Permission;
@@ -230,6 +231,11 @@ class UserRoleManagementTest extends TestCase
         $this->post('/roles', ['name' => 'ok', 'permissions' => ['not-a-permission']])->assertSessionHasErrors('permissions.0');
     }
 
+    private function clientPermissionCount(): int
+    {
+        return count(array_filter(config('permissions.permissions'), fn (array $p) => ! ($p['platform'] ?? false)));
+    }
+
     public function test_superuser_can_edit_permissions_but_not_the_protected_admin_role(): void
     {
         $this->actAs('admin', superuser: true);
@@ -240,7 +246,7 @@ class UserRoleManagementTest extends TestCase
 
         $admin = Role::findByName('admin', 'web');
         $this->put('/roles/'.$admin->id, ['permissions' => []])->assertSessionHasErrors('permissions');
-        $this->assertCount(count(array_filter(config('permissions.permissions'), fn (array $p, string $n) => ! ($p['platform'] ?? false), ARRAY_FILTER_USE_BOTH)), $admin->fresh()->permissions);
+        $this->assertCount(count(config('permissions.permissions')) - count(RolesAndPermissionsSeeder::reserved()), $admin->fresh()->permissions);
     }
 
     public function test_roles_cannot_be_deleted_even_by_superusers(): void
@@ -257,9 +263,10 @@ class UserRoleManagementTest extends TestCase
 
     public function test_only_superusers_receive_the_catalog_management_data(): void
     {
+        // A Workspace administrator is offered the permissions of a Workspace; the platform ones are for the platform administration alone.
         $this->actAs('admin');
         $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('canManageRoles', false)->has('permissionNames', count(config('permissions.permissions'))));
+            ->where('canManageRoles', false)->has('permissionNames', $this->clientPermissionCount()));
 
         $this->actAs('admin', superuser: true);
         $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page
@@ -370,7 +377,7 @@ class UserRoleManagementTest extends TestCase
         $this->actAs('admin');
 
         $this->get('/users')->assertInertia(fn (AssertableInertia $page) => $page
-            ->has('permissionNames', count(config('permissions.permissions')))->where('canManageRoles', false));
+            ->has('permissionNames', $this->clientPermissionCount())->where('canManageRoles', false));
         $this->post('/roles', ['name' => 'x', 'permissions' => ['manage-users']])->assertForbidden();
     }
 
@@ -398,10 +405,15 @@ class UserRoleManagementTest extends TestCase
             $this->assertSame('Clientes', $groups['customers']['moduleName']);
             $this->assertSame('view-customers', $items['edit-customers']['requires']);
             $this->assertNull($items['view-customers']['requires'], 'the permission that opens a page needs nothing else');
-            $this->assertNull($items['manage-plans']['requires']);
-            $this->assertTrue($items['manage-plans']['platform']);
-            // Every permission of the database is described: nothing assignable is hidden.
-            $this->assertCount(Permission::count(), $items);
+            $this->assertNull($items['view-plans']['requires']);
+            $this->assertSame('view-plans', $items['edit-plans']['requires']);
+            $this->assertTrue($items['view-plans']['platform']);
+            // The platform administration sees the whole catalog, and only what the catalog describes (never a bare technical name).
+            $this->assertCount(count(config('permissions.permissions')), $items);
+            foreach ($items as $item) {
+                $this->assertNotSame($item['name'], $item['label'], "[{$item['name']}] has a readable label");
+                $this->assertNotEmpty($item['description'], "[{$item['name']}] says what it allows");
+            }
 
             return true;
         }));

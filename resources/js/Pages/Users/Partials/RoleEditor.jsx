@@ -34,7 +34,6 @@ function PermissionOption({ item, checked, disabled, onToggle, held }) {
                 <span className="font-medium">{item.label}</span>
                 {item.platform && <span className="ml-2 align-middle text-[10px] font-semibold tracking-wide text-accent-violet uppercase">Solo Desarrollo_DEV</span>}
                 {item.description && <span className="mt-0.5 block text-xs text-ink-muted">{item.description}</span>}
-                <span className="mt-0.5 block font-mono text-[11px] text-ink-muted">{item.name}</span>
             </span>
         </label>
     );

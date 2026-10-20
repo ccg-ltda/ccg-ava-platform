@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Services\ModuleAccess;
 use App\Services\ModuleCatalog;
+use App\Services\PlatformAccess;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\ModuleCatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -261,31 +262,38 @@ class CommercialControlsTest extends TestCase
 
     // --- commercial permissions ----------------------------------------------------------------------------------------
 
+    /** @return list<string> */
+    private function commercial(): array
+    {
+        return app(PlatformAccess::class)->commercial();
+    }
+
     public function test_the_new_permissions_exist_and_only_the_plataforma_role_holds_them(): void
     {
         $this->artisan('db:seed', ['--class' => 'RolesAndPermissionsSeeder'])->assertSuccessful();
 
         foreach (['admin', 'supervisor', 'cliente', 'agente'] as $role) {
-            $this->assertFalse(Role::findByName($role, 'web')->hasAnyPermission(['manage-plans', 'manage-modules']), $role);
+            $this->assertFalse(Role::findByName($role, 'web')->hasAnyPermission($this->commercial()), $role);
         }
-        $this->assertTrue(Role::findByName('plataforma', 'web')->hasAllPermissions(['manage-plans', 'manage-modules']));
+        $this->assertTrue(Role::findByName('plataforma', 'web')->hasAllPermissions($this->commercial()));
     }
 
     public function test_plan_administration_and_catalog_administration_are_separate_permissions(): void
     {
-        Role::findOrCreate('comercial', 'web')->syncPermissions(['manage-plans', 'view-dashboard']);
-        Role::findOrCreate('catalogador', 'web')->syncPermissions(['manage-modules', 'view-dashboard']);
+        Role::findOrCreate('comercial', 'web')->syncPermissions(['view-plans', 'create-plans', 'edit-plans', 'activate-plans', 'assign-plans', 'view-dashboard']);
+        Role::findOrCreate('catalogador', 'web')->syncPermissions(['view-modules', 'create-modules', 'edit-modules', 'activate-modules', 'view-dashboard']);
         $category = ModuleCategory::where('key', 'health')->value('id');
 
         $this->actIn($this->dev, 'comercial');
-        $this->assertSame(['plans' => true, 'modules' => false], $this->props('/plans')['can']);
+        $can = $this->props('/plans')['can'];
+        $this->assertSame([true, false], [$can['plans'], $can['modules']]);
         $this->post('/plans', ['name' => 'Nuevo'])->assertSessionHasNoErrors();
         $this->post('/modules', ['name' => 'Citas', 'module_category_id' => $category])->assertForbidden();
         $this->post('/module-categories', ['name' => 'Otra'])->assertForbidden();
 
         $this->actIn($this->dev, 'catalogador');
         $props = $this->props('/plans');
-        $this->assertSame(['plans' => false, 'modules' => true], $props['can']);
+        $this->assertSame([false, true], [$props['can']['plans'], $props['can']['modules']]);
         $this->assertSame([], $props['plans']);
         $this->post('/modules', ['name' => 'Citas', 'module_category_id' => $category])->assertSessionHasNoErrors();
         $this->post('/plans', ['name' => 'Otro'])->assertForbidden();
@@ -361,11 +369,11 @@ class CommercialControlsTest extends TestCase
         $role = Role::findOrCreate('contable', 'web');
 
         $this->actIn($this->dev, 'plataforma'); // holds the permission but not the roles catalog
-        $this->put("/roles/{$role->id}", ['permissions' => ['manage-plans']])->assertForbidden();
+        $this->put("/roles/{$role->id}", ['permissions' => ['view-plans']])->assertForbidden();
 
         $this->actIn($this->dev, 'admin', superuser: true);
-        $this->put("/roles/{$role->id}", ['permissions' => ['manage-plans']])->assertSessionHasNoErrors();
-        $this->assertTrue($role->fresh()->hasPermissionTo('manage-plans'));
+        $this->put("/roles/{$role->id}", ['permissions' => ['view-plans']])->assertSessionHasNoErrors();
+        $this->assertTrue($role->fresh()->hasPermissionTo('view-plans'));
     }
 
     public function test_changing_the_plan_of_a_workspace_does_not_change_the_roles_of_its_users(): void

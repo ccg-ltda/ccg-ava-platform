@@ -224,9 +224,13 @@ class DemoConversationsTest extends TestCase
         $this->assertSame(11, Conversation::count());
         $this->artisan('demo:conversations', ['action' => 'generate'])->assertSuccessful();
         $this->assertSame(11, Conversation::count());
-        $this->artisan('demo:conversations', ['action' => 'reset'])->assertSuccessful();
+        // Removing needs the Workspace code typed: without it nothing is removed.
+        $this->artisan('demo:conversations', ['action' => 'reset'])->assertFailed();
+        $this->artisan('demo:conversations', ['action' => 'clean', '--confirm' => 'OTRO'])->assertFailed();
         $this->assertSame(11, Conversation::count());
-        $this->artisan('demo:conversations', ['action' => 'clean'])->assertSuccessful();
+        $this->artisan('demo:conversations', ['action' => 'reset', '--confirm' => 'DESARROLLO_DEV'])->assertSuccessful();
+        $this->assertSame(11, Conversation::count());
+        $this->artisan('demo:conversations', ['action' => 'clean', '--confirm' => 'DESARROLLO_DEV'])->assertSuccessful();
         $this->assertSame(0, Conversation::count());
         $this->artisan('demo:conversations', ['action' => 'bogus'])->assertFailed();
     }

@@ -5,6 +5,8 @@ namespace Tests;
 use App\Models\Organization;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Services\PlatformAccess;
+use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -36,12 +38,12 @@ abstract class TestCase extends BaseTestCase
             ->each(fn (string $name) => Permission::findOrCreate($name, 'web'));
 
         // `admin` never holds the commercial permissions: only `plataforma` does (as in the seeder).
-        Role::findOrCreate('admin', 'web')->syncPermissions($permissions->reject(fn (string $permission) => in_array($permission, ['manage-plans', 'manage-modules', 'access-private-data']))->all());
-        Role::findOrCreate('plataforma', 'web')->syncPermissions(['view-dashboard', 'manage-plans', 'manage-modules']);
-        Role::findOrCreate('soporte', 'web')->syncPermissions(['view-dashboard', 'view-conversations', 'access-private-data']);
+        Role::findOrCreate('admin', 'web')->syncPermissions($permissions->reject(fn (string $permission) => in_array($permission, RolesAndPermissionsSeeder::reserved()))->all());
+        Role::findOrCreate('plataforma', 'web')->syncPermissions(['view-dashboard', ...app(PlatformAccess::class)->commercial()]);
+        Role::findOrCreate('soporte', 'web')->syncPermissions(['view-dashboard', 'view-conversations', ...app(PlatformAccess::class)->privateData()]);
         Role::findOrCreate('supervisor', 'web')->syncPermissions(['view-dashboard', 'view-users', 'view-chatbots']);
         Role::findOrCreate('cliente', 'web')->syncPermissions(['view-dashboard']);
-        Role::findOrCreate('agente', 'web')->syncPermissions(['view-dashboard', 'view-conversations', 'reply-conversations']);
+        Role::findOrCreate('agente', 'web')->syncPermissions(['view-dashboard', 'view-conversations', 'take-conversations', 'reply-conversations', 'release-conversations', 'resolve-conversations']);
     }
 
     /**

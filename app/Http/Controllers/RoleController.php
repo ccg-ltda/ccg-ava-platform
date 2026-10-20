@@ -28,7 +28,9 @@ class RoleController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:50', 'regex:/^[a-z0-9_-]+$/', Rule::unique('roles', 'name')->where('guard_name', 'web')],
             'permissions' => ['array'],
-            'permissions.*' => ['string', Rule::exists('permissions', 'name')->where('guard_name', 'web')],
+            // Only permissions this person may see: the ones of the platform administration (and any the catalog does not define) are refused here, so a
+            // manipulated request can not hand them to a role.
+            'permissions.*' => ['string', Rule::exists('permissions', 'name')->where('guard_name', 'web'), Rule::in($this->catalog->visiblePermissions($request->user()))],
         ], ['name.regex' => 'Usa solo minúsculas, números, guiones y guion bajo.']);
 
         $role = Role::create(['name' => $data['name'], 'guard_name' => 'web']);
@@ -52,7 +54,9 @@ class RoleController extends Controller
 
         $data = $request->validate([
             'permissions' => ['array'],
-            'permissions.*' => ['string', Rule::exists('permissions', 'name')->where('guard_name', 'web')],
+            // Only permissions this person may see: the ones of the platform administration (and any the catalog does not define) are refused here, so a
+            // manipulated request can not hand them to a role.
+            'permissions.*' => ['string', Rule::exists('permissions', 'name')->where('guard_name', 'web'), Rule::in($this->catalog->visiblePermissions($request->user()))],
         ]);
 
         $before = $role->permissions()->pluck('name')->all();

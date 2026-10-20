@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Exceptions\DemoNotAllowed;
+use App\Models\Workspace;
 use App\Services\DemoBusinessData;
 use App\Services\DemoConversations;
 use Illuminate\Console\Attributes\Description;
@@ -12,9 +13,10 @@ use Illuminate\Console\Command;
 /**
  * Generates, counts or removes the demonstration data of the operational modules (Catálogo, Pedidos, Servicios, Sedes, Profesionales, Agenda, Clientes y
  * Campañas) in the administrative Workspace. Refuses to run outside the environments of config/demo.php. It is never run by a seeder or by a deploy: only
- * a person who types it. `clean` removes only records that carry the demo marks.
+ * a person who types it. `clean` removes only records that carry the demo marks, and only when the person confirms the Workspace by typing its code
+ * (`--confirm=DESARROLLO_DEV`): it never runs by accident, from a script that forgot the flag or from a deploy.
  */
-#[Signature('demo:data {action : generate, status or clean}')]
+#[Signature('demo:data {action : generate, status or clean} {--confirm= : code of the Workspace whose demo data may be removed (required by clean)}')]
 #[Description('Generate, count or clean the demo data of the operational modules (administrative Workspace, local only)')]
 class DemoDataCommand extends Command
 {
@@ -38,6 +40,13 @@ class DemoDataCommand extends Command
 
         try {
             $demo->assertAllowed($workspace);
+
+            if ($action === 'clean' && Workspace::normalizeCode((string) $this->option('confirm')) !== $workspace->code) {
+                $this->error("Para eliminar los datos demo escribe el código del Workspace: --confirm={$workspace->code}. No se eliminó nada.");
+
+                return self::FAILURE;
+            }
+
             $result = match ($action) {
                 'generate' => $demo->generate($workspace),
                 'clean' => $demo->clean($workspace),

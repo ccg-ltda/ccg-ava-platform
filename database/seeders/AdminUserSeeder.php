@@ -50,7 +50,7 @@ class AdminUserSeeder extends Seeder
         // Every permission of a Workspace admin EXCEPT the platform and support ones, which no role receives automatically
         // (RolesAndPermissionsSeeder revokes them from `admin`; granting them here would undo that on a clean install).
         $role->syncPermissions(Permission::where('guard_name', 'web')
-            ->whereNotIn('name', [...RolesAndPermissionsSeeder::PLATFORM_PERMISSIONS, ...RolesAndPermissionsSeeder::PRIVATE_DATA_PERMISSIONS])->get());
+            ->whereNotIn('name', RolesAndPermissionsSeeder::reserved())->get());
 
         $admin = User::updateOrCreate(
             ['email' => $email],

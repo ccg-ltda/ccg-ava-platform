@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceSetting;
 use App\Services\DemoBusinessData;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -197,12 +198,57 @@ class DemoBusinessDataTest extends TestCase
         $this->assertSame(36, Customer::where('workspace_id', $this->admin->id)->count());
 
         $this->artisan('demo:data status')->assertSuccessful();
-        $this->artisan('demo:data clean')->assertSuccessful();
+        $this->artisan('demo:data', ['action' => 'clean', '--confirm' => 'DESARROLLO_DEV'])->assertSuccessful();
         $this->assertSame(0, Customer::count());
         $this->artisan('demo:data nonsense')->assertExitCode(2);
 
         $this->app->detectEnvironment(fn () => 'production');
         $this->artisan('demo:data generate')->expectsOutputToContain('solo existen en entornos locales')->assertFailed();
+    }
+
+    public function test_cleaning_needs_the_workspace_code_typed_and_without_it_nothing_is_removed(): void
+    {
+        $this->artisan('demo:data generate')->assertSuccessful();
+        $before = $this->demo()->counts($this->admin);
+
+        $this->artisan('demo:data', ['action' => 'clean'])->expectsOutputToContain('--confirm=DESARROLLO_DEV')->assertFailed();
+        $this->artisan('demo:data', ['action' => 'clean', '--confirm' => 'OTRO_WORKSPACE'])->assertFailed();
+        $this->artisan('demo:data', ['action' => 'clean', '--confirm' => ''])->assertFailed();
+        $this->assertSame($before, $this->demo()->counts($this->admin), 'a clean that was not confirmed removes nothing');
+
+        $this->artisan('demo:data', ['action' => 'clean', '--confirm' => 'desarrollo_dev'])->assertSuccessful();
+        $this->assertSame(0, array_sum($this->demo()->counts($this->admin)));
+    }
+
+    public function test_nothing_removes_demo_data_by_itself_a_seeder_the_scheduler_or_a_new_catalog(): void
+    {
+        $this->artisan('demo:data generate')->assertSuccessful();
+        $before = $this->demo()->counts($this->admin);
+        $this->assertGreaterThan(0, array_sum($before));
+
+        // What a deploy or an update runs: every seeder, again.
+        foreach (['db:seed', 'db:seed --class=RolesAndPermissionsSeeder', 'db:seed --class=ModuleCatalogSeeder'] as $command) {
+            $this->artisan($command)->assertSuccessful();
+        }
+
+        $this->assertSame($before, $this->demo()->counts($this->admin));
+
+        $scheduled = collect(app(Schedule::class)->events())->map(fn ($event) => (string) $event->command)->implode(' | ');
+        $this->assertStringNotContainsString('demo:', $scheduled, 'no scheduled command touches demo data');
+    }
+
+    public function test_without_demo_data_the_screens_show_real_empty_states_and_no_invented_records(): void
+    {
+        $user = User::factory()->create();
+        $this->seedRoleCatalog();
+        $this->admin->users()->attach($user->id, ['role' => 'admin']);
+        $this->actingAs($user)->withSession(['workspace_id' => $this->admin->id]);
+
+        foreach (['/customers' => 'customers', '/orders' => 'orders', '/catalog' => 'products', '/campaigns' => 'campaigns'] as $url => $prop) {
+            $this->get($url)->assertOk()->assertInertia(fn ($page) => $page->where("{$prop}.meta.total", 0)->where("{$prop}.data", []));
+        }
+        $this->get('/conversations')->assertOk()->assertInertia(fn ($page) => $page->where('conversations', []));
+        $this->assertSame(0, array_sum($this->demo()->counts($this->admin)));
     }
 
     public function test_the_demo_screens_open_and_paginate_for_an_administrator(): void

@@ -64,7 +64,7 @@ class ConsultationPlanTest extends TestCase
 
     private function abilities(Conversation $conversation): array
     {
-        return app(ConversationInbox::class)->detail($conversation->fresh(), $this->client->settingsOrDefault(), $this->agent, ['reply-conversations', 'manage-conversations', 'view-conversations'], false);
+        return app(ConversationInbox::class)->detail($conversation->fresh(), $this->client->settingsOrDefault(), $this->agent, ['take-conversations', 'reply-conversations', 'release-conversations', 'resolve-conversations', 'manage-conversations', 'view-conversations'], false);
     }
 
     public function test_the_combination_is_allowed_but_assistants_still_need_conversations(): void

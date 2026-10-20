@@ -48,13 +48,13 @@ class UserController extends Controller
             // they may). Any other Workspace is searched on demand (workspaces.search, purpose "assign"), never listed whole.
             'createTargets' => fn () => $this->initialTargets($actor, $workspace),
             // The role catalog with the permissions each role grants (managed only by superusers).
-            'roles' => fn () => $this->rolesPage($request, $workspace),
+            'roles' => fn () => $this->rolesPage($request, $actor, $workspace),
             // Permissions the system defines, with the roles that grant each (read-only matrix).
-            'permissions' => fn () => $this->permissionsPage($request),
-            // The role editor offers every permission, whatever page of the permissions list is showing.
-            'permissionNames' => fn () => Permission::orderBy('name')->pluck('name'),
+            'permissions' => fn () => $this->permissionsPage($request, $actor),
+            // The role editor offers every permission the actor may see, whatever page of the permissions list is showing.
+            'permissionNames' => fn () => $this->catalog->visiblePermissions($actor),
             // What each permission means and the area it belongs to (config/permissions.php), to show them grouped and in plain words.
-            'permissionCatalog' => fn () => $this->permissionCatalog(),
+            'permissionCatalog' => fn () => $this->permissionCatalog($actor),
             'permissionRoles' => fn () => $this->catalog->all()->map(fn ($role) => ['id' => $role->id, 'name' => $role->name])->values(),
             'canManageRoles' => $actor->can('manage-roles'),
             'workspaces' => fn () => $this->workspaces->overview($actor, $request),
@@ -63,7 +63,7 @@ class UserController extends Controller
     }
 
     /** @return array{groups: array<string, array<string, mixed>>, items: list<array<string, mixed>>} */
-    private function permissionCatalog(): array
+    private function permissionCatalog(User $actor): array
     {
         $described = config('permissions.permissions');
         $groups = config('permissions.groups');
@@ -77,18 +77,18 @@ class UserController extends Controller
                 'module' => $group['module'] ?? null,
                 'moduleName' => isset($group['module']) ? config("modules.implemented.{$group['module']}.name") : null,
             ])->all(),
-            // A permission the catalog does not describe is still listed (by its name) so nothing assignable is hidden.
-            // In the order of the catalog (the permission that opens the page first, then the operations), the rest by name.
-            'items' => Permission::where('guard_name', 'web')->pluck('name')
-                ->sortBy(fn (string $name) => sprintf('%05d%s', ($position = array_search($name, array_keys($described), true)) === false ? 99999 : $position, $name))->values()
+            // Only what the catalog describes, in its order (the permission that opens the page first, then the operations), and only what this
+            // person may see: the permissions of the platform administration never reach anyone who is not it. A permission the catalog does
+            // not know (one left in a database from an earlier version) has no effect anywhere and is not offered.
+            'items' => collect($this->catalog->visiblePermissions($actor))
                 ->map(fn (string $name) => [
                     'name' => $name,
-                    'label' => $described[$name]['label'] ?? $name,
-                    'description' => $described[$name]['description'] ?? null,
-                    'group' => $described[$name]['group'] ?? 'general',
+                    'label' => $described[$name]['label'],
+                    'description' => $described[$name]['description'],
+                    'group' => $described[$name]['group'],
                     'platform' => (bool) ($described[$name]['platform'] ?? false),
                     // Every operation of a resource is done from its page: the permission that opens it is needed on top of the operation's own.
-                    'requires' => ($list = $groups[$described[$name]['group'] ?? 'general']['list'] ?? null) !== $name ? $list : null,
+                    'requires' => ($list = $groups[$described[$name]['group']]['list'] ?? null) !== $name ? $list : null,
                 ])->values()->all(),
         ];
     }
@@ -131,7 +131,8 @@ class UserController extends Controller
 
         $locked = $this->identity->lockedIds($actor, $page->getCollection(), $workspace);
         // What each role allows, so the list can show a person's effective permissions (one query for the whole page).
-        $grants = $this->catalog->all()->mapWithKeys(fn ($role) => [$role->name => $role->permissions->pluck('name')->sort()->values()->all()]);
+        $visible = $this->catalog->visiblePermissions($actor);
+        $grants = $this->catalog->all()->mapWithKeys(fn ($role) => [$role->name => $role->permissions->pluck('name')->intersect($visible)->sort()->values()->all()]);
 
         return [
             'data' => $page->getCollection()->map(fn (User $user) => [
@@ -150,8 +151,9 @@ class UserController extends Controller
     }
 
     /** @return array<string, mixed> */
-    private function rolesPage(Request $request, $workspace): array
+    private function rolesPage(Request $request, User $actor, $workspace): array
     {
+        $visible = $this->catalog->visiblePermissions($actor);
         $page = ListPagination::paginate($this->catalog->query(), $request, 'roles');
         $usersByRole = DB::table('workspace_user')
             ->where('workspace_id', $workspace->getKey())
@@ -163,7 +165,7 @@ class UserController extends Controller
             'data' => $page->getCollection()->map(fn ($role) => [
                 'id' => $role->id,
                 'name' => $role->name,
-                'permissions' => $role->permissions->pluck('name')->all(),
+                'permissions' => $role->permissions->pluck('name')->intersect($visible)->values()->all(),
                 'protected' => $this->catalog->isProtected($role),
                 'usersInWorkspace' => (int) ($usersByRole[$role->name] ?? 0),
             ])->values(),
@@ -172,16 +174,17 @@ class UserController extends Controller
     }
 
     /** @return array<string, mixed> */
-    private function permissionsPage(Request $request): array
+    private function permissionsPage(Request $request, User $actor): array
     {
+        $visible = $this->catalog->visiblePermissions($actor);
         // Filters of the permission list (resource and text), applied on the server over the catalog: the page count and the total follow them.
         $group = (string) $request->query('permission_group', '');
         $search = Str::lower(Str::ascii(trim((string) $request->query('permission_q', ''))));
         $described = config('permissions.permissions');
         $groups = config('permissions.groups');
         $names = collect($described)
-            ->filter(fn (array $entry, string $name) => ($group === '' || $entry['group'] === $group)
-                && ($search === '' || str_contains(Str::lower(Str::ascii($name.' '.$entry['label'].' '.$entry['description'].' '.($groups[$entry['group']]['label'] ?? ''))), $search)))
+            ->filter(fn (array $entry, string $name) => in_array($name, $visible, true) && ($group === '' || $entry['group'] === $group)
+                && ($search === '' || str_contains(Str::lower(Str::ascii($entry['label'].' '.$entry['description'].' '.($groups[$entry['group']]['label'] ?? ''))), $search)))
             ->keys()->all();
 
         $page = ListPagination::paginate(Permission::with('roles:id,name')->whereIn('name', $names)->orderBy('name'), $request, 'permissions');
@@ -193,7 +196,7 @@ class UserController extends Controller
             ])->values(),
             'meta' => ListPagination::meta($page),
             'filters' => ['group' => $group, 'q' => (string) $request->query('permission_q', '')],
-            'total' => Permission::where('guard_name', 'web')->count(),
+            'total' => count($visible),
         ];
     }
 

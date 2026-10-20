@@ -59,7 +59,7 @@ function FormModal({ show, title, form, onClose, onSubmit, submitLabel, children
  * one sits), with the categories (the commercial or organizational label of each module) managed in their own card. Registering a module or a category only
  * reserves its place; whether a module works comes from the platform's code (the badge), never from this screen. Nothing is deleted.
  */
-export default function CatalogPanel({ catalog }) {
+export default function CatalogPanel({ catalog, can }) {
     const confirm = useConfirm();
     const toast = useToast();
 
@@ -120,16 +120,18 @@ export default function CatalogPanel({ catalog }) {
                 «Implementado» solo cuando su funcionalidad ya existe en la plataforma; los demás quedan «Pendientes de implementación» y no se ofrecen como operativos.
             </Alert>
 
-            <div className="flex flex-wrap items-center justify-end gap-3">
-                <SecondaryButton type="button" onClick={() => openCategory()} className="gap-2">
-                    <FolderPlus className="size-4" aria-hidden="true" />
-                    Nueva categoría
-                </SecondaryButton>
-                <PrimaryButton type="button" onClick={() => openModule()} className="gap-2" disabled={categoryOptions.length === 0}>
-                    <Plus className="size-4" aria-hidden="true" />
-                    Registrar módulo pendiente
-                </PrimaryButton>
-            </div>
+            {can.createModule && (
+                <div className="flex flex-wrap items-center justify-end gap-3">
+                    <SecondaryButton type="button" onClick={() => openCategory()} className="gap-2">
+                        <FolderPlus className="size-4" aria-hidden="true" />
+                        Nueva categoría
+                    </SecondaryButton>
+                    <PrimaryButton type="button" onClick={() => openModule()} className="gap-2" disabled={categoryOptions.length === 0}>
+                        <Plus className="size-4" aria-hidden="true" />
+                        Registrar módulo pendiente
+                    </PrimaryButton>
+                </div>
+            )}
 
             <Card className="overflow-hidden">
                 <div className="border-b border-line p-4 sm:px-6">
@@ -148,9 +150,9 @@ export default function CatalogPanel({ catalog }) {
                                 {category.description && <p className="truncate text-xs text-ink-muted">{category.description}</p>}
                             </div>
                             <div className="flex items-center gap-1">
-                                {category.isActive && <IconButton icon={Plus} label="Registrar módulo aquí" context={category.name} onClick={() => openModule({}, category.id)} />}
-                                <IconButton icon={Pencil} label="Editar categoría" context={category.name} onClick={() => openCategory(category)} />
-                                <IconButton icon={Power} label={category.isActive ? 'Desactivar' : 'Activar'} context={category.name} tone={category.isActive ? 'danger' : 'primary'} onClick={() => toggle(category, 'category')} />
+                                {can.createModule && category.isActive && <IconButton icon={Plus} label="Registrar módulo aquí" context={category.name} onClick={() => openModule({}, category.id)} />}
+                                {can.editModule && <IconButton icon={Pencil} label="Editar categoría" context={category.name} onClick={() => openCategory(category)} />}
+                                {can.activateModule && <IconButton icon={Power} label={category.isActive ? 'Desactivar' : 'Activar'} context={category.name} tone={category.isActive ? 'danger' : 'primary'} onClick={() => toggle(category, 'category')} />}
                             </div>
                         </li>
                     ))}
@@ -186,8 +188,8 @@ export default function CatalogPanel({ catalog }) {
                                     </p>
                                 </div>
                                 <div className="flex items-center gap-1">
-                                    <IconButton icon={Pencil} label="Editar" context={module.name} onClick={() => openModule(module)} />
-                                    <IconButton icon={Power} label={module.isActive ? 'Desactivar' : 'Activar'} context={module.name} tone={module.isActive ? 'danger' : 'primary'} onClick={() => toggle(module, 'module')} />
+                                    {can.editModule && <IconButton icon={Pencil} label="Editar" context={module.name} onClick={() => openModule(module)} />}
+                                    {can.activateModule && <IconButton icon={Power} label={module.isActive ? 'Desactivar' : 'Activar'} context={module.name} tone={module.isActive ? 'danger' : 'primary'} onClick={() => toggle(module, 'module')} />}
                                 </div>
                             </li>
                         ))}

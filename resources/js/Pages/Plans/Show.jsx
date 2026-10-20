@@ -23,7 +23,7 @@ import PlanFormModal from './Partials/PlanFormModal';
 const sameIds = (a, b) => a.length === b.length && a.every((id) => b.includes(id));
 
 /** The modules of the plan: a checklist by category with one explicit save, and a warning before taking modules away from Workspaces. */
-function ModulesCard({ plan, catalog }) {
+function ModulesCard({ plan, catalog, canEdit }) {
     const confirm = useConfirm();
     const form = useForm({ module_ids: plan.moduleIds });
     const dirty = !sameIds(form.data.module_ids, plan.moduleIds);
@@ -54,16 +54,18 @@ function ModulesCard({ plan, catalog }) {
                         <h2 className="text-base font-bold text-ink">Módulos incluidos</h2>
                         <p className="mt-0.5 text-sm text-ink-muted">{form.data.module_ids.length} seleccionados. Los permisos de cada rol siguen decidiendo qué puede hacer cada persona.</p>
                     </div>
-                    <div className="flex gap-3">
-                        {dirty && (
-                            <SecondaryButton type="button" onClick={() => form.setData('module_ids', plan.moduleIds)}>
-                                Descartar
-                            </SecondaryButton>
-                        )}
-                        <PrimaryButton type="submit" disabled={!dirty || form.processing || incomplete}>
-                            Guardar módulos
-                        </PrimaryButton>
-                    </div>
+                    {canEdit && (
+                        <div className="flex gap-3">
+                            {dirty && (
+                                <SecondaryButton type="button" onClick={() => form.setData('module_ids', plan.moduleIds)}>
+                                    Descartar
+                                </SecondaryButton>
+                            )}
+                            <PrimaryButton type="submit" disabled={!dirty || form.processing || incomplete}>
+                                Guardar módulos
+                            </PrimaryButton>
+                        </div>
+                    )}
                 </div>
 
                 <Alert tone="info" className="mt-4">
@@ -79,7 +81,7 @@ function ModulesCard({ plan, catalog }) {
 }
 
 /** Workspaces that use the plan, with the control that assigns another Workspace to it. Assigning moves it away from its previous plan. */
-function WorkspacesCard({ plan, workspaces, perPageOptions }) {
+function WorkspacesCard({ plan, workspaces, perPageOptions, canAssign }) {
     const toast = useToast();
     const confirm = useConfirm();
     const list = usePagedList({ section: 'workspaces', only: ['workspaces', 'plan'], meta: workspaces.meta, perPageOptions, routeName: 'plans.show', routeParams: plan.id });
@@ -113,16 +115,18 @@ function WorkspacesCard({ plan, workspaces, perPageOptions }) {
                     El Workspace administrativo no tiene plan: siempre dispone de todos los módulos.
                 </p>
 
-                <div className="mt-4 flex flex-wrap items-end gap-3">
-                    <div className="w-full sm:w-96">
-                        <InputLabel htmlFor="plan_assign_workspace" value="Asignar un Workspace a este plan" />
-                        <WorkspaceCombobox id="plan_assign_workspace" purpose="view" value={selected} onChange={setSelected} disabled={!plan.isActive} className="mt-1" />
+                {canAssign && (
+                    <div className="mt-4 flex flex-wrap items-end gap-3">
+                        <div className="w-full sm:w-96">
+                            <InputLabel htmlFor="plan_assign_workspace" value="Asignar un Workspace a este plan" />
+                            <WorkspaceCombobox id="plan_assign_workspace" purpose="view" value={selected} onChange={setSelected} disabled={!plan.isActive} className="mt-1" />
+                        </div>
+                        <PrimaryButton type="button" onClick={assign} disabled={!selected || !plan.isActive || assigning}>
+                            Asignar
+                        </PrimaryButton>
                     </div>
-                    <PrimaryButton type="button" onClick={assign} disabled={!selected || !plan.isActive || assigning}>
-                        Asignar
-                    </PrimaryButton>
-                </div>
-                {!plan.isActive && <InputError message="Activa el plan para poder asignarlo a Workspaces." className="mt-2" />}
+                )}
+                {canAssign && !plan.isActive && <InputError message="Activa el plan para poder asignarlo a Workspaces." className="mt-2" />}
             </div>
 
             {workspaces.data.length === 0 ? (
@@ -162,7 +166,7 @@ function WorkspacesCard({ plan, workspaces, perPageOptions }) {
 }
 
 /** One plan: its data, its modules and the Workspaces that use it. */
-export default function Show({ plan, catalog, workspaces, perPageOptions }) {
+export default function Show({ can, plan, catalog, workspaces, perPageOptions }) {
     const confirm = useConfirm();
     const toast = useToast();
     const edit = useForm({ name: plan.name, description: plan.description ?? '' });
@@ -202,18 +206,22 @@ export default function Show({ plan, catalog, workspaces, perPageOptions }) {
             <PageHeader title={plan.name} description={plan.description ?? 'Sin descripción.'}>
                 <Badge tone={plan.isActive ? 'green' : 'neutral'}>{plan.isActive ? 'Activo' : 'Inactivo'}</Badge>
                 {plan.isDefault && <Badge tone="blue">Por defecto</Badge>}
-                <SecondaryButton type="button" onClick={() => setEditing(true)} className="gap-2">
-                    <Pencil className="size-4" aria-hidden="true" />
-                    Editar
-                </SecondaryButton>
-                <SecondaryButton type="button" onClick={toggleStatus} className="gap-2">
-                    <Power className="size-4" aria-hidden="true" />
-                    {plan.isActive ? 'Desactivar' : 'Activar'}
-                </SecondaryButton>
+                {can.editPlan && (
+                    <SecondaryButton type="button" onClick={() => setEditing(true)} className="gap-2">
+                        <Pencil className="size-4" aria-hidden="true" />
+                        Editar
+                    </SecondaryButton>
+                )}
+                {can.activatePlan && (
+                    <SecondaryButton type="button" onClick={toggleStatus} className="gap-2">
+                        <Power className="size-4" aria-hidden="true" />
+                        {plan.isActive ? 'Desactivar' : 'Activar'}
+                    </SecondaryButton>
+                )}
             </PageHeader>
 
-            <ModulesCard key={plan.moduleIds.join(',')} plan={plan} catalog={catalog} />
-            <WorkspacesCard plan={plan} workspaces={workspaces} perPageOptions={perPageOptions} />
+            <ModulesCard key={plan.moduleIds.join(',')} plan={plan} catalog={catalog} canEdit={can.editPlan} />
+            <WorkspacesCard plan={plan} workspaces={workspaces} perPageOptions={perPageOptions} canAssign={can.assignPlan} />
 
             <PlanFormModal show={editing} title="Editar plan" form={edit} submitLabel="Guardar cambios" onClose={() => setEditing(false)} onSubmit={submitEdit} />
         </>

@@ -26,6 +26,22 @@ class RoleCatalog
         return in_array($role->name, self::PROTECTED_ROLES, true);
     }
 
+    /**
+     * The permissions of the catalog (config/permissions.php, in its order) this person may see and hand out. The permissions that only operate in the
+     * administrative Workspace (plans, modules, support access, the DEMO bench) belong to the platform administration alone: anyone else never sees
+     * them, in a list, a role or the editor, and the server refuses them when a role is saved.
+     *
+     * @return list<string>
+     */
+    public function visiblePermissions(User $actor): array
+    {
+        $names = array_keys(config('permissions.permissions'));
+
+        return $actor->isPlatformSuperuser()
+            ? $names
+            : array_values(array_filter($names, fn (string $name) => ! config("permissions.permissions.{$name}.platform", false)));
+    }
+
     /** @return Builder<Role> the global catalog, with each role's permissions, by name */
     public function query(): Builder
     {

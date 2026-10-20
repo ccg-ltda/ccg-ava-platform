@@ -156,16 +156,17 @@ class ConversationInbox
     /** @return array{take: bool, reply: bool, release: bool, resolve: bool, assign: bool} */
     private function abilities(Conversation $conversation, User $user, array $permissions, bool $deliverable): array
     {
-        $reply = in_array(ConversationAgents::PERMISSION, $permissions, true);
-        $manage = in_array('manage-conversations', $permissions, true);
+        // Each action has its own permission: holding one never allows another.
+        $can = fn (string $permission) => in_array($permission, $permissions, true);
+        $manage = $can('manage-conversations');
         $handling = $conversation->handling;
         $operator = $this->control->isOperator($conversation, $user, $manage);
 
         return [
-            'take' => $reply && in_array($handling, [Conversation::AI, Conversation::PENDING], true),
-            'reply' => $reply && $handling === Conversation::HUMAN && $operator && $deliverable,
-            'release' => $reply && $this->control->aiAvailable($conversation) && (($handling === Conversation::HUMAN && $operator) || $handling === Conversation::PENDING),
-            'resolve' => $reply && $handling !== Conversation::RESOLVED && ($handling !== Conversation::HUMAN || $operator),
+            'take' => $can('take-conversations') && in_array($handling, [Conversation::AI, Conversation::PENDING], true),
+            'reply' => $can(ConversationAgents::PERMISSION) && $handling === Conversation::HUMAN && $operator && $deliverable,
+            'release' => $can('release-conversations') && $this->control->aiAvailable($conversation) && (($handling === Conversation::HUMAN && $operator) || $handling === Conversation::PENDING),
+            'resolve' => $can('resolve-conversations') && $handling !== Conversation::RESOLVED && ($handling !== Conversation::HUMAN || $operator),
             'assign' => $manage && $handling !== Conversation::RESOLVED,
         ];
     }

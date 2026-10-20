@@ -89,16 +89,14 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         Route::post('/{integration}/test', [IntegrationController::class, 'test'])->whereNumber('integration')->middleware(['workspace.permission:test-integrations', 'throttle:20,1'])->name('test');
     });
 
-    // Conversations hold what the contacts wrote: reading them is `view-conversations`; attending them (take, write, give
-    // back to the AI, resolve) is `reply-conversations`; assigning them to another agent is `manage-conversations`.
+    // Conversations hold what the contacts wrote: reading them is `view-conversations`; each action has its own permission (take, write, give
+    // back to the AI, resolve); assigning them to another agent is `manage-conversations`.
     Route::middleware(['workspace.module:conversations', 'workspace.permission:view-conversations'])->prefix('conversations')->name('conversations.')->group(function () {
         Route::get('/', [ConversationController::class, 'index'])->name('index');
-        Route::middleware('workspace.permission:reply-conversations')->group(function () {
-            Route::post('/{conversation}/take', [ConversationActionController::class, 'take'])->whereNumber('conversation')->name('take');
-            Route::post('/{conversation}/release', [ConversationActionController::class, 'release'])->whereNumber('conversation')->name('release');
-            Route::post('/{conversation}/resolve', [ConversationActionController::class, 'resolve'])->whereNumber('conversation')->name('resolve');
-            Route::post('/{conversation}/messages', [ConversationActionController::class, 'message'])->whereNumber('conversation')->middleware('throttle:60,1')->name('messages.store');
-        });
+        Route::post('/{conversation}/take', [ConversationActionController::class, 'take'])->whereNumber('conversation')->middleware('workspace.permission:take-conversations')->name('take');
+        Route::post('/{conversation}/release', [ConversationActionController::class, 'release'])->whereNumber('conversation')->middleware('workspace.permission:release-conversations')->name('release');
+        Route::post('/{conversation}/resolve', [ConversationActionController::class, 'resolve'])->whereNumber('conversation')->middleware('workspace.permission:resolve-conversations')->name('resolve');
+        Route::post('/{conversation}/messages', [ConversationActionController::class, 'message'])->whereNumber('conversation')->middleware(['workspace.permission:reply-conversations', 'throttle:60,1'])->name('messages.store');
         // Demo bench (404 outside demo environments): generate / reset / clean scenarios and simulate traffic on DEMO conversations.
         Route::middleware('workspace.permission:use-conversation-demo')->group(function () {
             Route::post('/demo/{action}', [DemoConversationController::class, 'manage'])->where('action', 'generate|reset|clean')->name('demo');
@@ -270,31 +268,31 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         Route::delete('/workspaces/{workspace}/members/{user}', [WorkspaceMemberController::class, 'destroy'])->middleware('workspace.permission:assign-roles')->name('workspaces.members.destroy');
     });
 
-    // Planes and the module catalog: CCG's commercial administration. Only superusers working inside the administrative
-    // Workspace whose role grants the permission of the area; a client Workspace can neither read nor change them, whatever
-    // its role or plan. `manage-plans` = plans and their assignment; `manage-modules` = modules and categories.
-    Route::get('/plans', [PlanController::class, 'index'])->middleware('workspace.platform:manage-plans,manage-modules')->name('plans.index');
+    // Planes and the module catalog: CCG's commercial administration. Only the platform administration working inside the administrative
+    // Workspace, and each operation has its own permission (view, create, edit, activate, assign); a client Workspace can neither read nor
+    // change them, whatever its role or plan. `view-plans` / `view-modules` open each part of the page.
+    Route::get('/plans', [PlanController::class, 'index'])->middleware('workspace.platform:view-plans,view-modules')->name('plans.index');
 
-    Route::middleware('workspace.platform:manage-plans')->group(function () {
-        Route::post('/plans', [PlanController::class, 'store'])->name('plans.store');
+    Route::middleware('workspace.platform:view-plans')->group(function () {
+        Route::post('/plans', [PlanController::class, 'store'])->middleware('workspace.platform:create-plans')->name('plans.store');
         Route::get('/plans/{plan}', [PlanController::class, 'show'])->whereNumber('plan')->name('plans.show');
-        Route::put('/plans/{plan}', [PlanController::class, 'update'])->whereNumber('plan')->name('plans.update');
-        Route::put('/plans/{plan}/modules', [PlanController::class, 'updateModules'])->whereNumber('plan')->name('plans.modules.update');
-        Route::post('/plans/{plan}/activate', [PlanController::class, 'activate'])->whereNumber('plan')->name('plans.activate');
-        Route::post('/plans/{plan}/deactivate', [PlanController::class, 'deactivate'])->whereNumber('plan')->name('plans.deactivate');
-        Route::put('/workspaces/{workspace}/plan', [WorkspacePlanController::class, 'update'])->whereNumber('workspace')->name('workspaces.plan.update');
+        Route::put('/plans/{plan}', [PlanController::class, 'update'])->whereNumber('plan')->middleware('workspace.platform:edit-plans')->name('plans.update');
+        Route::put('/plans/{plan}/modules', [PlanController::class, 'updateModules'])->whereNumber('plan')->middleware('workspace.platform:edit-plans')->name('plans.modules.update');
+        Route::post('/plans/{plan}/activate', [PlanController::class, 'activate'])->whereNumber('plan')->middleware('workspace.platform:activate-plans')->name('plans.activate');
+        Route::post('/plans/{plan}/deactivate', [PlanController::class, 'deactivate'])->whereNumber('plan')->middleware('workspace.platform:activate-plans')->name('plans.deactivate');
+        Route::put('/workspaces/{workspace}/plan', [WorkspacePlanController::class, 'update'])->whereNumber('workspace')->middleware('workspace.platform:assign-plans')->name('workspaces.plan.update');
     });
 
-    Route::middleware('workspace.platform:manage-modules')->group(function () {
-        Route::post('/modules', [ModuleController::class, 'store'])->name('modules.store');
-        Route::put('/modules/{module}', [ModuleController::class, 'update'])->whereNumber('module')->name('modules.update');
-        Route::post('/modules/{module}/activate', [ModuleController::class, 'activate'])->whereNumber('module')->name('modules.activate');
-        Route::post('/modules/{module}/deactivate', [ModuleController::class, 'deactivate'])->whereNumber('module')->name('modules.deactivate');
+    Route::middleware('workspace.platform:view-modules')->group(function () {
+        Route::post('/modules', [ModuleController::class, 'store'])->middleware('workspace.platform:create-modules')->name('modules.store');
+        Route::put('/modules/{module}', [ModuleController::class, 'update'])->whereNumber('module')->middleware('workspace.platform:edit-modules')->name('modules.update');
+        Route::post('/modules/{module}/activate', [ModuleController::class, 'activate'])->whereNumber('module')->middleware('workspace.platform:activate-modules')->name('modules.activate');
+        Route::post('/modules/{module}/deactivate', [ModuleController::class, 'deactivate'])->whereNumber('module')->middleware('workspace.platform:activate-modules')->name('modules.deactivate');
 
-        Route::post('/module-categories', [ModuleCategoryController::class, 'store'])->name('module-categories.store');
-        Route::put('/module-categories/{category}', [ModuleCategoryController::class, 'update'])->whereNumber('category')->name('module-categories.update');
-        Route::post('/module-categories/{category}/activate', [ModuleCategoryController::class, 'activate'])->whereNumber('category')->name('module-categories.activate');
-        Route::post('/module-categories/{category}/deactivate', [ModuleCategoryController::class, 'deactivate'])->whereNumber('category')->name('module-categories.deactivate');
+        Route::post('/module-categories', [ModuleCategoryController::class, 'store'])->middleware('workspace.platform:create-modules')->name('module-categories.store');
+        Route::put('/module-categories/{category}', [ModuleCategoryController::class, 'update'])->whereNumber('category')->middleware('workspace.platform:edit-modules')->name('module-categories.update');
+        Route::post('/module-categories/{category}/activate', [ModuleCategoryController::class, 'activate'])->whereNumber('category')->middleware('workspace.platform:activate-modules')->name('module-categories.activate');
+        Route::post('/module-categories/{category}/deactivate', [ModuleCategoryController::class, 'deactivate'])->whereNumber('category')->middleware('workspace.platform:activate-modules')->name('module-categories.deactivate');
     });
 
     // Temporary, justified access of a platform administrator to the private data of another Workspace. Being superuser is not enough:

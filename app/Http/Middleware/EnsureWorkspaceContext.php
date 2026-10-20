@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\Workspace;
 use App\Services\ModuleAccess;
+use App\Services\PlatformAccess;
 use App\Services\RememberedAccess;
 use Closure;
 use Illuminate\Http\Request;
@@ -18,7 +19,7 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class EnsureWorkspaceContext
 {
-    public function __construct(private readonly RememberedAccess $remembered, private readonly ModuleAccess $modules) {}
+    public function __construct(private readonly RememberedAccess $remembered, private readonly ModuleAccess $modules, private readonly PlatformAccess $platform) {}
 
     public function handle(Request $request, Closure $next): Response
     {
@@ -62,10 +63,14 @@ class EnsureWorkspaceContext
         $request->attributes->set('workspace_role', $role);
         $permissions = $catalogRole->permissions->pluck('name')->all();
 
-        // Superusers working inside the administrative Workspace administer the platform (plans and catalog), whatever their role:
-        // otherwise the only account able to grant the role could never open Planes. Never in a client Workspace.
-        if ($user->isPlatformSuperuser()) {
-            $permissions = array_values(array_unique([...$permissions, ...EnsurePlatformAdministration::PERMISSIONS]));
+        // The internal administration (a superuser with the role `admin` inside the administrative Workspace) always holds the whole catalog, resolved
+        // here and not from the rows of the permission tables: see PlatformAccess. Everyone else is limited by exactly what their role has saved.
+        if ($this->platform->isInternalAdministration($user, $workspace, $role)) {
+            $permissions = array_values(array_unique([...$permissions, ...$this->platform->internalAdministration()]));
+        } elseif ($user->isPlatformSuperuser()) {
+            // A superuser acting with another role in the administrative Workspace keeps that role, plus the commercial administration, so the
+            // account that assigns roles can always open Planes.
+            $permissions = array_values(array_unique([...$permissions, ...$this->platform->commercial()]));
         }
 
         $request->attributes->set('workspace_permissions', $permissions);

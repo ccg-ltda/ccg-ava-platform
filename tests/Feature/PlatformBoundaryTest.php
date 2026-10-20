@@ -7,6 +7,7 @@ use App\Models\Organization;
 use App\Models\Plan;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Services\PlatformAccess;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
@@ -215,15 +216,22 @@ class PlatformBoundaryTest extends TestCase
         app(RolesAndPermissionsSeeder::class)->run();
 
         $of = fn (string $role) => Role::findByName($role, 'web')->permissions->pluck('name')->sort()->values()->all();
-        $platform = ['manage-plans', 'manage-modules', 'access-private-data'];
+        $platform = RolesAndPermissionsSeeder::reserved();
+        $commercial = app(PlatformAccess::class)->commercial();
         $granular = ['create-users', 'edit-users', 'assign-roles', 'deactivate-users', 'export-audit'];
 
         $this->assertSame([], array_values(array_intersect($of('admin'), $platform)), 'Not even admin receives platform or support permissions.');
         $this->assertSame(array_values(array_diff(Permission::pluck('name')->sort()->values()->all(), $platform)), $of('admin'));
-        $this->assertSame(['manage-modules', 'manage-plans', 'view-dashboard'], $of('plataforma'));
-        $this->assertSame(['access-private-data', 'view-conversations', 'view-dashboard'], $of('soporte'));
+        $withDashboard = function (array $names) {
+            $names = ['view-dashboard', ...$names];
+            sort($names);
+
+            return $names;
+        };
+        $this->assertSame($withDashboard($commercial), $of('plataforma'));
+        $this->assertSame($withDashboard(['access-private-data', 'view-conversations']), $of('soporte'));
         $this->assertSame(['view-chatbots', 'view-dashboard', 'view-users'], $of('supervisor'));
-        $this->assertSame(['reply-conversations', 'view-conversations', 'view-dashboard'], $of('agente'));
+        $this->assertSame($withDashboard(['view-conversations', 'take-conversations', 'reply-conversations', 'release-conversations', 'resolve-conversations']), $of('agente'));
         $this->assertSame(['view-dashboard'], $of('cliente'));
         foreach (['supervisor', 'agente', 'cliente', 'plataforma', 'soporte'] as $role) {
             $this->assertSame([], array_values(array_intersect($of($role), $granular)), "[{$role}] must not receive user administration by default.");
@@ -303,7 +311,7 @@ class PlatformBoundaryTest extends TestCase
 
         $row = collect($this->get('/users')->inertiaProps('users.data'))->firstWhere('id', $agent->id);
 
-        $this->assertSame(['reply-conversations', 'view-conversations', 'view-dashboard'], $row['grants']);
+        $this->assertSame(['release-conversations', 'reply-conversations', 'resolve-conversations', 'take-conversations', 'view-conversations', 'view-dashboard'], $row['grants']);
     }
 
     // --- nobody escalates ---------------------------------------------------------------------------------------
@@ -395,9 +403,10 @@ class PlatformBoundaryTest extends TestCase
 
     public function test_commercial_and_support_permissions_are_marked_as_platform_only(): void
     {
-        foreach (['manage-plans', 'manage-modules', 'access-private-data'] as $name) {
+        foreach ([...app(PlatformAccess::class)->commercial(), 'access-private-data', 'use-conversation-demo'] as $name) {
             $this->assertTrue(config("permissions.permissions.{$name}.platform"), "[{$name}] only operates inside the administrative Workspace.");
         }
+        $this->assertSame(['access-private-data'], app(PlatformAccess::class)->privateData());
     }
 
     public function test_splitting_a_broad_permission_keeps_what_existing_roles_could_do_and_never_re_grants(): void

@@ -16,7 +16,7 @@ import PlanFormModal from './PlanFormModal';
  * Planes tab: search, create, edit and activate/deactivate commercial plans. Search runs on the server (debounced). A plan
  * with Workspaces cannot be deactivated (the server refuses and says why); nothing is ever deleted.
  */
-export default function PlansPanel({ plans, catalog, filters }) {
+export default function PlansPanel({ plans, catalog, filters, can }) {
     const confirm = useConfirm();
     const toast = useToast();
 
@@ -84,7 +84,7 @@ export default function PlansPanel({ plans, catalog, filters }) {
         });
     };
 
-    const newPlan = (
+    const newPlan = can.createPlan && (
         <PrimaryButton type="button" onClick={() => setCreating(true)} className="gap-2">
             <Plus className="size-4" aria-hidden="true" />
             Nuevo plan
@@ -138,14 +138,16 @@ export default function PlansPanel({ plans, catalog, filters }) {
                                 <Td>
                                     <div className="flex items-center justify-center gap-1">
                                         <IconButton icon={Eye} label="Ver detalle" context={plan.name} onClick={() => router.visit(route('plans.show', plan.id))} />
-                                        <IconButton icon={Pencil} label="Editar" context={plan.name} onClick={() => openEdit(plan)} />
-                                        <IconButton
-                                            icon={Power}
-                                            label={plan.isActive ? 'Desactivar' : 'Activar'}
-                                            context={plan.name}
-                                            tone={plan.isActive ? 'danger' : 'primary'}
-                                            onClick={() => toggleStatus(plan)}
-                                        />
+                                        {can.editPlan && <IconButton icon={Pencil} label="Editar" context={plan.name} onClick={() => openEdit(plan)} />}
+                                        {can.activatePlan && (
+                                            <IconButton
+                                                icon={Power}
+                                                label={plan.isActive ? 'Desactivar' : 'Activar'}
+                                                context={plan.name}
+                                                tone={plan.isActive ? 'danger' : 'primary'}
+                                                onClick={() => toggleStatus(plan)}
+                                            />
+                                        )}
                                     </div>
                                 </Td>
                             </tr>

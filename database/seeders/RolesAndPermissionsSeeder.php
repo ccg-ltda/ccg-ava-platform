@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\User;
+use App\Services\PlatformAccess;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -14,11 +15,18 @@ class RolesAndPermissionsSeeder extends Seeder
 {
     use WithoutModelEvents;
 
-    /** Permissions of the commercial administration: never given to `admin` or to anyone by this seeder. */
-    public const PLATFORM_PERMISSIONS = ['manage-plans', 'manage-modules'];
+    /**
+     * The commercial administration (plans and modules) and the support access to private data of ANOTHER Workspace: never given to `admin` by this
+     * seeder. The first goes to `plataforma`; the second to `soporte`. Both lists come from config/permissions.php (PlatformAccess).
+     *
+     * @return list<string>
+     */
+    public static function reserved(): array
+    {
+        $platform = app(PlatformAccess::class);
 
-    /** Access to private data of ANOTHER Workspace (support): separate from the commercial administration, never given to `admin` or to a superuser by this seeder. */
-    public const PRIVATE_DATA_PERMISSIONS = ['access-private-data'];
+        return [...$platform->commercial(), ...$platform->privateData()];
+    }
 
     /**
      * Creates fine-grained permissions that split an existing broad one. When a permission is created now (first run after the
@@ -86,21 +94,24 @@ class RolesAndPermissionsSeeder extends Seeder
         // The commercial permissions are the exception: no role receives them here except `plataforma`, and `admin` never
         // does, so a superuser decides explicitly who administers plans and the catalog (Usuarios y roles).
         // `admin` is a protected role (it cannot be edited), so only an earlier version of this seeder could have granted them: take them back.
-        $adminRole->givePermissionTo(Permission::whereNotIn('name', [...self::PLATFORM_PERMISSIONS, ...self::PRIVATE_DATA_PERMISSIONS])->get());
-        $adminRole->revokePermissionTo([...self::PLATFORM_PERMISSIONS, ...self::PRIVATE_DATA_PERMISSIONS]);
+        $adminRole->givePermissionTo(Permission::whereNotIn('name', self::reserved())->get());
+        $adminRole->revokePermissionTo(self::reserved());
 
         foreach ([
             [$supervisorRole, ['view-dashboard', 'view-users', 'view-chatbots']],
             [$clienteRole, ['view-dashboard']],
             // Attends conversations (read, take, write, give back to the AI, resolve) but cannot assign them to others.
-            [$agentRole, ['view-dashboard', 'view-conversations', 'reply-conversations']],
-            [$platformRole, ['view-dashboard', ...self::PLATFORM_PERMISSIONS]],
-            [$supportRole, ['view-dashboard', 'view-conversations', ...self::PRIVATE_DATA_PERMISSIONS]],
+            [$agentRole, ['view-dashboard', 'view-conversations', 'take-conversations', 'reply-conversations', 'release-conversations', 'resolve-conversations']],
+            [$platformRole, ['view-dashboard', ...app(PlatformAccess::class)->commercial()]],
+            [$supportRole, ['view-dashboard', 'view-conversations', ...app(PlatformAccess::class)->privateData()]],
         ] as [$role, $defaults]) {
             if ($role->wasRecentlyCreated) {
                 $role->syncPermissions($defaults);
             }
         }
+
+        // Permissions were created, retired and reassigned above: drop the package cache so nothing keeps answering from the old catalog.
+        app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
         // Sample accounts have well-known passwords: they exist only in local/testing, never elsewhere.
         // (The real administrator comes from AdminUserSeeder and its environment variables.)

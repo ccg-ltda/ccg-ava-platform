@@ -341,6 +341,21 @@ class CommerceTest extends TestCase
         $this->assertSame('confirmed', $order->fresh()->status);
     }
 
+    public function test_cancelling_and_advancing_are_two_separate_permissions_in_both_directions(): void
+    {
+        Role::findOrCreate('cancelador', 'web')->syncPermissions(['view-orders', 'view-order-details', 'cancel-orders']);
+        $mine = $this->product($this->shop);
+        $this->as();
+        $order = $this->place([['product_id' => $mine->id, 'quantity' => 1]]);
+
+        // Who may cancel but not advance: the route lets them in, the order stays untouched when they try to advance.
+        $this->as('cancelador');
+        $this->move($order, 'confirmed')->assertForbidden();
+        $this->assertSame('received', $order->fresh()->status);
+        $this->move($order, 'cancelled', ['reason' => 'Pedido duplicado'])->assertSessionHas('success');
+        $this->assertSame('cancelled', $order->fresh()->status);
+    }
+
     public function test_two_people_moving_the_same_order_cannot_both_succeed(): void
     {
         $mine = $this->product($this->shop);

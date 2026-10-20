@@ -14,7 +14,8 @@
  * `group` is the resource (see `groups`; its `list` is the permission that opens the page, which every other permission of the group needs on top of its own,
  * because each operation is done from that page); `module` (optional) is the module key of config/modules.php it belongs to, so the editor can tell
  * which module a Workspace needs for the permission to matter. `platform` marks the permissions that only operate inside the administrative
- * Workspace (Desarrollo_DEV): in a client Workspace the server ignores them, whatever the role.
+ * Workspace (Desarrollo_DEV): in a client Workspace the server ignores them, whatever the role, and the role editor and the permission lists never show them to
+ * anyone who is not the platform administration. `private` marks the one that is never granted by default (justified, temporary access to another Workspace's data).
  */
 return [
     'groups' => [
@@ -33,7 +34,9 @@ return [
         'campaigns' => ['label' => 'Campañas', 'description' => 'Campañas y plantillas de mensaje (no envían mensajes).', 'list' => 'view-campaigns', 'module' => 'campaigns'],
         'catalog' => ['label' => 'Catálogo de productos', 'description' => 'Productos, precios y disponibilidad por sede.', 'list' => 'view-catalog', 'module' => 'product_catalog'],
         'orders' => ['label' => 'Pedidos', 'description' => 'Pedidos, su detalle y su flujo de estados.', 'list' => 'view-orders', 'module' => 'orders'],
-        'platform' => ['label' => 'Administración de la plataforma', 'description' => 'Planes, módulos y accesos de soporte de CCG.'],
+        'plans' => ['label' => 'Planes comerciales', 'description' => 'Planes de CCG y su asignación a los Workspaces de clientes.', 'list' => 'view-plans'],
+        'modules' => ['label' => 'Catálogo de módulos', 'description' => 'Módulos y categorías que los planes pueden incluir.', 'list' => 'view-modules'],
+        'platform' => ['label' => 'Soporte de la plataforma', 'description' => 'Accesos temporales y justificados de soporte de CCG.'],
     ],
 
     'permissions' => [
@@ -73,13 +76,16 @@ return [
 
         // Conversaciones
         'view-conversations' => ['group' => 'conversations', 'label' => 'Consultar conversaciones', 'description' => 'Lee las conversaciones y los mensajes de los contactos del Workspace.'],
-        'reply-conversations' => ['group' => 'conversations', 'label' => 'Atender conversaciones', 'description' => 'Toma una conversación, escribe, la devuelve a la IA y la resuelve.'],
-        'manage-conversations' => ['group' => 'conversations', 'label' => 'Supervisar conversaciones', 'description' => 'Asigna conversaciones a otros agentes y opera cualquiera, aunque no sea suya.'],
-        'use-conversation-demo' => ['group' => 'conversations', 'label' => 'Usar el entorno DEMO', 'description' => 'Genera, reinicia y limpia los escenarios DEMO y simula tráfico sobre ellos. No existe fuera de los entornos de demostración.'],
+        'take-conversations' => ['group' => 'conversations', 'label' => 'Tomar conversaciones', 'description' => 'Toma una conversación para atenderla. Mientras la atiende, la IA no responde.'],
+        'reply-conversations' => ['group' => 'conversations', 'label' => 'Responder conversaciones', 'description' => 'Escribe mensajes al contacto en una conversación que está atendiendo. Quien lo tiene aparece como agente disponible.'],
+        'release-conversations' => ['group' => 'conversations', 'label' => 'Devolver conversaciones a la IA', 'description' => 'Deja de atender una conversación para que el asistente vuelva a responder.'],
+        'resolve-conversations' => ['group' => 'conversations', 'label' => 'Resolver conversaciones', 'description' => 'Marca una conversación como resuelta.'],
+        'manage-conversations' => ['group' => 'conversations', 'label' => 'Asignar y supervisar conversaciones', 'description' => 'Transfiere una conversación a otro agente y puede operar cualquiera, aunque no sea suya.'],
+        'use-conversation-demo' => ['group' => 'conversations', 'label' => 'Usar el entorno DEMO', 'description' => 'Genera, reinicia y limpia los escenarios DEMO y simula tráfico sobre ellos. Solo opera en Desarrollo_DEV y no existe fuera de los entornos de demostración.', 'platform' => true],
 
         // Agenda y reservas
-        'view-bookings' => ['group' => 'bookings', 'label' => 'Consultar la agenda', 'description' => 'Ve la agenda y las citas.'],
-        'create-bookings' => ['group' => 'bookings', 'label' => 'Crear citas', 'description' => 'Registra una cita nueva.'],
+        'view-bookings' => ['group' => 'bookings', 'label' => 'Consultar la agenda', 'description' => 'Ve la agenda y las citas del Workspace.'],
+        'create-bookings' => ['group' => 'bookings', 'label' => 'Crear citas', 'description' => 'Registra una cita nueva en la agenda.'],
         'edit-bookings' => ['group' => 'bookings', 'label' => 'Editar y reprogramar citas', 'description' => 'Confirma, reprograma, marca como atendida o no asistida y registra la confirmación del cliente.'],
         'cancel-bookings' => ['group' => 'bookings', 'label' => 'Cancelar citas', 'description' => 'Cancela una cita con su motivo.'],
         'manage-booking-settings' => ['group' => 'bookings', 'label' => 'Configurar reglas y página pública', 'description' => 'Cambia las reglas de reserva, los avisos de citas y el enlace de la página pública.'],
@@ -99,7 +105,7 @@ return [
 
         // Sedes
         'view-locations' => ['group' => 'locations', 'label' => 'Consultar sedes', 'description' => 'Ve las sedes del Workspace.'],
-        'create-locations' => ['group' => 'locations', 'label' => 'Crear sedes', 'description' => 'Crea una sede nueva.'],
+        'create-locations' => ['group' => 'locations', 'label' => 'Crear sedes', 'description' => 'Crea una sede nueva donde se atiende el negocio.'],
         'edit-locations' => ['group' => 'locations', 'label' => 'Editar sedes', 'description' => 'Cambia dirección, contacto y servicios de una sede.'],
         'activate-locations' => ['group' => 'locations', 'label' => 'Activar y desactivar sedes', 'description' => 'Abre o cierra una sede. Nunca se borra.'],
 
@@ -117,27 +123,38 @@ return [
         'create-campaigns' => ['group' => 'campaigns', 'label' => 'Crear campañas', 'description' => 'Crea una campaña nueva.'],
         'edit-campaigns' => ['group' => 'campaigns', 'label' => 'Editar campañas', 'description' => 'Cambia el nombre, la plantilla y la audiencia de una campaña que no se ha preparado.'],
         'prepare-campaigns' => ['group' => 'campaigns', 'label' => 'Preparar y simular campañas', 'description' => 'Calcula los destinatarios y simula el resultado. No envía mensajes: el envío real no existe.'],
-        'cancel-campaigns' => ['group' => 'campaigns', 'label' => 'Cancelar campañas', 'description' => 'Cancela una campaña.'],
+        'cancel-campaigns' => ['group' => 'campaigns', 'label' => 'Cancelar campañas', 'description' => 'Cancela una campaña que aún no se ha completado.'],
         'manage-campaign-templates' => ['group' => 'campaigns', 'label' => 'Gestionar plantillas de mensaje', 'description' => 'Crea, edita, activa y desactiva plantillas.'],
 
         // Catálogo de productos
         'view-catalog' => ['group' => 'catalog', 'label' => 'Consultar el catálogo de productos', 'description' => 'Ve los productos, sus precios y las sedes que los ofrecen.'],
-        'create-products' => ['group' => 'catalog', 'label' => 'Crear productos', 'description' => 'Da de alta un producto.'],
+        'create-products' => ['group' => 'catalog', 'label' => 'Crear productos', 'description' => 'Da de alta un producto nuevo en el catálogo.'],
         'edit-products' => ['group' => 'catalog', 'label' => 'Editar productos y precios', 'description' => 'Cambia los datos y el precio de un producto. Los pedidos ya hechos conservan su copia.'],
         'activate-products' => ['group' => 'catalog', 'label' => 'Activar y desactivar productos', 'description' => 'Ofrece o retira un producto. Nunca se borra.'],
 
         // Pedidos
-        'view-orders' => ['group' => 'orders', 'label' => 'Consultar pedidos', 'description' => 'Ve la lista de pedidos.'],
+        'view-orders' => ['group' => 'orders', 'label' => 'Consultar pedidos', 'description' => 'Ve la lista de pedidos del Workspace.'],
         'view-order-details' => ['group' => 'orders', 'label' => 'Ver el detalle de un pedido', 'description' => 'Abre el pedido con sus líneas, datos de contacto y entrega e historial de estados.'],
         'create-orders' => ['group' => 'orders', 'label' => 'Registrar pedidos', 'description' => 'Crea un pedido; el total lo calcula el servidor con el catálogo.'],
         'edit-orders' => ['group' => 'orders', 'label' => 'Editar pedidos', 'description' => 'Cambia las notas y los datos de entrega mientras el pedido no haya salido.'],
         'cancel-orders' => ['group' => 'orders', 'label' => 'Cancelar pedidos', 'description' => 'Cancela un pedido con un motivo escrito.'],
         'process-orders' => ['group' => 'orders', 'label' => 'Avanzar el estado de los pedidos', 'description' => 'Confirma, prepara, marca como listo, despacha y entrega pedidos. No los crea ni los cancela.'],
 
-        // Administración de la plataforma
-        'manage-plans' => ['group' => 'platform', 'label' => 'Administrar planes comerciales', 'description' => 'Crea y edita planes, define sus módulos y los asigna a Workspaces. Solo opera en Desarrollo_DEV.', 'platform' => true],
-        'manage-modules' => ['group' => 'platform', 'label' => 'Administrar el catálogo de módulos', 'description' => 'Registra módulos y categorías. Solo opera en Desarrollo_DEV.', 'platform' => true],
-        'access-private-data' => ['group' => 'platform', 'label' => 'Abrir accesos de soporte', 'description' => 'Permite abrir un acceso temporal, justificado y auditado a datos privados de otro Workspace. Solo opera en Desarrollo_DEV.', 'platform' => true],
+        // Planes comerciales (solo Desarrollo_DEV)
+        'view-plans' => ['group' => 'plans', 'label' => 'Consultar planes', 'description' => 'Abre Planes y ve cada plan con sus módulos y los Workspaces que lo usan. Solo opera en Desarrollo_DEV.', 'platform' => true],
+        'create-plans' => ['group' => 'plans', 'label' => 'Crear planes', 'description' => 'Crea un plan comercial nuevo. Solo opera en Desarrollo_DEV.', 'platform' => true],
+        'edit-plans' => ['group' => 'plans', 'label' => 'Editar planes y sus módulos', 'description' => 'Cambia el nombre, la descripción y los módulos que incluye un plan. Solo opera en Desarrollo_DEV.', 'platform' => true],
+        'activate-plans' => ['group' => 'plans', 'label' => 'Activar y desactivar planes', 'description' => 'Ofrece o retira un plan. Nunca se borra. Solo opera en Desarrollo_DEV.', 'platform' => true],
+        'assign-plans' => ['group' => 'plans', 'label' => 'Asignar un plan a un Workspace', 'description' => 'Cambia el plan comercial de un Workspace de cliente. Solo opera en Desarrollo_DEV.', 'platform' => true],
+
+        // Catálogo de módulos (solo Desarrollo_DEV)
+        'view-modules' => ['group' => 'modules', 'label' => 'Consultar el catálogo de módulos', 'description' => 'Ve los módulos y las categorías registrados. Solo opera en Desarrollo_DEV.', 'platform' => true],
+        'create-modules' => ['group' => 'modules', 'label' => 'Registrar módulos y categorías', 'description' => 'Reserva el lugar de un módulo pendiente o crea una categoría. Solo opera en Desarrollo_DEV.', 'platform' => true],
+        'edit-modules' => ['group' => 'modules', 'label' => 'Editar módulos y categorías', 'description' => 'Cambia el nombre, la descripción y la categoría de un módulo. Solo opera en Desarrollo_DEV.', 'platform' => true],
+        'activate-modules' => ['group' => 'modules', 'label' => 'Activar y desactivar módulos y categorías', 'description' => 'Ofrece o retira un módulo o una categoría de los planes. Nunca se borra. Solo opera en Desarrollo_DEV.', 'platform' => true],
+
+        // Soporte de la plataforma
+        'access-private-data' => ['group' => 'platform', 'label' => 'Abrir accesos de soporte', 'description' => 'Permite abrir un acceso temporal, justificado y auditado a datos privados de otro Workspace. Solo opera en Desarrollo_DEV.', 'platform' => true, 'private' => true],
     ],
 
     /*
@@ -149,6 +166,9 @@ return [
      * `admin` receives every permission in any case.
      */
     'legacy' => [
+        'reply-conversations' => ['grants' => ['take-conversations', 'release-conversations', 'resolve-conversations'], 'retire' => false],
+        'manage-plans' => ['grants' => ['view-plans', 'create-plans', 'edit-plans', 'activate-plans', 'assign-plans'], 'retire' => true],
+        'manage-modules' => ['grants' => ['view-modules', 'create-modules', 'edit-modules', 'activate-modules'], 'retire' => true],
         'manage-users' => ['grants' => ['create-users', 'edit-users', 'assign-roles', 'deactivate-users'], 'retire' => false],
         'manage-settings' => ['grants' => ['view-settings', 'edit-settings', 'view-integrations', 'manage-integrations', 'test-integrations', 'activate-integrations', 'view-audit', 'export-audit'], 'retire' => true],
         'manage-chatbots' => ['grants' => ['create-chatbots', 'edit-chatbots', 'activate-chatbots', 'manage-chatbot-channels', 'manage-agent-tokens'], 'retire' => true],

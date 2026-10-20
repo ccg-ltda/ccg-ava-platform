@@ -65,16 +65,16 @@ Clasificación según el código: **capacidades independientes** = `conversation
 
 ## 3. Cómo se administran los planes (flujo)
 
-Todo en **Planes** (`/plans`), solo dentro de `Desarrollo_DEV` y con `manage-plans` / `manage-modules` o siendo superusuario ahí. Un superusuario de un Workspace cliente no accede (ni siquiera puede entrar a un Workspace cliente sin membresía explícita). Un cliente no ve el catálogo comercial, no elige ni cambia su plan, ni se asigna módulos: lo comprueba el servidor en cada ruta y acción (`workspace.platform`), no solo el menú. Quién puede qué:
+Todo en **Planes** (`/plans`), solo dentro de `Desarrollo_DEV` y con el permiso de cada operación (`view-plans`, `create-plans`, `edit-plans`, `activate-plans`, `assign-plans`; `view-modules`, `create-modules`, `edit-modules`, `activate-modules`) o siendo la administración interna de la plataforma (superusuario con rol `admin` ahí, que los tiene todos; ver README). Cada operación tiene su permiso independiente: poder consultar no permite crear, ni crear editar. Un superusuario de un Workspace cliente no accede (ni siquiera puede entrar a un Workspace cliente sin membresía explícita). Un cliente no ve el catálogo comercial, no elige ni cambia su plan, ni se asigna módulos: lo comprueba el servidor en cada ruta y acción (`workspace.platform`), no solo el menú. Quién puede qué:
 
 | Acción | Quién | Dónde |
 |---|---|---|
-| Consultar planes y catálogo; crear, editar, activar/desactivar un plan y definir sus módulos; asignar un plan a un Workspace | `manage-plans` (o superusuario) | solo `Desarrollo_DEV` |
-| Registrar módulos y categorías | `manage-modules` (o superusuario) | solo `Desarrollo_DEV` |
+| Consultar planes y catálogo; crear, editar, activar/desactivar un plan y definir sus módulos; asignar un plan a un Workspace | `view-plans`, `create-plans`, `edit-plans`, `activate-plans`, `assign-plans` (o la administración interna) | solo `Desarrollo_DEV` |
+| Registrar módulos y categorías | `view-modules`, `create-modules`, `edit-modules`, `activate-modules` (o la administración interna) | solo `Desarrollo_DEV` |
 | Ver los módulos disponibles de su propio Workspace | cualquier usuario, solo a través del menú y de lo que su plan incluye | su Workspace |
 | Cambiar el plan, el catálogo o sus módulos | nadie en un Workspace cliente (403, aunque su rol traiga el permiso o sea superusuario) | — |
 
-Los planes deciden qué módulos EXISTEN para un Workspace; los permisos del rol deciden qué acciones hace cada usuario dentro de ellos; ninguno sustituye al otro.
+Los planes deciden qué módulos EXISTEN para un Workspace; los permisos del rol deciden qué acciones hace cada usuario dentro de ellos; ninguno sustituye al otro. **Excepción interna:** el Workspace administrativo (`Desarrollo_DEV`) tiene siempre todos los módulos implementados, sea cual sea su plan (`ModuleAccess::keys`), y la administración interna tiene todo el catálogo de permisos (`PlatformAccess`); ningún Workspace cliente recibe esa excepción.
 
 1. **Consultar el catálogo.** Pestaña «Catálogo de módulos»: todos los módulos registrados, con su categoría, su **grupo** y su estado (*Implementado* o *Pendiente de implementación*) y lo que requieren.
 2. **Organizar.** Crear categorías y registrar módulos futuros (reservan lugar; nunca habilitan nada). Nada se borra: se desactiva.

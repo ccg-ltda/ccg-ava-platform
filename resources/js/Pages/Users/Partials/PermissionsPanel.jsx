@@ -87,7 +87,6 @@ export default function PermissionsPanel({ roles, permissions, permissionCatalog
                                             <Badge className="normal-case tracking-normal">{groupLabel(permission.name)}</Badge>
                                         )}
                                     </span>
-                                    <span className="block font-mono text-[11px] text-ink-muted">{permission.name}</span>
                                     {describe(permission.name)?.description && <span className="mt-0.5 block max-w-md text-xs whitespace-normal text-ink-muted">{describe(permission.name).description}</span>}
                                 </Td>
                                 {roles.map((role) => {
@@ -96,9 +95,9 @@ export default function PermissionsPanel({ roles, permissions, permissionCatalog
                                     return (
                                         <Td key={role.id} className="text-center">
                                             {granted ? (
-                                                <Check className="mx-auto size-4 text-primary" aria-label={`${role.name} tiene ${permission.name}`} />
+                                                <Check className="mx-auto size-4 text-primary" aria-label={`${role.name} tiene: ${describe(permission.name)?.label}`} />
                                             ) : (
-                                                <Minus className="mx-auto size-4 text-line" aria-label={`${role.name} no tiene ${permission.name}`} />
+                                                <Minus className="mx-auto size-4 text-line" aria-label={`${role.name} no tiene: ${describe(permission.name)?.label}`} />
                                             )}
                                         </Td>
                                     );
