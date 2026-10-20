@@ -19,8 +19,9 @@ export function Fact({ label, children, className = '' }) {
  * One tab of Configuraciones in two states. Summary: what is saved, in a compact layout, with «Editar» (only for who may edit). Editing: the form of
  * this section only, with «Guardar cambios» (validates and saves, then the summary is back with the saved values) and «Cancelar» (drops the pending
  * changes). Only one section is edited at a time, so the one form of the page always holds either the saved values or the section being edited.
+ * Optional: `aside` is a live preview beside the form (it only reads the form values and never saves anything); `wide` lets the form use the full width.
  */
-export default function SettingsSection({ title, description, form, onSave, editing, onEdit, onCancel, canEdit, summary, children }) {
+export default function SettingsSection({ title, description, form, onSave, editing, onEdit, onCancel, canEdit, summary, aside, wide = false, children }) {
     if (!editing) {
         return (
             <Card className="overflow-hidden">
@@ -48,7 +49,16 @@ export default function SettingsSection({ title, description, form, onSave, edit
                     <h2 className="text-lg font-bold text-ink">Editar {title.toLowerCase()}</h2>
                     <p className="mt-1 text-sm text-ink-muted">{description}</p>
 
-                    <div className="mt-6 max-w-2xl space-y-6">{children}</div>
+                    {aside ? (
+                        <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:items-start">
+                            <div className="max-w-2xl space-y-6">{children}</div>
+                            <aside aria-label="Vista previa" className="space-y-3 lg:sticky lg:top-4">
+                                {aside}
+                            </aside>
+                        </div>
+                    ) : (
+                        <div className={`mt-6 space-y-6 ${wide ? '' : 'max-w-2xl'}`}>{children}</div>
+                    )}
                 </div>
 
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-canvas/60 px-4 py-3 sm:px-6">

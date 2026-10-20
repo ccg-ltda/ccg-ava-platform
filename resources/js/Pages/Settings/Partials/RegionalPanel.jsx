@@ -1,51 +1,54 @@
-import { Clock } from 'lucide-react';
 import { useMemo } from 'react';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import Select from '@/Components/Select';
-import { formatDate, formatMoney, formatTime } from '@/lib/format';
+import { formatDate, formatTime } from '@/lib/format';
+import RegionalPreview from './RegionalPreview';
 import SettingsSection, { Fact } from './SettingsSection';
 
-/** Regional: currency, timezone and the date/time format used across the Workspace. */
+/** Regional: currency, timezone and the date/time format used across the Workspace, with a small graphic preview of what each choice does. */
 export default function RegionalPanel({ settings, form, onSave, catalog, section }) {
     const { data, setData, errors } = form;
     const now = useMemo(() => new Date(), []);
-    const preferences = { timezone: data.timezone, dateFormat: data.date_format, timeFormat: data.time_format };
-    const saved = { timezone: settings.timezone, dateFormat: settings.date_format, timeFormat: settings.time_format };
     const labelOf = (options, value) => options.find((option) => option.value === value)?.label;
 
     const summary = (
-        <div className="space-y-4">
-            <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
+            <dl className="grid gap-3 sm:grid-cols-2">
                 <Fact label="Moneda">{labelOf(catalog.currencies, settings.currency)}</Fact>
                 <Fact label="Zona horaria">{labelOf(catalog.timezones, settings.timezone)}</Fact>
                 <Fact label="Formato de fecha">{labelOf(catalog.dateFormats, settings.date_format)}</Fact>
                 <Fact label="Formato de hora">{labelOf(catalog.timeFormats, settings.time_format)}</Fact>
             </dl>
-            <div className="flex items-start gap-3 rounded-lg border border-line bg-canvas/60 p-4 text-sm">
-                <Clock className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
-                <p className="text-ink">
-                    <span className="font-semibold">Así se ve:</span> {formatDate(now, saved)} {formatTime(now, saved)} · {formatMoney(1234567.89, settings.currency)}
-                </p>
-            </div>
+            <RegionalPreview currency={settings.currency} timezone={settings.timezone} dateFormat={settings.date_format} timeFormat={settings.time_format} catalog={catalog} />
         </div>
+    );
+
+    const preview = (
+        <>
+            <p className="text-xs font-semibold tracking-wider text-ink-muted uppercase">Así se verá</p>
+            <RegionalPreview currency={data.currency} timezone={data.timezone} dateFormat={data.date_format} timeFormat={data.time_format} catalog={catalog} />
+            <p className="text-xs text-ink-muted">Vista previa con ejemplos: no se guarda nada ni se modifican los registros existentes hasta que pulses «Guardar cambios».</p>
+        </>
     );
 
     const example = (format) => formatDate(now, { timezone: data.timezone, dateFormat: format.value });
     const timeExample = (format) => formatTime(now, { timezone: data.timezone, timeFormat: format.value });
 
     return (
-        <SettingsSection title="Regional" description="Moneda, zona horaria y formatos que verán todos los usuarios de este Workspace." form={form} onSave={onSave} summary={summary} {...section}>
+        <SettingsSection title="Regional" description="Moneda, zona horaria y formatos que verán todos los usuarios de este Workspace." form={form} onSave={onSave} summary={summary} aside={preview} {...section}>
             <div>
                 <InputLabel htmlFor="settings_currency" value="Moneda" />
                 <Select id="settings_currency" className="mt-1" value={data.currency} onChange={(value) => setData('currency', value)} options={catalog.currencies} invalid={Boolean(errors.currency)} />
                 <InputError message={errors.currency} className="mt-1" />
+                <p className="mt-1.5 text-xs text-ink-muted">Define el símbolo y los separadores de los montos.</p>
             </div>
 
             <div>
                 <InputLabel htmlFor="settings_timezone" value="Zona horaria" />
                 <Select id="settings_timezone" className="mt-1" value={data.timezone} onChange={(value) => setData('timezone', value)} options={catalog.timezones} invalid={Boolean(errors.timezone)} />
                 <InputError message={errors.timezone} className="mt-1" />
+                <p className="mt-1.5 text-xs text-ink-muted">Las fechas y horas de Ava se muestran en esta zona.</p>
             </div>
 
             <div className="grid gap-6 sm:grid-cols-2">
@@ -60,6 +63,7 @@ export default function RegionalPanel({ settings, form, onSave, catalog, section
                         invalid={Boolean(errors.date_format)}
                     />
                     <InputError message={errors.date_format} className="mt-1" />
+                    <p className="mt-1.5 text-xs text-ink-muted">Orden de día, mes y año.</p>
                 </div>
 
                 <div>
@@ -73,14 +77,8 @@ export default function RegionalPanel({ settings, form, onSave, catalog, section
                         invalid={Boolean(errors.time_format)}
                     />
                     <InputError message={errors.time_format} className="mt-1" />
+                    <p className="mt-1.5 text-xs text-ink-muted">24 horas o AM/PM.</p>
                 </div>
-            </div>
-
-            <div className="flex items-start gap-3 rounded-lg border border-line bg-canvas/60 p-4 text-sm">
-                <Clock className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
-                <p className="text-ink">
-                    <span className="font-semibold">Vista previa:</span> {formatDate(now, preferences)} {formatTime(now, preferences)} · {formatMoney(1234567.89, data.currency)}
-                </p>
             </div>
         </SettingsSection>
     );

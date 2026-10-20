@@ -28,9 +28,9 @@ const WORKFLOW = {
 
 function Step({ number, title, children }) {
     return (
-        <section aria-labelledby={`n8n-step-${number}`} className="space-y-3 border-t border-line pt-5">
-            <h4 id={`n8n-step-${number}`} className="flex items-center gap-2 text-sm font-bold text-ink">
-                <span className="grid size-6 place-items-center rounded-full bg-primary text-xs text-white" aria-hidden="true">
+        <section aria-labelledby={`n8n-step-${number}`} className="space-y-4 rounded-xl border border-line bg-card p-4 sm:p-5">
+            <h4 id={`n8n-step-${number}`} className="flex items-center gap-2.5 text-base font-bold text-ink">
+                <span className="grid size-7 shrink-0 place-items-center rounded-full bg-primary text-xs text-white" aria-hidden="true">
                     {number}
                 </span>
                 {title}
@@ -73,18 +73,18 @@ function Connection({ connection, readOnly, onConfigure }) {
 
     return (
         <div className="space-y-3">
-            <dl className="space-y-1.5 text-sm">
-                <div className="flex items-center justify-between gap-3">
+            <dl className="divide-y divide-line rounded-lg border border-line text-sm [&>div]:flex [&>div]:flex-col [&>div]:gap-0.5 [&>div]:px-3 [&>div]:py-2 sm:[&>div]:flex-row sm:[&>div]:items-center sm:[&>div]:justify-between sm:[&>div]:gap-3">
+                <div>
                     <dt className="shrink-0 text-ink-muted">URL de tu n8n</dt>
-                    <dd className="min-w-0 truncate font-semibold text-ink" title={connection.baseUrl}>
+                    <dd className="min-w-0 break-all font-semibold text-ink sm:truncate sm:text-right" title={connection.baseUrl}>
                         {connection.baseUrl}
                     </dd>
                 </div>
-                <div className="flex items-center justify-between gap-3">
+                <div>
                     <dt className="text-ink-muted">API Key</dt>
                     <dd className="font-semibold text-ink">{connection.apiKeySet ? '•••••••• guardada' : 'Sin API Key'}</dd>
                 </div>
-                <div className="flex items-center justify-between gap-3">
+                <div>
                     <dt className="text-ink-muted">Actualizada</dt>
                     <dd className="text-ink">{connection.updatedAt}</dd>
                 </div>
@@ -216,7 +216,7 @@ function N8nPanel({ automation, newToken, readOnly, workspaceId, onClose, onConf
     const state = CONNECTION[connection.state];
 
     return (
-        <Modal show onClose={onClose} maxWidth="4xl" scrollable>
+        <Modal show onClose={onClose} maxWidth="6xl" scrollable>
             <div className="flex min-h-0 flex-1 flex-col">
                 <header className="flex shrink-0 items-start justify-between gap-3 border-b border-line p-4 sm:px-6">
                     <div className="flex min-w-0 items-center gap-3">
@@ -236,20 +236,24 @@ function N8nPanel({ automation, newToken, readOnly, workspaceId, onClose, onConf
                     </button>
                 </header>
 
-                <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 sm:px-6" tabIndex={0} aria-label="Configuración de n8n">
-                    <Step number="1" title="Conecta tu n8n con Ava">
-                        <Connection connection={connection} readOnly={readOnly} onConfigure={onConfigure} />
-                    </Step>
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-canvas/50 p-4 sm:p-6" tabIndex={0} aria-label="Configuración de n8n">
+                    <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+                        <div className="space-y-5">
+                            <Step number="1" title="Conecta tu n8n con Ava">
+                                <Connection connection={connection} readOnly={readOnly} onConfigure={onConfigure} />
+                            </Step>
 
-                    <Step number="2" title="Configura tu workflow de n8n">
-                        <Workflow_ automation={automation} newToken={newToken} readOnly={readOnly} workspaceId={workspaceId} />
-                    </Step>
+                            <Step number="3" title="Dónde verás las conversaciones">
+                                <p className="text-sm text-ink-muted">
+                                    Conectar n8n no conecta WhatsApp, y configurar WhatsApp no conecta n8n: cada pieza se configura por separado. Cuando ambas estén listas y tu workflow envíe los mensajes a Ava, aparecerán en <strong className="text-ink">Asistentes → tu chatbot → Canales → WhatsApp → Conversaciones</strong>. Ava no crea conversaciones por su cuenta: solo muestra los mensajes que n8n le envía de verdad.
+                                </p>
+                            </Step>
+                        </div>
 
-                    <Step number="3" title="Dónde verás las conversaciones">
-                        <p className="text-sm text-ink-muted">
-                            Conectar n8n no conecta WhatsApp, y configurar WhatsApp no conecta n8n: cada pieza se configura por separado. Cuando ambas estén listas y tu workflow envíe los mensajes a Ava, aparecerán en <strong className="text-ink">Asistentes → tu chatbot → Canales → WhatsApp → Conversaciones</strong>. Ava no crea conversaciones por su cuenta: solo muestra los mensajes que n8n le envía de verdad.
-                        </p>
-                    </Step>
+                        <Step number="2" title="Configura tu workflow de n8n">
+                            <Workflow_ automation={automation} newToken={newToken} readOnly={readOnly} workspaceId={workspaceId} />
+                        </Step>
+                    </div>
                 </div>
 
                 <footer className="flex shrink-0 justify-end border-t border-line p-4 sm:px-6">

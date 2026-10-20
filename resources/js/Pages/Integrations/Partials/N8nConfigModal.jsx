@@ -33,37 +33,40 @@ export default function N8nConfigModal({ connection, onClose }) {
     };
 
     return (
-        <Modal show onClose={onClose} maxWidth="2xl" scrollable>
+        <Modal show onClose={onClose} maxWidth="4xl" scrollable>
             <form onSubmit={save(false)} noValidate className="flex min-h-0 flex-1 flex-col">
                 <header className="border-b border-line px-5 py-4 sm:px-8 sm:py-5">
                     <h2 className="text-lg font-bold text-ink">{editing ? 'Cambiar la configuración de n8n' : 'Configurar n8n'}</h2>
                     <p className="mt-1 text-sm text-ink-muted">Con estos dos datos Ava podrá comunicarse con tu instancia de n8n. Son propios de este Workspace.</p>
                 </header>
 
-                <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-6 sm:px-8">
-                    <div>
-                        <InputLabel htmlFor="n8n_base_url" value="URL de tu n8n" />
-                        <TextInput id="n8n_base_url" className="mt-1" value={data.base_url} onChange={(e) => setData('base_url', e.target.value)} placeholder="https://tu-instancia.app.n8n.cloud" invalid={Boolean(errors.base_url)} maxLength={2048} autoComplete="off" spellCheck={false} />
-                        <InputError message={errors.base_url} className="mt-1" />
-                        <p className="mt-1.5 text-xs text-ink-muted">Es la dirección que aparece en la barra de direcciones cuando estás dentro de n8n. Ejemplo: https://miempresa.app.n8n.cloud</p>
-                    </div>
+                <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-5 py-6 sm:px-8">
+                    <div className="grid items-start gap-6 md:grid-cols-2">
+                        <div>
+                            <InputLabel htmlFor="n8n_base_url" value="URL de tu n8n" />
+                            <TextInput id="n8n_base_url" className="mt-1" value={data.base_url} onChange={(e) => setData('base_url', e.target.value)} placeholder="https://tu-instancia.app.n8n.cloud" invalid={Boolean(errors.base_url)} maxLength={2048} autoComplete="off" spellCheck={false} />
+                            <InputError message={errors.base_url} className="mt-1" />
+                            <p className="mt-1.5 text-xs text-ink-muted">Es la dirección que aparece en la barra de direcciones cuando estás dentro de n8n. Ejemplo: https://miempresa.app.n8n.cloud</p>
+                        </div>
 
-                    <div>
-                        <InputLabel htmlFor="n8n_api_key" value="API Key de n8n" />
-                        <TextInput
-                            id="n8n_api_key"
-                            type="password"
-                            className="mt-1"
-                            value={data.api_key}
-                            onChange={(e) => setData('api_key', e.target.value)}
-                            placeholder={keyStored ? '•••••••• (guardada)' : 'Pega aquí la API Key'}
-                            invalid={Boolean(errors.api_key)}
-                            maxLength={4096}
-                            autoComplete="new-password"
-                        />
-                        <InputError message={errors.api_key} className="mt-1" />
-                        <p className="mt-1.5 text-xs text-ink-muted">En n8n ve a Settings → n8n API y crea una API Key. Copia la clave y pégala aquí.</p>
-                        {keyStored && <p className="mt-1 text-xs text-ink-muted">Escribe una clave nueva solo para reemplazarla. Nunca se muestra la guardada.</p>}
+                        <div>
+                            <InputLabel htmlFor="n8n_api_key" value="API Key de n8n" />
+                            <TextInput
+                                id="n8n_api_key"
+                                type="password"
+                                className="mt-1"
+                                value={data.api_key}
+                                onChange={(e) => setData('api_key', e.target.value)}
+                                placeholder={keyStored ? '•••••••• (guardada)' : 'Pega aquí la API Key'}
+                                invalid={Boolean(errors.api_key)}
+                                maxLength={4096}
+                                autoComplete="new-password"
+                            />
+                            <InputError message={errors.api_key} className="mt-1" />
+                            <p className="mt-1.5 text-xs text-ink-muted">En n8n ve a Settings → n8n API y crea una API Key. Copia la clave y pégala aquí.</p>
+                            {keyStored && <p className="mt-1 text-xs text-ink-muted">Escribe una clave nueva solo para reemplazarla. Nunca se muestra la guardada.</p>}
+                        </div>
+
                     </div>
 
                     <Alert tone="info">

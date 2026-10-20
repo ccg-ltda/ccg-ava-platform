@@ -22,7 +22,7 @@ import { useToast } from '@/Components/Toast';
 import { roleTone } from '@/config/roles';
 import useAccess from '@/Hooks/useAccess';
 import usePagedList from '@/Hooks/usePagedList';
-import { groupPermissions } from '@/lib/permissions';
+import GrantsModal from './GrantsModal';
 
 const FIELD = 'mt-1';
 
@@ -126,40 +126,6 @@ function FormModal({ show, title, onClose, onSubmit, processing, submitLabel, ch
                     </PrimaryButton>
                 </div>
             </form>
-        </Modal>
-    );
-}
-
-/** What a person can do in the Workspace: the permissions of their role, grouped by area (read-only). */
-function GrantsModal({ user, catalog, onClose }) {
-    const groups = user ? groupPermissions(catalog, user.grants) : [];
-
-    return (
-        <Modal show={Boolean(user)} onClose={onClose} maxWidth="md">
-            <div className="p-6">
-                <h2 className="text-lg font-bold text-ink">Permisos de {user?.name}</h2>
-                <p className="mt-1 text-sm text-ink-muted">
-                    Los da su rol <Badge tone={roleTone(user?.roles[0])}>{user?.roles[0] || 'Sin rol'}</Badge> en este Workspace. Se cambian en la pestaña Roles.
-                </p>
-                <div className="mt-4 space-y-4">
-                    {groups.length === 0 && <p className="text-sm text-ink-muted">Este rol no tiene permisos.</p>}
-                    {groups.map((group) => (
-                        <div key={group.id}>
-                            <p className="text-xs font-semibold tracking-wide text-ink-muted uppercase">{group.label}</p>
-                            <ul className="mt-1 space-y-1 text-sm text-ink">
-                                {group.items.map((item) => (
-                                    <li key={item.name}>{item.label}</li>
-                                ))}
-                            </ul>
-                        </div>
-                    ))}
-                </div>
-                <div className="mt-6 flex justify-end">
-                    <SecondaryButton type="button" onClick={onClose}>
-                        Cerrar
-                    </SecondaryButton>
-                </div>
-            </div>
         </Modal>
     );
 }
@@ -336,7 +302,7 @@ export default function UsersPanel({ users, filters, perPageOptions, createTarge
 
             <Pagination noun="usuarios" {...list.paginationProps} />
 
-            <GrantsModal user={grantsOf} catalog={permissionCatalog} onClose={() => setGrantsOf(null)} />
+            <GrantsModal user={grantsOf} catalog={permissionCatalog} roleTone={roleTone} onClose={() => setGrantsOf(null)} />
 
             <FormModal show={showCreate} title="Nuevo usuario" onClose={() => setShowCreate(false)} onSubmit={submitCreate} processing={create.processing} submitLabel={create.processing ? 'Guardando...' : 'Crear usuario'}>
                 <UserFields data={create.data} setData={create.setData} errors={create.errors} roles={rolesFor(create.data.workspace_option)} withPassword />

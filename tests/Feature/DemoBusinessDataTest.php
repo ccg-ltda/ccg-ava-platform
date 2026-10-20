@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Customers\CustomerRegistry;
 use App\Exceptions\DemoNotAllowed;
 use App\Models\Appointment;
 use App\Models\Customer;
@@ -13,6 +14,7 @@ use App\Models\WorkspaceSetting;
 use App\Services\DemoBusinessData;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -50,21 +52,23 @@ class DemoBusinessDataTest extends TestCase
     {
         $counts = $this->demo()->generate($this->admin);
 
-        $this->assertSame(36, $counts['customers']);
-        $this->assertGreaterThanOrEqual(20, $counts['orders']);
-        $this->assertSame(14, $counts['products']);
-        $this->assertSame(8, $counts['services']);
-        $this->assertSame(3, $counts['locations']);
-        $this->assertSame(5, $counts['professionals']);
-        $this->assertGreaterThanOrEqual(30, $counts['appointments']);
-        $this->assertSame(4, $counts['templates']);
-        $this->assertSame(4, $counts['campaigns']);
+        $this->assertSame(10, $counts['customers']);
+        $this->assertSame(10, $counts['orders']);
+        $this->assertSame(10, $counts['products']);
+        $this->assertSame(10, $counts['services']);
+        $this->assertSame(5, $counts['locations']);
+        $this->assertSame(10, $counts['professionals']);
+        $this->assertSame(10, $counts['resources']);
+        $this->assertSame(3, $counts['exceptions']);
+        $this->assertSame(10, $counts['appointments']);
+        $this->assertSame(3, $counts['templates']);
+        $this->assertSame(1, $counts['campaigns']);
 
         // Enough variety to try filters, pagination and every state.
         $this->assertEqualsCanonicalizing(['received', 'confirmed', 'preparing', 'ready', 'dispatched', 'delivered', 'cancelled'], $this->admin->orders()->distinct()->pluck('status')->all());
         $this->assertEqualsCanonicalizing(['pickup', 'delivery'], $this->admin->orders()->distinct()->pluck('delivery_method')->all());
         $this->assertEqualsCanonicalizing(['requested', 'confirmed', 'completed', 'no_show', 'cancelled'], $this->admin->appointments()->distinct()->pluck('status')->all());
-        $this->assertEqualsCanonicalizing(['draft', 'prepared', 'simulated', 'cancelled'], $this->admin->campaigns()->distinct()->pluck('status')->all());
+        $this->assertEqualsCanonicalizing(['simulated'], $this->admin->campaigns()->distinct()->pluck('status')->all());
         $this->assertEqualsCanonicalizing([true, false], $this->admin->customers()->distinct()->pluck('is_active')->map(fn ($v) => (bool) $v)->all());
         $this->assertEqualsCanonicalizing(['granted', 'unknown', 'revoked'], $this->admin->customers()->distinct()->pluck('marketing_consent')->all());
         $this->assertEqualsCanonicalizing([true, false], $this->admin->products()->distinct()->pluck('is_active')->map(fn ($v) => (bool) $v)->all());
@@ -137,6 +141,34 @@ class DemoBusinessDataTest extends TestCase
         $this->assertSame($snapshot, [Customer::count(), Order::count(), Appointment::count()]);
     }
 
+    public function test_the_targets_are_the_total_of_each_module_so_records_people_created_count_and_stay_untouched(): void
+    {
+        $service = $this->admin->services()->create(['name' => 'Pelo', 'duration_minutes' => 30, 'price' => 20000, 'is_active' => true]);
+        $professional = $this->admin->professionals()->create(['name' => 'Pedro', 'is_active' => true]);
+        $product = $this->admin->products()->create(['sku' => '123', 'name' => 'Carne', 'price' => 12000, 'is_active' => true]);
+        $customer = app(CustomerRegistry::class)->save($this->admin, ['first_name' => 'Real', 'phone' => '+573001112233', 'email' => 'real@example.com', 'source' => 'manual', 'marketing_consent' => 'unknown', 'is_active' => true], [], []);
+
+        $this->demo()->generate($this->admin);
+
+        foreach (['customers', 'products', 'services', 'professionals', 'orders', 'appointments', 'locations', 'bookableResources', 'scheduleExceptions', 'messageTemplates', 'campaigns'] as $relation) {
+            $target = ['bookableResources' => 'resources', 'scheduleExceptions' => 'exceptions', 'messageTemplates' => 'templates'][$relation] ?? $relation;
+            $this->assertSame(DemoBusinessData::TARGETS[$target], $this->admin->{$relation}()->count(), "total of {$relation}");
+        }
+
+        // What a person created is still there, unchanged, and is not marked as demo.
+        $this->assertSame('Pelo', $service->fresh()->name);
+        $this->assertSame('Pedro', $professional->fresh()->name);
+        $this->assertSame('Carne', $product->fresh()->name);
+        $this->assertSame('real@example.com', $customer->fresh()->email);
+
+        // A second run creates nothing.
+        $rows = fn () => collect(['customers', 'products', 'services', 'professionals', 'orders', 'appointments', 'locations', 'bookableResources', 'scheduleExceptions', 'messageTemplates', 'campaigns'])->map(fn ($r) => $this->admin->{$r}()->count())->all();
+        $before = $rows();
+        $this->demo()->generate($this->admin);
+        $this->assertSame($before, $rows());
+        $this->assertSame(0, DB::table('audit_logs')->count(), 'the generator writes no audit records');
+    }
+
     public function test_cleaning_removes_only_what_carries_the_demo_marks(): void
     {
         $this->demo()->generate($this->admin);
@@ -146,7 +178,7 @@ class DemoBusinessDataTest extends TestCase
 
         $removed = $this->demo()->clean($this->admin);
 
-        $this->assertSame(36, $removed['customers']);
+        $this->assertSame(10, $removed['customers']);
         $counts = $this->demo()->counts($this->admin);
         $this->assertSame(array_fill_keys(array_keys($counts), 0), $counts);
         $this->assertTrue(Customer::whereKey($realCustomer->id)->exists());
@@ -160,7 +192,7 @@ class DemoBusinessDataTest extends TestCase
         $this->demo()->generate($this->admin);
         $this->demo()->clean($this->admin);
 
-        $this->assertSame(36, $this->demo()->generate($this->admin)['customers']);
+        $this->assertSame(10, $this->demo()->generate($this->admin)['customers']);
     }
 
     public function test_it_only_runs_in_the_administrative_workspace_and_never_in_production(): void
@@ -195,7 +227,7 @@ class DemoBusinessDataTest extends TestCase
     public function test_the_command_runs_with_the_same_guards_and_prints_what_it_did(): void
     {
         $this->artisan('demo:data generate')->expectsOutputToContain('Datos demo en DESARROLLO_DEV')->assertSuccessful();
-        $this->assertSame(36, Customer::where('workspace_id', $this->admin->id)->count());
+        $this->assertSame(10, Customer::where('workspace_id', $this->admin->id)->count());
 
         $this->artisan('demo:data status')->assertSuccessful();
         $this->artisan('demo:data', ['action' => 'clean', '--confirm' => 'DESARROLLO_DEV'])->assertSuccessful();
@@ -262,8 +294,8 @@ class DemoBusinessDataTest extends TestCase
         foreach (['/customers', '/catalog', '/orders', '/services', '/locations', '/professionals', '/bookings', '/campaigns'] as $url) {
             $this->get($url)->assertOk();
         }
-        $this->get('/customers?customers_per_page=10')->assertInertia(fn ($page) => $page->where('customers.meta.total', 36)->where('customers.meta.last_page', 4));
-        $this->get('/orders')->assertInertia(fn ($page) => $page->where('orders.meta.total', fn ($total) => $total >= 20));
+        $this->get('/customers?customers_per_page=10')->assertInertia(fn ($page) => $page->where('customers.meta.total', 10)->where('customers.meta.last_page', 1));
+        $this->get('/orders')->assertInertia(fn ($page) => $page->where('orders.meta.total', 10));
         $order = $this->admin->orders()->first();
         $this->get("/orders/{$order->id}")->assertOk();
         $customer = $this->admin->customers()->first();

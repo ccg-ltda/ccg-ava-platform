@@ -25,7 +25,7 @@ use Illuminate\Support\Str;
  *
  * How it is recognised: every record carries an explicit mark in a field the person sees — names start with «Demo ·», SKUs with «DEMO-» and every
  * contact uses the reserved domain `demo.invalid` or the fictitious number range +1 202 555 01xx. `clean` removes ONLY what carries those marks, in
- * the order the foreign keys need, and leaves anything a person created. `generate` is idempotent: it creates what is missing and leaves the rest as it is.
+ * the order the foreign keys need, and leaves anything a person created. `generate` is idempotent: it creates what is missing to reach TARGETS and leaves the rest as it is.
  * Everything is deterministic (no randomness), so two runs give the same data.
  */
 class DemoBusinessData
@@ -35,6 +35,16 @@ class DemoBusinessData
     public const DOMAIN = 'demo.invalid';
 
     public const SKU = 'DEMO-';
+
+    /**
+     * How many records each module holds in the Workspace once it is prepared for demonstration. A target is the TOTAL of the module (records that people
+     * created count too), never an amount added on top: the generator creates only what is missing to reach it, so a second run adds nothing and
+     * nothing that already exists is touched. The lists below are ordered so that the first records already show every state.
+     */
+    public const TARGETS = [
+        'customers' => 10, 'products' => 10, 'services' => 10, 'orders' => 10, 'locations' => 5, 'professionals' => 10,
+        'resources' => 10, 'exceptions' => 3, 'appointments' => 10, 'templates' => 3, 'campaigns' => 1,
+    ];
 
     private const FIRST_NAMES = ['Laura', 'Carlos', 'Marta', 'Andrés', 'Sofía', 'Diego', 'Valentina', 'Mateo', 'Camila', 'Julián', 'Isabela', 'Sergio'];
 
@@ -53,6 +63,12 @@ class DemoBusinessData
         $this->guard->assertAllowed($workspace);
     }
 
+    /** How many records of a module may still be created to reach its target (the TOTAL of the module counts, whoever created each record). */
+    private function room(int $existing, string $kind): int
+    {
+        return max(0, self::TARGETS[$kind] - $existing);
+    }
+
     /** @return array<string, int> what the demo set of the Workspace holds now */
     public function counts(Workspace $workspace): array
     {
@@ -64,6 +80,8 @@ class DemoBusinessData
             'locations' => $workspace->locations()->where('name', 'like', self::PREFIX.'%')->count(),
             'professionals' => $workspace->professionals()->where('name', 'like', self::PREFIX.'%')->count(),
             'appointments' => $this->demoAppointments($workspace)->count(),
+            'resources' => $workspace->bookableResources()->where('name', 'like', self::PREFIX.'%')->count(),
+            'exceptions' => $workspace->scheduleExceptions()->where('reason', 'like', self::PREFIX.'%')->count(),
             'templates' => $workspace->messageTemplates()->where('name', 'like', self::PREFIX.'%')->count(),
             'campaigns' => $workspace->campaigns()->where('name', 'like', self::PREFIX.'%')->count(),
         ];
@@ -165,12 +183,21 @@ class DemoBusinessData
             'centro' => ['Centro', 'Calle 10 # 5-20', 'Bogotá', true],
             'norte' => ['Norte', 'Carrera 15 # 100-30', 'Bogotá', true],
             'cerrada' => ['Cerrada (temporal)', 'Avenida 1 # 2-3', 'Medellín', false],
+            'sur' => ['Sur', 'Carrera 50 # 20-15', 'Medellín', true],
+            'occidente' => ['Occidente', 'Calle 80 # 69-40', 'Cali', true],
         ];
         $locations = [];
+        $room = $this->room($workspace->locations()->count(), 'locations');
 
         foreach ($rows as $key => [$name, $address, $city, $active]) {
-            $locations[$key] = $workspace->locations()->firstOrCreate(['name' => self::PREFIX.$name], [
-                'address' => $address, 'city' => $city, 'phone' => '+1202555010'.(count($locations) + 1), 'notes' => 'Sede de demostración.', 'is_active' => $active,
+            $existing = $workspace->locations()->where('name', self::PREFIX.$name)->first();
+
+            if (! $existing && $room-- <= 0) {
+                continue;
+            }
+
+            $locations[$key] = $existing ?? $workspace->locations()->create([
+                'name' => self::PREFIX.$name, 'address' => $address, 'city' => $city, 'phone' => '+1202555010'.(count($locations) + 1), 'notes' => 'Sede de demostración.', 'is_active' => $active,
             ]);
         }
 
@@ -188,23 +215,36 @@ class DemoBusinessData
             'masaje' => ['Masaje relajante', 'Bienestar', 60, 15, 90000, true],
             'limpieza' => ['Limpieza facial', 'Estética', 75, 10, 80000, true],
             'consulta' => ['Consulta de valoración', 'Consultas', 30, 0, null, true],
+            'depilacion' => ['Depilación con cera', 'Estética', 45, 10, 55000, true],
             'retirado' => ['Peinado de novia (retirado)', 'Belleza', 180, 30, 250000, false],
+            'tratamiento' => ['Tratamiento capilar', 'Belleza', 60, 10, 70000, true],
         ];
         $services = [];
 
+        $room = $this->room($workspace->services()->count(), 'services');
+
         foreach ($rows as $key => [$name, $category, $minutes, $buffer, $price, $active]) {
-            $service = $workspace->services()->firstOrCreate(['name' => self::PREFIX.$name], [
-                'description' => 'Servicio de demostración.', 'category' => $category, 'duration_minutes' => $minutes, 'buffer_minutes' => $buffer, 'price' => $price, 'is_active' => $active,
+            $existing = $workspace->services()->where('name', self::PREFIX.$name)->first();
+
+            if (! $existing && $room-- <= 0) {
+                continue;
+            }
+
+            $services[$key] = $existing ?? $workspace->services()->create([
+                'name' => self::PREFIX.$name, 'description' => 'Servicio de demostración.', 'category' => $category, 'duration_minutes' => $minutes, 'buffer_minutes' => $buffer, 'price' => $price, 'is_active' => $active,
             ]);
-            $services[$key] = $service;
         }
 
         // Which sede offers what: the first sede offers everything, the second only some (a service with no row would be offered in every sede).
-        foreach (['corte', 'color', 'barba', 'manicure', 'masaje', 'limpieza', 'consulta'] as $key) {
-            $locations['centro']->services()->syncWithoutDetaching([$services[$key]->id => ['workspace_id' => $workspace->id]]);
-        }
-        foreach (['corte', 'barba', 'consulta'] as $key) {
-            $locations['norte']->services()->syncWithoutDetaching([$services[$key]->id => ['workspace_id' => $workspace->id]]);
+        foreach ([
+            'centro' => ['corte', 'color', 'barba', 'manicure', 'masaje', 'limpieza', 'consulta'],
+            'norte' => ['corte', 'barba', 'consulta'],
+            'sur' => ['corte', 'barba', 'manicure', 'depilacion', 'tratamiento'],
+            'occidente' => ['limpieza', 'masaje', 'depilacion'],
+        ] as $location => $keys) {
+            foreach (array_filter($keys, fn (string $key) => isset($services[$key], $locations[$location])) as $key) {
+                $locations[$location]->services()->syncWithoutDetaching([$services[$key]->id => ['workspace_id' => $workspace->id]]);
+            }
         }
 
         return $services;
@@ -219,17 +259,31 @@ class DemoBusinessData
             'paula' => ['Paula Sierra', 'Esteticista', ['manicure', 'limpieza', 'masaje'], [1, 3, 5, 6], '08:00', '16:00', true],
             'jorge' => ['Jorge Nieto', 'Médico general', ['consulta'], [1, 2, 3, 4], '08:00', '12:00', true],
             'ausente' => ['Marcela Díaz (inactiva)', 'Estilista', ['corte'], [1, 2], '09:00', '13:00', false],
+            'sara' => ['Sara Beltrán', 'Colorista', ['color', 'tratamiento'], [2, 3, 4, 5], '09:00', '17:00', true],
+            'david' => ['David Quintero', 'Barbero', ['corte', 'barba'], [1, 3, 5, 6], '10:00', '18:00', true],
+            'elena' => ['Elena Cruz', 'Esteticista', ['depilacion', 'limpieza'], [1, 2, 4, 5], '08:00', '16:00', true],
+            'mario' => ['Mario Pardo', 'Masajista', ['masaje'], [2, 4, 6], '09:00', '15:00', true],
+            'nora' => ['Nora Herrera', 'Manicurista', ['manicure'], [1, 2, 3, 5, 6], '09:00', '17:00', true],
         ];
         $professionals = [];
 
-        foreach ($rows as $key => [$name, $specialty, $offered, $weekdays, $from, $to, $active]) {
-            $professional = $workspace->professionals()->firstOrCreate(['name' => self::PREFIX.$name], ['specialty' => $specialty, 'phone' => null, 'is_active' => $active]);
+        $room = $this->room($workspace->professionals()->count(), 'professionals');
+        $sedeOf = ['luis' => 'norte', 'david' => 'sur', 'nora' => 'sur', 'elena' => 'occidente'];
 
-            if ($professional->wasRecentlyCreated) {
-                $professional->services()->sync(collect($offered)->mapWithKeys(fn (string $service) => [$services[$service]->id => ['workspace_id' => $workspace->id]])->all());
+        foreach ($rows as $key => [$name, $specialty, $offered, $weekdays, $from, $to, $active]) {
+            $existing = $workspace->professionals()->where('name', self::PREFIX.$name)->first();
+
+            if (! $existing && $room-- <= 0) {
+                continue;
+            }
+
+            $professional = $existing ?? $workspace->professionals()->create(['name' => self::PREFIX.$name, 'specialty' => $specialty, 'phone' => null, 'is_active' => $active]);
+
+            if (! $existing) {
+                $professional->services()->sync(collect($offered)->filter(fn (string $service) => isset($services[$service]))->mapWithKeys(fn (string $service) => [$services[$service]->id => ['workspace_id' => $workspace->id]])->all());
 
                 foreach ($weekdays as $weekday) {
-                    $professional->scheduleRules()->create(['workspace_id' => $workspace->id, 'location_id' => $key === 'luis' ? $locations['norte']->id : null, 'weekday' => $weekday, 'starts_at' => "{$from}:00", 'ends_at' => "{$to}:00"]);
+                    $professional->scheduleRules()->create(['workspace_id' => $workspace->id, 'location_id' => isset($sedeOf[$key]) ? ($locations[$sedeOf[$key]] ?? null)?->id : null, 'weekday' => $weekday, 'starts_at' => "{$from}:00", 'ends_at' => "{$to}:00"]);
                 }
             }
 
@@ -241,25 +295,41 @@ class DemoBusinessData
 
     private function resourcesAndExceptions(Workspace $workspace, array $services, array $professionals): void
     {
-        foreach ([['Sala de masajes', 'Sala', ['masaje']], ['Silla de manicure', 'Silla', ['manicure']]] as [$name, $kind, $offered]) {
-            $resource = $workspace->bookableResources()->firstOrCreate(['name' => self::PREFIX.$name], ['kind' => $kind, 'is_active' => true]);
+        $resourceRoom = $this->room($workspace->bookableResources()->count(), 'resources');
 
-            if ($resource->wasRecentlyCreated) {
-                foreach ($offered as $service) {
+        foreach ([
+            ['Sala de masajes', 'Sala', ['masaje']], ['Silla de manicure', 'Silla', ['manicure']], ['Sala de masajes 2', 'Sala', ['masaje']],
+            ['Silla de corte 1', 'Silla', ['corte', 'barba']], ['Silla de corte 2', 'Silla', ['corte', 'barba']], ['Lavacabezas', 'Equipo', ['color', 'tratamiento']],
+            ['Cabina facial', 'Cabina', ['limpieza']], ['Cabina de depilación', 'Cabina', ['depilacion']], ['Consultorio 1', 'Consultorio', ['consulta']],
+            ['Silla de manicure 2', 'Silla', ['manicure']],
+        ] as [$name, $kind, $offered]) {
+            $existing = $workspace->bookableResources()->where('name', self::PREFIX.$name)->first();
+
+            if (! $existing && $resourceRoom-- <= 0) {
+                continue;
+            }
+
+            $resource = $existing ?? $workspace->bookableResources()->create(['name' => self::PREFIX.$name, 'kind' => $kind, 'is_active' => true]);
+
+            if (! $existing) {
+                foreach (array_filter($offered, fn (string $service) => isset($services[$service])) as $service) {
                     DB::table('resource_service')->insertOrIgnore(['workspace_id' => $workspace->id, 'resource_id' => $resource->id, 'service_id' => $services[$service]->id]);
                 }
             }
         }
 
         $today = now()->startOfDay();
+        $exceptionRoom = $this->room($workspace->scheduleExceptions()->count(), 'exceptions');
         foreach ([
             [null, $today->copy()->addDays(9), $today->copy()->addDays(9), 'Festivo'],
-            [$professionals['ana'], $today->copy()->addDays(3), $today->copy()->addDays(5), 'Vacaciones'],
+            [$professionals['ana'] ?? null, $today->copy()->addDays(3), $today->copy()->addDays(5), 'Vacaciones'],
+            [null, $today->copy()->addDays(20), $today->copy()->addDays(20), 'Día no laborable (inventario)'],
         ] as [$professional, $from, $to, $reason]) {
-            $workspace->scheduleExceptions()->firstOrCreate(
-                ['reason' => self::PREFIX.$reason, 'professional_id' => $professional?->id],
-                ['date_from' => $from->toDateString(), 'date_to' => $to->toDateString()],
-            );
+            $criteria = ['reason' => self::PREFIX.$reason, 'professional_id' => $professional?->id];
+
+            if (! $workspace->scheduleExceptions()->where($criteria)->exists() && $exceptionRoom-- > 0) {
+                $workspace->scheduleExceptions()->create($criteria + ['date_from' => $from->toDateString(), 'date_to' => $to->toDateString()]);
+            }
         }
     }
 
@@ -272,6 +342,8 @@ class DemoBusinessData
         $consents = ['granted', 'granted', 'unknown', 'revoked', 'granted', 'unknown'];
         $tags = [['vip'], ['mayorista'], ['nuevo'], [], ['vip', 'frecuente'], ['frecuente']];
 
+        $room = $this->room($workspace->customers()->count(), 'customers');
+
         for ($n = 1; $n <= 36; $n++) {
             $email = sprintf('cliente%02d@%s', $n, self::DOMAIN);
             $existing = $workspace->customers()->where('email_normalized', $email)->first();
@@ -279,6 +351,10 @@ class DemoBusinessData
             if ($existing) {
                 $records[] = $existing;
 
+                continue;
+            }
+
+            if ($room-- <= 0) {
                 continue;
             }
 
@@ -303,7 +379,9 @@ class DemoBusinessData
     /** Appointments of the last month and the next two weeks, in every state; never two for the same professional at the same time. */
     private function appointments(Workspace $workspace, array $services, array $professionals, array $locations): void
     {
-        if ($this->demoAppointments($workspace)->count() >= 36) {
+        $room = $this->room($workspace->appointments()->count(), 'appointments');
+
+        if ($room === 0) {
             return;
         }
 
@@ -312,18 +390,21 @@ class DemoBusinessData
             ['paula', 'manicure', 'centro'], ['paula', 'limpieza', 'centro'], ['jorge', 'consulta', 'centro'], ['paula', 'masaje', 'centro'],
         ];
         // Offset in days (negative = past), status and how it came in. A cancelled one carries its reason; a future one is confirmed or requested.
+        // Ordered so the first ones already show every state, past and future; the rest only matters when the Workspace has fewer records.
         $plan = [
-            [-28, 'completed', 'admin'], [-25, 'completed', 'web'], [-21, 'no_show', 'chat'], [-18, 'completed', 'admin'], [-14, 'cancelled', 'web'], [-11, 'completed', 'chat'],
-            [-9, 'completed', 'admin'], [-7, 'no_show', 'web'], [-5, 'completed', 'admin'], [-3, 'cancelled', 'chat'], [-2, 'completed', 'web'], [-1, 'completed', 'admin'],
-            [1, 'confirmed', 'admin'], [2, 'confirmed', 'web'], [2, 'requested', 'chat'], [4, 'confirmed', 'admin'], [5, 'requested', 'web'], [6, 'confirmed', 'chat'],
-            [7, 'confirmed', 'admin'], [8, 'requested', 'admin'], [10, 'confirmed', 'web'], [11, 'confirmed', 'admin'], [12, 'cancelled', 'web'], [13, 'confirmed', 'chat'],
+            [-14, 'completed', 'admin'], [-9, 'completed', 'web'], [-5, 'no_show', 'chat'], [-3, 'cancelled', 'web'], [-1, 'completed', 'admin'],
+            [1, 'confirmed', 'admin'], [2, 'requested', 'chat'], [5, 'confirmed', 'web'], [8, 'confirmed', 'admin'], [10, 'requested', 'web'], [12, 'cancelled', 'web'], [13, 'confirmed', 'chat'],
         ];
         $currency = $workspace->settingsOrDefault()->currency;
         $taken = [];
         // The days (1 = Monday) and the starting hours each professional works, as set in professionals().
         $schedules = ['ana' => [[1, 2, 3, 4, 5], [9, 10, 11, 13, 14]], 'luis' => [[2, 3, 4, 5, 6], [10, 11, 12, 14, 15]], 'paula' => [[1, 3, 5, 6], [8, 9, 10, 11, 13]], 'jorge' => [[1, 2, 3, 4], [8, 9, 10, 11]]];
 
-        foreach (array_merge($plan, $plan) as $index => [$offset, $status, $channel]) {
+        foreach ($plan as $index => [$offset, $status, $channel]) {
+            if ($room <= 0) {
+                break;
+            }
+
             [$professionalKey, $serviceKey, $locationKey] = $pairs[$index % count($pairs)];
             $professional = $professionals[$professionalKey];
             $service = $services[$serviceKey];
@@ -335,7 +416,7 @@ class DemoBusinessData
                 $start = $start->addDay();
             }
 
-            $start = $start->setTime($hours[($index + intdiv($index, count($plan)) * 2) % count($hours)], $index % 2 === 0 ? 0 : 30)->utc();
+            $start = $start->setTime($hours[$index % count($hours)], $index % 2 === 0 ? 0 : 30)->utc();
             $end = $start->copy()->addMinutes($service->duration_minutes);
             $until = $end->copy()->addMinutes($service->buffer_minutes);
 
@@ -346,6 +427,7 @@ class DemoBusinessData
                 continue;
             }
             $taken[$professional->id][] = [$start, $until];
+            $room--;
 
             $customerNumber = ($index % 30) + 1;
             $contact = $workspace->bookingCustomers()->firstOrCreate(
@@ -375,20 +457,27 @@ class DemoBusinessData
     {
         $rows = [
             ['01', 'Hamburguesa clásica', 'Comida', 18000, true], ['02', 'Hamburguesa doble', 'Comida', 26000, true], ['03', 'Pizza personal', 'Comida', 22000, true],
-            ['04', 'Ensalada de la casa', 'Comida', 15000, true], ['05', 'Papas a la francesa', 'Acompañamientos', 8000, true], ['06', 'Aros de cebolla', 'Acompañamientos', 9000, true],
-            ['07', 'Limonada natural', 'Bebidas', 6000, true], ['08', 'Gaseosa 400 ml', 'Bebidas', 4500, true], ['09', 'Café americano', 'Bebidas', 5000, true],
-            ['10', 'Brownie con helado', 'Postres', 12000, true], ['11', 'Cheesecake', 'Postres', 14000, true], ['12', 'Combo familiar', 'Combos', 68000, true],
-            ['13', 'Sopa del día (agotada)', 'Comida', 13000, false], ['14', 'Promoción de temporada (retirada)', 'Combos', 49000, false],
+            ['05', 'Papas a la francesa', 'Acompañamientos', 8000, true], ['07', 'Limonada natural', 'Bebidas', 6000, true], ['10', 'Brownie con helado', 'Postres', 12000, true],
+            ['12', 'Combo familiar', 'Combos', 68000, true], ['13', 'Sopa del día (agotada)', 'Comida', 13000, false], ['09', 'Café americano', 'Bebidas', 5000, true],
+            ['04', 'Ensalada de la casa', 'Comida', 15000, true], ['06', 'Aros de cebolla', 'Acompañamientos', 9000, true], ['08', 'Gaseosa 400 ml', 'Bebidas', 4500, true],
+            ['11', 'Cheesecake', 'Postres', 14000, true], ['14', 'Promoción de temporada (retirada)', 'Combos', 49000, false],
         ];
         $products = [];
 
+        $room = $this->room($workspace->products()->count(), 'products');
+
         foreach ($rows as [$code, $name, $category, $price, $active]) {
-            $product = $workspace->products()->firstOrCreate(['sku' => self::SKU.$code], ['name' => self::PREFIX.$name, 'description' => 'Producto de demostración.', 'category' => $category, 'price' => $price, 'is_active' => $active]);
-            $products[$code] = $product;
+            $existing = $workspace->products()->where('sku', self::SKU.$code)->first();
+
+            if (! $existing && $room-- <= 0) {
+                continue;
+            }
+
+            $products[$code] = $existing ?? $workspace->products()->create(['sku' => self::SKU.$code, 'name' => self::PREFIX.$name, 'description' => 'Producto de demostración.', 'category' => $category, 'price' => $price, 'is_active' => $active]);
         }
 
         // Some products are only sold in some sedes (the others are sold everywhere).
-        foreach (['10', '11'] as $code) {
+        foreach (array_filter(['10', '11'], fn (string $code) => isset($products[$code], $locations['centro'])) as $code) {
             $locations['centro']->products()->syncWithoutDetaching([$products[$code]->id => ['workspace_id' => $workspace->id]]);
         }
 
@@ -398,20 +487,22 @@ class DemoBusinessData
     /** Orders in every state, pickup and delivery, built with the real service so totals, numbers and history follow the real rules. */
     private function orders(Workspace $workspace, array $products, array $customers, array $locations): void
     {
-        if ($this->demoOrders($workspace)->count() >= 24) {
+        $room = $this->room($workspace->orders()->count(), 'orders');
+        $codes = array_keys(array_filter($products, fn (Product $product) => $product->is_active));
+        // The state each order ends in: the path walks the allowed graph, so the history of each one is complete.
+        // Ordered so the first ones already cover every state.
+        $paths = [['received'], ['confirmed'], ['preparing'], ['ready'], ['dispatched'], ['delivered'], ['cancelled'], ['delivered'], ['received'], ['delivered'], ['dispatched'], ['cancelled']];
+        $flow = ['received', 'confirmed', 'preparing', 'ready', 'dispatched', 'delivered'];
+
+        if ($customers === [] || $codes === []) {
             return;
         }
 
-        $codes = array_keys(array_filter($products, fn (Product $product) => $product->is_active));
-        // The state each order ends in: the path walks the allowed graph, so the history of each one is complete.
-        $paths = [
-            ['received'], ['received'], ['received'], ['confirmed'], ['confirmed'], ['preparing'], ['preparing'], ['ready'], ['ready'],
-            ['dispatched'], ['dispatched'], ['delivered'], ['delivered'], ['delivered'], ['delivered'], ['delivered'], ['delivered'], ['delivered'],
-            ['cancelled'], ['cancelled'], ['cancelled'], ['delivered'], ['delivered'], ['dispatched'],
-        ];
-        $flow = ['received', 'confirmed', 'preparing', 'ready', 'dispatched', 'delivered'];
+        // Each run continues where the demo orders already are, so a repeated run creates none once the target is reached.
+        $done = $this->demoOrders($workspace)->count();
 
-        foreach ($paths as $index => [$final]) {
+        foreach (array_slice($paths, $done, $room) as $offset => [$final]) {
+            $index = $done + $offset;
             $customer = $customers[$index % count($customers)];
             $delivery = in_array($final, ['dispatched'], true) || $index % 3 === 0;
             $lines = [];
@@ -458,26 +549,33 @@ class DemoBusinessData
     private function campaignsAndTemplates(Workspace $workspace): void
     {
         $templates = [];
+        $templateRoom = $this->room($workspace->messageTemplates()->count(), 'templates');
 
         foreach ([
             ['Bienvenida', 'Comunicación', 'Hola {{nombre}}, gracias por elegirnos. Este es un mensaje de demostración.'],
             ['Recordatorio de cita', 'Recordatorios', 'Hola {{nombre}}, te recordamos tu cita de la próxima semana. (Demostración)'],
             ['Promoción de temporada', 'Promociones', 'Hola {{nombre_completo}}, esta semana tienes un beneficio especial. (Demostración)'],
-            ['Plantilla en desuso', 'Comunicación', 'Mensaje antiguo para {{nombre}}. (Demostración)', false],
         ] as $row) {
-            [$name, $category, $body, $active] = array_pad($row, 4, true);
-            $templates[] = $workspace->messageTemplates()->firstOrCreate(['name' => self::PREFIX.$name], ['category' => $category, 'body' => $body, 'is_active' => $active]);
+            [$name, $category, $body] = $row;
+            $existing = $workspace->messageTemplates()->where('name', self::PREFIX.$name)->first();
+
+            if (! $existing && $templateRoom-- <= 0) {
+                continue;
+            }
+
+            $templates[] = $existing ?? $workspace->messageTemplates()->create(['name' => self::PREFIX.$name, 'category' => $category, 'body' => $body, 'is_active' => true]);
         }
 
-        $rows = [
-            ['Bienvenida a clientes nuevos', 'whatsapp', 'filtered', ['tag' => 'nuevo'], $templates[0], 'draft'],
-            ['Recordatorio general', 'whatsapp', 'all', [], $templates[1], 'prepared'],
-            ['Promoción de temporada', 'whatsapp', 'all', [], $templates[2], 'simulated'],
-            ['Campaña cancelada', 'email', 'all', [], $templates[0], 'cancelled'],
-        ];
+        if (count($templates) < 3) {
+            return;
+        }
+
+        // One campaign is enough to see the module; «simulated» is a rehearsal that marks recipients and never touches a channel.
+        $rows = [['Promoción de temporada', 'whatsapp', 'all', [], $templates[2], 'simulated']];
+        $campaignRoom = $this->room($workspace->campaigns()->count(), 'campaigns');
 
         foreach ($rows as [$name, $channel, $audience, $filters, $template, $final]) {
-            if ($workspace->campaigns()->where('name', self::PREFIX.$name)->exists()) {
+            if ($campaignRoom-- <= 0 || $workspace->campaigns()->where('name', self::PREFIX.$name)->exists()) {
                 continue;
             }
 

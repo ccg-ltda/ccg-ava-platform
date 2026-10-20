@@ -89,8 +89,8 @@ class ReportsOperationsTest extends TestCase
 
         // Clientes
         $customers = $props['operations']['customers']['data'];
-        $this->assertSame(36, $customers['kpis']['total']);
-        $this->assertSame(36, collect($customers['byConsent'])->sum('value'));
+        $this->assertSame(10, $customers['kpis']['total']);
+        $this->assertSame(10, collect($customers['byConsent'])->sum('value'));
         $this->assertSame($this->admin->customers()->where('is_active', true)->where('marketing_consent', 'granted')->count(), $customers['kpis']['reachable']);
     }
 
