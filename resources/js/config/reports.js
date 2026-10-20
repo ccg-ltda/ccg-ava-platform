@@ -1,4 +1,4 @@
-import { CalendarDays, ClipboardList, Contact, HelpCircle, LayoutDashboard, LineChart, MessageSquare, MessagesSquare, MousePointerClick, ShoppingCart } from 'lucide-react';
+import { Boxes, CalendarDays, ClipboardList, Contact, HelpCircle, LayoutDashboard, LineChart, MessageSquare, MessagesSquare, MousePointerClick, ShoppingCart } from 'lucide-react';
 
 /** Look of each metric the server defines in config/reports.php (the server owns the data, this owns the icon and tone). */
 export const metricStyles = {
@@ -58,5 +58,6 @@ export const reportSections = [
     { id: 'trends', label: 'Tendencias', icon: LineChart, needs: ['conversations'] },
     { id: 'bookings', label: 'Reservas', icon: CalendarDays, needs: ['bookings'] },
     { id: 'orders', label: 'Pedidos', icon: ShoppingCart, needs: ['orders'] },
+    { id: 'inventory', label: 'Inventario', icon: Boxes, needs: ['inventory'] },
     { id: 'customers', label: 'Clientes', icon: Contact, needs: ['customers'] },
 ];

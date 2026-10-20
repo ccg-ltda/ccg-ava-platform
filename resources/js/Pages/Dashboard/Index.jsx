@@ -1,5 +1,5 @@
-import { Head, router, usePage } from '@inertiajs/react';
-import { Bot, CalendarRange, MessageSquareText, MessagesSquare, Sparkles, UserRoundCheck, Users } from 'lucide-react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
+import { Bot, CalendarRange, LayoutDashboard, MessageSquareText, MessagesSquare, Sparkles, UserRoundCheck, Users } from 'lucide-react';
 import { useState } from 'react';
 import Alert from '@/Components/Alert';
 import ChartCard from '@/Components/Charts/ChartCard';
@@ -7,11 +7,13 @@ import ChartEmpty from '@/Components/Charts/ChartEmpty';
 import DonutChart from '@/Components/Charts/DonutChart';
 import RankingList from '@/Components/Charts/RankingList';
 import SeriesChart from '@/Components/Charts/SeriesChart';
+import EmptyState from '@/Components/EmptyState';
 import InputLabel from '@/Components/InputLabel';
 import PageHeader from '@/Components/PageHeader';
 import Select from '@/Components/Select';
 import WorkspaceCombobox, { ALL_WORKSPACES } from '@/Components/WorkspaceCombobox';
 import { activitySeries, stateTones } from '@/config/dashboard';
+import useAccess from '@/Hooks/useAccess';
 import AppLayout from '@/Layouts/AppLayout';
 import KpiCard from './Partials/KpiCard';
 import { AttentionPanel, IntegrationsPanel, QuickLinks, RecentActivity, RecentConversations } from './Partials/Panels';
@@ -27,6 +29,7 @@ const retry = () => router.reload({ preserveScroll: true });
  */
 export default function Index({ filters, range, options, scope, can, sources, kpis, activity, states, channels, attention, integrations, recentConversations, recentActivity, demo }) {
     const { workspace, errors } = usePage().props;
+    const { permissions, modules } = useAccess();
     const [loading, setLoading] = useState(false);
 
     const workspaceParam = scope.mode === 'all' ? 'all' : scope.mode === 'workspace' ? String(scope.workspace.id) : undefined;
@@ -50,6 +53,8 @@ export default function Index({ filters, range, options, scope, can, sources, kp
     const noActivity = activity?.data && activity.data.total === 0;
     const statesTotal = (states?.data ?? []).reduce((sum, item) => sum + item.value, 0);
     const hasData = sources.conversations || sources.assistants || sources.users;
+    // Agenda, Pedidos and Clientes have their figures in Reportes: say so only when the plan has one of them and the role may open it.
+    const operational = ['bookings', 'orders', 'customers'].some((module) => modules.includes(module)) && permissions.includes('view-dashboard');
 
     return (
         <>
@@ -71,12 +76,18 @@ export default function Index({ filters, range, options, scope, can, sources, kp
 
             {(errors?.period || errors?.workspace) && <Alert tone="warning">{errors.period ?? errors.workspace}</Alert>}
 
-            {!hasData && <Alert tone="info">El plan de este Workspace no incluye módulos con cifras para mostrar aquí. Puedes seguir usando los módulos que sí incluye desde el menú.</Alert>}
-
             {demo?.data > 0 && <Alert tone="info">Estas cifras incluyen {demo.data.toLocaleString('es')} conversaciones de demostración (simuladas), marcadas como tales en la bandeja.</Alert>}
 
             <div className={`space-y-6 transition-opacity duration-200 ${loading ? 'opacity-60' : ''}`} aria-busy={loading || undefined}>
-                {!hasData ? null : kpis.error ? (
+                {!hasData ? (
+                    <EmptyState icon={LayoutDashboard} title="Aún no hay cifras en el Dashboard" description={operational ? 'Las cifras de Agenda, Pedidos y Clientes están en Reportes.' : 'Aquí aparecerán las cifras de los módulos que incluya tu plan.'}>
+                        {operational && (
+                            <Link href={route('reports.index')} className="inline-flex items-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-strong focus-visible:outline-2 focus-visible:outline-primary">
+                                Ir a Reportes
+                            </Link>
+                        )}
+                    </EmptyState>
+                ) : kpis.error ? (
                     <Alert tone="warning">
                         {kpis.error}{' '}
                         <button type="button" onClick={retry} className="font-semibold underline underline-offset-2">

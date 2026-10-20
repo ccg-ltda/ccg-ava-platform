@@ -88,6 +88,52 @@ class OperationsMetrics
     }
 
     /**
+     * The inventory of the Catálogo: what is on hand now (per location: stocks are never added up as if they were in one place; the total only says how many
+     * units there are in all) and what moved in the period. Everything is read from the stocks and movements that are stored: nothing is estimated. Categories
+     * are the normalized ones. Only products with stock control and active count for the alerts.
+     *
+     * @return array<string, mixed>
+     */
+    public function inventory(Workspace $workspace, ReportPeriod $period): array
+    {
+        $stocks = fn () => DB::table('inventory_stocks')->join('products', fn ($join) => $join->on('products.id', '=', 'inventory_stocks.product_id')->on('products.workspace_id', '=', 'inventory_stocks.workspace_id'))
+            ->where('inventory_stocks.workspace_id', $workspace->id)->where('products.is_active', true)->where('products.tracks_inventory', true);
+        $locations = $workspace->locations()->pluck('name', 'id');
+        $low = fn ($q) => $q->where('inventory_stocks.quantity', '>', 0)->where('inventory_stocks.min_quantity', '>', 0)->whereColumn('inventory_stocks.quantity', '<=', 'inventory_stocks.min_quantity');
+        $moved = fn () => DB::table('inventory_movements')->where('workspace_id', $workspace->id)->whereBetween('created_at', [$period->from, $period->to]);
+        $sumOf = fn (string $type) => (int) $moved()->where('type', $type)->sum('quantity_change');
+
+        return [
+            'kpis' => [
+                'tracked' => (int) $workspace->products()->where('is_active', true)->where('tracks_inventory', true)->count(),
+                'units' => (int) $stocks()->sum('inventory_stocks.quantity'),
+                // A product is low or out PER LOCATION: the count is of stocks (product in a location), so two locations of one product count twice.
+                'low' => (int) $low($stocks())->count(),
+                'out' => (int) $stocks()->where('inventory_stocks.quantity', '<=', 0)->count(),
+                'entries' => $sumOf('entry'),
+                'sold' => -$sumOf('sale'),
+            ],
+            'byLocation' => $stocks()->selectRaw('inventory_stocks.location_id, sum(inventory_stocks.quantity) as units')->groupBy('inventory_stocks.location_id')->orderByDesc('units')->get()
+                ->map(fn ($row) => ['key' => (string) ($row->location_id ?? 'general'), 'label' => $row->location_id ? ($locations[$row->location_id] ?? 'Sede inactiva') : 'Inventario general', 'value' => (int) $row->units])->all(),
+            'byCategory' => $stocks()->leftJoin('product_categories', fn ($join) => $join->on('product_categories.id', '=', 'products.category_id')->on('product_categories.workspace_id', '=', 'products.workspace_id'))
+                ->selectRaw('product_categories.name as category, sum(inventory_stocks.quantity) as units')->groupBy('product_categories.name')->orderByDesc('units')->get()
+                ->map(fn ($row) => ['key' => $row->category ?? '—', 'label' => $row->category ?? 'Sin categoría', 'value' => (int) $row->units])->all(),
+            // Units that moved in the period by kind: entries and adjustments up, sales and adjustments down, and what a cancellation returned.
+            'movements' => [
+                ['key' => 'entry', 'label' => 'Entradas', 'value' => $sumOf('entry')],
+                ['key' => 'sale', 'label' => 'Ventas', 'value' => -$sumOf('sale')],
+                ['key' => 'cancellation', 'label' => 'Devueltas por cancelaciones', 'value' => $sumOf('cancellation')],
+                ['key' => 'adjustment_up', 'label' => 'Ajustes que suman', 'value' => (int) $moved()->where('type', 'adjustment')->where('quantity_change', '>', 0)->sum('quantity_change')],
+                ['key' => 'adjustment_down', 'label' => 'Ajustes que restan', 'value' => -(int) $moved()->where('type', 'adjustment')->where('quantity_change', '<', 0)->sum('quantity_change')],
+            ],
+            // What needs a look first: stocks at zero or at/below their minimum, emptiest first.
+            'attention' => $stocks()->where(fn ($q) => $q->where('inventory_stocks.quantity', '<=', 0)->orWhere(fn ($w) => $low($w)))
+                ->select('products.name', 'inventory_stocks.location_id', 'inventory_stocks.quantity', 'inventory_stocks.min_quantity')->orderBy('inventory_stocks.quantity')->orderBy('products.name')->limit(8)->get()
+                ->map(fn ($row) => ['name' => $row->name, 'location' => $row->location_id ? ($locations[$row->location_id] ?? 'Sede inactiva') : 'Inventario general', 'quantity' => (int) $row->quantity, 'min' => (int) $row->min_quantity])->all(),
+        ];
+    }
+
+    /**
      * The customers of the Workspace: how many there are now, how many joined in the period, and by consent and origin. Contact data never leaves here.
      *
      * @return array<string, mixed>

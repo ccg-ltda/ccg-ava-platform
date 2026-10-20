@@ -251,7 +251,7 @@ class CampaignsTest extends TestCase
 
     // --- prepare / simulate / cancel -------------------------------------------------------------------------------
 
-    public function test_preparing_fixes_the_audience_and_the_campaign_is_no_longer_editable(): void
+    public function test_preparing_fixes_the_audience_of_the_campaign(): void
     {
         $ana = $this->customer($this->workspace, 'Ana');
         $campaign = $this->draft();
@@ -263,10 +263,89 @@ class CampaignsTest extends TestCase
         // A customer added afterwards is not part of the fixed audience.
         $this->customer($this->workspace, 'Beto');
         $this->assertSame([$ana->id], $campaign->recipients()->pluck('customer_id')->all());
-
-        $this->put("/campaigns/{$campaign->id}", $this->payload(['name' => 'Cambio']))->assertSessionHasErrors('status');
-        $this->assertSame('Octubre', $campaign->fresh()->name);
         $this->assertTrue(AuditLog::where('resource_type', 'campaign')->where('action', 'prepared')->exists());
+    }
+
+    public function test_a_prepared_campaign_can_be_edited_it_returns_to_draft_and_its_fixed_recipients_are_discarded(): void
+    {
+        $ana = $this->customer($this->workspace, 'Ana', ['source' => 'manual']);
+        $beto = $this->customer($this->workspace, 'Beto', ['source' => 'booking']);
+        $campaign = $this->draft();
+        $this->post("/campaigns/{$campaign->id}/prepare")->assertSessionHasNoErrors();
+        $this->assertEqualsCanonicalizing([$ana->id, $beto->id], $campaign->recipients()->pluck('customer_id')->all());
+
+        $this->put("/campaigns/{$campaign->id}", $this->payload(['name' => 'Cambio', 'filters' => ['source' => 'booking']]))->assertSessionHasNoErrors();
+
+        $fresh = $campaign->fresh();
+        $this->assertSame('draft', $fresh->status);
+        $this->assertSame('Cambio', $fresh->name);
+        $this->assertSame('booking', $fresh->filters['source']);
+        $this->assertNull($fresh->prepared_at);
+        $this->assertSame(0, $campaign->recipients()->count(), 'the fixed audience belonged to the old configuration');
+        $this->assertTrue(AuditLog::where('resource_type', 'campaign')->where('action', 'reopened')->exists());
+
+        // It is prepared again with the NEW audience, and the detail and the list show the updated campaign.
+        $this->post("/campaigns/{$campaign->id}/prepare")->assertSessionHasNoErrors();
+        $this->assertSame([$beto->id], $campaign->recipients()->where('status', 'pending')->pluck('customer_id')->all());
+        $this->get("/campaigns/{$campaign->id}")->assertInertia(fn ($page) => $page->where('campaign.name', 'Cambio')->where('campaign.status', 'prepared'));
+        $this->get('/campaigns?tab=campaigns')->assertInertia(fn ($page) => $page->where('campaigns.data.0.name', 'Cambio'));
+    }
+
+    public function test_a_simulated_campaign_can_be_reused_by_editing_its_recipients(): void
+    {
+        $ana = $this->customer($this->workspace, 'Ana');
+        $beto = $this->customer($this->workspace, 'Beto');
+        $campaign = $this->draft();
+        $this->post("/campaigns/{$campaign->id}/prepare")->assertSessionHasNoErrors();
+        $this->post("/campaigns/{$campaign->id}/simulate")->assertSessionHasNoErrors();
+        $this->assertSame('simulated', $campaign->fresh()->status);
+
+        $this->put("/campaigns/{$campaign->id}", $this->payload(['audience' => 'selected', 'customer_ids' => [$ana->id]]))->assertSessionHasNoErrors();
+
+        $fresh = $campaign->fresh();
+        $this->assertSame('draft', $fresh->status);
+        $this->assertNull($fresh->simulated_at);
+        $this->assertSame('selected', $fresh->audience);
+        $this->assertSame([$ana->id], $fresh->customer_ids);
+        $this->assertSame(0, $campaign->recipients()->count());
+        $this->assertNotContains($beto->id, $fresh->customer_ids);
+        Http::assertNothingSent();
+    }
+
+    public function test_a_cancelled_campaign_and_one_with_real_results_are_never_edited(): void
+    {
+        $this->customer($this->workspace, 'Ana');
+        $cancelled = $this->draft();
+        $this->post("/campaigns/{$cancelled->id}/cancel")->assertSessionHasNoErrors();
+
+        $this->put("/campaigns/{$cancelled->id}", $this->payload(['name' => 'Cambio']))->assertSessionHasErrors('status');
+        $this->assertSame('Octubre', $cancelled->fresh()->name);
+        $this->assertSame('cancelled', $cancelled->fresh()->status);
+
+        // A recipient with a result that a rehearsal never produces (what a real send would leave) blocks the edit.
+        $sent = $this->draft(['name' => 'Enviada']);
+        $this->post("/campaigns/{$sent->id}/prepare")->assertSessionHasNoErrors();
+        $sent->recipients()->update(['status' => 'sent']);
+
+        $this->put("/campaigns/{$sent->id}", $this->payload(['name' => 'Cambio']))->assertSessionHasErrors('status');
+        $this->assertSame('Enviada', $sent->fresh()->name);
+        $this->assertSame('prepared', $sent->fresh()->status);
+        $this->assertSame(1, $sent->recipients()->count(), 'nothing is discarded when the edit is refused');
+    }
+
+    public function test_editing_a_campaign_needs_its_permission_and_never_reaches_another_workspace(): void
+    {
+        $this->customer($this->workspace, 'Ana');
+        $campaign = $this->draft();
+        $this->post("/campaigns/{$campaign->id}/prepare")->assertSessionHasNoErrors();
+        $foreign = $this->draft(['name' => 'Ajena'], $this->other);
+
+        $this->put("/campaigns/{$foreign->id}", $this->payload(['name' => 'Hackeada']))->assertNotFound();
+        $this->assertSame('Ajena', $foreign->fresh()->name);
+
+        $this->actingAs($this->member($this->workspace, 'cliente'))->withSession(['workspace_id' => $this->workspace->id]);
+        $this->put("/campaigns/{$campaign->id}", $this->payload(['name' => 'Sin permiso']))->assertForbidden();
+        $this->assertSame('prepared', $campaign->fresh()->status);
     }
 
     public function test_a_campaign_with_nobody_eligible_cannot_be_prepared(): void

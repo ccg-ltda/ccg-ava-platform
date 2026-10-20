@@ -141,6 +141,56 @@ class DemoBusinessDataTest extends TestCase
         $this->assertSame($snapshot, [Customer::count(), Order::count(), Appointment::count()]);
     }
 
+    public function test_the_demo_appointments_fall_inside_the_working_hours_of_their_professional_in_the_workspace_time_zone(): void
+    {
+        $this->admin->settings()->updateOrCreate([], ['timezone' => 'America/Bogota']);
+
+        $this->demo()->generate($this->admin);
+
+        $appointments = $this->admin->appointments()->get();
+        $this->assertNotEmpty($appointments);
+
+        foreach ($appointments as $appointment) {
+            $local = $appointment->starts_at->copy()->setTimezone('America/Bogota');
+            $rule = $this->admin->professionals()->findOrFail($appointment->professional_id)->scheduleRules()->where('weekday', $local->dayOfWeekIso)->first();
+
+            $this->assertNotNull($rule, "[{$appointment->professional_name}] works on weekday {$local->dayOfWeekIso}");
+            $this->assertGreaterThanOrEqual(substr((string) $rule->starts_at, 0, 5), $local->format('H:i'), "local start of #{$appointment->id}");
+            $this->assertLessThanOrEqual(substr((string) $rule->ends_at, 0, 5), $appointment->ends_at->copy()->setTimezone('America/Bogota')->format('H:i'), "local end of #{$appointment->id}");
+        }
+    }
+
+    public function test_demo_appointments_stored_with_utc_hours_are_realigned_and_nothing_else_is_touched(): void
+    {
+        $this->admin->settings()->updateOrCreate([], ['timezone' => 'America/Bogota']);
+        $this->demo()->generate($this->admin);
+        // A manual appointment that looks just like the stale ones (outside the hours as stored) but whose customer is a real contact.
+        $contact = $this->admin->bookingCustomers()->create(['name' => 'Manual', 'phone' => '+573009998877', 'email' => 'manual@example.com']);
+        $manual = $this->admin->appointments()->orderBy('id')->first()->replicate();
+        $manual->forceFill(['customer_id' => $contact->id, 'token_hash' => hash('sha256', 'manual'), 'starts_at' => '2026-11-03 09:00:00', 'ends_at' => '2026-11-03 09:45:00', 'blocks_until' => '2026-11-03 09:55:00'])->save();
+        $manualBefore = $manual->only(['starts_at', 'ends_at', 'blocks_until']);
+        $correct = $this->admin->appointments()->where('id', '!=', $manual->id)->orderBy('id')->get()->mapWithKeys(fn (Appointment $a) => [$a->id => [$a->starts_at->copy(), $a->ends_at->copy(), $a->blocks_until->copy()]]);
+        // The state an earlier generator left: the same wall-clock hours, read as UTC (five hours before the right instant).
+        foreach ($correct as $id => [$start, $end, $until]) {
+            Appointment::whereKey($id)->update(['starts_at' => $start->copy()->subHours(5), 'ends_at' => $end->copy()->subHours(5), 'blocks_until' => $until->copy()->subHours(5)]);
+        }
+
+        // Without confirmation it only reports what it would change.
+        $this->artisan('demo:data', ['action' => 'fix-times'])->assertSuccessful();
+        $this->assertTrue(Appointment::find($correct->keys()->first())->starts_at->eq($correct->first()[0]->copy()->subHours(5)), 'nothing changed without --confirm');
+
+        $rows = $this->demo()->realignAppointmentTimes($this->admin, true);
+
+        $this->assertSame($correct->keys()->all(), array_column($rows, 'id'), 'exactly the demo appointments');
+        foreach ($correct as $id => [$start, $end, $until]) {
+            $fresh = Appointment::find($id);
+            $this->assertTrue($fresh->starts_at->eq($start) && $fresh->ends_at->eq($end) && $fresh->blocks_until->eq($until), "appointment #{$id} is back at its instant");
+            $this->assertSame($end->diffInMinutes($start), $fresh->ends_at->diffInMinutes($fresh->starts_at), 'the duration is kept');
+        }
+        $this->assertEquals($manualBefore, $manual->fresh()->only(['starts_at', 'ends_at', 'blocks_until']), 'a manual appointment is never touched');
+        $this->assertSame([], $this->demo()->realignAppointmentTimes($this->admin, true), 'a second run changes nothing');
+    }
+
     public function test_the_targets_are_the_total_of_each_module_so_records_people_created_count_and_stay_untouched(): void
     {
         $service = $this->admin->services()->create(['name' => 'Pelo', 'duration_minutes' => 30, 'price' => 20000, 'is_active' => true]);

@@ -1,5 +1,5 @@
 import { Head, router, usePage } from '@inertiajs/react';
-import { ArrowDownRight, ArrowUpRight, CalendarRange, Minus } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, CalendarRange, LineChart, Minus } from 'lucide-react';
 import { useState } from 'react';
 import Alert from '@/Components/Alert';
 import Card from '@/Components/Card';
@@ -9,6 +9,7 @@ import DonutChart from '@/Components/Charts/DonutChart';
 import RankingList from '@/Components/Charts/RankingList';
 import SeriesChart from '@/Components/Charts/SeriesChart';
 import TimeChart from '@/Components/Charts/TimeChart';
+import EmptyState from '@/Components/EmptyState';
 import InputLabel from '@/Components/InputLabel';
 import MetricCard from '@/Components/MetricCard';
 import PageHeader from '@/Components/PageHeader';
@@ -236,6 +237,7 @@ export default function Index({ stats, roleBreakdown, recentUsers, sources, filt
                 );
             case 'bookings':
             case 'orders':
+            case 'inventory':
             case 'customers':
                 return <OperationsPanel kind={section.id} section={operations[section.id]} range={range} loading={loading} onRetry={retry} />;
             default:
@@ -264,7 +266,7 @@ export default function Index({ stats, roleBreakdown, recentUsers, sources, filt
             {(errors?.period || errors?.granularity) && <Alert tone="warning">{errors.period ?? errors.granularity}</Alert>}
 
             {sections.length === 0 ? (
-                <Alert tone="info">El plan de este Workspace no incluye módulos con datos para analizar. Puedes seguir usando los módulos que sí incluye desde el menú.</Alert>
+                <EmptyState icon={LineChart} title="Aún no hay reportes disponibles" description="Aquí aparecerán los reportes de los módulos que incluya tu plan." />
             ) : (
                 <Tabs tabs={sections.map(({ id, label, icon }) => ({ id, label, icon }))} selectedIndex={tab} onChange={selectTab}>
                     {sections.map((section) => (

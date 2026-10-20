@@ -1,4 +1,4 @@
-import { CalendarCheck, CalendarClock, CalendarX, Contact, MailCheck, PackageCheck, ShoppingCart, UserPlus, UserX, Wallet } from 'lucide-react';
+import { Boxes, CalendarCheck, CalendarClock, CalendarX, Contact, MailCheck, PackageCheck, PackageX, ShoppingCart, TriangleAlert, UserPlus, UserX, Wallet } from 'lucide-react';
 import Alert from '@/Components/Alert';
 import ChartCard from '@/Components/Charts/ChartCard';
 import ChartEmpty from '@/Components/Charts/ChartEmpty';
@@ -96,6 +96,49 @@ function Orders({ data, loading }) {
     );
 }
 
+const movementTones = { entry: 'green', sale: 'blue', cancellation: 'amber', adjustment_up: 'violet', adjustment_down: 'neutral' };
+
+function Inventory({ data, loading }) {
+    const k = data.kpis;
+
+    return (
+        <>
+            <Cards>
+                <MetricCard label="Productos con control" hint="Activos con inventario" value={k.tracked} icon={Boxes} tone="blue" />
+                <MetricCard label="Unidades en existencia" hint="Suma de las existencias de todas las sedes" value={k.units} icon={PackageCheck} tone="green" delay={60} />
+                <MetricCard label="Con stock bajo" hint="Producto y sede en o bajo su mínimo" value={k.low} icon={TriangleAlert} tone="amber" delay={120} />
+                <MetricCard label="Agotados" hint="Producto y sede sin existencias" value={k.out} icon={PackageX} tone="red" delay={180} />
+                <MetricCard label="Entradas del periodo" hint="Unidades que entraron" value={k.entries} icon={PackageCheck} tone="green" delay={240} />
+                <MetricCard label="Vendidas en el periodo" hint="Unidades descontadas por ventas confirmadas" value={k.sold} icon={ShoppingCart} tone="violet" delay={300} />
+            </Cards>
+            <div className="grid gap-6 lg:grid-cols-2">
+                <Ranking title="Existencias por sede" description="Cada sede se cuenta por separado." items={data.byLocation} formatValue={(value) => `${value.toLocaleString('es')} u.`} loading={loading} />
+                <Ranking title="Existencias por categoría" description="Con las categorías normalizadas del catálogo." items={data.byCategory} formatValue={(value) => `${value.toLocaleString('es')} u.`} loading={loading} />
+            </div>
+            <div className="grid gap-6 lg:grid-cols-2">
+                <Distribution title="Movimientos del periodo" description="Unidades que entraron, salieron o se corrigieron." items={data.movements} tones={movementTones} ariaLabel="Distribución de los movimientos de inventario del periodo" loading={loading} />
+                <ChartCard title="Para revisar primero" description="Existencias agotadas o en su mínimo, de menos a más." loading={loading} height={200}>
+                    {data.attention.length === 0 ? (
+                        <ChartEmpty type="ranking" title="Todo en orden" description="Ningún producto está agotado ni en su mínimo." height={200} />
+                    ) : (
+                        <ul className="divide-y divide-line text-sm">
+                            {data.attention.map((row) => (
+                                <li key={`${row.name}-${row.location}`} className="flex items-center justify-between gap-3 py-2">
+                                    <span className="min-w-0">
+                                        <span className="block truncate font-medium text-ink">{row.name}</span>
+                                        <span className="block truncate text-xs text-ink-muted">{row.location}</span>
+                                    </span>
+                                    <span className={`shrink-0 font-semibold tabular-nums ${row.quantity === 0 ? 'text-danger' : 'text-accent-amber'}`}>{row.quantity === 0 ? 'Agotado' : `${row.quantity} / mín. ${row.min}`}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </ChartCard>
+            </div>
+        </>
+    );
+}
+
 function Customers({ data, loading }) {
     const k = data.kpis;
 
@@ -133,7 +176,7 @@ export default function OperationsPanel({ kind, section, loading, onRetry }) {
         );
     }
 
-    const Body = { bookings: Bookings, orders: Orders, customers: Customers }[kind];
+    const Body = { bookings: Bookings, orders: Orders, inventory: Inventory, customers: Customers }[kind];
 
     return <Body data={section.data} loading={loading} />;
 }

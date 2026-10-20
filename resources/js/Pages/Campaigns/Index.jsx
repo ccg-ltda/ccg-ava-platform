@@ -1,5 +1,5 @@
 import { Head, Link, router, useForm } from '@inertiajs/react';
-import { FileText, Megaphone, Pencil, Plus, Power } from 'lucide-react';
+import { Eye, FileText, Megaphone, Pencil, Plus, Power } from 'lucide-react';
 import { useState } from 'react';
 import Badge from '@/Components/Badge';
 import Card from '@/Components/Card';
@@ -83,7 +83,7 @@ function NewCampaignModal({ channels, templates, bodyMax, onClose }) {
     );
 }
 
-function TemplatesTab({ templates, canManage, onEdit, onCreate }) {
+function TemplatesTab({ templates, canManage, onEdit, onView, onCreate }) {
     const confirm = useConfirm();
 
     const toggle = async (template) => {
@@ -111,7 +111,7 @@ function TemplatesTab({ templates, canManage, onEdit, onCreate }) {
                         <Th>Plantilla</Th>
                         <Th>Mensaje</Th>
                         <Th>Categoría</Th>
-                        {canManage && <Th className="text-center">Acciones</Th>}
+                        <Th className="text-center">Acciones</Th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
@@ -123,14 +123,20 @@ function TemplatesTab({ templates, canManage, onEdit, onCreate }) {
                             </Td>
                             <Td className="max-w-md text-ink-muted"><p className="line-clamp-2 break-words">{template.body}</p></Td>
                             <Td className="text-ink-muted">{template.category ?? '—'}</Td>
-                            {canManage && (
-                                <Td className="text-center">
-                                    <div className="inline-flex">
-                                        <IconButton icon={Pencil} label="Editar" context={template.name} onClick={() => onEdit(template)} />
-                                        <IconButton icon={Power} label={template.isActive ? 'Desactivar' : 'Activar'} context={template.name} tone={template.isActive ? 'danger' : 'primary'} onClick={() => toggle(template)} />
-                                    </div>
-                                </Td>
-                            )}
+                            <Td className="text-center">
+                                <div className="inline-flex items-center">
+                                    <button type="button" onClick={() => onView(template)} aria-label={`Ver ${template.name}`} className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-accent-blue hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-primary">
+                                        <Eye className="size-4" aria-hidden="true" />
+                                        Ver
+                                    </button>
+                                    {canManage && (
+                                        <>
+                                            <IconButton icon={Pencil} label="Editar" context={template.name} onClick={() => onEdit(template)} />
+                                            <IconButton icon={Power} label={template.isActive ? 'Desactivar' : 'Activar'} context={template.name} tone={template.isActive ? 'danger' : 'primary'} onClick={() => toggle(template)} />
+                                        </>
+                                    )}
+                                </div>
+                            </Td>
                         </tr>
                     ))}
                 </tbody>
@@ -161,6 +167,7 @@ function CampaignsTab({ campaigns, perPageOptions, channels, statuses, canManage
                         <Th>Estado</Th>
                         <Th>Destinatarios</Th>
                         <Th>Creada</Th>
+                        {canDetail && <Th className="text-center">Acciones</Th>}
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
@@ -168,7 +175,7 @@ function CampaignsTab({ campaigns, perPageOptions, channels, statuses, canManage
                         <tr key={campaign.id}>
                             <Td>
                                 {canDetail ? (
-                                    <Link href={route('campaigns.show', campaign.id)} className="font-semibold text-ink hover:text-primary">
+                                    <Link href={route('campaigns.show', campaign.id)} className="font-semibold text-ink hover:text-accent-blue">
                                         {campaign.name}
                                     </Link>
                                 ) : (
@@ -181,6 +188,14 @@ function CampaignsTab({ campaigns, perPageOptions, channels, statuses, canManage
                             </Td>
                             <Td className="text-ink-muted">{campaign.recipients ?? 'Sin preparar'}</Td>
                             <Td className="text-ink-muted">{formatDateTime(campaign.createdAt)}</Td>
+                            {canDetail && (
+                                <Td className="text-center">
+                                    <Link href={route('campaigns.show', campaign.id)} aria-label={`Ver ${campaign.name}`} className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-accent-blue hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-primary">
+                                        <Eye className="size-4" aria-hidden="true" />
+                                        Ver
+                                    </Link>
+                                </Td>
+                            )}
                         </tr>
                     ))}
                 </tbody>
@@ -229,7 +244,7 @@ export default function Index({ templates, campaigns, perPageOptions, variables,
                     { id: 'campaigns', label: 'Campañas', icon: Megaphone, count: campaigns.meta.total },
                 ]}
             >
-                <TemplatesTab templates={templates} canManage={canTemplates} onEdit={setEditingTemplate} onCreate={() => setEditingTemplate({})} />
+                <TemplatesTab templates={templates} canManage={canTemplates} onEdit={setEditingTemplate} onView={(template) => setEditingTemplate({ ...template, readOnly: true })} onCreate={() => setEditingTemplate({})} />
                 <CampaignsTab campaigns={campaigns} perPageOptions={perPageOptions} channels={channels} statuses={statuses} canManage={canCreate} canDetail={canDetail} onCreate={() => setCreatingCampaign(true)} />
             </Tabs>
 

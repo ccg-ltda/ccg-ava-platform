@@ -56,6 +56,7 @@ class BookingController extends Controller
         $capabilities = $this->bookings->capabilities($workspace);
         $from = $this->day($request->query('from'), $timezone);
         $days = in_array((int) $request->query('days'), [1, 7, 31], true) ? (int) $request->query('days') : 7;
+        [$end, $span] = $this->window($request->query('to'), $from, $days, $timezone);
         $professionalId = ctype_digit((string) $request->query('professional')) ? (int) $request->query('professional') : null;
         $status = in_array($request->query('status'), Appointment::STATUSES, true) ? $request->query('status') : null;
         $origin = in_array($request->query('origin'), Appointment::CHANNELS, true) ? $request->query('origin') : null;
@@ -63,9 +64,9 @@ class BookingController extends Controller
 
         return Inertia::render('Bookings/Index', [
             'capabilities' => $capabilities,
-            'filters' => ['from' => $from->setTimezone($timezone)->toDateString(), 'days' => $days, 'professional' => $professionalId, 'status' => $status, 'origin' => $origin, 'search' => trim((string) $request->query('search', ''))],
+            'filters' => ['from' => $from->setTimezone($timezone)->toDateString(), 'to' => $span['to'], 'days' => $span['days'], 'professional' => $professionalId, 'status' => $status, 'origin' => $origin, 'search' => trim((string) $request->query('search', ''))],
             'appointments' => $workspace->appointments()->with(['customer', 'workspace'])->when($this->notifier->ready(), fn ($query) => $query->with('notifications'))
-                ->where('starts_at', '>=', $from)->where('starts_at', '<', $from->addDays($days))
+                ->where('starts_at', '>=', $from)->where('starts_at', '<', $end)
                 ->when($professionalId, fn ($query) => $query->where('professional_id', $professionalId))
                 ->when($status, fn ($query) => $query->where('status', $status))
                 ->when($origin, fn ($query) => $query->where('channel', $origin))
@@ -189,9 +190,48 @@ class BookingController extends Controller
         return $request->attributes->get('workspace')->appointments()->with(['customer', 'workspace'])->findOrFail($id);
     }
 
+    /** Longest range the agenda lists at once (a day in the list is a block of appointments, and the list is capped). */
+    private const MAX_RANGE_DAYS = 92;
+
+    /**
+     * The end (exclusive) of the listed window and what to report back. Without `to` it is the chosen number of days; with `to` (a local day, inclusive)
+     * the window is exactly from..to, in the Workspace's time zone. A `to` before `from`, or an interval longer than the limit, is a validation error
+     * (shown next to the field) and nothing is listed from it.
+     *
+     * @return array{0: CarbonImmutable, 1: array{to: ?string, days: int}}
+     *
+     * @throws ValidationException
+     */
+    private function window(mixed $to, CarbonImmutable $from, int $days, string $timezone): array
+    {
+        if (! is_string($to) || $to === '') {
+            return [$from->addDays($days), ['to' => null, 'days' => $days]];
+        }
+
+        $parsed = CarbonImmutable::canBeCreatedFromFormat($to, '!Y-m-d') ? CarbonImmutable::createFromFormat('!Y-m-d', $to, $timezone) : false;
+
+        if (! $parsed || $parsed->format('Y-m-d') !== $to) {
+            throw ValidationException::withMessages(['to' => 'La fecha final no es válida.']);
+        }
+
+        $first = $from->setTimezone($timezone)->startOfDay();
+
+        if ($parsed->lt($first)) {
+            throw ValidationException::withMessages(['to' => 'La fecha inicial no puede ser posterior a la final.']);
+        }
+
+        $span = (int) $first->diffInDays($parsed) + 1;
+
+        if ($span > self::MAX_RANGE_DAYS) {
+            throw ValidationException::withMessages(['to' => 'Elige un intervalo de máximo '.self::MAX_RANGE_DAYS.' días.']);
+        }
+
+        return [$parsed->addDay()->utc(), ['to' => $to, 'days' => $span]];
+    }
+
     private function day(mixed $value, string $timezone): CarbonImmutable
     {
-        $parsed = is_string($value) ? CarbonImmutable::createFromFormat('Y-m-d', $value, $timezone) : false;
+        $parsed = is_string($value) && CarbonImmutable::canBeCreatedFromFormat($value, 'Y-m-d') ? CarbonImmutable::createFromFormat('Y-m-d', $value, $timezone) : false;
 
         return ($parsed ?: CarbonImmutable::now($timezone))->startOfDay()->utc();
     }

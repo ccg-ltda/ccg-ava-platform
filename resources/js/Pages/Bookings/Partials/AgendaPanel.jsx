@@ -1,13 +1,16 @@
-import { router } from '@inertiajs/react';
-import { Ban, CalendarClock, CalendarDays, Check, ChevronLeft, ChevronRight, RefreshCw, UserCheck, UserX } from 'lucide-react';
+import { router, usePage } from '@inertiajs/react';
+import { Ban, CalendarClock, CalendarDays, CalendarRange, Check, ChevronLeft, ChevronRight, RefreshCw, UserCheck, UserX, X } from 'lucide-react';
 import { useState } from 'react';
 import Badge from '@/Components/Badge';
 import Card from '@/Components/Card';
 import CancelDialog from './CancelDialog';
 import EmptyState from '@/Components/EmptyState';
 import IconButton from '@/Components/IconButton';
+import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import PrimaryButton from '@/Components/PrimaryButton';
+import SearchableSelect from '@/Components/SearchableSelect';
+import SecondaryButton from '@/Components/SecondaryButton';
 import Select from '@/Components/Select';
 import TextInput from '@/Components/TextInput';
 import { addDays, dayLabel, money, statusTones, syncErrors, syncLabels } from '@/config/bookings';
@@ -30,9 +33,16 @@ export default function AgendaPanel({ appointments, filters, options, capabiliti
     const [dialog, setDialog] = useState(null); // {} = new, an appointment = reschedule
     const [cancelling, setCancelling] = useState(null);
 
+    const { errors = {} } = usePage().props;
+    const clean = (params) => Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ''));
     const visit = (params) =>
-        router.get(route('bookings.index'), { ...filters, ...params, tab: 'agenda', search: undefined }, { only: ['appointments', 'filters'], preserveState: true, preserveScroll: true, replace: true });
-    const step = (direction) => visit({ from: addDays(filters.from, direction * filters.days) });
+        router.get(route('bookings.index'), clean({ ...filters, ...params, tab: 'agenda', search: undefined }), { only: ['appointments', 'filters', 'errors'], preserveState: true, preserveScroll: true, replace: true });
+    // A range is stepped by its own length; a custom «Hasta» moves along with «Desde».
+    const step = (direction) => visit({ from: addDays(filters.from, direction * filters.days), to: filters.to ? addDays(filters.to, direction * filters.days) : undefined });
+    const showingToday = filters.from === today && filters.to === today;
+    const backwards = Boolean(filters.to) && filters.from > filters.to;
+    const changeFrom = (value) => value && visit({ from: value });
+    const changeTo = (value) => visit({ to: value || undefined });
     const act = (appointment, path, payload = {}) => router.post(route(path, appointment.id), payload, { preserveScroll: true });
 
     const days = appointments.reduce((groups, appointment) => ({ ...groups, [appointment.date]: [...(groups[appointment.date] ?? []), appointment] }), {});
@@ -48,35 +58,62 @@ export default function AgendaPanel({ appointments, filters, options, capabiliti
             )}
 
             <Card className="p-4 sm:p-5">
-                <div className="flex flex-wrap items-end gap-3">
-                    <div className="flex items-end gap-1">
+                <div className="grid items-end gap-x-3 gap-y-4 sm:grid-cols-2 xl:grid-cols-[auto_8rem_repeat(3,minmax(0,1fr))]">
+                    <div className="flex min-w-0 items-end gap-1 sm:col-span-2 xl:col-span-1">
                         <IconButton icon={ChevronLeft} label="Anterior" onClick={() => step(-1)} />
-                        <div>
+                        <div className="min-w-0 flex-1 sm:flex-none">
                             <InputLabel htmlFor="agenda_from" value="Desde" />
-                            <TextInput id="agenda_from" type="date" className="mt-1 w-44" value={filters.from} onChange={(e) => e.target.value && visit({ from: e.target.value })} />
+                            <TextInput id="agenda_from" type="date" className="mt-1 w-full sm:w-36" value={filters.from} max={filters.to || undefined} onChange={(e) => changeFrom(e.target.value)} invalid={backwards} />
+                        </div>
+                        <div className="min-w-0 flex-1 sm:flex-none">
+                            <InputLabel htmlFor="agenda_to" value="Hasta" />
+                            <TextInput id="agenda_to" type="date" className="mt-1 w-full sm:w-36" value={filters.to ?? ''} min={filters.from} onChange={(e) => changeTo(e.target.value)} invalid={Boolean(errors.to) || backwards} aria-describedby="agenda_to_error" />
                         </div>
                         <IconButton icon={ChevronRight} label="Siguiente" onClick={() => step(1)} />
                     </div>
-                    <div className="w-32">
+                    <div>
                         <InputLabel htmlFor="agenda_days" value="Ver" />
-                        <Select id="agenda_days" className="mt-1" value={filters.days} onChange={(value) => visit({ days: value })} options={RANGES} />
+                        <Select id="agenda_days" className="mt-1" value={filters.to ? '' : filters.days} onChange={(value) => visit({ days: value, to: undefined })} options={RANGES} placeholder="Personalizado" />
                     </div>
-                    <div className="w-52">
+                    <div>
                         <InputLabel htmlFor="agenda_pro" value="Profesional" />
-                        <Select id="agenda_pro" className="mt-1" value={filters.professional ?? ''} onChange={(value) => visit({ professional: value || undefined })} options={[{ value: '', label: 'Todos' }, ...options.professionals.filter((p) => typeof p.id === 'number').map((p) => ({ value: p.id, label: p.name }))]} />
+                        <SearchableSelect id="agenda_pro" className="mt-1" value={filters.professional ?? ''} onChange={(value) => visit({ professional: value || undefined })} options={[{ value: '', label: 'Todos' }, ...options.professionals.filter((p) => typeof p.id === 'number').map((p) => ({ value: p.id, label: p.name }))]} placeholder="Escribe para buscar" />
                     </div>
-                    <div className="w-52">
+                    <div>
                         <InputLabel htmlFor="agenda_status" value="Estado" />
                         <Select id="agenda_status" className="mt-1" value={filters.status ?? ''} onChange={(value) => visit({ status: value || undefined })} options={STATUSES} />
                     </div>
-                    <div className="w-52">
+                    <div>
                         <InputLabel htmlFor="agenda_origin" value="Origen" />
                         <Select id="agenda_origin" className="mt-1" value={filters.origin ?? ''} onChange={(value) => visit({ origin: value || undefined })} options={ORIGINS} />
                     </div>
-                    <div className="ml-auto flex gap-2">
-                        <button type="button" onClick={() => visit({ from: today })} className="text-sm font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary">Hoy</button>
-                        {canCreate && <PrimaryButton type="button" onClick={() => setDialog({})}>Nueva cita</PrimaryButton>}
+                </div>
+
+                <div id="agenda_to_error" aria-live="polite">
+                    {backwards && <InputError message="La fecha inicial no puede ser posterior a la final." className="mt-2" />}
+                    {!backwards && <InputError message={errors.to} className="mt-2" />}
+                </div>
+
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <SecondaryButton type="button" aria-pressed={showingToday} onClick={() => visit({ from: today, to: today, days: 1 })} className={`gap-2 ${showingToday ? 'border-primary bg-primary-soft text-accent-blue' : ''}`}>
+                            <CalendarRange className="size-4" aria-hidden="true" />
+                            Hoy
+                        </SecondaryButton>
+                        {showingToday && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-primary-soft py-1 pr-1 pl-3 text-xs font-semibold text-accent-blue" role="status">
+                                Mostrando solo las citas de hoy
+                                <button type="button" onClick={() => visit({ from: today, to: undefined, days: 7 })} aria-label="Quitar el filtro de hoy y volver a la vista de la semana" className="grid size-5 place-items-center rounded-full hover:bg-primary/15 focus-visible:outline-2 focus-visible:outline-primary">
+                                    <X className="size-3.5" aria-hidden="true" />
+                                </button>
+                            </span>
+                        )}
                     </div>
+                    {canCreate && (
+                        <PrimaryButton type="button" onClick={() => setDialog({})} className="gap-2">
+                            Nueva cita
+                        </PrimaryButton>
+                    )}
                 </div>
             </Card>
 

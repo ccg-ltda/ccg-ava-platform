@@ -13,6 +13,8 @@ use App\Models\Professional;
 use App\Models\Service;
 use App\Models\Workspace;
 use App\Orders\OrderService;
+use App\Orders\ProductCategories;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -55,6 +57,7 @@ class DemoBusinessData
         private readonly OrderService $orders,
         private readonly CampaignManager $campaigns,
         private readonly DemoConversations $guard,
+        private readonly ProductCategories $categories,
     ) {}
 
     /** @throws DemoNotAllowed */
@@ -67,6 +70,68 @@ class DemoBusinessData
     private function room(int $existing, string $kind): int
     {
         return max(0, self::TARGETS[$kind] - $existing);
+    }
+
+    /**
+     * Realigns the demo appointments that an earlier version of the generator stored with the working hours read as UTC instead of as local hours of the
+     * Workspace (they showed hours before the professional starts). Only appointments that are unmistakably demo are considered: their customer uses the reserved
+     * domain and their service and professional carry the demo prefix. They are grouped by the minute they were created in (one run of the generator). A group is
+     * stale when at least one of its appointments falls OUTSIDE the working hours of its professional as stored but INSIDE them once its stored wall-clock time is
+     * read as local time: that proves the whole run was stored that way, so every appointment of the group that fits read as local is moved (some happen to fit
+     * both ways, which is why one proof covers the group). `starts_at`, `ends_at`, `blocks_until` and `cancelled_at` move by the same offset, so duration, order and
+     * relations stay. A group with no such proof, manual appointments and anything that does not fit read as local are never touched; running it again changes nothing.
+     *
+     * @return list<array{id: int, from: string, to: string, local: string, applied: bool}> the appointments to realign (or realigned with `$apply`)
+     *
+     * @throws DemoNotAllowed
+     */
+    public function realignAppointmentTimes(Workspace $workspace, bool $apply = false): array
+    {
+        $this->assertAllowed($workspace);
+
+        $timezone = $workspace->settingsOrDefault()->timezone;
+        $candidates = [];
+
+        foreach ($this->demoAppointments($workspace)->where('service_name', 'like', self::PREFIX.'%')->where('professional_name', 'like', self::PREFIX.'%')->orderBy('id')->get() as $appointment) {
+            $wall = fn ($moment) => CarbonImmutable::parse($moment->format('Y-m-d H:i:s'), 'UTC');
+            $stored = ['start' => $wall($appointment->starts_at), 'end' => $wall($appointment->ends_at)];
+            $local = ['start' => CarbonImmutable::parse($stored['start']->format('Y-m-d H:i:s'), $timezone), 'end' => CarbonImmutable::parse($stored['end']->format('Y-m-d H:i:s'), $timezone)];
+            $rules = $workspace->professionals()->whereKey($appointment->professional_id)->first()?->scheduleRules()->get() ?? collect();
+            // Whether the whole appointment lies inside the hours of some rule of its weekday, reading both moments in the Workspace's zone.
+            $fits = fn (CarbonImmutable $start, CarbonImmutable $end) => $rules->contains(fn ($rule) => (int) $rule->weekday === $start->dayOfWeekIso
+                && substr((string) $rule->starts_at, 0, 5) <= $start->format('H:i') && $end->format('H:i') <= substr((string) $rule->ends_at, 0, 5));
+
+            $candidates[] = [
+                'id' => $appointment->id,
+                'batch' => $appointment->created_at->format('Y-m-d H:i'),
+                'asStored' => $fits($stored['start']->setTimezone($timezone), $stored['end']->setTimezone($timezone)),
+                'asLocal' => $fits($local['start'], $local['end']),
+                'from' => $stored['start'],
+                'to' => $local['start']->utc(),
+            ];
+        }
+
+        $stale = collect($candidates)->filter(fn (array $row) => ! $row['asStored'] && $row['asLocal'])->pluck('batch')->unique()->all();
+        $plan = array_values(array_filter($candidates, fn (array $row) => in_array($row['batch'], $stale, true) && $row['asLocal']));
+
+        if ($apply && $plan !== []) {
+            DB::transaction(function () use ($workspace, $plan) {
+                foreach ($plan as $row) {
+                    $appointment = $workspace->appointments()->lockForUpdate()->findOrFail($row['id']);
+
+                    // Guard: the row is still exactly what was planned (nothing else touched it meanwhile).
+                    if ($appointment->starts_at->format('Y-m-d H:i') !== $row['from']->format('Y-m-d H:i')) {
+                        continue;
+                    }
+
+                    $seconds = $row['to']->diffInSeconds($row['from'], false) * -1;
+                    $move = fn ($moment) => $moment?->copy()->addSeconds($seconds);
+                    $appointment->forceFill(['starts_at' => $move($appointment->starts_at), 'ends_at' => $move($appointment->ends_at), 'blocks_until' => $move($appointment->blocks_until), 'cancelled_at' => $move($appointment->cancelled_at)])->saveQuietly();
+                }
+            });
+        }
+
+        return array_map(fn (array $row) => ['id' => $row['id'], 'from' => $row['from']->format('Y-m-d H:i'), 'to' => $row['to']->format('Y-m-d H:i'), 'local' => $row['to']->setTimezone($workspace->settingsOrDefault()->timezone)->format('Y-m-d H:i'), 'applied' => $apply], $plan);
     }
 
     /** @return array<string, int> what the demo set of the Workspace holds now */
@@ -396,6 +461,9 @@ class DemoBusinessData
             [1, 'confirmed', 'admin'], [2, 'requested', 'chat'], [5, 'confirmed', 'web'], [8, 'confirmed', 'admin'], [10, 'requested', 'web'], [12, 'cancelled', 'web'], [13, 'confirmed', 'chat'],
         ];
         $currency = $workspace->settingsOrDefault()->currency;
+        // The working hours of the professionals are LOCAL hours of the Workspace: the appointments are built in its time zone and stored in UTC, so they
+        // fall inside those hours when the agenda shows them (building them in UTC put them hours off).
+        $timezone = $workspace->settingsOrDefault()->timezone;
         $taken = [];
         // The days (1 = Monday) and the starting hours each professional works, as set in professionals().
         $schedules = ['ana' => [[1, 2, 3, 4, 5], [9, 10, 11, 13, 14]], 'luis' => [[2, 3, 4, 5, 6], [10, 11, 12, 14, 15]], 'paula' => [[1, 3, 5, 6], [8, 9, 10, 11, 13]], 'jorge' => [[1, 2, 3, 4], [8, 9, 10, 11]]];
@@ -410,7 +478,7 @@ class DemoBusinessData
             $service = $services[$serviceKey];
             // Always inside the professional's own days and hours; the second pass over the plan uses other hours so a day never overlaps itself.
             [$days, $hours] = $schedules[$professionalKey];
-            $start = now()->startOfDay()->addDays($offset);
+            $start = now($timezone)->startOfDay()->addDays($offset);
 
             while (! in_array($start->dayOfWeekIso, $days, true)) {
                 $start = $start->addDay();
@@ -473,7 +541,9 @@ class DemoBusinessData
                 continue;
             }
 
-            $products[$code] = $existing ?? $workspace->products()->create(['sku' => self::SKU.$code, 'name' => self::PREFIX.$name, 'description' => 'Producto de demostración.', 'category' => $category, 'price' => $price, 'is_active' => $active]);
+            // The category is a valid one of the Workspace (created once, whatever the capitalization), like a product made from the screen.
+            $normalized = $this->categories->ready() ? $this->categories->ensure($workspace, $category)[0] : null;
+            $products[$code] = $existing ?? $workspace->products()->create(['sku' => self::SKU.$code, 'name' => self::PREFIX.$name, 'description' => 'Producto de demostración.', 'category' => $normalized?->name ?? $category, 'category_id' => $normalized?->id, 'price' => $price, 'is_active' => $active]);
         }
 
         // Some products are only sold in some sedes (the others are sold everywhere).

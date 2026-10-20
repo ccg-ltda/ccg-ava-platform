@@ -1,4 +1,5 @@
 import { router } from '@inertiajs/react';
+import { UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Alert from '@/Components/Alert';
 import InputError from '@/Components/InputError';
@@ -6,10 +7,11 @@ import InputLabel from '@/Components/InputLabel';
 import Modal from '@/Components/Modal';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
+import SearchableSelect from '@/Components/SearchableSelect';
 import Select from '@/Components/Select';
 import Textarea from '@/Components/Textarea';
 import TextInput from '@/Components/TextInput';
-import { dayLabel, getJson } from '@/config/bookings';
+import { getJson, longDayLabel } from '@/config/bookings';
 
 /**
  * Picks WHEN: the free starts the agenda really offers for a service (and optionally a professional) over a few days. Nothing is
@@ -40,11 +42,14 @@ function SlotPicker({ serviceId, professionalId, locationId, from, value, onPick
     const byDay = state.slots.reduce((groups, slot) => ({ ...groups, [slot.date]: [...(groups[slot.date] ?? []), slot] }), {});
 
     return (
-        <div className="max-h-64 space-y-3 overflow-y-auto pr-1">
+        <div className="max-h-80 space-y-3 overflow-y-auto overscroll-contain pr-1" role="group" aria-label="Horarios libres por día">
             {Object.entries(byDay).map(([date, slots]) => (
-                <div key={date}>
-                    <p className="text-xs font-semibold tracking-wide text-ink-muted uppercase">{dayLabel(date)}</p>
-                    <div className="mt-1.5 flex flex-wrap gap-2">
+                <section key={date} className="rounded-xl border border-primary/15 bg-primary-soft/50 p-3 sm:p-4">
+                    <h4 className="flex items-baseline justify-between gap-2 text-sm font-bold text-ink">
+                        {longDayLabel(date)}
+                        <span className="text-xs font-normal text-ink-muted">{slots.length} {slots.length === 1 ? 'horario' : 'horarios'}</span>
+                    </h4>
+                    <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
                         {slots.map((slot) => {
                             const picked = value?.startsAt === slot.startsAt && value?.professionalId === slot.professionalId;
 
@@ -54,15 +59,17 @@ function SlotPicker({ serviceId, professionalId, locationId, from, value, onPick
                                     type="button"
                                     aria-pressed={picked}
                                     onClick={() => onPick(slot)}
-                                    className={`rounded-lg border px-2.5 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-primary ${picked ? 'border-primary bg-primary text-white' : 'border-field text-ink hover:border-primary/50'}`}
+                                    className={`flex min-h-11 flex-col items-center justify-center rounded-lg border px-2 py-1.5 text-sm font-semibold tabular-nums transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-primary ${
+                                        picked ? 'border-primary bg-primary text-white shadow-card' : 'border-field bg-card text-ink hover:border-primary/60'
+                                    }`}
                                 >
                                     {slot.label}
-                                    {!professionalId && <span className={`ml-1.5 text-xs ${picked ? 'text-white/80' : 'text-ink-muted'}`}>{slot.professionalName}</span>}
+                                    {!professionalId && <span className={`w-full truncate text-center text-[11px] font-normal ${picked ? 'text-white/80' : 'text-ink-muted'}`}>{slot.professionalName}</span>}
                                 </button>
                             );
                         })}
                     </div>
-                </div>
+                </section>
             ))}
         </div>
     );
@@ -119,7 +126,7 @@ export default function AppointmentDialog({ appointment, options, today, onClose
                         {!rescheduling && (
                             <div>
                                 <InputLabel htmlFor="appt_service" value="Servicio" />
-                                <Select id="appt_service" className="mt-1" value={serviceId} onChange={(value) => { setServiceId(value); setSlot(null); }} options={services} placeholder="Elige un servicio" invalid={Boolean(errors.service_id)} />
+                                <SearchableSelect id="appt_service" className="mt-1" value={serviceId} onChange={(value) => { setServiceId(value); setSlot(null); }} options={services} placeholder="Escribe para buscar o elige" invalid={Boolean(errors.service_id)} />
                                 <InputError message={errors.service_id} className="mt-1" />
                             </div>
                         )}
@@ -132,7 +139,7 @@ export default function AppointmentDialog({ appointment, options, today, onClose
                         )}
                         <div>
                             <InputLabel htmlFor="appt_pro" value="Profesional" />
-                            <Select id="appt_pro" className="mt-1" value={professionalId} onChange={(value) => { setProfessionalId(value); setSlot(null); }} options={professionals} />
+                            <SearchableSelect id="appt_pro" className="mt-1" value={professionalId} onChange={(value) => { setProfessionalId(value); setSlot(null); }} options={professionals} placeholder="Escribe para buscar o elige" />
                         </div>
                         <div>
                             <InputLabel htmlFor="appt_from" value="Buscar desde" />
@@ -150,9 +157,17 @@ export default function AppointmentDialog({ appointment, options, today, onClose
                     </div>
 
                     {!rescheduling && (
-                        <fieldset className="space-y-4 rounded-xl border border-line p-4">
-                            <legend className="px-1 text-sm font-medium text-ink">Quién reserva</legend>
-                            <div className="grid gap-4 sm:grid-cols-2">
+                        <section aria-labelledby="appt_who" className="space-y-5 rounded-xl border border-line bg-canvas/40 p-4 sm:p-5">
+                            <header className="flex items-start gap-3">
+                                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                                    <UserRound className="size-5" aria-hidden="true" />
+                                </span>
+                                <div>
+                                    <h3 id="appt_who" className="text-sm font-bold text-ink">Quién reserva</h3>
+                                    <p className="text-xs text-ink-muted">Los datos mínimos para identificar y contactar a la persona.</p>
+                                </div>
+                            </header>
+                            <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
                                 <div>
                                     <InputLabel htmlFor="appt_name" value="Nombre" />
                                     <TextInput id="appt_name" className="mt-1" value={customer.name} maxLength={120} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} invalid={Boolean(errors['customer.name'])} />
@@ -161,7 +176,7 @@ export default function AppointmentDialog({ appointment, options, today, onClose
                                 <div>
                                     <InputLabel htmlFor="appt_phone" value="Teléfono" />
                                     <TextInput id="appt_phone" type="tel" className="mt-1" placeholder="+573001112233" value={customer.phone} maxLength={32} onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} invalid={Boolean(errors['customer.phone'])} />
-                                    <p className="mt-1 text-xs text-ink-muted">Con el prefijo del país, por ejemplo +573001112233.</p>
+                                    <p className="mt-1.5 text-xs text-ink-muted">Con el prefijo del país, por ejemplo +573001112233.</p>
                                     <InputError message={errors['customer.phone']} className="mt-1" />
                                 </div>
                                 <div className="sm:col-span-2">
@@ -169,13 +184,13 @@ export default function AppointmentDialog({ appointment, options, today, onClose
                                     <TextInput id="appt_email" type="email" className="mt-1" value={customer.email} maxLength={160} onChange={(e) => setCustomer({ ...customer, email: e.target.value })} invalid={Boolean(errors['customer.email'])} />
                                     <InputError message={errors['customer.email']} className="mt-1" />
                                 </div>
+                                <div className="sm:col-span-2">
+                                    <InputLabel htmlFor="appt_notes" value="Nota (opcional)" />
+                                    <Textarea id="appt_notes" rows={2} className="mt-1" aria-describedby="appt_notes_hint" value={notes} maxLength={500} onChange={(e) => setNotes(e.target.value)} />
+                                    <p id="appt_notes_hint" className="mt-1.5 text-xs text-ink-muted">Solo datos para organizar la cita. No registres diagnósticos ni información médica: Ava no tiene una política definida para guardarla.</p>
+                                </div>
                             </div>
-                            <div>
-                                <InputLabel htmlFor="appt_notes" value="Nota (opcional)" />
-                                <Textarea id="appt_notes" rows={2} className="mt-1" aria-describedby="appt_notes_hint" value={notes} maxLength={500} onChange={(e) => setNotes(e.target.value)} />
-                                <p id="appt_notes_hint" className="mt-1 text-xs text-ink-muted">Solo datos para organizar la cita. No registres diagnósticos ni información médica: Ava no tiene una política definida para guardarla.</p>
-                            </div>
-                        </fieldset>
+                        </section>
                     )}
                 </div>
                 <div className="flex justify-end gap-3 border-t border-line bg-card px-5 py-4 sm:px-8">

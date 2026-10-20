@@ -8,9 +8,9 @@ import InputLabel from '@/Components/InputLabel';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import Select from '@/Components/Select';
-import Textarea from '@/Components/Textarea';
 import TextInput from '@/Components/TextInput';
 import Toggle from '@/Components/Toggle';
+import MessageFields from './MessageFields';
 
 const KINDS = [
     { key: 'received', title: 'Recepción de la reserva', description: 'Se envía cuando una reserva queda «Por confirmar»: dice que se recibió, no que está confirmada.' },
@@ -32,7 +32,7 @@ const initialMessages = (messages) =>
         KINDS.map(({ key }) => {
             const entry = messages?.[key] ?? {};
 
-            return [key, { text: entry.text ?? '', template: { name: entry.template?.name ?? '', language: entry.template?.language ?? '', params: (entry.template?.params ?? []).join(', ') } }];
+            return [key, { text: entry.text ?? '', template: { name: entry.template?.name ?? '', language: entry.template?.language ?? '', params: [...(entry.template?.params ?? [])] } }];
         }),
     );
 
@@ -54,9 +54,8 @@ export default function NotificationSettings({ notifications, canManage }) {
             messages: Object.fromEntries(
                 KINDS.map(({ key }) => {
                     const entry = payload.messages[key];
-                    const params = entry.template.params.split(',').map((item) => item.trim()).filter(Boolean);
 
-                    return [key, { text: entry.text, template: { name: entry.template.name, language: entry.template.language, params } }];
+                    return [key, { text: entry.text, template: { name: entry.template.name, language: entry.template.language, params: entry.template.params } }];
                 }),
             ),
         }));
@@ -64,7 +63,7 @@ export default function NotificationSettings({ notifications, canManage }) {
     };
 
     const setOffset = (index, value) => setData('reminder_offsets', data.reminder_offsets.map((item, i) => (i === index ? (value === '' ? '' : Number(value)) : item)));
-    const setMessage = (kind, path, value) => setData('messages', { ...data.messages, [kind]: path === 'text' ? { ...data.messages[kind], text: value } : { ...data.messages[kind], template: { ...data.messages[kind].template, [path]: value } } });
+    const setMessage = (kind, message) => setData('messages', { ...data.messages, [kind]: message });
     const offsetError = errors.reminder_offsets ?? Object.entries(errors).find(([key]) => key.startsWith('reminder_offsets.'))?.[1];
 
     return (
@@ -123,38 +122,26 @@ export default function NotificationSettings({ notifications, canManage }) {
                     <div>
                         <h3 className="text-sm font-bold text-ink">Qué dicen los mensajes</h3>
                         <p className="mt-0.5 text-xs text-ink-muted">
-                            Variables: {notifications.variables.map((variable) => `{{${variable}}}`).join(' ')}. WhatsApp solo permite un texto libre si la persona escribió al negocio en las últimas {notifications.limits.window_hours} horas; fuera de ese plazo solo se puede enviar una plantilla ya aprobada por Meta. Ava no puede comprobar con Meta si la plantilla está aprobada: si Meta la rechaza, el aviso queda «Falló» y el motivo se ve en la Agenda.
+                            WhatsApp solo permite un texto libre si la persona escribió al negocio en las últimas {notifications.limits.window_hours} horas; fuera de ese plazo solo se puede enviar una plantilla ya aprobada por Meta. Ava no puede comprobar con Meta si la plantilla está aprobada: si Meta la rechaza, el aviso queda «Falló» y el motivo se ve en la Agenda.
                         </p>
                     </div>
                     {KINDS.map(({ key, title, description }) => (
-                        <div key={key} className="space-y-3 rounded-xl border border-line p-4">
+                        <section key={key} aria-labelledby={`msg_title_${key}`} className="space-y-4 rounded-xl border border-line p-4 sm:p-5">
                             <div>
-                                <p className="text-sm font-semibold text-ink">{title}</p>
+                                <h4 id={`msg_title_${key}`} className="text-sm font-semibold text-ink">{title}</h4>
                                 <p className="text-xs text-ink-muted">{description}</p>
                             </div>
-                            <div>
-                                <InputLabel htmlFor={`msg_${key}`} value="Texto (dentro de las 24 h)" />
-                                <Textarea id={`msg_${key}`} rows={2} className="mt-1" maxLength={notifications.limits.text_max} placeholder={notifications.defaults[key]} value={data.messages[key].text} onChange={(e) => setMessage(key, 'text', e.target.value)} disabled={locked} />
-                                <InputError message={errors[`messages.${key}.text`]} className="mt-1" />
-                            </div>
-                            <div className="grid gap-3 sm:grid-cols-3">
-                                <div>
-                                    <InputLabel htmlFor={`tpl_${key}`} value="Plantilla de Meta (nombre)" />
-                                    <TextInput id={`tpl_${key}`} className="mt-1" placeholder="recordatorio_cita" value={data.messages[key].template.name} onChange={(e) => setMessage(key, 'name', e.target.value)} disabled={locked} invalid={Boolean(errors[`messages.${key}.template.name`])} />
-                                    <InputError message={errors[`messages.${key}.template.name`]} className="mt-1" />
-                                </div>
-                                <div>
-                                    <InputLabel htmlFor={`lang_${key}`} value="Idioma" />
-                                    <TextInput id={`lang_${key}`} className="mt-1" placeholder="es" value={data.messages[key].template.language} onChange={(e) => setMessage(key, 'language', e.target.value)} disabled={locked} invalid={Boolean(errors[`messages.${key}.template.language`])} />
-                                    <InputError message={errors[`messages.${key}.template.language`]} className="mt-1" />
-                                </div>
-                                <div>
-                                    <InputLabel htmlFor={`params_${key}`} value="Variables de la plantilla, en orden" />
-                                    <TextInput id={`params_${key}`} className="mt-1" placeholder="nombre, fecha, hora" value={data.messages[key].template.params} onChange={(e) => setMessage(key, 'params', e.target.value)} disabled={locked} />
-                                    <InputError message={errors[`messages.${key}.template.params`] ?? errors[`messages.${key}.template.params.0`]} className="mt-1" />
-                                </div>
-                            </div>
-                        </div>
+                            <MessageFields
+                                kind={key}
+                                message={data.messages[key]}
+                                onChange={(message) => setMessage(key, message)}
+                                variables={notifications.variables}
+                                fallback={notifications.defaults[key]}
+                                limits={notifications.limits}
+                                errors={errors}
+                                disabled={locked}
+                            />
+                        </section>
                     ))}
                 </div>
 

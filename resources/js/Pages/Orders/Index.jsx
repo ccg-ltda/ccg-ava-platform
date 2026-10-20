@@ -20,6 +20,7 @@ import TextInput from '@/Components/TextInput';
 import { day, money } from '@/config/orders';
 import usePagedList from '@/Hooks/usePagedList';
 import AppLayout from '@/Layouts/AppLayout';
+import { shouldOpenRow } from '@/lib/rowLink';
 import OrderStatusBadge from './Partials/OrderStatusBadge';
 
 function NewOrderModal({ form: options, methods, currency, onClose }) {
@@ -40,6 +41,14 @@ function NewOrderModal({ form: options, methods, currency, onClose }) {
     });
     const { data, setData, errors } = form;
     const products = useMemo(() => options.products.filter((product) => !data.location_id || product.locationIds.length === 0 || product.locationIds.includes(Number(data.location_id))), [options.products, data.location_id]);
+    // What the stock control says of a product in the chosen location (a product without control says nothing).
+    const availability = (product) => {
+        if (!product.stock) return '';
+
+        const quantity = product.stock[data.location_id || 'general'];
+
+        return quantity > 0 ? ` · ${quantity} disponibles` : ' · sin existencias aquí';
+    };
     const price = (id) => options.products.find((product) => product.id === Number(id))?.price ?? 0;
     // A preview only: the server reads the prices from the catalog and computes the real total.
     const estimate = data.lines.reduce((sum, line) => sum + price(line.product_id) * (Number(line.quantity) || 0), 0);
@@ -63,7 +72,7 @@ function NewOrderModal({ form: options, methods, currency, onClose }) {
     };
 
     return (
-        <Modal show onClose={onClose} maxWidth="2xl" scrollable>
+        <Modal show onClose={onClose} maxWidth="4xl" scrollable>
             <form onSubmit={submit} noValidate className="flex min-h-0 flex-1 flex-col">
                 <header className="border-b border-line px-5 py-4 sm:px-8">
                     <h2 className="text-lg font-bold text-ink">Nuevo pedido</h2>
@@ -110,7 +119,7 @@ function NewOrderModal({ form: options, methods, currency, onClose }) {
                         {data.lines.map((line, index) => (
                             <div key={index} className="grid grid-cols-[minmax(0,1fr)_5rem_auto] items-start gap-2">
                                 <div>
-                                    <Select aria-label={`Producto ${index + 1}`} value={line.product_id} onChange={(value) => setLine(index, { product_id: value })} placeholder="Elige un producto" options={products.map((product) => ({ value: product.id, label: `${product.name} · ${money(product.price, currency)}` }))} invalid={Boolean(lineError(index, 'product_id'))} />
+                                    <Select aria-label={`Producto ${index + 1}`} value={line.product_id} onChange={(value) => setLine(index, { product_id: value })} placeholder="Elige un producto" options={products.map((product) => ({ value: product.id, label: `${product.name} · ${money(product.price, currency)}${availability(product)}` }))} invalid={Boolean(lineError(index, 'product_id'))} />
                                     <InputError message={lineError(index, 'product_id')} className="mt-1" />
                                 </div>
                                 <div>
@@ -152,14 +161,19 @@ function NewOrderModal({ form: options, methods, currency, onClose }) {
                                     <InputLabel htmlFor="order_reference" value="Referencias (opcional)" />
                                     <TextInput id="order_reference" className="mt-1" value={data.delivery_reference} maxLength={255} onChange={(e) => setData('delivery_reference', e.target.value)} />
                                 </div>
-                                <div>
-                                    <InputLabel htmlFor="order_recipient" value="Quién recibe, si es otra persona (opcional)" />
-                                    <TextInput id="order_recipient" className="mt-1" value={data.recipient_name} maxLength={120} onChange={(e) => setData('recipient_name', e.target.value)} />
-                                </div>
-                                <div>
-                                    <InputLabel htmlFor="order_recipient_phone" value="Teléfono de quien recibe (opcional)" />
-                                    <TextInput id="order_recipient_phone" type="tel" placeholder="+573001112233" className="mt-1" value={data.recipient_phone} maxLength={32} onChange={(e) => setData('recipient_phone', e.target.value)} invalid={Boolean(errors.recipient_phone)} />
-                                    <InputError message={errors.recipient_phone} className="mt-1" />
+                                <div className="space-y-3 rounded-lg border border-line bg-canvas/40 p-3 sm:col-span-2 sm:p-4">
+                                    <p className="text-xs font-semibold tracking-wide text-ink-muted uppercase">Si recibe otra persona</p>
+                                    <div className="grid gap-3 md:grid-cols-2">
+                                        <div>
+                                            <InputLabel htmlFor="order_recipient" value="Quién recibe, si es otra persona (opcional)" />
+                                            <TextInput id="order_recipient" className="mt-1" value={data.recipient_name} maxLength={120} onChange={(e) => setData('recipient_name', e.target.value)} />
+                                        </div>
+                                        <div>
+                                            <InputLabel htmlFor="order_recipient_phone" value="Teléfono de quien recibe (opcional)" />
+                                            <TextInput id="order_recipient_phone" type="tel" placeholder="+573001112233" className="mt-1" value={data.recipient_phone} maxLength={32} onChange={(e) => setData('recipient_phone', e.target.value)} invalid={Boolean(errors.recipient_phone)} />
+                                            <InputError message={errors.recipient_phone} className="mt-1" />
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -188,6 +202,9 @@ function NewOrderModal({ form: options, methods, currency, onClose }) {
 export default function Index({ schemaPending, orders, filters, perPageOptions, counts, statuses, methods, currency, form: formOptions, notifier, canDetail }) {
     const [creating, setCreating] = useState(false);
     const [search, setSearch] = useState(filters.search ?? '');
+    const openDetail = (event, id) => {
+        if (shouldOpenRow(event, window.getSelection()?.toString() ?? '')) router.visit(route('orders.show', id));
+    };
     const firstRender = useRef(true);
     const list = usePagedList({
         section: 'orders',
@@ -275,10 +292,14 @@ export default function Index({ schemaPending, orders, filters, perPageOptions, 
                                 </thead>
                                 <tbody className="divide-y divide-line">
                                     {orders.data.map((order) => (
-                                        <tr key={order.id} className="transition-colors duration-150 hover:bg-canvas/70">
+                                        <tr
+                                            key={order.id}
+                                            onClick={canDetail ? (event) => openDetail(event, order.id) : undefined}
+                                            className={`transition-colors duration-150 hover:bg-canvas/70 focus-within:bg-canvas/70 ${canDetail ? 'cursor-pointer' : ''}`}
+                                        >
                                             <Td>
                                                 {canDetail ? (
-                                                    <Link href={route('orders.show', order.id)} className="font-mono text-sm font-bold text-ink hover:text-primary">
+                                                    <Link href={route('orders.show', order.id)} className="font-mono text-sm font-bold text-ink hover:text-primary focus-visible:outline-2 focus-visible:outline-primary">
                                                         #{order.number}
                                                     </Link>
                                                 ) : (

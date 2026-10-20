@@ -21,14 +21,17 @@ class CampaignManager
     public function __construct(private readonly CampaignAudience $audience, private readonly MessageTemplates $templates, private readonly AuditLogger $audit) {}
 
     /**
-     * Creates or edits a draft. A prepared, simulated or cancelled campaign is history and is never edited.
+     * Creates or edits a campaign. A draft is edited as it is. A prepared or simulated one (its audience was frozen, or rehearsed, but nothing ever left Ava)
+     * can be edited too: it goes back to draft and its frozen recipients are discarded, because a different message, filter or selection means a
+     * different audience that must be prepared again. A cancelled campaign is history and is never edited, and neither is one whose recipients carry any
+     * result other than pending, excluded or simulated (a real send would leave one).
      *
      * @param  array<string, mixed>  $data  name, message_template_id, body, channel, audience, filters, customer_ids
      */
     public function saveDraft(Workspace $workspace, array $data, ?Campaign $campaign, ?User $user): Campaign
     {
         if ($campaign && ! $campaign->isDraft()) {
-            throw ValidationException::withMessages(['status' => 'Solo se puede editar una campaña en borrador.']);
+            return $this->reopenAndSave($workspace, $data, $campaign);
         }
 
         $campaign ??= new Campaign(['workspace_id' => $workspace->id]);
@@ -37,6 +40,37 @@ class CampaignManager
         $campaign->fill($data)->save();
 
         return $campaign;
+    }
+
+    /** Returns a prepared or simulated campaign to draft (discarding its frozen audience) and saves the new configuration, all or nothing. */
+    private function reopenAndSave(Workspace $workspace, array $data, Campaign $campaign): Campaign
+    {
+        if (! in_array($campaign->status, [Campaign::PREPARED, Campaign::SIMULATED], true)) {
+            throw ValidationException::withMessages(['status' => 'Una campaña cancelada no se puede editar.']);
+        }
+
+        return DB::transaction(function () use ($workspace, $data, $campaign) {
+            $recipients = CampaignRecipient::where('campaign_id', $campaign->id)->where('workspace_id', $workspace->id);
+
+            if ((clone $recipients)->whereNotIn('status', [CampaignRecipient::PENDING, CampaignRecipient::EXCLUDED, CampaignRecipient::SIMULATED])->exists()) {
+                throw ValidationException::withMessages(['status' => 'Esta campaña ya tiene envíos registrados y no se puede editar.']);
+            }
+
+            $before = $campaign->status;
+            $claimed = Campaign::whereKey($campaign->id)->where('workspace_id', $workspace->id)->where('status', $before)
+                ->update(['status' => Campaign::DRAFT, 'prepared_at' => null, 'simulated_at' => null]);
+
+            if ($claimed !== 1) {
+                throw ValidationException::withMessages(['status' => 'La campaña cambió mientras la editabas. Vuelve a abrirla.']);
+            }
+
+            $discarded = $recipients->delete();
+            $campaign->refresh();
+            $campaign->fill($data)->save();
+            $this->audit->record('reopened', 'campaign', $campaign->id, $campaign->name, [AuditLogger::change('Estado', config("campaigns.statuses.{$before}"), 'Borrador'), AuditLogger::change('Destinatarios fijados descartados', null, (string) $discarded)], $workspace);
+
+            return $campaign;
+        });
     }
 
     /** Freezes the audience: one row per customer, excluded ones with their reason. Refused when nobody is eligible or the message is not valid. */

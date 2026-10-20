@@ -16,7 +16,7 @@ use Illuminate\Console\Command;
  * a person who types it. `clean` removes only records that carry the demo marks, and only when the person confirms the Workspace by typing its code
  * (`--confirm=DESARROLLO_DEV`): it never runs by accident, from a script that forgot the flag or from a deploy.
  */
-#[Signature('demo:data {action : generate, status or clean} {--confirm= : code of the Workspace whose demo data may be removed (required by clean)}')]
+#[Signature('demo:data {action : generate, status, clean or fix-times} {--confirm= : code of the Workspace whose demo data may be changed (required by clean and to apply fix-times)}')]
 #[Description('Generate, count or clean the demo data of the operational modules (administrative Workspace, local only)')]
 class DemoDataCommand extends Command
 {
@@ -24,8 +24,8 @@ class DemoDataCommand extends Command
     {
         $action = $this->argument('action');
 
-        if (! in_array($action, ['generate', 'status', 'clean'], true)) {
-            $this->error('La acción debe ser generate, status o clean.');
+        if (! in_array($action, ['generate', 'status', 'clean', 'fix-times'], true)) {
+            $this->error('La acción debe ser generate, status, clean o fix-times.');
 
             return self::INVALID;
         }
@@ -47,6 +47,10 @@ class DemoDataCommand extends Command
                 return self::FAILURE;
             }
 
+            if ($action === 'fix-times') {
+                return $this->fixTimes($demo, $workspace);
+            }
+
             $result = match ($action) {
                 'generate' => $demo->generate($workspace),
                 'clean' => $demo->clean($workspace),
@@ -64,6 +68,24 @@ class DemoDataCommand extends Command
             default => "Datos demo en {$workspace->code}:",
         });
         $this->table(['Tipo', 'Registros'], collect($result)->map(fn (int $count, string $kind) => [$kind, $count])->values()->all());
+
+        return self::SUCCESS;
+    }
+
+    /** Shows the demo appointments stored with hours read as UTC; applies the realignment only with `--confirm=<code>` (see DemoBusinessData::realignAppointmentTimes). */
+    private function fixTimes(DemoBusinessData $demo, Workspace $workspace): int
+    {
+        $apply = Workspace::normalizeCode((string) $this->option('confirm')) === $workspace->code;
+        $rows = $demo->realignAppointmentTimes($workspace, $apply);
+
+        if ($rows === []) {
+            $this->info('Ninguna cita demo necesita corrección de hora.');
+
+            return self::SUCCESS;
+        }
+
+        $this->table(['Cita', 'UTC guardado', 'UTC nuevo', 'Hora local nueva'], array_map(fn (array $row) => [$row['id'], $row['from'], $row['to'], $row['local']], $rows));
+        $this->{$apply ? 'info' : 'warn'}($apply ? 'Corregidas: '.count($rows).' citas demo (solo las de la tabla).' : 'Simulación: no se cambió nada. Para aplicar: --confirm='.$workspace->code);
 
         return self::SUCCESS;
     }

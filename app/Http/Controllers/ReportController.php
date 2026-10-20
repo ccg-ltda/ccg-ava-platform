@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ReadsSections;
 use App\Http\Requests\ReportFilterRequest;
+use App\Orders\CommerceSchema;
 use App\Services\DashboardMetrics;
 use App\Services\ModuleAccess;
 use App\Services\OperationsMetrics;
@@ -46,7 +47,8 @@ class ReportController extends Controller
         // that module (the figures include money and customers, so `view-dashboard` alone is not enough).
         $own = $target !== null && $target->is($active);
         $has = fn (string $module, string $permission) => $own && in_array($module, $modules, true) && in_array($permission, $permissions, true);
-        $ops = ['bookings' => $has('bookings', 'view-bookings'), 'orders' => $has('orders', 'view-orders'), 'customers' => $has('customers', 'view-customers')];
+        // Inventory belongs to the product catalog module and to `view-inventory`, and only exists once its migration is applied: without all three nothing of it is read.
+        $ops = ['bookings' => $has('bookings', 'view-bookings'), 'orders' => $has('orders', 'view-orders'), 'customers' => $has('customers', 'view-customers'), 'inventory' => $has('product_catalog', 'view-inventory') && app(CommerceSchema::class)->inventoryReady()];
 
         return Inertia::render('Reports/Index', ($team ? $report->for($active, $role, $target, $global, in_array('view-users', $permissions, true)) : ['stats' => null, 'roleBreakdown' => null, 'recentUsers' => null])
             + array_merge($analytics, ['metrics' => $conversations ? $analytics['metrics'] : []])
@@ -56,6 +58,7 @@ class ReportController extends Controller
                     'bookings' => $ops['bookings'] ? $this->section('bookings', fn () => $operations->bookings($active, $period)) : null,
                     'orders' => $ops['orders'] ? $this->section('orders', fn () => $operations->orders($active, $period)) : null,
                     'customers' => $ops['customers'] ? $this->section('customers', fn () => $operations->customers($active, $period)) : null,
+                    'inventory' => $ops['inventory'] ? $this->section('inventory', fn () => $operations->inventory($active, $period)) : null,
                 ],
                 'figures' => $conversations ? $this->section('figures', fn () => $metrics->comparison($target, $period)) : null,
                 'activity' => $conversations ? $this->section('activity', fn () => $metrics->series($target, $period, $settings)) : null,

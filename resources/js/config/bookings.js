@@ -30,6 +30,13 @@ export const addDays = (date, days) => {
 /** "lun 13 oct" for a `YYYY-MM-DD`. */
 export const dayLabel = (date) => new Date(`${date}T12:00:00`).toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short' });
 
+/** "Mar, 20 de octubre" for a `YYYY-MM-DD`. */
+export const longDayLabel = (date) => {
+    const label = new Date(`${date}T12:00:00`).toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'long' }).replace('.', '');
+
+    return label.charAt(0).toUpperCase() + label.slice(1);
+};
+
 /** Reads JSON from one of Ava's endpoints; a refusal carries the server's own message. */
 export async function getJson(url, params = {}) {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString();

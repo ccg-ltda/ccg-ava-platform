@@ -176,6 +176,42 @@ class BookingAdminTest extends TestCase
         $this->get('/bookings?from=2026-10-20&days=7')->assertInertia(fn (AssertableInertia $page) => $page->has('appointments', 0));
     }
 
+    public function test_the_agenda_filters_by_an_explicit_range_in_the_server_and_keeps_the_other_filters(): void
+    {
+        // «Today» is 2026-10-12 in the Workspace's time zone (see freezeAgendaTime).
+        $today = $this->appointment([], '2026-10-12 10:00:00');
+        $soon = $this->appointment(['phone' => '+57 300 111 2244', 'name' => 'Beto'], '2026-10-14 10:00:00');
+        $later = $this->appointment(['phone' => '+57 300 111 2255', 'name' => 'Carla'], '2026-10-20 10:00:00');
+        $soon->update(['status' => 'cancelled']);
+
+        $this->get('/bookings')->assertInertia(fn (AssertableInertia $page) => $page->where('today', '2026-10-12'));
+
+        // Only today: the same day on both sides of the range.
+        $this->get('/bookings?from=2026-10-12&to=2026-10-12')->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('filters.from', '2026-10-12')->where('filters.to', '2026-10-12')->where('filters.days', 1)->has('appointments', 1)->where('appointments.0.id', $today->id));
+
+        // An explicit range wins over the number of days, and its end day is included.
+        $this->get('/bookings?from=2026-10-12&to=2026-10-14&days=1')->assertInertia(fn (AssertableInertia $page) => $page->where('filters.days', 3)->has('appointments', 2));
+        $this->get('/bookings?from=2026-10-12&to=2026-10-31')->assertInertia(fn (AssertableInertia $page) => $page->where('filters.days', 20)->has('appointments', 3));
+
+        // Combined with the existing filters (status, professional) and always computed in the server, not over what is on screen.
+        $this->get('/bookings?from=2026-10-12&to=2026-10-31&status=cancelled')->assertInertia(fn (AssertableInertia $page) => $page->has('appointments', 1)->where('appointments.0.id', $soon->id));
+        $this->get('/bookings?from=2026-10-12&to=2026-10-31&professional='.$later->professional_id.'&status=confirmed')->assertInertia(fn (AssertableInertia $page) => $page->has('appointments', 2));
+        $this->get('/bookings?from=2026-10-15&to=2026-10-19')->assertInertia(fn (AssertableInertia $page) => $page->has('appointments', 0));
+    }
+
+    public function test_a_range_that_ends_before_it_starts_or_is_too_long_is_refused_without_listing_anything(): void
+    {
+        $this->appointment([], '2026-10-12 10:00:00');
+
+        $this->get('/bookings?from=2026-10-14&to=2026-10-12')->assertSessionHasErrors(['to' => 'La fecha inicial no puede ser posterior a la final.']);
+        $this->get('/bookings?from=2026-10-01&to=2027-03-01')->assertSessionHasErrors('to');
+        $this->get('/bookings?from=2026-10-12&to=no-es-una-fecha')->assertSessionHasErrors('to');
+        $this->get('/bookings?from=2026-10-12&to=2026-02-30')->assertSessionHasErrors('to');
+        // The same range with a valid end is fine, up to the limit.
+        $this->get('/bookings?from=2026-10-01&to=2026-12-31')->assertSessionHasNoErrors()->assertOk();
+    }
+
     public function test_staff_create_an_appointment_for_a_customer_who_is_reused_by_phone(): void
     {
         $service = $this->makeService($this->workspace);

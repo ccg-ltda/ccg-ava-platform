@@ -73,7 +73,7 @@ class CampaignController extends Controller
             ],
             'summary' => $editable ? $this->audience->summary($model) : $this->frozenSummary($model),
             'recipients' => fn () => $editable ? null : $this->recipientsPage($request, $model),
-            'picker' => fn () => $editable && $model->audience === 'selected' ? $this->picker($request, $workspace, $model) : null,
+            'picker' => fn () => $model->status !== Campaign::CANCELLED && $model->audience === 'selected' ? $this->picker($request, $workspace, $model) : null,
             'delivery' => $this->dispatcher->availability($model),
             'templates' => $workspace->messageTemplates()->where('is_active', true)->orderBy('name')->get(['id', 'name', 'body'])->all(),
             'availability' => $this->templates->availability($workspace),
@@ -102,9 +102,11 @@ class CampaignController extends Controller
     public function update(SaveCampaignRequest $request, int $campaign): RedirectResponse
     {
         $workspace = $request->attributes->get('workspace');
-        $this->manager->saveDraft($workspace, $request->campaign(), $workspace->campaigns()->findOrFail($campaign), $request->user());
+        $model = $workspace->campaigns()->findOrFail($campaign);
+        $wasDraft = $model->isDraft();
+        $this->manager->saveDraft($workspace, $request->campaign(), $model, $request->user());
 
-        return back()->with('success', 'Borrador guardado correctamente');
+        return back()->with('success', $wasDraft ? 'Borrador guardado correctamente' : 'Campaña guardada como borrador: vuelve a prepararla para fijar los destinatarios');
     }
 
     public function prepare(Request $request, int $campaign): RedirectResponse

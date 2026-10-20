@@ -1,5 +1,6 @@
 import { Head, Link, router, useForm } from '@inertiajs/react';
-import { ArrowLeft, Ban, ClipboardCheck, FlaskConical, Save } from 'lucide-react';
+import { ArrowLeft, Ban, ClipboardCheck, FlaskConical, Pencil, Save } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import Alert from '@/Components/Alert';
 import Badge from '@/Components/Badge';
 import Card from '@/Components/Card';
@@ -75,7 +76,10 @@ export default function Show({ campaign, summary, recipients, picker, delivery, 
     const canPrepare = permissions.includes('prepare-campaigns');
     const canCancel = permissions.includes('cancel-campaigns');
     const draft = campaign.status === 'draft';
-    const editable = draft && canEdit;
+    // A prepared or simulated campaign can be edited too, on request: saving returns it to draft and its frozen recipients are discarded. A cancelled one never.
+    const reopenable = canEdit && ['prepared', 'simulated'].includes(campaign.status);
+    const [reopening, setReopening] = useState(false);
+    const editable = canEdit && (draft || (reopenable && reopening));
     const variables = Object.keys(availability).map((key) => ({ key, label: availability[key].label }));
     const form = useForm({
         name: campaign.name,
@@ -89,9 +93,29 @@ export default function Show({ campaign, summary, recipients, picker, delivery, 
     const { data, setData, errors } = form;
     const setFilter = (key, value) => setData('filters', { ...data.filters, [key]: value });
 
-    const save = () => {
+    // Once the server saved it as a draft the page comes back with that status: the reopening is over.
+    useEffect(() => setReopening(false), [campaign.status]);
+
+    const send = () => {
         form.transform((values) => ({ ...values, message_template_id: values.message_template_id || null }));
         form.put(route('campaigns.update', campaign.id), { preserveScroll: true });
+    };
+
+    const save = async () => {
+        if (draft) return send();
+
+        const confirmed = await confirm({
+            description: 'Al guardar, la campaña vuelve a borrador y se descartan los destinatarios que habían quedado fijados. Tendrás que prepararla de nuevo. No se envía ningún mensaje.',
+            confirmLabel: 'Guardar y volver a borrador',
+        });
+
+        if (confirmed) send();
+    };
+
+    const stopReopening = () => {
+        form.reset();
+        form.clearErrors();
+        setReopening(false);
     };
 
     const pickTemplate = (value) => {
@@ -128,6 +152,16 @@ export default function Show({ campaign, summary, recipients, picker, delivery, 
                 </p>
             </Alert>
             {errors.status && <InputError message={errors.status} />}
+            {reopenable && !reopening && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-card p-4">
+                    <p className="text-sm text-ink-muted">Para cambiar el nombre, el mensaje, la plantilla, los filtros o los destinatarios, edita la campaña: volverá a borrador y habrá que prepararla otra vez.</p>
+                    <SecondaryButton type="button" className="gap-2" onClick={() => setReopening(true)}>
+                        <Pencil className="size-4" aria-hidden="true" />
+                        Editar campaña
+                    </SecondaryButton>
+                </div>
+            )}
+            {reopening && <Alert tone="warning">Estás editando una campaña {campaign.status === 'simulated' ? 'simulada' : 'preparada'}. Al guardar volverá a borrador y se descartarán sus destinatarios fijados.</Alert>}
 
             <div className="grid gap-6 lg:grid-cols-3">
                 <Card className="space-y-5 p-5 sm:p-6 lg:col-span-2">
@@ -208,9 +242,14 @@ export default function Show({ campaign, summary, recipients, picker, delivery, 
 
                     {editable && (
                         <div className="flex flex-wrap justify-end gap-3 border-t border-line pt-4">
+                            {reopening && (
+                                <SecondaryButton type="button" onClick={stopReopening} disabled={form.processing}>
+                                    Cancelar edición
+                                </SecondaryButton>
+                            )}
                             <PrimaryButton type="button" className="gap-2" onClick={save} disabled={form.processing || !form.isDirty}>
                                 <Save className="size-4" aria-hidden="true" />
-                                Guardar borrador
+                                {draft ? 'Guardar borrador' : 'Guardar cambios'}
                             </PrimaryButton>
                         </div>
                     )}
