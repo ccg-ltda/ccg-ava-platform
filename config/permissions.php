@@ -32,7 +32,7 @@ return [
         'locations' => ['label' => 'Sedes', 'description' => 'Dónde se atiende el negocio.', 'list' => 'view-locations', 'module' => 'locations'],
         'customers' => ['label' => 'Clientes', 'description' => 'Fichas de clientes del Workspace.', 'list' => 'view-customers', 'module' => 'customers'],
         'campaigns' => ['label' => 'Campañas', 'description' => 'Campañas y plantillas de mensaje (no envían mensajes).', 'list' => 'view-campaigns', 'module' => 'campaigns'],
-        'catalog' => ['label' => 'Catálogo de productos', 'description' => 'Productos, precios y disponibilidad por sede.', 'list' => 'view-catalog', 'module' => 'product_catalog'],
+        'catalog' => ['label' => 'Catálogo de productos', 'description' => 'Productos, precios, categorías e inventario por sede.', 'list' => 'view-catalog', 'module' => 'product_catalog'],
         'orders' => ['label' => 'Pedidos', 'description' => 'Pedidos, su detalle y su flujo de estados.', 'list' => 'view-orders', 'module' => 'orders'],
         'plans' => ['label' => 'Planes comerciales', 'description' => 'Planes de CCG y su asignación a los Workspaces de clientes.', 'list' => 'view-plans'],
         'modules' => ['label' => 'Catálogo de módulos', 'description' => 'Módulos y categorías que los planes pueden incluir.', 'list' => 'view-modules'],
@@ -131,6 +131,8 @@ return [
         'create-products' => ['group' => 'catalog', 'label' => 'Crear productos', 'description' => 'Da de alta un producto nuevo en el catálogo.'],
         'edit-products' => ['group' => 'catalog', 'label' => 'Editar productos y precios', 'description' => 'Cambia los datos y el precio de un producto. Los pedidos ya hechos conservan su copia.'],
         'activate-products' => ['group' => 'catalog', 'label' => 'Activar y desactivar productos', 'description' => 'Ofrece o retira un producto. Nunca se borra.'],
+        'view-inventory' => ['group' => 'catalog', 'label' => 'Consultar el inventario', 'description' => 'Ve las existencias de cada sede, el stock mínimo y el historial de movimientos.'],
+        'adjust-inventory' => ['group' => 'catalog', 'label' => 'Registrar entradas y ajustes de inventario', 'description' => 'Anota entradas de mercancía, corrige existencias con un motivo y fija el stock mínimo de cada sede. Cada cambio queda en el historial.'],
 
         // Pedidos
         'view-orders' => ['group' => 'orders', 'label' => 'Consultar pedidos', 'description' => 'Ve la lista de pedidos del Workspace.'],

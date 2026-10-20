@@ -9,6 +9,7 @@ use App\Models\Order;
 use App\Models\OrderLine;
 use App\Models\OrderStatusChange;
 use App\Models\Product;
+use App\Models\ProductCategory;
 use App\Models\Workspace;
 use App\Orders\OrderNotifier;
 use App\Orders\OrderService;
@@ -75,13 +76,19 @@ class CommerceTest extends TestCase
     public function test_the_catalog_is_created_edited_searched_and_deactivated_but_never_deleted(): void
     {
         $this->as();
-        $this->post('/catalog', ['name' => 'Hamburguesa', 'sku' => 'HAM-01', 'price' => '18500', 'category' => 'Comida'])->assertSessionHasNoErrors();
-        $this->post('/catalog', ['name' => 'Gaseosa', 'price' => '4000.50', 'category' => 'Bebidas'])->assertSessionHasNoErrors();
+        // The category is chosen from the Workspace's own list (see InventoryTest for the rules of the list itself).
+        $this->post('/catalog/categories', ['name' => 'Comida'])->assertSessionHasNoErrors();
+        $this->post('/catalog/categories', ['name' => 'Bebidas'])->assertSessionHasNoErrors();
+        $comida = ProductCategory::where('name', 'Comida')->firstOrFail();
+        $bebidas = ProductCategory::where('name', 'Bebidas')->firstOrFail();
+        $this->post('/catalog', ['name' => 'Hamburguesa', 'sku' => 'HAM-01', 'price' => '18500', 'category_id' => $comida->id])->assertSessionHasNoErrors();
+        $this->post('/catalog', ['name' => 'Gaseosa', 'price' => '4000.50', 'category_id' => $bebidas->id])->assertSessionHasNoErrors();
+        $this->post('/catalog', ['name' => 'Texto libre', 'price' => '1', 'category' => 'Inventada'])->assertSessionHasErrors('category_id');
         $burger = Product::where('sku', 'HAM-01')->firstOrFail();
         $this->assertSame('18500.00', $burger->price);
 
         $this->get('/catalog?search=ham')->assertInertia(fn ($page) => $page->has('products.data', 1)->where('products.data.0.sku', 'HAM-01'));
-        $this->get('/catalog?category=Bebidas')->assertInertia(fn ($page) => $page->has('products.data', 1)->where('products.data.0.name', 'Gaseosa'));
+        $this->get("/catalog?category={$bebidas->id}")->assertInertia(fn ($page) => $page->has('products.data', 1)->where('products.data.0.name', 'Gaseosa'));
 
         $this->put("/catalog/{$burger->id}", ['name' => 'Hamburguesa doble', 'sku' => 'HAM-01', 'price' => '21000'])->assertSessionHasNoErrors();
         $this->assertSame('Hamburguesa doble', $burger->fresh()->name);

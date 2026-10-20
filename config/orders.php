@@ -40,5 +40,11 @@ return [
     /* A move that only makes sense for one method: ready -> dispatched is for deliveries, ready -> delivered (handed over at the counter) for pickups. */
     'method_moves' => ['ready>dispatched' => 'delivery', 'ready>delivered' => 'pickup'],
 
+    /* The picture of a product: stored on the default disk (private bucket), served only to the members of its Workspace. */
+    'image' => ['max_kb' => 2048, 'mimes' => ['png', 'jpg', 'jpeg', 'webp']],
+
+    /* The most stock rows a product form may carry (one per location), and the largest quantity one stock holds. */
+    'inventory' => ['max_rows' => 50, 'max_quantity' => 1000000],
+
     'limits' => ['lines' => 50, 'quantity' => 9999, 'price' => 99999999.99, 'notes' => 500, 'reason' => 255],
 ];

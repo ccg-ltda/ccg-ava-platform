@@ -14,19 +14,36 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * offered for new orders, and the orders that already used it keep their own copy of its name, sku and price).
  * It is NOT a bookable service: those have a duration and a professional and live in Servicios y Reservas.
  */
-#[Fillable(['sku', 'name', 'description', 'category', 'price', 'is_active'])]
+#[Fillable(['sku', 'name', 'description', 'category', 'category_id', 'image_path', 'price', 'cost', 'is_active', 'tracks_inventory'])]
 class Product extends Model
 {
     use Audited;
 
     protected function casts(): array
     {
-        return ['is_active' => 'boolean', 'price' => 'decimal:2'];
+        return ['is_active' => 'boolean', 'tracks_inventory' => 'boolean', 'price' => 'decimal:2', 'cost' => 'decimal:2'];
     }
 
     public function workspace(): BelongsTo
     {
         return $this->belongsTo(Workspace::class);
+    }
+
+    /** The normalized category (`category` keeps a copy of its name for the consumers that read the text). */
+    public function productCategory(): BelongsTo
+    {
+        return $this->belongsTo(ProductCategory::class, 'category_id');
+    }
+
+    /** The stock of this product, one row per location (and one for the general stock when the Workspace has no locations). */
+    public function stocks(): HasMany
+    {
+        return $this->hasMany(InventoryStock::class);
+    }
+
+    public function movements(): HasMany
+    {
+        return $this->hasMany(InventoryMovement::class);
     }
 
     /** The locations that offer it; none = offered in every location. */
@@ -57,6 +74,6 @@ class Product extends Model
 
     public function auditFields(): array
     {
-        return ['sku' => 'SKU', 'name' => 'Nombre', 'description' => 'Descripción', 'category' => 'Categoría', 'price' => 'Precio', 'is_active' => 'Activo'];
+        return ['sku' => 'SKU', 'name' => 'Nombre', 'description' => 'Descripción', 'category' => 'Categoría', 'price' => 'Precio', 'cost' => 'Coste', 'is_active' => 'Activo', 'tracks_inventory' => 'Control de inventario'];
     }
 }

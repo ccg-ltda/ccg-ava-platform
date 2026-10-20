@@ -1,133 +1,92 @@
-import { Head, router, useForm } from '@inertiajs/react';
-import { Package, Pencil, Plus, Power } from 'lucide-react';
+import { Head, Link, router } from '@inertiajs/react';
+import { Boxes, Eye, MapPin, Package, PackageX, Pencil, Plus, TriangleAlert } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import Alert from '@/Components/Alert';
 import Badge from '@/Components/Badge';
 import Card from '@/Components/Card';
 import { useConfirm } from '@/Components/ConfirmDialog';
 import EmptyState from '@/Components/EmptyState';
-import IconButton from '@/Components/IconButton';
-import InputError from '@/Components/InputError';
-import InputLabel from '@/Components/InputLabel';
-import Modal from '@/Components/Modal';
 import PageHeader from '@/Components/PageHeader';
 import Pagination from '@/Components/Pagination';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SearchInput from '@/Components/SearchInput';
-import SecondaryButton from '@/Components/SecondaryButton';
 import Select from '@/Components/Select';
+import StatusSwitch from '@/Components/StatusSwitch';
 import { TableWrap, Td, Th } from '@/Components/Table';
-import Textarea from '@/Components/Textarea';
-import TextInput from '@/Components/TextInput';
 import { money } from '@/config/orders';
 import useAccess from '@/Hooks/useAccess';
 import usePagedList from '@/Hooks/usePagedList';
 import AppLayout from '@/Layouts/AppLayout';
+import ProductModal from './Partials/ProductModal';
+import StockInfo, { ProductThumb } from './Partials/StockInfo';
 
-function ProductModal({ product, locations, currency, onClose }) {
-    const editing = Boolean(product?.id);
-    const form = useForm({
-        sku: product?.sku ?? '',
-        name: product?.name ?? '',
-        description: product?.description ?? '',
-        category: product?.category ?? '',
-        price: product?.price ?? '',
-        location_ids: product?.locationIds ?? [],
-    });
-    const { data, setData, errors } = form;
-    const toggleLocation = (id) => setData('location_ids', data.location_ids.includes(id) ? data.location_ids.filter((item) => item !== id) : [...data.location_ids, id]);
+const AVAILABILITY = [
+    { value: '', label: 'Toda disponibilidad' },
+    { value: 'ok', label: 'Con existencias' },
+    { value: 'low', label: 'Stock bajo' },
+    { value: 'out', label: 'Agotados' },
+    { value: 'untracked', label: 'Sin control de inventario' },
+];
 
-    const submit = (event) => {
-        event.preventDefault();
-        const options = { preserveScroll: true, onSuccess: onClose };
-
-        if (editing) form.put(route('catalog.update', product.id), options);
-        else form.post(route('catalog.store'), options);
-    };
-
+/** A figure of the compact summary. */
+function Figure({ icon: Icon, label, value, tone = 'text-ink', hint }) {
     return (
-        <Modal show onClose={onClose} maxWidth="lg" scrollable>
-            <form onSubmit={submit} noValidate className="flex min-h-0 flex-1 flex-col">
-                <header className="border-b border-line px-5 py-4 sm:px-8">
-                    <h2 className="text-lg font-bold text-ink">{editing ? 'Editar producto' : 'Nuevo producto'}</h2>
-                </header>
-                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5 sm:px-8">
-                    <div>
-                        <InputLabel htmlFor="product_name" value="Nombre" />
-                        <TextInput id="product_name" className="mt-1" value={data.name} maxLength={160} onChange={(e) => setData('name', e.target.value)} invalid={Boolean(errors.name)} />
-                        <InputError message={errors.name} className="mt-1" />
-                    </div>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <div>
-                            <InputLabel htmlFor="product_price" value={`Precio (${currency})`} />
-                            <TextInput id="product_price" type="number" min={0} step="0.01" inputMode="decimal" className="mt-1" value={data.price} onChange={(e) => setData('price', e.target.value)} invalid={Boolean(errors.price)} />
-                            <InputError message={errors.price} className="mt-1" />
-                        </div>
-                        <div>
-                            <InputLabel htmlFor="product_sku" value="SKU (opcional)" />
-                            <TextInput id="product_sku" className="mt-1" value={data.sku} maxLength={64} onChange={(e) => setData('sku', e.target.value)} invalid={Boolean(errors.sku)} />
-                            <InputError message={errors.sku} className="mt-1" />
-                        </div>
-                        <div className="sm:col-span-2">
-                            <InputLabel htmlFor="product_category" value="Categoría (opcional)" />
-                            <TextInput id="product_category" className="mt-1" value={data.category} maxLength={80} onChange={(e) => setData('category', e.target.value)} invalid={Boolean(errors.category)} />
-                            <InputError message={errors.category} className="mt-1" />
-                        </div>
-                    </div>
-                    <div>
-                        <InputLabel htmlFor="product_description" value="Descripción (opcional)" />
-                        <Textarea id="product_description" rows={3} className="mt-1" value={data.description} maxLength={2000} onChange={(e) => setData('description', e.target.value)} />
-                        <InputError message={errors.description} className="mt-1" />
-                    </div>
-                    {locations.length > 0 && (
-                        <fieldset>
-                            <legend className="text-sm font-medium text-ink">Sedes que lo ofrecen (opcional)</legend>
-                            <p className="mt-0.5 text-xs text-ink-muted">Si no marcas ninguna, el producto se ofrece en todas las sedes.</p>
-                            <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                                {locations.map((location) => (
-                                    <label key={location.id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-field px-3 py-2 text-sm text-ink has-checked:border-primary/50 has-checked:bg-primary-soft/40">
-                                        <input type="checkbox" className="size-4 accent-primary" checked={data.location_ids.includes(location.id)} onChange={() => toggleLocation(location.id)} />
-                                        {location.name}
-                                    </label>
-                                ))}
-                            </div>
-                            <InputError message={errors.location_ids ?? errors['location_ids.0']} className="mt-1" />
-                        </fieldset>
-                    )}
-                    {editing && <p className="text-xs text-ink-muted">Cambiar el precio solo afecta a los pedidos nuevos: los pedidos ya registrados conservan el precio con el que se hicieron.</p>}
-                </div>
-                <div className="flex justify-end gap-3 border-t border-line bg-card px-5 py-4 sm:px-8">
-                    <SecondaryButton type="button" onClick={onClose}>
-                        Cancelar
-                    </SecondaryButton>
-                    <PrimaryButton type="submit" disabled={form.processing}>
-                        {editing ? 'Guardar cambios' : 'Crear producto'}
-                    </PrimaryButton>
-                </div>
-            </form>
-        </Modal>
+        <div className="flex items-center gap-3 rounded-xl border border-line bg-card px-4 py-3">
+            <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-accent-blue">
+                <Icon className="size-4" aria-hidden="true" />
+            </span>
+            <div className="min-w-0">
+                <p className={`text-xl leading-tight font-bold tabular-nums ${tone}`}>{value.toLocaleString('es')}</p>
+                <p className="text-xs leading-snug text-ink-muted">{label}</p>
+                {hint && <p className="text-[11px] leading-snug text-ink-muted/80">{hint}</p>}
+            </div>
+        </div>
     );
 }
 
-/** Catálogo de productos: what the Workspace sells. Never deleted, only deactivated. */
-export default function Index({ schemaPending, products, filters, perPageOptions, categories, locations, currency, total }) {
+/** The state of a product with the word (a deactivated product is not an out-of-stock one). */
+function StateBadge({ product }) {
+    return <Badge tone={product.isActive ? 'green' : 'red'}>{product.isActive ? 'Activo' : 'Inactivo'}</Badge>;
+}
+
+/** Ver / Editar, always visible and reachable with the keyboard. */
+function RowActions({ product, canEdit, onEdit }) {
+    return (
+        <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+            <Link href={route('catalog.show', product.id)} aria-label={`Ver ${product.name}`} className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-accent-blue hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-primary">
+                <Eye className="size-4" aria-hidden="true" />
+                Ver
+            </Link>
+            {canEdit && (
+                <button type="button" onClick={() => onEdit(product)} aria-label={`Editar ${product.name}`} className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-ink-muted hover:bg-canvas hover:text-ink focus-visible:outline-2 focus-visible:outline-primary">
+                    <Pencil className="size-4" aria-hidden="true" />
+                    Editar
+                </button>
+            )}
+        </div>
+    );
+}
+
+/** Catálogo de productos and its inventory: what the Workspace sells and how much of it is where. Never deleted, only deactivated. */
+export default function Index({ schemaPending, products, filters, perPageOptions, categories, locations, currency, total, inventory }) {
     const confirm = useConfirm();
     const { permissions } = useAccess();
     const canCreate = permissions.includes('create-products') && !schemaPending;
     const canEdit = permissions.includes('edit-products') && !schemaPending;
     const canToggle = permissions.includes('activate-products') && !schemaPending;
-    const canAct = canEdit || canToggle;
     const [editing, setEditing] = useState(null);
     const [search, setSearch] = useState(filters.search ?? '');
     const firstRender = useRef(true);
+    const showStock = Boolean(inventory?.canView);
+    const categoryOptions = inventory.ready ? categories.map((category) => ({ value: String(category.id), label: category.name })) : categories.map((category) => ({ value: category, label: category }));
 
     const list = usePagedList({
         section: 'products',
-        only: ['products', 'filters', 'categories'],
+        only: ['products', 'filters', 'categories', 'inventory'],
         meta: products.meta,
         perPageOptions,
         routeName: 'catalog.index',
-        extra: { search: filters.search || undefined, category: filters.category || undefined, status: filters.status || undefined },
+        extra: { search: filters.search || undefined, category: filters.category || undefined, status: filters.status || undefined, availability: filters.availability || undefined, place: filters.place || undefined },
     });
 
     useEffect(() => {
@@ -144,11 +103,14 @@ export default function Index({ schemaPending, products, filters, perPageOptions
     }, [search]);
 
     const filter = (key) => (value) => list.visit({ [key]: value || undefined }, { restart: true });
-    const filtered = Boolean(filters.search || filters.category || filters.status);
+    const filtered = Boolean(filters.search || filters.category || filters.status || filters.availability);
+    const placeOptions = [{ value: '', label: 'Todas las sedes' }, ...locations.map((location) => ({ value: String(location.id), label: location.name })), ...(locations.length === 0 ? [{ value: 'general', label: 'Inventario general' }] : [])];
 
     const toggle = async (product) => {
         const confirmed = await confirm({
-            description: product.isActive ? `«${product.name}» dejará de ofrecerse en pedidos nuevos. Los pedidos que ya lo incluyen no cambian. Puede reactivarse.` : `«${product.name}» volverá a ofrecerse en pedidos nuevos.`,
+            description: product.isActive
+                ? `«${product.name}» dejará de ofrecerse en pedidos nuevos.${product.openOrders > 0 ? ` Está en ${product.openOrders} pedido${product.openOrders === 1 ? '' : 's'} en curso: no cambian.` : ' Los pedidos que ya lo incluyen no cambian.'} Puede reactivarse.`
+                : `«${product.name}» volverá a ofrecerse en pedidos nuevos.`,
             confirmLabel: product.isActive ? 'Desactivar' : 'Activar',
         });
 
@@ -159,7 +121,7 @@ export default function Index({ schemaPending, products, filters, perPageOptions
         <>
             <Head title="Catálogo" />
 
-            <PageHeader title="Catálogo de productos" description="Lo que vende este Workspace: nombre, SKU, precio y las sedes que lo ofrecen. Nunca se borra: se desactiva.">
+            <PageHeader title="Catálogo de productos" description="Lo que vende este Workspace y cuánto hay de cada producto en cada sede. Nunca se borra: se desactiva.">
                 {canCreate && (
                     <PrimaryButton type="button" onClick={() => setEditing({})} className="gap-2">
                         <Plus className="size-4" aria-hidden="true" />
@@ -174,12 +136,34 @@ export default function Index({ schemaPending, products, filters, perPageOptions
                 </Alert>
             )}
 
+            {!schemaPending && !inventory.ready && (
+                <Alert tone="info">El inventario todavía no está disponible en este entorno: falta aplicar la última migración de la base de datos. El catálogo sigue funcionando como siempre.</Alert>
+            )}
+
+            {!schemaPending && showStock && inventory.summary && (
+                <section aria-label="Resumen del inventario" className="space-y-2">
+                    <p className="flex flex-wrap items-center gap-1.5 text-sm text-ink-muted">
+                        <MapPin className="size-4" aria-hidden="true" />
+                        Resumen de <strong className="text-ink">{inventory.placeLabel}</strong>
+                        {filters.place === '' && locations.length > 0 && <span>(cada sede se cuenta por separado)</span>}
+                    </p>
+                    <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                        <Figure icon={Boxes} label="Productos con control de inventario" value={inventory.summary.tracked} />
+                        <Figure icon={Package} label="Unidades en existencia" value={inventory.summary.units} hint={filters.place === '' && locations.length > 0 ? 'Suma de todas las sedes' : undefined} />
+                        <Figure icon={TriangleAlert} label="Con stock bajo" value={inventory.summary.low} tone={inventory.summary.low > 0 ? 'text-accent-amber' : 'text-ink'} />
+                        <Figure icon={PackageX} label="Agotados" value={inventory.summary.out} tone={inventory.summary.out > 0 ? 'text-danger' : 'text-ink'} />
+                    </div>
+                </section>
+            )}
+
             {!schemaPending && (
                 <Card className="overflow-hidden">
-                    <div className="grid gap-3 border-b border-line p-4 sm:grid-cols-2 sm:p-6 lg:grid-cols-4">
-                        <SearchInput className="sm:col-span-2" value={search} onChange={setSearch} placeholder="Buscar por nombre o SKU" label="Buscar productos" />
-                        <Select aria-label="Categoría" value={filters.category ?? ''} onChange={filter('category')} options={[{ value: '', label: 'Todas las categorías' }, ...categories.map((category) => ({ value: category, label: category }))]} />
+                    <div className={`grid gap-3 border-b border-line p-4 sm:grid-cols-2 sm:p-6 ${showStock ? 'xl:grid-cols-[minmax(0,1.3fr)_repeat(4,minmax(9.5rem,1fr))]' : 'xl:grid-cols-[minmax(0,1.3fr)_repeat(2,minmax(9.5rem,1fr))]'}`}>
+                        <SearchInput className="sm:col-span-2 xl:col-span-1" value={search} onChange={setSearch} placeholder="Buscar por nombre o SKU" label="Buscar productos" />
+                        {showStock && <Select aria-label="Sede consultada" value={filters.place ?? ''} onChange={filter('place')} options={placeOptions} />}
+                        <Select aria-label="Categoría" value={filters.category ?? ''} onChange={filter('category')} options={[{ value: '', label: 'Todas las categorías' }, ...categoryOptions]} />
                         <Select aria-label="Estado" value={filters.status ?? ''} onChange={filter('status')} options={[{ value: '', label: 'Todos los estados' }, { value: 'active', label: 'Activos' }, { value: 'inactive', label: 'Inactivos' }]} />
+                        {showStock && <Select aria-label="Disponibilidad" value={filters.availability ?? ''} onChange={filter('availability')} options={AVAILABILITY} />}
                     </div>
 
                     {products.data.length === 0 ? (
@@ -193,50 +177,88 @@ export default function Index({ schemaPending, products, filters, perPageOptions
                             </EmptyState>
                         </div>
                     ) : (
-                        <TableWrap busy={list.loading}>
-                            <thead>
-                                <tr>
-                                    <Th>Producto</Th>
-                                    <Th>SKU</Th>
-                                    <Th>Categoría</Th>
-                                    <Th>Precio</Th>
-                                    <Th>Sedes</Th>
-                                    <Th>Estado</Th>
-                                    {canAct && <Th className="text-center">Acciones</Th>}
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-line">
+                        <>
+                            {/* Phones and small tablets: one card per product, nothing scrolls sideways. */}
+                            <ul className="divide-y divide-line lg:hidden" aria-label="Productos">
                                 {products.data.map((product) => (
-                                    <tr key={product.id} className={product.isActive ? '' : 'opacity-60'}>
-                                        <Td>
-                                            <p className="font-semibold text-ink">{product.name}</p>
-                                            {product.description && <p className="mt-0.5 max-w-md truncate text-xs text-ink-muted">{product.description}</p>}
-                                        </Td>
-                                        <Td className="whitespace-nowrap font-mono text-xs text-ink-muted">{product.sku ?? '—'}</Td>
-                                        <Td className="text-ink-muted">{product.category ?? '—'}</Td>
-                                        <Td className="whitespace-nowrap font-medium text-ink">{money(product.price, currency)}</Td>
-                                        <Td className="text-ink-muted">{product.locationIds.length === 0 ? 'Todas' : `${product.locationIds.length} sede${product.locationIds.length === 1 ? '' : 's'}`}</Td>
-                                        <Td className="whitespace-nowrap">
-                                            <Badge tone={product.isActive ? 'green' : 'neutral'}>{product.isActive ? 'Activo' : 'Inactivo'}</Badge>
-                                        </Td>
-                                        {canAct && (
-                                            <Td>
-                                                <div className="flex items-center justify-center gap-1">
-                                                    {canEdit && <IconButton icon={Pencil} label="Editar" context={product.name} onClick={() => setEditing(product)} />}
-                                                    {canToggle && <IconButton icon={Power} label={product.isActive ? 'Desactivar' : 'Activar'} context={product.name} tone={product.isActive ? 'danger' : 'primary'} onClick={() => toggle(product)} />}
-                                                </div>
-                                            </Td>
-                                        )}
-                                    </tr>
+                                    <li key={product.id} className={`space-y-3 p-4 ${product.isActive ? '' : 'bg-canvas/50'}`}>
+                                        <div className="flex gap-3">
+                                            <ProductThumb product={product} size="size-16" iconSize="size-6" />
+                                            <div className="min-w-0 flex-1">
+                                                <p className="font-semibold break-words text-ink">{product.name}</p>
+                                                <p className="text-xs text-ink-muted">{[product.sku, product.category].filter(Boolean).join(' · ') || 'Sin SKU ni categoría'}</p>
+                                                <p className="mt-1 text-sm font-semibold text-ink">{money(product.price, currency)}</p>
+                                            </div>
+                                            <span className="self-start">
+                                                <StateBadge product={product} />
+                                            </span>
+                                        </div>
+                                        {showStock && <StockInfo stock={product.stock} />}
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            {canToggle ? (
+                                                <button type="button" onClick={() => toggle(product)} className="text-xs font-semibold text-ink-muted underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-primary">
+                                                    {product.isActive ? 'Desactivar' : 'Activar'}
+                                                </button>
+                                            ) : (
+                                                <span />
+                                            )}
+                                            <RowActions product={product} canEdit={canEdit} onEdit={setEditing} />
+                                        </div>
+                                    </li>
                                 ))}
-                            </tbody>
-                        </TableWrap>
+                            </ul>
+
+                            <div className="hidden lg:block">
+                                <TableWrap busy={list.loading}>
+                                    <thead>
+                                        <tr>
+                                            <Th>Producto</Th>
+                                            <Th>Categoría</Th>
+                                            <Th>Precio</Th>
+                                            {showStock && <Th>{filters.place === '' ? 'Existencias' : 'Existencias de la sede'}</Th>}
+                                            <Th>Estado</Th>
+                                            <Th className="text-right">Acciones</Th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-line">
+                                        {products.data.map((product) => (
+                                            <tr key={product.id} className={`transition-colors duration-150 hover:bg-canvas/70 focus-within:bg-canvas/70 ${product.isActive ? '' : 'bg-canvas/40'}`}>
+                                                <Td>
+                                                    <div className="flex items-center gap-3">
+                                                        <ProductThumb product={product} />
+                                                        <div className="min-w-0">
+                                                            <Link href={route('catalog.show', product.id)} className="font-semibold text-ink hover:text-accent-blue focus-visible:outline-2 focus-visible:outline-primary">
+                                                                {product.name}
+                                                            </Link>
+                                                            <p className="font-mono text-xs text-ink-muted">{product.sku ?? 'Sin SKU'}</p>
+                                                        </div>
+                                                    </div>
+                                                </Td>
+                                                <Td className="text-ink-muted">{product.category ?? '—'}</Td>
+                                                <Td className="whitespace-nowrap font-medium text-ink">{money(product.price, currency)}</Td>
+                                                {showStock && (
+                                                    <Td>
+                                                        <StockInfo stock={product.stock} />
+                                                    </Td>
+                                                )}
+                                                <Td className="whitespace-nowrap">
+                                                    {canToggle ? <StatusSwitch checked={product.isActive} onChange={() => toggle(product)} aria-label={`${product.isActive ? 'Desactivar' : 'Activar'} ${product.name}`} /> : <StateBadge product={product} />}
+                                                </Td>
+                                                <Td>
+                                                    <RowActions product={product} canEdit={canEdit} onEdit={setEditing} />
+                                                </Td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </TableWrap>
+                            </div>
+                        </>
                     )}
                     <Pagination noun="productos" {...list.paginationProps} />
                 </Card>
             )}
 
-            {editing && <ProductModal product={editing} locations={locations} currency={currency} onClose={() => setEditing(null)} />}
+            {editing && <ProductModal product={editing} locations={locations} categories={categories} currency={currency} inventory={inventory} canActivate={canToggle} onClose={() => setEditing(null)} />}
         </>
     );
 }

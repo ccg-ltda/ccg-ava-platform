@@ -24,7 +24,7 @@ use Throwable;
  */
 class OrderService
 {
-    public function __construct(private readonly Locations $locations, private readonly ModuleAccess $modules, private readonly OrderNotifier $notifier) {}
+    public function __construct(private readonly Locations $locations, private readonly ModuleAccess $modules, private readonly OrderNotifier $notifier, private readonly InventoryService $inventory) {}
 
     /**
      * @param  array<string, mixed>  $data  customer_name, customer_phone?, customer_email?, customer_id?, delivery_method, delivery_address?, delivery_city?,
@@ -92,6 +92,11 @@ class OrderService
 
             if ($cents > 99_999_999_999_999) { // what a decimal(14,2) column holds
                 throw OrderException::unavailable('El total del pedido supera el máximo permitido.');
+            }
+
+            // A product with stock control must have, in the order's location, what the order asks for (checked again, under lock, when the sale is confirmed).
+            if ($this->inventory->ready()) {
+                $this->inventory->assertAvailable($rows, $location?->id, $location?->name);
             }
 
             $order = $workspace->orders()->create([
@@ -171,6 +176,14 @@ class OrderService
 
             if ($needed && $needed !== $current->delivery_method) {
                 throw OrderException::state($needed === 'delivery' ? 'Solo un pedido a domicilio se despacha: este se recoge.' : 'Un pedido a domicilio se entrega después de despacharlo.');
+            }
+
+            // The sale leaves the stock when the shop accepts it (received -> confirmed), once; a cancellation after that returns it, once. Both run inside this
+            // transaction and under this order's lock: an order that cannot be fulfilled stays exactly as it was.
+            if ($to === 'confirmed') {
+                $this->inventory->consume($current, $actor);
+            } elseif ($to === 'cancelled') {
+                $this->inventory->restore($current, $actor);
             }
 
             $current->forceFill(['status' => $to, 'status_changed_at' => now(), 'cancel_reason' => $to === 'cancelled' ? $reason : $current->cancel_reason])->save();

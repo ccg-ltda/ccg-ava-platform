@@ -287,7 +287,7 @@ class InternalAdministrationTest extends TestCase
         $expected = [
             'customers' => ['view-customers', 'view-customer-details', 'create-customers', 'edit-customers', 'activate-customers', 'anonymize-customers'],
             'orders' => ['view-orders', 'view-order-details', 'create-orders', 'edit-orders', 'cancel-orders', 'process-orders'],
-            'catalog' => ['view-catalog', 'create-products', 'edit-products', 'activate-products'],
+            'catalog' => ['view-catalog', 'create-products', 'edit-products', 'activate-products', 'view-inventory', 'adjust-inventory'],
             'assistants' => ['view-chatbots', 'create-chatbots', 'edit-chatbots', 'activate-chatbots', 'manage-chatbot-channels', 'manage-agent-tokens'],
             'conversations' => ['view-conversations', 'take-conversations', 'reply-conversations', 'release-conversations', 'resolve-conversations', 'manage-conversations', 'use-conversation-demo'],
             'plans' => ['view-plans', 'create-plans', 'edit-plans', 'activate-plans', 'assign-plans'],

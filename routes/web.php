@@ -12,6 +12,7 @@ use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DemoConversationController;
 use App\Http\Controllers\IntegrationController;
+use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\LegalController;
 use App\Http\Controllers\LocationController;
 use App\Http\Controllers\MessageTemplateController;
@@ -138,7 +139,17 @@ Route::middleware(['auth', 'workspace'])->group(function () {
     Route::middleware(['workspace.module:product_catalog', 'workspace.permission:view-catalog'])->prefix('catalog')->name('catalog.')->group(function () {
         Route::get('/', [ProductController::class, 'index'])->name('index');
         Route::post('/', [ProductController::class, 'store'])->middleware('workspace.permission:create-products')->name('store');
+        // A category is chosen from the Workspace's own list; creating one is part of creating or editing products (the same permissions).
+        Route::post('/categories', [ProductController::class, 'storeCategory'])->middleware(['workspace.permission:create-products,edit-products', 'throttle:60,1'])->name('categories.store');
+        Route::get('/{product}', [ProductController::class, 'show'])->whereNumber('product')->name('show');
+        Route::get('/{product}/image', [ProductController::class, 'image'])->whereNumber('product')->name('image');
         Route::put('/{product}', [ProductController::class, 'update'])->whereNumber('product')->middleware('workspace.permission:edit-products')->name('update');
+        // Inventory: every change goes through InventoryService and leaves its movement. Reading the stock and its history is `view-inventory`.
+        Route::middleware('workspace.permission:adjust-inventory')->prefix('/{product}/stock')->whereNumber('product')->name('stock.')->group(function () {
+            Route::post('/receive', [InventoryController::class, 'receive'])->middleware('throttle:60,1')->name('receive');
+            Route::post('/adjust', [InventoryController::class, 'adjust'])->middleware('throttle:60,1')->name('adjust');
+            Route::put('/minimum', [InventoryController::class, 'minimum'])->name('minimum');
+        });
         Route::post('/{product}/activate', [ProductController::class, 'activate'])->whereNumber('product')->middleware('workspace.permission:activate-products')->name('activate');
         Route::post('/{product}/deactivate', [ProductController::class, 'deactivate'])->whereNumber('product')->middleware('workspace.permission:activate-products')->name('deactivate');
     });

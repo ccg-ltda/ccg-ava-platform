@@ -14,9 +14,17 @@ class CommerceSchema
 
     private ?bool $linked = null;
 
+    private ?bool $inventory = null;
+
     public function ready(): bool
     {
         return $this->ready ??= Schema::hasTable('products') && Schema::hasTable('location_product') && Schema::hasTable('orders') && Schema::hasTable('order_lines') && Schema::hasTable('order_status_changes');
+    }
+
+    /** Whether the inventory structure exists (migration `create_inventory_tables`): until it is applied the Catálogo and the orders behave exactly as before. */
+    public function inventoryReady(): bool
+    {
+        return $this->inventory ??= $this->ready() && Schema::hasTable('inventory_stocks') && Schema::hasTable('inventory_movements') && Schema::hasTable('product_categories') && Schema::hasColumn('products', 'tracks_inventory');
     }
 
     /**

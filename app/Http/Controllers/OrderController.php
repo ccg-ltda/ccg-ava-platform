@@ -156,7 +156,11 @@ class OrderController extends Controller
         $canCustomers = in_array('customers', $this->modules->forRequest($request), true) && in_array('view-customers', $request->attributes->get('workspace_permissions', []), true);
 
         return [
-            'products' => $workspace->products()->with('locations:id')->where('is_active', true)->orderBy('name')->limit(500)->get()->map(fn ($product) => ['id' => $product->id, 'sku' => $product->sku, 'name' => $product->name, 'price' => (float) $product->price, 'locationIds' => $product->locations->pluck('id')->all()])->all(),
+            // A product with stock control carries what is on hand in each location (key = the location id, `general` for the general stock), so the form can say
+            // «sin existencias aquí» before the server refuses it; a product without control has no `stock` and is always offered.
+            'products' => $workspace->products()->with(app(CommerceSchema::class)->inventoryReady() ? ['locations:id', 'stocks'] : ['locations:id'])->where('is_active', true)->orderBy('name')->limit(500)->get()
+                ->map(fn ($product) => ['id' => $product->id, 'sku' => $product->sku, 'name' => $product->name, 'price' => (float) $product->price, 'locationIds' => $product->locations->pluck('id')->all(),
+                    'stock' => app(CommerceSchema::class)->inventoryReady() && $product->tracks_inventory ? $product->stocks->mapWithKeys(fn ($stock) => [($stock->location_id ?? 'general') => $stock->quantity])->all() : null])->all(),
             'locations' => $this->locations->active($workspace)->map(fn ($location) => ['id' => $location->id, 'name' => $location->name])->values()->all(),
             'customers' => $canCustomers ? $workspace->customers()->where('is_active', true)->orderBy('first_name')->orderBy('last_name')->limit(300)->get()->map(fn ($customer) => ['id' => $customer->id, 'name' => $customer->fullName(), 'phone' => $customer->phone, 'email' => $customer->email])->all() : [],
         ];
