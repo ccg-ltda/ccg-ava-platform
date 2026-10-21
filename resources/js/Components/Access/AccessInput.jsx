@@ -18,13 +18,13 @@ function Field({ id, label, message, children }) {
  * `message` is the error text (shown when not empty); `valid` marks the field as filled correctly.
  * `connect` draws the SVG line from the background sphere to the input.
  */
-export function AccessInput({ id, label, message = '', valid = false, connect = false, ...props }) {
+export function AccessInput({ id, label, message = '', valid = false, connect = false, className = '', ...props }) {
     const ref = useRef(null);
     useConnectTarget(ref, connect);
 
     return (
         <Field id={id} label={label} message={message}>
-            <input ref={ref} id={id} className={stateClass(message, valid)} {...props} />
+            <input ref={ref} id={id} className={[stateClass(message, valid), className].filter(Boolean).join(' ')} {...props} />
         </Field>
     );
 }

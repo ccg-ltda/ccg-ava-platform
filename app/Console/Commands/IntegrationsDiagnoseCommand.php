@@ -13,8 +13,11 @@ use App\Models\Integration;
 use App\Models\Message;
 use App\Models\Plan;
 use App\Models\Workspace;
+use App\Payments\PaymentGateway;
 use App\Services\ModuleAccess;
 use App\Services\ModuleCatalog;
+use App\Services\SignupCatalog;
+use App\Services\SignupService;
 use App\Services\SupportChannel;
 use App\Support\MailAvailability;
 use App\Support\ScheduledCommandMonitor;
@@ -72,6 +75,9 @@ class IntegrationsDiagnoseCommand extends Command
 
         $this->components->info('Chat público de CCG (soporte en el Workspace administrativo)');
         $this->supportChat();
+
+        $this->components->info('Registro público y contratación');
+        $this->publicSignup();
 
         $this->components->info('Confirmaciones y recordatorios de citas');
         $this->appointmentNotifications($workspaceId);
@@ -425,6 +431,37 @@ class IntegrationsDiagnoseCommand extends Command
         filled(config('support.notify_webhook_url'))
             ? $this->good('Hay un webhook de avisos al equipo (nueva consulta y petición de una persona); su recepción en n8n no se ha probado desde aquí.')
             : $this->caution('Sin CCG_SUPPORT_NOTIFY_URL no sale ningún aviso al equipo: las consultas solo aparecen en la bandeja de Conversaciones.');
+    }
+
+    /**
+     * What stops the public sign-up from being usable, read only: whether there is anything to contract, whether the tables exist, whether a payment
+     * provider and real mail are configured, and the contracts that were paid but not provisioned. Counts and fixed codes only.
+     */
+    private function publicSignup(): void
+    {
+        if (! Schema::hasTable('signup_requests') || ! Schema::hasColumn('plans', 'is_public')) {
+            $this->caution('Falta aplicar la migración del registro público: /registro no puede guardar solicitudes.');
+
+            return;
+        }
+
+        $catalog = app(SignupCatalog::class);
+        $catalog->hasOffers()
+            ? $this->good('Hay ofertas publicadas para contratar ('.count($catalog->solutions()).' solución(es)).')
+            : $this->caution('No hay ninguna oferta válida publicada: /registro muestra que no hay ofertas disponibles. Configúralas en Planes → Oferta comercial.');
+
+        app(PaymentGateway::class)->isConfigured()
+            ? $this->good('Hay un proveedor de pagos configurado.')
+            : $this->caution('No hay proveedor de pagos: ninguna contratación puede cobrarse ni activarse todavía.');
+
+        MailAvailability::deliversRealMail()
+            ? $this->good('El correo sale de verdad (el código de verificación llegará).')
+            : $this->caution('El correo no sale de verdad (log, array o sin remitente real): el código de verificación no llegaría a nadie.');
+
+        $stuck = app(SignupService::class)->stuck()->count();
+        $stuck === 0
+            ? $this->good('Ninguna contratación pagada está sin aprovisionar.')
+            : $this->blocker("Hay {$stuck} contratación(es) pagada(s) sin aprovisionar: revisa con php artisan signup:reconcile.");
     }
 
     /** Workspaces that asked for confirmations or reminders but cannot send them, and what happened to the messages of the last 24 hours (ids and counts only). */

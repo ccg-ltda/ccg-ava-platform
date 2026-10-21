@@ -32,6 +32,7 @@ use App\Http\Controllers\SavedFilterController;
 use App\Http\Controllers\ScheduleExceptionController;
 use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\SignupController;
 use App\Http\Controllers\SupportAccessController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WorkspaceController;
@@ -48,6 +49,23 @@ Route::redirect('/', '/pre-login');
 // Public legal texts (no session): linked from the access screens and the account-recovery forms.
 Route::get('/legal', [LegalController::class, 'index'])->name('legal.index');
 Route::get('/legal/{slug}', [LegalController::class, 'show'])->where('slug', '[a-z-]+')->name('legal.show');
+
+// Public sign-up of new customers (guests only): the wizard decides every step on the server and creates nothing definitive before a verified payment.
+Route::middleware('guest')->prefix('registro')->name('signup.')->group(function () {
+    Route::get('/', [SignupController::class, 'index'])->name('index');
+    Route::post('/correo', [SignupController::class, 'sendCode'])->middleware('throttle:signup-code')->name('code.send');
+    Route::post('/codigo', [SignupController::class, 'verifyCode'])->middleware('throttle:signup-verify')->name('code.verify');
+    Route::post('/reiniciar', [SignupController::class, 'restart'])->middleware('throttle:signup-step')->name('restart');
+    Route::get('/disponibilidad', [SignupController::class, 'availability'])->middleware('throttle:signup-availability')->name('availability');
+    Route::post('/empresa', [SignupController::class, 'company'])->middleware('throttle:signup-step')->name('company');
+    Route::post('/solucion', [SignupController::class, 'solution'])->middleware('throttle:signup-step')->name('solution');
+    Route::post('/plan', [SignupController::class, 'plan'])->middleware('throttle:signup-step')->name('plan');
+    Route::post('/contratar', [SignupController::class, 'contract'])->middleware('throttle:signup-step')->name('contract');
+    Route::post('/cotizacion', [SignupController::class, 'quote'])->middleware('throttle:signup-step')->name('quote');
+    Route::post('/atras', [SignupController::class, 'back'])->middleware('throttle:signup-step')->name('back');
+    Route::post('/cancelar', [SignupController::class, 'cancel'])->middleware('throttle:signup-step')->name('cancel');
+    Route::get('/bienvenida', [SignupController::class, 'welcome'])->name('welcome');
+});
 
 // The open booking page of a Workspace (no session): the key in the URL is the only thing the visitor chooses. Its data comes from /api/booking/{key}/....
 Route::get('/book/{key}', [PublicBookingController::class, 'page'])->where('key', '[A-Za-z0-9]{32}')->middleware('throttle:booking-config')->name('booking.public');

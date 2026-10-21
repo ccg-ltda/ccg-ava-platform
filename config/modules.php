@@ -97,12 +97,13 @@ return [
     ],
 
     'categories' => [
-        'shared' => ['name' => 'Módulos compartidos', 'description' => 'Funciones comunes a todas las soluciones de Ava Platform.', 'sort' => 10],
+        // `solution => false`: a group of shared capabilities, not a commercial solution (it can not be chosen as the solution of a plan in the public sign-up). Default true.
+        'shared' => ['name' => 'Módulos compartidos', 'description' => 'Funciones comunes a todas las soluciones de Ava Platform.', 'solution' => false, 'sort' => 10],
         'health' => ['name' => 'Salud', 'description' => 'Área para módulos de salud.', 'group' => 'solutions', 'sort' => 20],
         'delivery' => ['name' => 'Delivery', 'description' => 'Área para módulos de delivery.', 'group' => 'solutions', 'sort' => 30],
         'ecommerce' => ['name' => 'eCommerce', 'description' => 'Área para módulos de comercio electrónico.', 'group' => 'solutions', 'sort' => 40],
         'services_bookings' => ['name' => 'Servicios y Reservas', 'description' => 'Área para módulos de servicios y reservas.', 'group' => 'solutions', 'sort' => 50],
-        'communication' => ['name' => 'Clientes y comunicación', 'description' => 'Fichas de clientes y mensajes salientes reutilizables por cualquier solución.', 'group' => 'shared', 'sort' => 60],
+        'communication' => ['name' => 'Clientes y comunicación', 'description' => 'Fichas de clientes y mensajes salientes reutilizables por cualquier solución.', 'group' => 'shared', 'solution' => false, 'sort' => 60],
     ],
 
     /*

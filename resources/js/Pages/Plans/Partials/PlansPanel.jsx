@@ -10,13 +10,14 @@ import PrimaryButton from '@/Components/PrimaryButton';
 import SearchInput from '@/Components/SearchInput';
 import { TableWrap, Td, Th } from '@/Components/Table';
 import { useToast } from '@/Components/Toast';
+import OfferBadge from './OfferBadge';
 import PlanFormModal from './PlanFormModal';
 
 /**
  * Planes tab: search, create, edit and activate/deactivate commercial plans. Search runs on the server (debounced). A plan
  * with Workspaces cannot be deactivated (the server refuses and says why); nothing is ever deleted.
  */
-export default function PlansPanel({ plans, catalog, filters, can }) {
+export default function PlansPanel({ plans, catalog, filters, can, commercial }) {
     const confirm = useConfirm();
     const toast = useToast();
 
@@ -24,8 +25,9 @@ export default function PlansPanel({ plans, catalog, filters, can }) {
     const [loading, setLoading] = useState(false);
     const first = useRef(true);
 
-    const create = useForm({ name: '', description: '', module_ids: [] });
-    const edit = useForm({ name: '', description: '', module_ids: [] });
+    const blankOffer = { module_category_id: null, price: '', currency: null, billing_period: null, is_public: false, requires_quote: false };
+    const create = useForm({ name: '', description: '', module_ids: [], ...blankOffer });
+    const edit = useForm({ name: '', description: '', module_ids: [], ...blankOffer });
     const [creating, setCreating] = useState(false);
     const [editing, setEditing] = useState(null);
 
@@ -59,7 +61,17 @@ export default function PlansPanel({ plans, catalog, filters, can }) {
         setEditing(plan);
         edit.clearErrors();
         // The editor opens with what the plan has saved: its data and its modules.
-        edit.setData({ name: plan.name, description: plan.description ?? '', module_ids: plan.moduleIds ?? [] });
+        edit.setData({
+            name: plan.name,
+            description: plan.description ?? '',
+            module_ids: plan.moduleIds ?? [],
+            module_category_id: plan.offer?.solutionId ?? null,
+            price: plan.offer?.price ?? '',
+            currency: plan.offer?.currency ?? null,
+            billing_period: plan.offer?.period ?? null,
+            is_public: Boolean(plan.offer?.isPublic),
+            requires_quote: Boolean(plan.offer?.requiresQuote),
+        });
     };
 
     const submitEdit = (e) => {
@@ -128,6 +140,8 @@ export default function PlansPanel({ plans, catalog, filters, can }) {
                                     </Link>
                                     {plan.isDefault && <Badge tone="blue" className="ml-2">Por defecto</Badge>}
                                     {plan.unmet.length > 0 && <Badge tone="amber" className="ml-2">Dependencias incompletas</Badge>}
+                                    <OfferBadge offer={plan.offer} className="ml-2" />
+                                    {plan.offer?.state === 'incomplete' && <p className="mt-0.5 max-w-md text-xs text-accent-amber">Registro público: {plan.offer.issues.join(' ')}</p>}
                                     {plan.description && <p className="mt-0.5 max-w-md truncate text-xs text-ink-muted">{plan.description}</p>}
                                 </Td>
                                 <Td className="whitespace-nowrap">
@@ -156,8 +170,8 @@ export default function PlansPanel({ plans, catalog, filters, can }) {
                 </TableWrap>
             )}
 
-            <PlanFormModal show={creating} title="Nuevo plan" form={create} catalog={catalog} submitLabel="Crear plan" onClose={() => setCreating(false)} onSubmit={submitCreate} />
-            <PlanFormModal show={Boolean(editing)} title="Editar plan" form={edit} catalog={catalog} submitLabel="Guardar cambios" onClose={() => setEditing(null)} onSubmit={submitEdit} />
+            <PlanFormModal show={creating} title="Nuevo plan" form={create} catalog={catalog} commercial={commercial} submitLabel="Crear plan" onClose={() => setCreating(false)} onSubmit={submitCreate} />
+            <PlanFormModal show={Boolean(editing)} title="Editar plan" form={edit} catalog={catalog} commercial={commercial} submitLabel="Guardar cambios" onClose={() => setEditing(null)} onSubmit={submitEdit} />
         </Card>
     );
 }

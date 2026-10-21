@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Middleware\EnsurePlatformAdministration;
 use App\Http\Requests\SavePlanModulesRequest;
 use App\Http\Requests\SavePlanRequest;
+use App\Models\ModuleCategory;
 use App\Models\Plan;
 use App\Models\Workspace;
 use App\Services\ListPagination;
@@ -32,7 +33,7 @@ class PlanController extends Controller
 
         return Inertia::render('Plans/Index', [
             'can' => $can,
-            'plans' => ! $can['plans'] ? [] : Plan::query()->withCount('modules')
+            'plans' => ! $can['plans'] ? [] : Plan::query()->withCount('modules')->with('solution')
                 ->when($search !== '', function ($query) use ($search) {
                     $like = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($search)).'%';
                     $query->whereRaw("lower(name) like ? escape '!'", [$like]);
@@ -41,6 +42,7 @@ class PlanController extends Controller
                 ->map(fn (Plan $plan) => $this->summary($plan, $counts[$plan->id] ?? 0))->all(),
             'catalog' => $this->catalog->grouped(),
             'filters' => ['search' => $search],
+            'commercial' => $this->commercialOptions(),
         ]);
     }
 
@@ -71,9 +73,10 @@ class PlanController extends Controller
     {
         return Inertia::render('Plans/Show', [
             'can' => $this->abilities($request),
-            'plan' => $this->summary($plan->loadCount('modules'), $this->catalog->workspacesOf($plan)->count())
+            'plan' => $this->summary($plan->loadMissing('solution')->loadCount('modules'), $this->catalog->workspacesOf($plan)->count())
                 + ['moduleIds' => $plan->modules()->pluck('modules.id')->all()],
             'catalog' => $this->catalog->grouped(),
+            'commercial' => $this->commercialOptions(),
             'workspaces' => fn () => $this->workspacesPage($request, $plan),
             'perPageOptions' => ListPagination::OPTIONS,
         ]);
@@ -81,7 +84,7 @@ class PlanController extends Controller
 
     public function store(SavePlanRequest $request): RedirectResponse
     {
-        $plan = $this->catalog->createPlan($request->validated(), $request->moduleIds());
+        $plan = $this->catalog->createPlan($request->safe()->only(['name', 'description']), $request->moduleIds(), $request->commercial());
 
         return redirect()->route('plans.show', $plan)->with('success', 'Plan creado correctamente');
     }
@@ -90,7 +93,7 @@ class PlanController extends Controller
     public function update(SavePlanRequest $request, Plan $plan): RedirectResponse
     {
         DB::transaction(function () use ($request, $plan) {
-            $this->catalog->updatePlan($plan, $request->validated());
+            $this->catalog->updatePlan($plan, $request->safe()->only(['name', 'description']), $request->commercial());
 
             if ($request->has('module_ids')) {
                 $this->catalog->syncModules($plan, $request->moduleIds());
@@ -133,8 +136,26 @@ class PlanController extends Controller
             'moduleIds' => $plan->modules()->pluck('modules.id')->all(),
             'modulesCount' => $plan->modules_count,
             'workspacesCount' => $workspacesCount,
+            // The commercial offer, exactly as saved (price in major units): what the public sign-up reads.
+            'offer' => [
+                'solutionId' => $plan->module_category_id, 'price' => $plan->price_cents !== null ? $plan->price_cents / 100 : null, 'currency' => $plan->currency,
+                'period' => $plan->billing_period, 'isPublic' => $plan->is_public, 'requiresQuote' => $plan->requires_quote,
+                // private | online | quote | incomplete (+ why): the same rule the public sign-up applies.
+                'state' => $plan->offerState()['state'], 'issues' => $plan->offerState()['issues'],
+            ],
             // Modules of the plan that are NOT operative because a module they need is not in the plan.
             'unmet' => $this->catalog->unmetDependencies($plan->modules()->pluck('modules.key')->all()),
+        ];
+    }
+
+    /** @return array<string, mixed> the choices of the commercial form: solutions (module categories), currencies and periods */
+    private function commercialOptions(): array
+    {
+        return [
+            // Only categories that are commercial solutions: the groups of shared capabilities are not offered as a solution.
+            'solutions' => ModuleCategory::where('is_active', true)->orderBy('sort_order')->get()->filter(fn (ModuleCategory $c) => $c->isSolution())->map(fn ($c) => ['value' => $c->id, 'label' => $c->name])->values()->all(),
+            'currencies' => collect(config('workspace.currencies'))->map(fn (string $name, string $code) => ['value' => $code, 'label' => "{$code} · {$name}"])->values()->all(),
+            'periods' => collect(Plan::PERIODS)->map(fn (string $label, string $key) => ['value' => $key, 'label' => $label])->values()->all(),
         ];
     }
 

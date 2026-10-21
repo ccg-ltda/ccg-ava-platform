@@ -128,10 +128,10 @@ class ModuleCatalog
      * @param  array{name: string, description?: ?string}  $data
      * @param  list<int>  $moduleIds
      */
-    public function createPlan(array $data, array $moduleIds = []): Plan
+    public function createPlan(array $data, array $moduleIds = [], array $commercial = []): Plan
     {
-        return DB::transaction(function () use ($data, $moduleIds) {
-            $plan = Plan::create(['name' => $data['name'], 'description' => $data['description'] ?? null]);
+        return DB::transaction(function () use ($data, $moduleIds, $commercial) {
+            $plan = Plan::create(['name' => $data['name'], 'description' => $data['description'] ?? null] + $commercial);
             $this->syncModules($plan, $moduleIds);
 
             return $plan;
@@ -139,9 +139,9 @@ class ModuleCatalog
     }
 
     /** @param  array{name: string, description?: ?string}  $data */
-    public function updatePlan(Plan $plan, array $data): Plan
+    public function updatePlan(Plan $plan, array $data, array $commercial = []): Plan
     {
-        $plan->update(['name' => $data['name'], 'description' => $data['description'] ?? null]);
+        $plan->update(['name' => $data['name'], 'description' => $data['description'] ?? null] + $commercial);
 
         return $plan;
     }

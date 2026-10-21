@@ -220,3 +220,7 @@ Estado verificado en el código. «Fase» = cuándo se cierra el hueco que queda
 | **P-AVISO** | Texto, ubicación y versión del aviso para WhatsApp y webchat | El widget no muestra aviso |
 | **P-INC** | Procedimiento de incidentes | No definido |
 | **P-SUB** | Lista de subencargados y licencia de n8n | No definida |
+
+## 17. Datos del registro público (2026-10-21)
+
+El registro de nuevos clientes (`/registro`) trata, antes de que exista una cuenta: el correo de quien se registra (con su código de verificación, del que solo se guarda un HMAC y que caduca a los 15 minutos), el nombre del administrador, la contraseña (solo su hash), el nombre y el NIT de la empresa, un teléfono de contacto, el nombre elegido para el Workspace, el plan elegido con una instantánea de su precio, las versiones de los documentos aceptados y la IP. Esos datos viven en `signup_verifications` y `signup_requests`; al completarse el pago pasan a `organizations` (nombre, NIT, teléfono), `users` y `legal_acceptances`. **No hay plazos de retención ni purga** de verificaciones ni de solicitudes abandonadas o canceladas: es una decisión pendiente (P-RET). La aceptación usa los textos en borrador de `config/legal.php` hasta la revisión jurídica; el NIT es dato de una persona jurídica, pero el teléfono y el correo pueden identificar a una persona natural.

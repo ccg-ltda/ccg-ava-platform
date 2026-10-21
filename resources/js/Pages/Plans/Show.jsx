@@ -18,6 +18,7 @@ import WorkspaceCombobox from '@/Components/WorkspaceCombobox';
 import usePagedList from '@/Hooks/usePagedList';
 import AppLayout from '@/Layouts/AppLayout';
 import ModuleChecklist from './Partials/ModuleChecklist';
+import OfferBadge from './Partials/OfferBadge';
 import PlanFormModal from './Partials/PlanFormModal';
 
 const sameIds = (a, b) => a.length === b.length && a.every((id) => b.includes(id));
@@ -171,10 +172,19 @@ function WorkspacesCard({ plan, workspaces, perPageOptions, canAssign }) {
 }
 
 /** One plan: its data, its modules and the Workspaces that use it. */
-export default function Show({ can, plan, catalog, workspaces, perPageOptions }) {
+export default function Show({ can, plan, catalog, commercial, workspaces, perPageOptions }) {
     const confirm = useConfirm();
     const toast = useToast();
-    const edit = useForm({ name: plan.name, description: plan.description ?? '' });
+    const edit = useForm({
+        name: plan.name,
+        description: plan.description ?? '',
+        module_category_id: plan.offer?.solutionId ?? null,
+        price: plan.offer?.price ?? '',
+        currency: plan.offer?.currency ?? null,
+        billing_period: plan.offer?.period ?? null,
+        is_public: Boolean(plan.offer?.isPublic),
+        requires_quote: Boolean(plan.offer?.requiresQuote),
+    });
     const [editing, setEditing] = useState(false);
 
     const submitEdit = (e) => {
@@ -211,6 +221,7 @@ export default function Show({ can, plan, catalog, workspaces, perPageOptions })
             <PageHeader title={plan.name} description={plan.description ?? 'Sin descripción.'}>
                 <Badge tone={plan.isActive ? 'green' : 'neutral'}>{plan.isActive ? 'Activo' : 'Inactivo'}</Badge>
                 {plan.isDefault && <Badge tone="blue">Por defecto</Badge>}
+                <OfferBadge offer={plan.offer} />
                 {can.editPlan && (
                     <SecondaryButton type="button" onClick={() => setEditing(true)} className="gap-2">
                         <Pencil className="size-4" aria-hidden="true" />
@@ -228,7 +239,7 @@ export default function Show({ can, plan, catalog, workspaces, perPageOptions })
             <ModulesCard key={plan.moduleIds.join(',')} plan={plan} catalog={catalog} canEdit={can.editPlan} />
             <WorkspacesCard plan={plan} workspaces={workspaces} perPageOptions={perPageOptions} canAssign={can.assignPlan} />
 
-            <PlanFormModal show={editing} title="Editar plan" form={edit} submitLabel="Guardar cambios" onClose={() => setEditing(false)} onSubmit={submitEdit} />
+            <PlanFormModal show={editing} title="Editar plan" form={edit} commercial={commercial} submitLabel="Guardar cambios" onClose={() => setEditing(false)} onSubmit={submitEdit} />
         </>
     );
 }

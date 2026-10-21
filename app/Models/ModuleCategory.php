@@ -18,6 +18,16 @@ class ModuleCategory extends Model
         return ['is_active' => 'boolean', 'sort_order' => 'integer'];
     }
 
+    /**
+     * Whether the category is a commercial SOLUTION (Salud, Delivery, eCommerce, Servicios y Reservas, or one created in Planes) and not a group of shared
+     * capabilities («Módulos compartidos», «Clientes y comunicación»): config/modules.php `categories.*.solution` (false for those two; true by default,
+     * which is what a category created in Planes gets). Only a solution can be chosen for a plan in the public sign-up.
+     */
+    public function isSolution(): bool
+    {
+        return (bool) config("modules.categories.{$this->key}.solution", true);
+    }
+
     public function modules(): HasMany
     {
         return $this->hasMany(Module::class);

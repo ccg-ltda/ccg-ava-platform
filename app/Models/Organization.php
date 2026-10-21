@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['name', 'is_active'])]
+#[Fillable(['name', 'tax_id', 'phone', 'is_active'])]
 class Organization extends Model
 {
     use Audited;

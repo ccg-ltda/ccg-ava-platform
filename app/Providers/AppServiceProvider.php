@@ -12,6 +12,8 @@ use App\Models\User;
 use App\Orders\CommerceSchema;
 use App\Orders\OrderNotifier;
 use App\Orders\UnavailableOrderNotifier;
+use App\Payments\PaymentGateway;
+use App\Payments\UnconfiguredPaymentGateway;
 use App\Services\AgentToolTrace;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Foundation\DevCommands;
@@ -34,6 +36,9 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(AppointmentNotifier::class);
         $this->app->scoped(CommerceSchema::class);
         $this->app->scoped(AgentToolTrace::class);
+
+        // The payment provider of the public sign-up: none is connected, so the unconfigured gateway says so and charges nothing. A real provider is bound here.
+        $this->app->bind(PaymentGateway::class, UnconfiguredPaymentGateway::class);
 
         // How an order event would reach the customer: no channel is connected yet, so the unavailable notifier says so and sends nothing.
         $this->app->bind(OrderNotifier::class, UnavailableOrderNotifier::class);
@@ -79,6 +84,17 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('password-reset-submit', fn (Request $request) => Limit::perMinute(10)->by('ip:'.$request->ip()));
         // Changing one's own password asks for the current one: limit guessing it from a hijacked session.
         RateLimiter::for('password-change', fn (Request $request) => Limit::perMinute(6)->by('user:'.$request->user()?->id.'|'.$request->ip()));
+
+        // Public sign-up: sending a code reaches a mailbox (limited per IP and per address), checking one is a guessing surface, the other steps and the
+        // availability check are cheap but open to anyone.
+        RateLimiter::for('signup-code', fn (Request $request) => [
+            Limit::perMinute(5)->by('ip:'.$request->ip()),
+            Limit::perHour(20)->by('ip-hour:'.$request->ip()),
+            Limit::perHour(5)->by('email:'.sha1(mb_strtolower(is_string($email = $request->input('email')) ? $email : ''))),
+        ]);
+        RateLimiter::for('signup-verify', fn (Request $request) => Limit::perMinute(10)->by('ip:'.$request->ip().'|'.$request->session()->getId()));
+        RateLimiter::for('signup-step', fn (Request $request) => Limit::perMinute(60)->by('ip:'.$request->ip()));
+        RateLimiter::for('signup-availability', fn (Request $request) => Limit::perMinute(30)->by('ip:'.$request->ip()));
 
         // The automation of a chatbot reads its configuration on every conversation.
         RateLimiter::for('agent', fn (Request $request) => Limit::perMinute((int) config('chatbots.agent_per_minute'))->by(sha1((string) $request->bearerToken()).'|'.$request->ip()));

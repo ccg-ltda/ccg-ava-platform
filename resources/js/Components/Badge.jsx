@@ -7,9 +7,10 @@ const TONES = {
     neutral: 'bg-canvas text-ink-muted ring-1 ring-line',
 };
 
-export default function Badge({ tone = 'neutral', className = '', children }) {
+export default function Badge({ tone = 'neutral', className = '', title, children }) {
     return (
         <span
+            title={title}
             className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${TONES[tone]} ${className}`}
         >
             {children}

@@ -1,4 +1,4 @@
-import { Head, useForm } from '@inertiajs/react';
+import { Head, Link, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 import { useAccess } from '@/Components/Access/AccessContext';
 import { AccessInput } from '@/Components/Access/AccessInput';
@@ -52,6 +52,12 @@ export default function PreLogin() {
                     Continuar
                 </button>
             </form>
+
+            <div className="login-signup">
+                ¿Aún no tienes cuenta?
+                <br />
+                <Link href={route('signup.index')}>Regístrate</Link>
+            </div>
         </>
     );
 }

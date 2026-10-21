@@ -97,6 +97,10 @@ Disponibilidad efectiva = módulos del plan, más concedidos, menos retirados, y
 
 **Alta de un cliente nuevo:** `registerNewCustomer` deja el Workspace desactivado y la suscripción `pending`; el primer pago confirmado (`confirmPayment`) aplica el plan, activa la suscripción y reabre el Workspace, una sola vez y solo si lo cerró ese registro. Repetir la confirmación no cambia nada. No hay ruta web ni API que modifique una suscripción.
 
+### Oferta comercial y registro público (2026-10-21)
+
+Cada plan puede llevar su **oferta comercial** (Planes → editar plan → «Oferta comercial»): la solución a la que pertenece (una categoría del catálogo), el precio (en la moneda indicada), la periodicidad, si se ofrece en el registro público y si se vende por cotización. Es lo único que lee `/registro` (`SignupCatalog`): nada se escribe en el código y un valor ausente se muestra como ausente. Un plan se vende en línea solo si está activo, es público, no es por cotización y tiene solución, precio, moneda y periodicidad; uno por cotización nunca abre un cobro. Los planes pueden tener cero módulos y dependencias incompletas (E4); la vista previa de módulos del registro es informativa. Solo una categoría que es una **solución comercial** (`config/modules.php categories.*.solution`, verdadero salvo «Módulos compartidos» y «Clientes y comunicación») puede ser la solución de un plan; la administración muestra por plan si está en «Contratación en línea», «Por cotización», «Oferta incompleta» (con la razón) o «No público». El detalle del flujo y del punto de integración del pago está en `RECOMENDACIONES.md` §27, y las condiciones de habilitación en §28.
+
 ### Ejemplos ilustrativos (NO son planes reales ni se han creado)
 
 | Ejemplo | Módulos | Resultado |

@@ -3,10 +3,13 @@ import Alert from '@/Components/Alert';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import Modal from '@/Components/Modal';
+import PriceInput from '@/Components/PriceInput';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
+import Select from '@/Components/Select';
 import Textarea from '@/Components/Textarea';
 import TextInput from '@/Components/TextInput';
+import Toggle from '@/Components/Toggle';
 import ModuleChecklist, { unmetRequirements } from './ModuleChecklist';
 
 /**
@@ -14,7 +17,7 @@ import ModuleChecklist, { unmetRequirements } from './ModuleChecklist';
  * 1. the plan's data and 2. its modules, organized like the application menu— scroll inside. `form` is an Inertia useForm with `name`, `description`
  * and `module_ids`; the server saves exactly what it holds. Pass `catalog` to offer the modules.
  */
-export default function PlanFormModal({ show, title, form, catalog, submitLabel, onClose, onSubmit }) {
+export default function PlanFormModal({ show, title, form, catalog, commercial, submitLabel, onClose, onSubmit }) {
     const modules = catalog ? catalog.flatMap((category) => category.modules) : [];
     const selected = form.data.module_ids ?? [];
     const chosen = modules.filter((module) => selected.includes(module.id));
@@ -53,6 +56,43 @@ export default function PlanFormModal({ show, title, form, catalog, submitLabel,
                             </div>
                         </div>
                     </section>
+
+                    {commercial && (
+                        <section aria-labelledby="plan-step-offer" className="space-y-4">
+                            <div>
+                                <h3 id="plan-step-offer" className="text-sm font-bold text-ink">Oferta comercial</h3>
+                                <p className="mt-1 text-xs text-ink-muted">
+                                    Lo que el registro público muestra de este plan. Nada se completa por sí solo: sin solución, precio, moneda y periodicidad un plan no se vende en línea, y un plan «Por cotización» nunca abre un cobro.
+                                </p>
+                            </div>
+                            <div className="grid gap-4 lg:grid-cols-4">
+                                <div className="lg:col-span-1">
+                                    <InputLabel htmlFor="plan_solution" value="Solución" />
+                                    <Select id="plan_solution" className="mt-1" value={form.data.module_category_id ?? ''} onChange={(value) => form.setData('module_category_id', value === '' ? null : value)} options={[{ value: '', label: 'Sin solución (personalizado)' }, ...commercial.solutions]} />
+                                    <InputError message={form.errors.module_category_id} className="mt-1" />
+                                </div>
+                                <div>
+                                    <InputLabel htmlFor="plan_price" value="Precio" />
+                                    <PriceInput id="plan_price" className="mt-1" value={form.data.price ?? ''} onChange={(value) => form.setData('price', value)} invalid={Boolean(form.errors.price)} />
+                                    <InputError message={form.errors.price} className="mt-1" />
+                                </div>
+                                <div>
+                                    <InputLabel htmlFor="plan_currency" value="Moneda" />
+                                    <Select id="plan_currency" className="mt-1" value={form.data.currency ?? ''} onChange={(value) => form.setData('currency', value === '' ? null : value)} options={[{ value: '', label: 'Sin moneda' }, ...commercial.currencies]} />
+                                    <InputError message={form.errors.currency} className="mt-1" />
+                                </div>
+                                <div>
+                                    <InputLabel htmlFor="plan_period" value="Periodicidad" />
+                                    <Select id="plan_period" className="mt-1" value={form.data.billing_period ?? ''} onChange={(value) => form.setData('billing_period', value === '' ? null : value)} options={[{ value: '', label: 'Sin periodicidad' }, ...commercial.periods]} />
+                                    <InputError message={form.errors.billing_period} className="mt-1" />
+                                </div>
+                            </div>
+                            <div className="grid gap-4 lg:grid-cols-2">
+                                <Toggle checked={Boolean(form.data.is_public)} onChange={(value) => form.setData('is_public', value)} label="Ofrecer en el registro público" description="Solo planes activos y marcados así aparecen en el registro de nuevos clientes." />
+                                <Toggle checked={Boolean(form.data.requires_quote)} onChange={(value) => form.setData('requires_quote', value)} label="Se vende por cotización" description="El cliente solicita una cotización; no hay cobro ni activación automática." />
+                            </div>
+                        </section>
+                    )}
 
                     {catalog && (
                         <section aria-labelledby="plan-step-modules" className="space-y-4">
