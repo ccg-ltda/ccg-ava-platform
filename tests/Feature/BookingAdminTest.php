@@ -7,6 +7,8 @@ use App\Models\AuditLog;
 use App\Models\BookingCustomer;
 use App\Models\Module;
 use App\Models\Workspace;
+use App\Services\ModuleAccess;
+use App\Services\ModuleCatalog;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia;
@@ -345,15 +347,18 @@ class BookingAdminTest extends TestCase
         }
     }
 
-    public function test_a_plan_cannot_be_saved_without_the_dependencies_of_the_booking_modules(): void
+    public function test_a_plan_saved_without_the_dependencies_of_the_booking_modules_is_only_flagged_as_incomplete(): void
     {
         $dev = Workspace::create(['organization_id' => $this->workspace->organization_id, 'code' => 'DESARROLLO_DEV', 'name' => 'Dev']);
         $this->actAsMember($dev, 'plataforma');
         $plan = $this->workspace->plan;
 
-        $this->put("/plans/{$plan->id}/modules", ['module_ids' => [Module::where('key', 'bookings')->value('id')]])->assertSessionHasErrors('module_ids');
+        $this->put("/plans/{$plan->id}/modules", ['module_ids' => [Module::where('key', 'bookings')->value('id')]])->assertSessionHasNoErrors(); // E4: saved, flagged as incomplete
+        $this->assertSame(['bookings'], collect(app(ModuleCatalog::class)->unmetDependencies(['bookings']))->pluck('key')->all());
+        $this->assertNotContains('bookings', app(ModuleAccess::class)->keys($this->workspace->fresh())); // never operative
         $this->put("/plans/{$plan->id}/modules", ['module_ids' => Module::whereIn('key', ['service_catalog', 'professionals', 'bookings'])->pluck('id')->all()])->assertSessionHasNoErrors();
-        $this->put("/plans/{$plan->id}/modules", ['module_ids' => Module::whereIn('key', ['calendar_providers', 'bookings', 'service_catalog', 'professionals'])->pluck('id')->all()])->assertSessionHasErrors('module_ids'); // needs Integraciones
+        $this->put("/plans/{$plan->id}/modules", ['module_ids' => Module::whereIn('key', ['calendar_providers', 'bookings', 'service_catalog', 'professionals'])->pluck('id')->all()])->assertSessionHasNoErrors(); // needs Integraciones: saved, calendar_providers not operative
+        $this->assertNotContains('calendar_providers', app(ModuleAccess::class)->keys($this->workspace->fresh()));
     }
 
     public function test_nothing_of_another_workspace_can_be_read_or_changed(): void

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Module;
+use App\Models\Plan;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\ModuleAccess;
@@ -169,5 +170,51 @@ class ModuleRegistrationTest extends TestCase
         $this->assertStringContainsString('ModuleCatalogSeeder', $output);
         $this->assertStringContainsString('Permisos que faltan (view-orders)', $output);
         $this->assertStringContainsString('RolesAndPermissionsSeeder', $output);
+    }
+
+    public function test_the_diagnosis_reports_plans_without_changing_them(): void
+    {
+        $this->seed(ModuleCatalogSeeder::class);
+        $default = Plan::where('key', 'full_platform')->firstOrFail();
+
+        Artisan::call('integrations:diagnose');
+        $healthy = Artisan::output();
+        $this->assertStringContainsString('El plan por defecto tiene los 8 módulos compartidos', $healthy);
+        $this->assertStringContainsString('Ningún Workspace usa un plan desactivado.', $healthy);
+        $this->assertStringContainsString('Ningún plan tiene dependencias incompletas.', $healthy);
+
+        // Drift of the default plan (an administrator added modules) is reported as a pending decision, never fixed.
+        $default->modules()->attach(Module::where('key', 'customers')->value('id'));
+        Artisan::call('integrations:diagnose');
+        $this->assertStringContainsString('tiene 9 módulos y el código lo crea con 8; de más (customers)', Artisan::output());
+        $this->assertSame(9, $default->modules()->count());
+
+        // An incomplete plan and a client Workspace on an inactive plan are named by id.
+        $incomplete = Plan::create(['name' => 'Incompleto']);
+        $incomplete->modules()->attach(Module::where('key', 'campaigns')->value('id'));
+        $off = Plan::create(['name' => 'Apagado', 'is_active' => false]);
+        $client = $this->bookingWorkspace('CLIENTE_X', []);
+        $client->update(['plan_id' => $off->id]);
+
+        $this->assertSame(1, Artisan::call('integrations:diagnose'));
+        $output = Artisan::output();
+        $this->assertStringContainsString("Planes con dependencias incompletas (no se pueden asignar): plan(es) {$incomplete->id}", $output);
+        $this->assertStringContainsString("Workspaces con plan desactivado (sin módulos): plan(es) {$off->id}", $output);
+    }
+
+    public function test_the_diagnosis_blocks_when_the_default_plan_is_missing_or_off(): void
+    {
+        $this->seed(ModuleCatalogSeeder::class);
+        $default = Plan::where('key', 'full_platform')->firstOrFail();
+
+        $default->update(['is_active' => false]);
+        Artisan::call('integrations:diagnose');
+        $this->assertStringContainsString('El plan por defecto está desactivado', Artisan::output());
+
+        $default->modules()->detach();
+        Workspace::whereNotNull('plan_id')->update(['plan_id' => null]);
+        $default->delete();
+        Artisan::call('integrations:diagnose');
+        $this->assertStringContainsString('No existe el plan por defecto (full_platform)', Artisan::output());
     }
 }

@@ -11,8 +11,11 @@ use App\Models\ChatbotChannel;
 use App\Models\ChatbotExecution;
 use App\Models\Integration;
 use App\Models\Message;
+use App\Models\Plan;
 use App\Models\Workspace;
 use App\Services\ModuleAccess;
+use App\Services\ModuleCatalog;
+use App\Services\SupportChannel;
 use App\Support\MailAvailability;
 use App\Support\ScheduledCommandMonitor;
 use Illuminate\Console\Command;
@@ -66,6 +69,9 @@ class IntegrationsDiagnoseCommand extends Command
 
         $this->components->info('Módulos y permisos (lo que hace visible un módulo)');
         $this->modulesAndPermissions();
+
+        $this->components->info('Chat público de CCG (soporte en el Workspace administrativo)');
+        $this->supportChat();
 
         $this->components->info('Confirmaciones y recordatorios de citas');
         $this->appointmentNotifications($workspaceId);
@@ -346,6 +352,79 @@ class IntegrationsDiagnoseCommand extends Command
             DB::table('role_has_permissions')->join('permissions', 'permissions.id', '=', 'role_has_permissions.permission_id')->where('role_has_permissions.role_id', $admin->id)->pluck('permissions.name')->all(),
         )) : [];
         $lacking === [] ? $this->good('El rol admin tiene todos los permisos de cliente.') : $this->caution('El rol admin no tiene ('.implode(', ', $lacking).'): su menú no mostrará esos módulos.');
+
+        $this->plans();
+    }
+
+    /**
+     * Plans as data (read-only; it changes and decides nothing): whether the Workspaces can resolve a plan, whether a plan is incomplete and how the default plan
+     * compares with what the code would create. The contents of a plan are a commercial decision, so a difference is reported, never judged or fixed.
+     */
+    private function plans(): void
+    {
+        if (! Schema::hasTable('plans') || ! Schema::hasTable('module_plan')) {
+            $this->blocker('Faltan las tablas de planes (migración pendiente).');
+
+            return;
+        }
+
+        $access = app(ModuleAccess::class);
+        $catalog = app(ModuleCatalog::class);
+        $default = $access->defaultPlan();
+
+        if (! $default) {
+            $this->blocker('No existe el plan por defecto ('.config('modules.default_plan').'): los Workspaces sin plan no tienen módulos. Ejecuta php artisan db:seed --class=ModuleCatalogSeeder.');
+        } elseif (! $default->is_active) {
+            $this->blocker('El plan por defecto está desactivado: los Workspaces sin plan no tienen módulos.');
+        } else {
+            $actual = $default->modules()->pluck('modules.key')->all();
+            $seeded = array_keys(array_filter(config('modules.implemented'), fn (array $module) => $module['category'] === 'shared'));
+            $extra = array_values(array_diff($actual, $seeded));
+            $missing = array_values(array_diff($seeded, $actual));
+
+            $extra === [] && $missing === []
+                ? $this->good('El plan por defecto tiene los '.count($seeded).' módulos compartidos con los que se crea.')
+                : $this->caution('El plan por defecto tiene '.count($actual).' módulos y el código lo crea con '.count($seeded).'; '
+                    .($extra === [] ? '' : 'de más ('.implode(', ', $extra).')').($extra !== [] && $missing !== [] ? ', ' : '')
+                    .($missing === [] ? '' : 'de menos ('.implode(', ', $missing).')').'. Su contenido es una decisión comercial pendiente: no se modifica.');
+        }
+
+        $inactive = Plan::where('is_active', false)->get()->filter(fn (Plan $plan) => $catalog->workspacesOf($plan)->exists());
+        $inactive->isEmpty()
+            ? $this->good('Ningún Workspace usa un plan desactivado.')
+            : $this->blocker('Workspaces con plan desactivado (sin módulos): plan(es) '.$inactive->pluck('id')->implode(', ').'.');
+
+        $incomplete = Plan::with('modules:id,key')->get()->filter(fn (Plan $plan) => $catalog->unmetDependencies($plan->modules->pluck('key')->all()) !== []);
+        $incomplete->isEmpty()
+            ? $this->good('Ningún plan tiene dependencias incompletas.')
+            : $this->caution('Planes con dependencias incompletas (no se pueden asignar): plan(es) '.$incomplete->pluck('id')->implode(', ').'.');
+    }
+
+    /**
+     * CCG's public chat: whether the configured key names a live web channel of the ADMINISTRATIVE Workspace. Fixed codes only, never the key or any data
+     * of the channel. A key that names another Workspace is a blocker: it would send CCG's visitors to a client.
+     */
+    private function supportChat(): void
+    {
+        $support = app(SupportChannel::class);
+
+        if ($support->configuredKey() === null) {
+            $this->caution('El chat público de CCG no está configurado (CCG_SUPPORT_CHAT_KEY): no se ofrece ningún botón. Crea el canal Web de un asistente del Workspace administrativo y copia su clave.');
+        } elseif (! Workspace::where('code', Workspace::normalizeCode((string) config('workspace.admin_code')))->exists()) {
+            $this->blocker('No existe el Workspace administrativo ('.config('workspace.admin_code').'): el chat público de CCG no tiene destino.');
+        } elseif (($problem = $support->problem()) !== null) {
+            $this->blocker('La clave del chat público de CCG no sirve ('.$problem.'): no se ofrece el botón. '.match ($problem) {
+                'not_administrative_workspace' => 'Pertenece a un Workspace que no es el administrativo; corrígela para no desviar visitantes a un cliente.',
+                'channel_not_live' => 'El canal, el asistente, su integración Web o el módulo Asistentes/Conversaciones no están activos.',
+                default => 'Revisa la clave configurada.',
+            });
+        } else {
+            $this->good('El chat público de CCG apunta a un canal Web activo del Workspace administrativo.');
+        }
+
+        filled(config('support.notify_webhook_url'))
+            ? $this->good('Hay un webhook de avisos al equipo (nueva consulta y petición de una persona); su recepción en n8n no se ha probado desde aquí.')
+            : $this->caution('Sin CCG_SUPPORT_NOTIFY_URL no sale ningún aviso al equipo: las consultas solo aparecen en la bandeja de Conversaciones.');
     }
 
     /** Workspaces that asked for confirmations or reminders but cannot send them, and what happened to the messages of the last 24 hours (ids and counts only). */

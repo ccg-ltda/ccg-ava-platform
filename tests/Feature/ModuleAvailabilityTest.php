@@ -112,7 +112,8 @@ class ModuleAvailabilityTest extends TestCase
         $this->actIn($this->client, 'admin');
         $this->contract($this->client, $this->everyModuleExcept($module));
 
-        $this->get($url)->assertForbidden();
+        // The home page (Dashboard) is never served; instead of an error it sends the person to the page that explains what the Workspace has.
+        $module === 'dashboard' ? $this->get($url)->assertRedirect(route('workspace.empty')) : $this->get($url)->assertForbidden();
     }
 
     #[DataProvider('pages')]
@@ -243,7 +244,8 @@ class ModuleAvailabilityTest extends TestCase
 
         Module::where('key', 'audit')->update(['is_active' => true]);
         $plan->update(['is_active' => false]);
-        $this->get('/dashboard')->assertForbidden();
+        $this->get('/dashboard')->assertRedirect(route('workspace.empty')); // the home page explains instead of erroring
+        $this->get('/audit')->assertForbidden();
         $this->assertSame(2, $plan->modules()->count());
 
         $plan->update(['is_active' => true]);
@@ -257,7 +259,8 @@ class ModuleAvailabilityTest extends TestCase
 
         $this->assertSame([], app(ModuleAccess::class)->keys($this->client->fresh()));
         $this->actIn($this->client, 'admin');
-        $this->get('/dashboard')->assertForbidden();
+        $this->get('/dashboard')->assertRedirect(route('workspace.empty'));
+        $this->get('/audit')->assertForbidden();
         $this->get('/profile')->assertOk();
     }
 

@@ -31,7 +31,7 @@ class EffectivePermissionsTest extends TestCase
     /** Routes of a signed-in, Workspace-bound user that need no permission on purpose: each decides inside, over the user's own data. */
     private const OPEN_ROUTES = [
         'GET profile', 'PATCH profile', 'PUT profile/communications', 'GET profile/photo', 'POST profile/photo', 'DELETE profile/photo',
-        'GET workspace/logo', 'GET workspaces/search',
+        'GET workspace/logo', 'GET workspaces/search', 'GET sin-modulos', // sin-modulos: only reads which modules the Workspace has and grants nothing
         'POST saved-filters/{scope}', 'PUT saved-filters/{scope}/{filter}', 'DELETE saved-filters/{scope}/{filter}',
     ];
 
@@ -218,7 +218,10 @@ class EffectivePermissionsTest extends TestCase
             foreach ($entries as [, $route]) {
                 $status = $this->send($route);
 
-                if ($status !== 403) {
+                // The home page is never served without its module; instead of an error it redirects to the explanatory page (/sin-modulos).
+                $expected = $module === 'dashboard' && $route->uri() === 'dashboard' ? 302 : 403;
+
+                if ($status !== $expected) {
                     $failures[] = $this->label($route)." without module [{$module}] answered {$status}";
                 }
             }

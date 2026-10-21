@@ -3,6 +3,7 @@ import ParticleBackground from '@/Components/Access/ParticleBackground';
 import ThemeToggle from '@/Components/Access/ThemeToggle';
 import ToastContainer from '@/Components/Access/ToastContainer';
 import LegalLinks from '@/Components/LegalLinks';
+import SupportChat from '@/Components/SupportChat';
 
 /** Animated background shared by every Ava screen: grid, particle sphere and field connection lines. */
 export function AvaBackground() {
@@ -41,6 +42,7 @@ function AccessShell({ children }) {
                     <LegalLinks className="footer-text" />
                 </div>
             </div>
+            <SupportChat />
         </div>
     );
 }

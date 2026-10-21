@@ -40,9 +40,10 @@ class WidgetController extends Controller
         $data = $request->validate([
             'session_id' => ['required', 'string', 'regex:/^[A-Za-z0-9_-]{8,64}$/'],
             'message' => ['required', 'string', 'max:'.config('chatbots.widget.max_message')],
+            'message_id' => ['sometimes', 'nullable', 'string', 'regex:/^[A-Za-z0-9_-]{8,64}$/'],
         ]);
 
-        $result = $this->widget->relay($channel, $data['session_id'], trim($data['message']));
+        $result = $this->widget->relay($channel, $data['session_id'], trim($data['message']), $data['message_id'] ?? null);
 
         return response()->json(
             $result['status'] === 200 ? $this->answer($result) : ['message' => $result['message']],

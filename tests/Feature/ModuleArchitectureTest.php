@@ -112,13 +112,13 @@ class ModuleArchitectureTest extends TestCase
         $this->assertEqualsCanonicalizing($keys, app(ModuleAccess::class)->keys($this->client->fresh()));
     }
 
-    public function test_an_incomplete_plan_is_refused_when_saved_and_when_applied_to_a_workspace(): void
+    public function test_an_incomplete_plan_is_saved_with_a_warning_but_refused_when_applied_to_a_workspace(): void
     {
         $this->platformAdmin();
 
-        // When saved.
-        $this->post('/plans', ['name' => 'Incompleto', 'module_ids' => $this->ids(['campaigns', 'bookings'])])->assertSessionHasErrors('module_ids');
-        $this->assertNull(Plan::where('name', 'Incompleto')->first());
+        // When saved: allowed (warned about in Planes).
+        $this->post('/plans', ['name' => 'Incompleto', 'module_ids' => $this->ids(['campaigns', 'bookings'])])->assertSessionHasNoErrors(); // E4: advertir, no bloquear
+        $this->assertNotNull(Plan::where('name', 'Incompleto')->first());
 
         // A plan that was saved before a dependency existed is incomplete: it exists, but it can not be applied.
         $legacy = Plan::create(['name' => 'Anterior']);

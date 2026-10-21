@@ -17,7 +17,7 @@ import { useToast } from '@/Components/Toast';
 import WorkspaceCombobox from '@/Components/WorkspaceCombobox';
 import usePagedList from '@/Hooks/usePagedList';
 import AppLayout from '@/Layouts/AppLayout';
-import ModuleChecklist, { unmetRequirements } from './Partials/ModuleChecklist';
+import ModuleChecklist from './Partials/ModuleChecklist';
 import PlanFormModal from './Partials/PlanFormModal';
 
 const sameIds = (a, b) => a.length === b.length && a.every((id) => b.includes(id));
@@ -27,7 +27,6 @@ function ModulesCard({ plan, catalog, canEdit }) {
     const confirm = useConfirm();
     const form = useForm({ module_ids: plan.moduleIds });
     const dirty = !sameIds(form.data.module_ids, plan.moduleIds);
-    const incomplete = unmetRequirements(catalog, form.data.module_ids).length > 0;
 
     const submit = async (e) => {
         e.preventDefault();
@@ -61,7 +60,7 @@ function ModulesCard({ plan, catalog, canEdit }) {
                                     Descartar
                                 </SecondaryButton>
                             )}
-                            <PrimaryButton type="submit" disabled={!dirty || form.processing || incomplete}>
+                            <PrimaryButton type="submit" disabled={!dirty || form.processing}>
                                 Guardar módulos
                             </PrimaryButton>
                         </div>
@@ -142,6 +141,7 @@ function WorkspacesCard({ plan, workspaces, perPageOptions, canAssign }) {
                             <Th>Organización</Th>
                             <Th>Estado</Th>
                             <Th>Asignación</Th>
+                            <Th>Módulos</Th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-line">
@@ -154,6 +154,11 @@ function WorkspacesCard({ plan, workspaces, perPageOptions, canAssign }) {
                                     <Badge tone={workspace.isActive ? 'green' : 'neutral'}>{workspace.isActive ? 'Activo' : 'Inactivo'}</Badge>
                                 </Td>
                                 <Td className="whitespace-nowrap text-ink-muted">{workspace.explicit ? 'Asignado' : 'Por defecto'}</Td>
+                                <Td className="whitespace-nowrap">
+                                    <Link href={route('workspaces.modules.show', workspace.id)} className="text-sm font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary">
+                                        Ver y personalizar
+                                    </Link>
+                                </Td>
                             </tr>
                         ))}
                     </tbody>

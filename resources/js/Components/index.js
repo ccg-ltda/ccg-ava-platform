@@ -1,6 +1,6 @@
 export { default as Badge } from './Badge';
 export { default as Card } from './Card';
-export { default as ChatButton } from './ChatButton';
+export { default as SupportChat } from './SupportChat';
 export { default as Checkbox } from './Checkbox';
 export { default as DangerButton } from './DangerButton';
 export { default as Dropdown } from './Dropdown';

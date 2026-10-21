@@ -29,6 +29,7 @@ class WebWidget
         private readonly ConversationControl $control,
         private readonly ModuleAccess $modules,
         private readonly ChatbotExecutions $executions,
+        private readonly SupportChannel $support,
     ) {}
 
     public function resolve(string $publicKey): ?ChatbotChannel
@@ -86,13 +87,24 @@ class WebWidget
      *
      * @return array{status: int, reply?: ?string, handling?: string, pending?: bool, message?: string}
      */
-    public function relay(ChatbotChannel $channel, string $sessionId, string $message): array
+    public function relay(ChatbotChannel $channel, string $sessionId, string $message, ?string $messageId = null): array
     {
         $chatbot = $channel->chatbot;
         $recorded = $this->conversations->record($chatbot, 'web', [
             'contact_id' => $sessionId, 'direction' => 'in', 'type' => 'text', 'body' => $message, 'sent_at' => now(),
+            // The widget's own id of this message: a retry of the same request (a dropped connection, a double tap) is stored and answered once.
+            'external_id' => $messageId !== null ? 'w:'.$messageId : null,
         ]);
         $conversation = $recorded['conversation'];
+
+        if (! $recorded['created']) {
+            return ['status' => 200, 'reply' => null, 'handling' => $conversation->handling, 'duplicate' => true];
+        }
+
+        // CCG's support chat: the team hears of a conversation once, when its first message arrives.
+        if ($conversation->messages()->count() === 1) {
+            $this->support->notify('new_conversation', $conversation->load('chatbot.workspace'));
+        }
 
         if (! $conversation->aiMayReply()) {
             return ['status' => 200, 'reply' => null, 'handling' => $conversation->handling];
@@ -109,6 +121,14 @@ class WebWidget
         $answer = $this->askAutomation($channel, $sessionId, $message);
 
         if (isset($answer['status'])) {
+            // CCG's support chat never leaves a visitor facing an error: the message is already stored, so a person is asked for and the
+            // visitor is told one will answer. Any other Workspace keeps the plain failure for its own widget.
+            if ($this->support->owns($conversation->load('chatbot.workspace'))) {
+                $this->control->requestHuman($conversation, 'El asistente no respondió.');
+
+                return ['status' => 200, 'reply' => null, 'handling' => Conversation::PENDING];
+            }
+
             return $answer;
         }
 

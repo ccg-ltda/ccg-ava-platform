@@ -7,6 +7,7 @@ use App\Models\Module;
 use App\Models\ModuleCategory;
 use App\Models\Plan;
 use App\Models\Workspace;
+use App\Models\WorkspaceModuleOverride;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -165,7 +166,9 @@ class ModuleCatalog
 
     /**
      * Replaces the modules of a plan. A module that is switched off can stay where it already was but cannot be added.
-     * The change is audited as one event listing the modules before and after.
+     * The change is audited as one event listing the modules before and after. A plan may have ANY number of modules, none included, and may leave a
+     * module without what it needs (decision E4): that is only warned about (`unmetDependencies`, shown in Planes) and ModuleAccess keeps the module
+     * inoperative, but it never blocks saving. Assigning such a plan to a Workspace is still refused (see assignPlan).
      *
      * @param  list<int>  $moduleIds
      */
@@ -180,30 +183,12 @@ class ModuleCatalog
             throw ValidationException::withMessages(['module_ids' => 'No se pueden añadir módulos desactivados: '.$inactive->implode(', ').'.']);
         }
 
-        $this->assertDependenciesMet(Module::whereIn('id', $moduleIds)->pluck('key')->all());
-
         $before = $this->names($current);
         $plan->modules()->sync($moduleIds);
         $after = $this->names($moduleIds);
 
         if ($before !== $after) {
             $this->audit->record('updated', 'plan', $plan->id, $plan->name, [AuditLogger::change('Módulos', $before ?: null, $after ?: null)]);
-        }
-    }
-
-    /**
-     * A plan may combine modules freely, but not leave one without what it technically needs (config/modules.php `dependencies`).
-     * The server is the authority: the interface only explains it.
-     *
-     * @param  list<string>  $keys  keys of the modules the plan would contain
-     */
-    private function assertDependenciesMet(array $keys): void
-    {
-        $problems = collect($this->unmetDependencies($keys))
-            ->map(fn (array $unmet) => "«{$unmet['name']}» necesita {$this->namesOf($unmet['missing'])}")->values();
-
-        if ($problems->isNotEmpty()) {
-            throw ValidationException::withMessages(['module_ids' => $problems->implode('; ').'. Inclúyelos en el plan o quita el módulo que los necesita.']);
         }
     }
 
@@ -227,6 +212,105 @@ class ModuleCatalog
         $names = Module::whereIn('key', $keys)->pluck('name', 'key');
 
         return collect($keys)->map(fn (string $key) => '«'.($names[$key] ?? $key).'»')->implode(', ');
+    }
+
+    // --- exceptions of one Workspace over its plan -----------------------------------------------------------------
+
+    /**
+     * Every module of the catalog as ONE Workspace sees it: whether its plan includes it, the exception it carries (grant / revoke) and whether it is
+     * effectively available now. Reading never changes anything.
+     *
+     * @return array{plan: ?array{id: int, name: string}, subscription: ?array{status: string, paymentStatus: string}, blocked: ?string, modules: list<array<string, mixed>>}
+     */
+    public function workspaceModules(Workspace $workspace): array
+    {
+        $plan = $workspace->plan_id ? $workspace->plan : $this->access->defaultPlan();
+        $inPlan = $plan ? $plan->modules()->pluck('modules.key')->all() : [];
+        $overrides = WorkspaceModuleOverride::where('workspace_id', $workspace->id)->pluck('mode', 'module_id');
+        $effective = $this->access->keys($workspace);
+        $subscription = $this->access->subscription($workspace);
+
+        return [
+            'plan' => $plan ? ['id' => $plan->id, 'name' => $plan->name] : null,
+            'subscription' => $subscription ? ['status' => $subscription->status, 'paymentStatus' => $subscription->payment_status] : null,
+            'blocked' => match (true) {
+                ! $plan || ! $plan->is_active => 'plan',
+                ! $this->access->subscriptionAllows($workspace) => 'subscription',
+                default => null,
+            },
+            'modules' => Module::with('category:id,name')->orderBy('name')->get()->map(fn (Module $module) => [
+                'id' => $module->id,
+                'key' => $module->key,
+                'name' => $module->name,
+                'category' => $module->category?->name,
+                'isActive' => $module->is_active,
+                'implemented' => $module->isImplemented(),
+                'inPlan' => in_array($module->key, $inPlan, true),
+                'override' => $overrides[$module->id] ?? null,
+                'effective' => in_array($module->key, $effective, true),
+                'requires' => collect($this->access->dependencies()[$module->key] ?? [])->values()->all(),
+            ])->all(),
+        ];
+    }
+
+    /**
+     * Replaces the exceptions of ONE client Workspace. `$granted` are modules the plan lacks, `$revoked` modules the plan includes; anything that would
+     * change nothing (already in the plan / already outside it) is dropped. Exceptions that stay keep their reason and author. The plan and every
+     * other Workspace are untouched. Audited as one event with the modules granted and revoked before and after.
+     *
+     * @param  list<int>  $granted
+     * @param  list<int>  $revoked
+     */
+    public function setWorkspaceOverrides(Workspace $workspace, array $granted, array $revoked, ?string $reason, ?int $userId): void
+    {
+        if ($workspace->isAdministrative()) {
+            throw ValidationException::withMessages(['workspace_id' => 'El Workspace administrativo siempre dispone de todos los módulos: no admite excepciones.']);
+        }
+
+        $plan = $workspace->plan_id ? $workspace->plan : $this->access->defaultPlan();
+        $planIds = $plan ? $plan->modules()->pluck('modules.id')->all() : [];
+        $current = WorkspaceModuleOverride::where('workspace_id', $workspace->id)->get()->keyBy('module_id');
+
+        $inactive = Module::whereIn('id', $granted)->where('is_active', false)->whereNotIn('id', $current->where('mode', WorkspaceModuleOverride::GRANT)->keys())->pluck('name');
+
+        if ($inactive->isNotEmpty()) {
+            throw ValidationException::withMessages(['granted' => 'No se pueden conceder módulos desactivados: '.$inactive->implode(', ').'.']);
+        }
+
+        if (array_intersect($granted, $revoked) !== []) {
+            throw ValidationException::withMessages(['granted' => 'Un módulo no puede concederse y retirarse a la vez.']);
+        }
+
+        $wanted = collect($granted)->reject(fn (int $id) => in_array($id, $planIds, true))->mapWithKeys(fn (int $id) => [$id => WorkspaceModuleOverride::GRANT])->all()
+            + collect($revoked)->filter(fn (int $id) => in_array($id, $planIds, true))->mapWithKeys(fn (int $id) => [$id => WorkspaceModuleOverride::REVOKE])->all();
+        $wanted = collect($wanted);
+
+        $before = $this->overrideSummary($current->map->mode->all());
+
+        DB::transaction(function () use ($workspace, $current, $wanted, $reason, $userId) {
+            WorkspaceModuleOverride::where('workspace_id', $workspace->id)->whereNotIn('module_id', $wanted->keys())->delete();
+
+            foreach ($wanted as $moduleId => $mode) {
+                if (($current[$moduleId]->mode ?? null) !== $mode) {
+                    WorkspaceModuleOverride::updateOrCreate(['workspace_id' => $workspace->id, 'module_id' => $moduleId], ['mode' => $mode, 'reason' => $reason, 'created_by' => $userId]);
+                }
+            }
+        });
+
+        $after = $this->overrideSummary($wanted->all());
+
+        if ($before !== $after) {
+            $this->audit->record('updated', 'workspace_modules', $workspace->id, $workspace->auditLabel(), [AuditLogger::change('Excepciones de módulos', $before ?: null, $after ?: null)]
+                + ($reason ? [1 => AuditLogger::change('Motivo', null, $reason)] : []), $workspace);
+        }
+    }
+
+    /** @param  array<int, string>  $overrides  module id => mode */
+    private function overrideSummary(array $overrides): string
+    {
+        $names = Module::whereIn('id', array_keys($overrides))->pluck('name', 'id');
+
+        return collect($overrides)->map(fn (string $mode, int $id) => ($mode === WorkspaceModuleOverride::GRANT ? '+ ' : '− ').($names[$id] ?? $id))->sort()->implode(', ');
     }
 
     /** Assigns a plan to a client Workspace. The administrative Workspace takes no commercial restrictions. */

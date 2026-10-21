@@ -122,7 +122,7 @@ class CommercialControlsTest extends TestCase
         $this->get('/conversations')->assertForbidden();
     }
 
-    public function test_the_server_refuses_a_plan_that_leaves_a_module_without_its_dependency(): void
+    public function test_a_plan_that_leaves_a_module_without_its_dependency_is_saved_but_the_module_stays_inoperative(): void
     {
         $this->actIn($this->dev, 'plataforma');
         $plan = $this->contract($this->other, ['dashboard']);
@@ -130,11 +130,12 @@ class CommercialControlsTest extends TestCase
         $assistants = Module::where('key', 'assistants')->value('id');
         $conversations = Module::where('key', 'conversations')->value('id');
 
-        $this->put("/plans/{$plan->id}/modules", ['module_ids' => [$assistants]])->assertSessionHasErrors('module_ids');
-        $this->assertSame(['dashboard'], $plan->modules()->pluck('key')->all());
+        $this->put("/plans/{$plan->id}/modules", ['module_ids' => [$assistants]])->assertSessionHasNoErrors();
+        $this->assertSame(['assistants'], $plan->modules()->pluck('key')->all());
+        $this->assertSame([], app(ModuleAccess::class)->keys($this->other->fresh()), 'Asistentes without Conversaciones is not operative');
 
-        $this->post('/plans', ['name' => 'Incompleto', 'module_ids' => [$assistants]])->assertSessionHasErrors('module_ids');
-        $this->assertNull(Plan::where('name', 'Incompleto')->first());
+        $this->post('/plans', ['name' => 'Incompleto', 'module_ids' => [$assistants]])->assertSessionHasNoErrors();
+        $this->assertNotNull(Plan::where('name', 'Incompleto')->first());
 
         $this->put("/plans/{$plan->id}/modules", ['module_ids' => [$assistants, $conversations]])->assertSessionHasNoErrors();
         $this->assertEqualsCanonicalizing(['assistants', 'conversations'], $plan->modules()->pluck('key')->all());

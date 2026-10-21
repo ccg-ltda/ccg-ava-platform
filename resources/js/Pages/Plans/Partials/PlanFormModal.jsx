@@ -87,7 +87,7 @@ export default function PlanFormModal({ show, title, form, catalog, submitLabel,
                         <SecondaryButton type="button" onClick={onClose}>
                             Cancelar
                         </SecondaryButton>
-                        <PrimaryButton type="submit" disabled={form.processing || incomplete}>
+                        <PrimaryButton type="submit" disabled={form.processing}>
                             {submitLabel}
                         </PrimaryButton>
                     </div>

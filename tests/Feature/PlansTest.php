@@ -212,7 +212,8 @@ class PlansTest extends TestCase
         $plan = $this->plan('Atómico', ['dashboard']);
         $this->platformAdmin();
 
-        // A module that needs another one cannot be saved alone: neither the name nor the modules change.
+        // A deactivated module cannot be added: neither the name nor the modules change (an incomplete dependency, in turn, is only warned about: E4).
+        Module::where('key', 'campaigns')->update(['is_active' => false]);
         $this->put("/plans/{$plan->id}", ['name' => 'Otro nombre', 'module_ids' => [$this->moduleId('campaigns')]])->assertSessionHasErrors('module_ids');
 
         $plan->refresh();

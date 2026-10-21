@@ -26,6 +26,7 @@ class ConversationControl
         private readonly AuditLogger $audit,
         private readonly ConversationAgents $agents,
         private readonly ModuleAccess $modules,
+        private readonly SupportChannel $support,
     ) {}
 
     /**
@@ -40,17 +41,27 @@ class ConversationControl
     /** The automation (or a rule) asks for a person. Nothing happens when a person already has it or was already asked. */
     public function requestHuman(Conversation $conversation, ?string $reason = null): Conversation
     {
-        return $this->change($conversation, function (Conversation $locked) use ($reason) {
+        $moved = false;
+
+        $result = $this->change($conversation, function (Conversation $locked) use ($reason, &$moved) {
             if (in_array($locked->handling, [Conversation::PENDING, Conversation::HUMAN], true)) {
                 return null;
             }
 
             $before = $this->snapshot($locked);
             $this->move($locked, Conversation::PENDING, null, ['handoff_reason' => filled($reason) ? mb_substr(trim($reason), 0, 255) : null]);
+            $moved = true;
 
             // Only the first request is an event; an automatic one (the assistant) is attributed to its source, never to a person.
             return ['requested', $before];
         });
+
+        // CCG's support chat: the team is alerted once per request (the id of the alert carries the state version).
+        if ($moved) {
+            $this->support->notify('human_requested', $result);
+        }
+
+        return $result;
     }
 
     /**
@@ -63,7 +74,7 @@ class ConversationControl
     {
         $moved = false;
 
-        $this->change($conversation, function (Conversation $locked) use ($expectedVersion, $code, &$moved) {
+        $result = $this->change($conversation, function (Conversation $locked) use ($expectedVersion, $code, &$moved) {
             if ($locked->handling !== Conversation::AI || $locked->handling_version !== $expectedVersion) {
                 return null;
             }
@@ -74,6 +85,10 @@ class ConversationControl
 
             return ['requested', $before];
         });
+
+        if ($moved) {
+            $this->support->notify('human_requested', $result);
+        }
 
         return $moved;
     }

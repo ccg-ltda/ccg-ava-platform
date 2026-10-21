@@ -374,11 +374,13 @@
                 input.value = '';
                 add('me', text);
                 var typing = add('bot typing', 'Escribiendo…');
+                /* One id per message: if the request is repeated (dropped connection, double tap) Ava stores and answers it once. */
+                var messageId = 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 
                 fetch(options.api + '/messages', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    body: JSON.stringify({ session_id: session, message: text })
+                    body: JSON.stringify({ session_id: session, message: text, message_id: messageId })
                 }).then(function (response) {
                     return response.json().catch(function () { return {}; }).then(function (body) {
                         if (response.ok && body.pending === true) { startWaiting(typing); return; }

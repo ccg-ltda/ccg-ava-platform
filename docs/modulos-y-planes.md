@@ -79,10 +79,23 @@ Los planes deciden qué módulos EXISTEN para un Workspace; los permisos del rol
 1. **Consultar el catálogo.** Pestaña «Catálogo de módulos»: todos los módulos registrados, con su categoría, su **grupo** y su estado (*Implementado* o *Pendiente de implementación*) y lo que requieren.
 2. **Organizar.** Crear categorías y registrar módulos futuros (reservan lugar; nunca habilitan nada). Nada se borra: se desactiva.
 3. **Crear un plan.** «Nuevo plan» o la ficha de un plan: casillas de módulos agrupadas por **grupo de Ava y categoría**, mezclando libremente categorías. Los módulos pendientes pueden incluirse (quedan reservados) pero se etiquetan.
-4. **Ver dependencias.** Cada módulo muestra «Requiere…»; un aviso explica qué falta y ofrece «Añadir». El servidor rechaza guardar un plan que incumple una dependencia.
+4. **Ver dependencias.** Cada módulo muestra «Requiere…»; un aviso explica qué falta y ofrece «Añadir». Decisión E4: un plan con dependencias incompletas **se guarda con la advertencia** (y puede tener cero módulos); ese módulo no es operativo y el plan incompleto no se puede asignar a un Workspace. No hay módulos mínimos obligatorios.
 5. **Asignar a un Workspace.** Desde la ficha del plan (o el Workspace): un Workspace cliente tiene **un** plan. Se rechazan planes desactivados y, ahora también, **planes incompletos**. `Desarrollo_DEV` no admite plan.
 6. **Auditoría.** Todo cambio (plan, módulos del plan con antes y después, asignación, catálogo) queda en la auditoría.
 7. **Qué ve el cliente.** Solo lo que su plan incluye **y** está implementado **y** su rol permite; el resto responde 403 aunque conozca la URL.
+
+### Suscripción y excepciones por Workspace (2026-10-21)
+
+Además del plan hay dos capas, ambas aditivas y leídas por `ModuleAccess` (única fuente de la disponibilidad):
+
+| Pieza | Tabla | Qué hace |
+|---|---|---|
+| **Suscripción** | `subscriptions` (una por Workspace) | Estado (`pending`, `active`, `grace`, `suspended`, `cancelled`, `expired`) y estado de pago. `suspended`, `cancelled` y `expired` retiran el acceso a todos los módulos (los datos se conservan); `pending`, `active` y `grace` no lo retiran. Un Workspace **sin** fila es anterior a las suscripciones y se rige solo por su plan. |
+| **Excepción del Workspace** | `workspace_module_overrides` | `grant` concede un módulo que el plan no tiene; `revoke` retira uno que sí tiene. Solo afecta a ese Workspace, no edita el plan y se conserva cuando cambia la oferta o se repite la activación. |
+
+Disponibilidad efectiva = módulos del plan, más concedidos, menos retirados, y después dependencias. `SubscriptionService::confirmPayment` es el **único punto de integración** del futuro proveedor de pagos: registra el pago confirmado (idempotente por referencia) y activa; sin pago confirmado `activate` se niega. La activación aplica el plan al Workspace (`assignPlan`) sin tocar sus excepciones. Las excepciones se administran en Planes → ficha del plan → Workspaces → «Ver y personalizar» (`/workspaces/{id}/modules`; ver con `view-plans`, cambiar con `assign-plans`, solo en `Desarrollo_DEV`). Un Workspace sin módulos (o con suscripción que retira el acceso) llega a `/sin-modulos`, que explica el motivo.
+
+**Alta de un cliente nuevo:** `registerNewCustomer` deja el Workspace desactivado y la suscripción `pending`; el primer pago confirmado (`confirmPayment`) aplica el plan, activa la suscripción y reabre el Workspace, una sola vez y solo si lo cerró ese registro. Repetir la confirmación no cambia nada. No hay ruta web ni API que modifique una suscripción.
 
 ### Ejemplos ilustrativos (NO son planes reales ni se han creado)
 
@@ -156,7 +169,7 @@ Una empresa que contrata Salud y E-commerce tiene DOS Workspaces: el código no 
 ## 4. Criterios de aceptación (verificados por prueba)
 
 - Un plan combina módulos de distintas categorías sin solución predeterminada (`ModuleArchitectureTest`).
-- Dependencias: se validan al crear/modificar el plan y al aplicarlo; los módulos no operativos se descartan y no son accesibles por URL.
+- Dependencias: se advierten al crear/modificar el plan (no bloquean el guardado, decisión E4) y se exigen al asignarlo; los módulos no operativos se descartan y no son accesibles por URL.
 - Una categoría/módulo creados desde la interfaz no habilitan nada y caen en el grupo por defecto.
 - Ninguna decisión de acceso nombra un tipo de negocio.
 - Toda ruta con sesión está detrás de un módulo o declarada «core».

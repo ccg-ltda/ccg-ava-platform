@@ -141,7 +141,7 @@ return [
         'profile.*', 'legal.accept', 'legal.accept.store', 'logout', 'verification.*', 'password.*', 'confirm-password',
         'workspaces.search', 'workspace.logo',
         'saved-filters.*',
-        'plans.*', 'modules.*', 'module-categories.*', 'workspaces.plan.update', 'support-access.*',
+        'workspace.empty', 'workspaces.modules.*', 'plans.*', 'modules.*', 'module-categories.*', 'workspaces.plan.update', 'support-access.*',
     ],
 
     'implemented' => [

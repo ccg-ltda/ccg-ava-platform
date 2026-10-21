@@ -13,6 +13,8 @@ return [
         'workspace' => ['label' => 'Workspaces', 'noun' => 'el Workspace'],
         'organization' => ['label' => 'Organizaciones', 'noun' => 'la organización'],
         'plan' => ['label' => 'Planes', 'noun' => 'el plan'],
+        'workspace_modules' => ['label' => 'Módulos del Workspace', 'noun' => 'los módulos de'],
+        'subscription' => ['label' => 'Suscripciones', 'noun' => 'la suscripción de'],
         'module' => ['label' => 'Catálogo de módulos', 'noun' => 'el módulo'],
         'module_category' => ['label' => 'Categorías de módulos', 'noun' => 'la categoría de módulos'],
         'settings' => ['label' => 'Configuraciones', 'noun' => 'la configuración del Workspace'],

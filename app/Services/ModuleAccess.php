@@ -3,7 +3,9 @@
 namespace App\Services;
 
 use App\Models\Plan;
+use App\Models\Subscription;
 use App\Models\Workspace;
+use App\Models\WorkspaceModuleOverride;
 use Illuminate\Http\Request;
 
 /**
@@ -18,6 +20,11 @@ use Illuminate\Http\Request;
  * The administrative Workspace of Ava Platform always has every implemented module (it must be able to administer the
  * platform). A Workspace without a plan uses the default plan; if there is none or it is inactive, it has no modules
  * (fail closed).
+ *
+ * Two layers sit on top of the plan, and nothing else: (1) the subscription of the Workspace, when it has one, must not withdraw access
+ * (suspended, cancelled, expired; pending, active and grace do not; a Workspace WITHOUT a subscription row is a legacy one governed by its plan alone), and (2) the authorized exceptions of
+ * that single Workspace (`workspace_module_overrides`): a `grant` adds a module the plan lacks, a `revoke` removes one it includes. The plan itself is
+ * never edited by an exception. Dependencies are applied last, so an exception can never make a module operative without what it needs.
  */
 class ModuleAccess
 {
@@ -79,12 +86,50 @@ class ModuleAccess
 
         $plan = $workspace->plan_id ? $workspace->plan : $this->defaultPlan();
 
-        if (! $plan || ! $plan->is_active) {
+        if (! $plan || ! $plan->is_active || ! $this->subscriptionAllows($workspace)) {
             return [];
         }
 
-        return $this->operative($plan->modules()->where('modules.is_active', true)->pluck('modules.key')
-            ->filter(fn (string $key) => $this->isImplemented($key))->values()->all());
+        $keys = $plan->modules()->where('modules.is_active', true)->pluck('modules.key')
+            ->filter(fn (string $key) => $this->isImplemented($key))->values()->all();
+
+        return $this->operative($this->withOverrides($workspace, $keys));
+    }
+
+    /** The subscription of a client Workspace, if it has one. */
+    public function subscription(Workspace $workspace): ?Subscription
+    {
+        return Subscription::where('workspace_id', $workspace->id)->first();
+    }
+
+    /** No subscription row = legacy Workspace (plan only). With one, only a status that grants access opens the modules. */
+    public function subscriptionAllows(Workspace $workspace): bool
+    {
+        $subscription = $this->subscription($workspace);
+
+        return $subscription === null || ! $subscription->withdrawsAccess();
+    }
+
+    /**
+     * Applies the exceptions of this Workspace to the modules its plan gives. Only active, implemented modules can be granted.
+     *
+     * @param  list<string>  $keys
+     * @return list<string>
+     */
+    public function withOverrides(Workspace $workspace, array $keys): array
+    {
+        $overrides = WorkspaceModuleOverride::where('workspace_id', $workspace->id)->join('modules', 'modules.id', '=', 'workspace_module_overrides.module_id')
+            ->get(['modules.key as key', 'modules.is_active as active', 'workspace_module_overrides.mode as mode']);
+
+        foreach ($overrides as $override) {
+            if ($override->mode === WorkspaceModuleOverride::REVOKE) {
+                $keys = array_values(array_diff($keys, [$override->key]));
+            } elseif ($override->active && $this->isImplemented($override->key)) {
+                $keys[] = $override->key;
+            }
+        }
+
+        return array_values(array_unique($keys));
     }
 
     /**

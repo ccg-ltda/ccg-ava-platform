@@ -242,3 +242,4 @@ La tarea está terminada solo si: el requerimiento está completo, no hay duplic
 - La lógica de negocio vive en `app/Services`, `app/Booking`, `app/Orders` y similares; la lógica nueva no debe crecer dentro de los controladores.
 - La imagen de MinIO es solo para desarrollo.
 - Detalle y estado de cada punto en `pendientes.md`.
+- Chat público de CCG (decisión permanente, 2026-10-21): es un canal Web normal de un asistente del Workspace administrativo (`workspace.admin_code`); `config/support.php` solo nombra su clave y `SupportChannel` la acepta únicamente si el canal es de ese Workspace. El visitante nunca elige el Workspace ni es miembro; quien lee y responde es el equipo con los permisos de Conversaciones. Sin clave válida no se dibuja ningún botón.

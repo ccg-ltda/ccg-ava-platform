@@ -1,5 +1,6 @@
 import Card from '@/Components/Card';
 import LegalLinks from '@/Components/LegalLinks';
+import SupportChat from '@/Components/SupportChat';
 
 /**
  * Shell of the account-recovery pages (forgot / reset / confirm password, verify email) and of the legal pages: the same
@@ -19,6 +20,7 @@ export default function GuestLayout({ title, children, wide = false }) {
             </main>
 
             <LegalLinks className="mt-6 text-xs text-ink-muted" linkClassName="hover:text-primary hover:underline" />
+            <SupportChat />
         </div>
     );
 }

@@ -35,8 +35,10 @@ use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SupportAccessController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WorkspaceController;
+use App\Http\Controllers\WorkspaceEmptyController;
 use App\Http\Controllers\WorkspaceLogoController;
 use App\Http\Controllers\WorkspaceMemberController;
+use App\Http\Controllers\WorkspaceModuleController;
 use App\Http\Controllers\WorkspacePlanController;
 use App\Http\Controllers\WorkspaceSearchController;
 use Illuminate\Support\Facades\Route;
@@ -53,6 +55,9 @@ Route::get('/book/{key}', [PublicBookingController::class, 'page'])->where('key'
 // Everything below requires an authenticated user AND a valid Workspace context
 // (re-validated on every request by EnsureWorkspaceContext).
 Route::middleware(['auth', 'verified', 'workspace'])->group(function () {
+    // Where the home page lands when the Workspace has no Dashboard to show (no modules, a suspended subscription...). Core: it grants nothing.
+    Route::get('/sin-modulos', WorkspaceEmptyController::class)->name('workspace.empty');
+
     // Dashboard: the executive and operational summary and the home page after login. Reportes: the detailed analytics.
     Route::get('/dashboard', [DashboardController::class, 'index'])->middleware(['workspace.module:dashboard', 'workspace.permission:view-dashboard'])->name('dashboard');
     Route::get('/reports', [ReportController::class, 'index'])->middleware(['workspace.module:reports', 'workspace.permission:view-dashboard'])->name('reports.index');
@@ -298,6 +303,8 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         Route::put('/plans/{plan}/modules', [PlanController::class, 'updateModules'])->whereNumber('plan')->middleware('workspace.platform:edit-plans')->name('plans.modules.update');
         Route::post('/plans/{plan}/activate', [PlanController::class, 'activate'])->whereNumber('plan')->middleware('workspace.platform:activate-plans')->name('plans.activate');
         Route::post('/plans/{plan}/deactivate', [PlanController::class, 'deactivate'])->whereNumber('plan')->middleware('workspace.platform:activate-plans')->name('plans.deactivate');
+        Route::get('/workspaces/{workspace}/modules', [WorkspaceModuleController::class, 'show'])->whereNumber('workspace')->name('workspaces.modules.show');
+        Route::put('/workspaces/{workspace}/modules', [WorkspaceModuleController::class, 'update'])->whereNumber('workspace')->middleware('workspace.platform:assign-plans')->name('workspaces.modules.update');
         Route::put('/workspaces/{workspace}/plan', [WorkspacePlanController::class, 'update'])->whereNumber('workspace')->middleware('workspace.platform:assign-plans')->name('workspaces.plan.update');
     });
 

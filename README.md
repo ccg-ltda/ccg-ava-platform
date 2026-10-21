@@ -136,7 +136,7 @@ Todo teléfono NUEVO o modificado (ficha de Cliente, profesional y reservas del 
 
 ### Chatbots, canales y conversaciones
 
-- **Web:** widget (`public/widget/ava-widget.js`) con un código de instalación único; el visitante habla con la IA a través del webhook de n8n del Workspace y, si un agente toma la conversación, recibe sus respuestas en el mismo chat.
+- **Web:** widget (`public/widget/ava-widget.js`) con un código de instalación único; el visitante habla con la IA a través del webhook de n8n del Workspace y, si un agente toma la conversación, recibe sus respuestas en el mismo chat. **Chat público de CCG:** `CCG_SUPPORT_CHAT_KEY` nombra el canal Web de un asistente del Workspace administrativo; las páginas públicas de Ava muestran ese chat solo si la clave es válida (ver `RECOMENDACIONES.md` §26).
 - **WhatsApp:** n8n recibe y responde, y reporta cada mensaje a Ava. Las respuestas de un agente las envía Ava por la Graph API con el token de la integración del Workspace. Instagram y Messenger aún no están disponibles.
 - **Atención humana:** `ai → pending → human → resolved`. Mientras una persona tiene la conversación, la IA no responde (n8n debe consultar `authorize` antes de enviar; el widget web lo aplica Ava misma).
 - **Herramientas del asistente (`/api/agent/*`):** n8n las usa con el token del chatbot o, mejor, con el token de ejecución de vida corta que Ava le entrega en cada ejecución (solo sirve para la conversación de esa ejecución y muere si una persona la toma). `/api/agent/config` anuncia cuáles ofrece el plan del Workspace: **reservas** (`/api/agent/booking/*`) y **pedidos** (`/api/agent/orders/*`). El asistente nunca ejecuta nada por su cuenta: pide la operación y cuenta al contacto lo que Ava respondió.

@@ -6,8 +6,8 @@ import InputError from '@/Components/InputError';
 import ImplementationBadge from './ImplementationBadge';
 
 /**
- * Selected modules that lack a module they technically need (`requires`, from config/modules.php). The server rejects the
- * same selection; this only explains it before saving. Returns `[{ module, missing: [{ id, key, name }] }]`.
+ * Selected modules that lack a module they technically need (`requires`, from config/modules.php). It is only a warning (decision E4): the plan can be saved and
+ * ModuleAccess keeps those modules inoperative. Returns `[{ module, missing: [{ id, key, name }] }]`.
  */
 export function unmetRequirements(catalog, selected) {
     const modules = catalog.flatMap((category) => category.modules);
@@ -98,7 +98,7 @@ export default function ModuleChecklist({ catalog, selected, onChange, error, di
         <div className="space-y-6">
             {unmet.length > 0 && (
                 <Alert tone="warning">
-                    <p className="font-semibold">Este plan no se puede guardar así: faltan módulos de los que otros dependen.</p>
+                    <p className="font-semibold">Faltan módulos de los que otros dependen. El plan se puede guardar así, pero esos módulos no funcionarán (ni se podrá asignar el plan) hasta completarlo.</p>
                     <ul className="mt-1 space-y-1.5">
                         {unmet.map(({ module, missing }) => (
                             <li key={module.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">

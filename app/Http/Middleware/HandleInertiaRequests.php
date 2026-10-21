@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Services\ModuleAccess;
 use App\Services\ProfilePhoto;
+use App\Services\SupportChannel;
 use App\Services\WorkspaceSettingsService;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -53,6 +54,9 @@ class HandleInertiaRequests extends Middleware
             // Modules the plan of the active Workspace includes (navigation only; every route is also enforced by the server),
             // and what this user administers of the platform (superuser inside the administrative Workspace with the permission).
             'modules' => fn () => $request->attributes->has('workspace') ? app(ModuleAccess::class)->forRequest($request) : [],
+            // CCG's public support chat: the public key of the web channel of the administrative Workspace, only while that channel is valid and live
+            // (SupportChannel). Null = nothing is offered. The key is public by design; the destination is always resolved by the server from it.
+            'supportChat' => fn () => ($key = app(SupportChannel::class)->publicKey()) ? ['key' => $key, 'script' => url('/widget/ava-widget.js')] : null,
             'platform' => fn () => EnsurePlatformAdministration::allows($request),
             'platformAccess' => fn () => [
                 'plans' => EnsurePlatformAdministration::allows($request, EnsurePlatformAdministration::PLANS),
