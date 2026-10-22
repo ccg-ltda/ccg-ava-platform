@@ -1,5 +1,5 @@
 import { Head } from '@inertiajs/react';
-import { CalendarDays, Settings, Users } from 'lucide-react';
+import { BellRing, CalendarDays, Settings, Users } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import Card from '@/Components/Card';
 import EmptyState from '@/Components/EmptyState';
@@ -13,6 +13,7 @@ import usePagedList from '@/Hooks/usePagedList';
 import useUrlTab from '@/Hooks/useUrlTab';
 import AppLayout from '@/Layouts/AppLayout';
 import AgendaPanel from './Partials/AgendaPanel';
+import NotificationSettings from './Partials/NotificationSettings';
 import SettingsPanel from './Partials/SettingsPanel';
 
 /** Who booked: the minimum needed to identify and contact them (name, phone, email). Deliberately not a CRM. */
@@ -70,14 +71,16 @@ function CustomersPanel({ customers, filters, perPageOptions }) {
 }
 
 /** Agenda y reservas: the calendar of appointments, who booked and the booking rules of the Workspace. */
-export default function Index({ capabilities, filters, appointments, options, customers, settings, perPageOptions, today }) {
+export default function Index({ capabilities, filters, appointments, options, customers, settings, perPageOptions, today, listLimit }) {
     const { permissions } = useAccess();
     // Creating, editing (confirm, reschedule, mark) and cancelling an appointment are independent; the rules and the public page are a fourth.
     const can = { create: permissions.includes('create-bookings'), edit: permissions.includes('edit-bookings'), cancel: permissions.includes('cancel-bookings') };
     const sections = [
         { id: 'agenda', label: 'Agenda', icon: CalendarDays, count: appointments.length },
         { id: 'clientes', label: 'Clientes', icon: Users, count: customers.meta.total },
-        { id: 'configuracion', label: 'Configuración', icon: Settings },
+        // Confirmations and reminders of the appointments: their own tab next to the Agenda. They read and write the SAME settings as before (one source).
+        { id: 'recordatorios', label: 'Recordatorios y confirmaciones', icon: BellRing },
+        { id: 'configuracion', label: 'Configuración de Agenda', icon: Settings },
     ];
     const [tab, selectTab] = useUrlTab(sections.map((section) => section.id));
 
@@ -85,11 +88,12 @@ export default function Index({ capabilities, filters, appointments, options, cu
         <>
             <Head title="Agenda y reservas" />
 
-            <PageHeader title="Agenda y reservas" description="Citas, quién reserva y las reglas de reserva de tu negocio." />
+            <PageHeader title="Agenda y reservas" description="Calendario de citas, quién reserva, recordatorios y confirmaciones, y las reglas de reserva de tu negocio." />
 
             <Tabs tabs={sections} selectedIndex={tab} onChange={selectTab}>
-                <AgendaPanel appointments={appointments} filters={filters} options={options} capabilities={capabilities} today={today} can={can} />
+                <AgendaPanel appointments={appointments} filters={filters} options={options} capabilities={capabilities} today={today} can={can} listLimit={listLimit} />
                 <CustomersPanel customers={customers} filters={filters} perPageOptions={perPageOptions} />
+                <NotificationSettings notifications={settings.notifications} canManage={permissions.includes('manage-booking-settings')} />
                 <SettingsPanel settings={settings} capabilities={capabilities} canManage={permissions.includes('manage-booking-settings')} />
             </Tabs>
         </>

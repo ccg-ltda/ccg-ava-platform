@@ -1,5 +1,5 @@
 import { router, useForm } from '@inertiajs/react';
-import { FolderPlus, Pencil, Plus, Power } from 'lucide-react';
+import { Eye, EyeOff, FolderPlus, Pencil, Plus, Power } from 'lucide-react';
 import { useState } from 'react';
 import Alert from '@/Components/Alert';
 import Badge from '@/Components/Badge';
@@ -113,6 +113,25 @@ export default function CatalogPanel({ catalog, can }) {
         });
     };
 
+    // Shows or hides a solution in the PUBLIC offer. It deletes nothing: plans, Workspaces and subscriptions keep working; the server validates it again.
+    const togglePublic = async (category) => {
+        const hiding = category.isPublic;
+        const confirmed = await confirm({
+            title: hiding ? 'Ocultar de la oferta pública' : 'Mostrar en la oferta pública',
+            description: hiding
+                ? `«${category.name}» dejará de ofrecerse a nuevos clientes en el registro público. Sus planes, Workspaces y suscripciones no cambian.`
+                : `«${category.name}» se ofrecerá en el registro público con sus planes que estén activos, públicos y completos.`,
+            confirmLabel: hiding ? 'Ocultar' : 'Mostrar',
+        });
+
+        if (!confirmed) return;
+
+        router.post(route(hiding ? 'module-categories.unpublish' : 'module-categories.publish', category.id), {}, {
+            preserveScroll: true,
+            onError: (errors) => toast.error(errors.category ?? 'No se pudo cambiar la visibilidad.'),
+        });
+    };
+
     return (
         <div className="space-y-6">
             <Alert tone="info">
@@ -145,12 +164,15 @@ export default function CatalogPanel({ catalog, can }) {
                                 <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-ink">
                                     {category.name}
                                     <Badge tone={category.isActive ? 'green' : 'neutral'}>{category.isActive ? 'Activa' : 'Inactiva'}</Badge>
+                                    <Badge tone={category.isSolution ? 'violet' : 'neutral'}>{category.isSolution ? 'Solución comercial' : 'Capacidades compartidas'}</Badge>
+                                    {category.isSolution && category.isPublic !== null && <Badge tone={category.isPublic ? 'green' : 'amber'}>{category.isPublic ? 'Pública' : 'Privada'}</Badge>}
                                     <span className="text-xs font-normal text-ink-muted">{category.modules.length} {category.modules.length === 1 ? 'módulo' : 'módulos'}</span>
                                 </p>
                                 {category.description && <p className="truncate text-xs text-ink-muted">{category.description}</p>}
                             </div>
                             <div className="flex items-center gap-1">
                                 {can.createModule && category.isActive && <IconButton icon={Plus} label="Registrar módulo aquí" context={category.name} onClick={() => openModule({}, category.id)} />}
+                                {can.activateModule && category.isSolution && category.isPublic !== null && category.isActive && <IconButton icon={category.isPublic ? EyeOff : Eye} label={category.isPublic ? 'Ocultar de la oferta pública' : 'Mostrar en la oferta pública'} context={category.name} onClick={() => togglePublic(category)} />}
                                 {can.editModule && <IconButton icon={Pencil} label="Editar categoría" context={category.name} onClick={() => openCategory(category)} />}
                                 {can.activateModule && <IconButton icon={Power} label={category.isActive ? 'Desactivar' : 'Activar'} context={category.name} tone={category.isActive ? 'danger' : 'primary'} onClick={() => toggle(category, 'category')} />}
                             </div>
@@ -226,7 +248,12 @@ export default function CatalogPanel({ catalog, can }) {
                 onClose={() => setCategoryDialog(null)}
                 onSubmit={save(categoryForm, categoryDialog ?? {}, setCategoryDialog, { store: 'module-categories.store', update: 'module-categories.update' })}
             >
-                <NameDescriptionFields form={categoryForm} prefix="category" nameLabel="Nombre de la categoría" />
+                <NameDescriptionFields form={categoryForm} prefix="category" nameLabel="Nombre comercial de la categoría o solución" />
+                {categoryDialog?.key && (
+                    <p className="mt-3 text-xs text-ink-muted">
+                        Identificador técnico: <code className="rounded bg-canvas px-1.5 py-0.5">{categoryDialog.key}</code> (no cambia aunque cambies el nombre; los planes y módulos se asocian por él). Desactivarla la retira de la oferta pública sin borrar planes ni contrataciones.
+                    </p>
+                )}
             </FormModal>
         </div>
     );

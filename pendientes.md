@@ -156,6 +156,10 @@ Abiertos y aplicables (los de despliegue inmediato están en B):
 
 ## Hecho
 
+- [x] **Plan maestro Zonno by CCG, bloque 1 (2026-10-22, sin commit):** límites reales visibles en oferta y resumen, límites congelados y verificación antes de confirmar, resumen centrado, etiquetas de solución. Matriz y bloques 2 a 6 en `RECOMENDACIONES.md` §38. Pendiente: D-SOL1 (visibilidad pública de solución), verificar el resumen en navegador (claro/oscuro, 390 px).
+
+- [x] **Identificador fiscal opcional y de cualquier país en `/registro` (2026-10-22):** sin migración; sin dígito verificador obligatorio; los existentes no cambian. Ver `RECOMENDACIONES.md` §37 y §37.1 (sesión de registro vencida ya no lanza 409; fallo del navegador sin reproducir). **Pendiente (bloque posterior):** plantilla HTML editable de los correos; comprobar a ojo el registro en modo oscuro.
+
 - [x] **D-CON1, histórico, «sesión» y modo oscuro (2026-10-22):** registro auditado de un precio acordado fuera del registro (reutiliza las condiciones congeladas; las históricas se congelan solo a propósito), «sesión» no existe como límite (decisión D-SES pendiente), modo oscuro del panel verificado en una pantalla. Corrige la afirmación errónea de §34/§35 de que no existía. Ver `RECOMENDACIONES.md` §36. Pendiente: pasarela de pagos (externa), D-PRU1, D-SES, unificar el widget antiguo, PostgreSQL desechable para PHPUnit, limpiar datos `[TEST]` (§35.5).
 
 - [x] **Migraciones activadas y vencimiento de pruebas (2026-10-22):** las cinco migraciones (`2026_10_24` a `2026_10_28`) se aplicaron a `ccg_ava` (PostgreSQL local) tras un respaldo verificado (`ava_20261021_235025.dump`, restore-check OK); 61 tablas intactas. Prueba vencida = acceso restringido en el servidor al instante, comando `subscriptions:expire-trials` idempotente, datos intactos, reactivación solo por pago confirmado (proveedor pendiente). Widget antiguo: no se usa si hay límite de IA. Verificado en navegador contra PostgreSQL (escritorio y 390 px). Ver `RECOMENDACIONES.md` §35.

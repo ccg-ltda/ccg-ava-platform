@@ -101,12 +101,12 @@ class InventoryTest extends TestCase
         $other = ProductCategory::create(['workspace_id' => $foreign->id, 'name' => 'Ajena', 'normalized_name' => 'ajena']);
         $inactive = ProductCategory::create(['workspace_id' => $this->workspace->id, 'name' => 'Vieja', 'normalized_name' => 'vieja', 'is_active' => false]);
 
-        $this->post('/catalog', ['name' => 'Crema', 'price' => '10000', 'category_id' => $category->id])->assertSessionHasNoErrors();
+        $this->post('/catalog', ['location_ids' => [$this->centro->id], 'name' => 'Crema', 'price' => '10000', 'category_id' => $category->id])->assertSessionHasNoErrors();
         $created = $this->workspace->products()->where('name', 'Crema')->firstOrFail();
         $this->assertSame([$category->id, 'Cuidado facial'], [$created->category_id, $created->category], 'the product keeps the category and a copy of its name');
 
         foreach ([$other->id, $inactive->id, 999999, 'texto-libre'] as $invalid) {
-            $this->post('/catalog', ['name' => 'Mala '.$invalid, 'price' => '1', 'category_id' => $invalid])->assertSessionHasErrors('category_id');
+            $this->post('/catalog', ['location_ids' => [$this->centro->id], 'name' => 'Mala '.$invalid, 'price' => '1', 'category_id' => $invalid])->assertSessionHasErrors('category_id');
         }
         $this->assertDatabaseMissing('products', ['workspace_id' => $this->workspace->id, 'name' => 'Mala '.$other->id]);
     }
@@ -162,7 +162,7 @@ class InventoryTest extends TestCase
 
     public function test_a_picture_is_stored_privately_served_to_members_and_replaced_safely(): void
     {
-        $this->post('/catalog', ['name' => 'Con foto', 'price' => '1000', 'image' => UploadedFile::fake()->image('a.png', 200, 200)])->assertSessionHasNoErrors();
+        $this->post('/catalog', ['location_ids' => [$this->centro->id], 'name' => 'Con foto', 'price' => '1000', 'image' => UploadedFile::fake()->image('a.png', 200, 200)])->assertSessionHasNoErrors();
         $product = $this->workspace->products()->where('name', 'Con foto')->firstOrFail();
         $first = $product->image_path;
 
@@ -171,7 +171,7 @@ class InventoryTest extends TestCase
         $this->get("/catalog/{$product->id}/image")->assertOk()->assertHeader('Cache-Control', 'no-cache, private');
 
         // A different picture replaces it: the old file goes only because no other product uses it.
-        $this->post("/catalog/{$product->id}", ['_method' => 'put', 'name' => 'Con foto', 'price' => '1000', 'image' => UploadedFile::fake()->image('b.jpg', 100, 100)])->assertSessionHasNoErrors();
+        $this->post("/catalog/{$product->id}", ['location_ids' => [$this->centro->id], '_method' => 'put', 'name' => 'Con foto', 'price' => '1000', 'image' => UploadedFile::fake()->image('b.jpg', 100, 100)])->assertSessionHasNoErrors();
         $second = $product->fresh()->image_path;
         $this->assertNotSame($first, $second);
         Storage::assertMissing($first);
@@ -179,7 +179,7 @@ class InventoryTest extends TestCase
 
         // A file that another product points to is never deleted.
         $twin = $this->product(['image_path' => $second]);
-        $this->post("/catalog/{$product->id}", ['_method' => 'put', 'name' => 'Con foto', 'price' => '1000', 'remove_image' => true])->assertSessionHasNoErrors();
+        $this->post("/catalog/{$product->id}", ['location_ids' => [$this->centro->id], '_method' => 'put', 'name' => 'Con foto', 'price' => '1000', 'remove_image' => true])->assertSessionHasNoErrors();
         $this->assertNull($product->fresh()->image_path);
         Storage::assertExists($second);
         $this->assertSame($second, $twin->fresh()->image_path);
@@ -187,16 +187,16 @@ class InventoryTest extends TestCase
 
     public function test_only_pictures_of_the_allowed_type_and_size_are_accepted(): void
     {
-        $this->post('/catalog', ['name' => 'PDF', 'price' => '1', 'image' => UploadedFile::fake()->create('x.pdf', 10, 'application/pdf')])->assertSessionHasErrors('image');
-        $this->post('/catalog', ['name' => 'SVG', 'price' => '1', 'image' => UploadedFile::fake()->createWithContent('x.svg', '<svg xmlns="http://www.w3.org/2000/svg"></svg>')])->assertSessionHasErrors('image');
-        $this->post('/catalog', ['name' => 'Grande', 'price' => '1', 'image' => UploadedFile::fake()->image('x.png')->size(3000)])->assertSessionHasErrors('image');
+        $this->post('/catalog', ['location_ids' => [$this->centro->id], 'name' => 'PDF', 'price' => '1', 'image' => UploadedFile::fake()->create('x.pdf', 10, 'application/pdf')])->assertSessionHasErrors('image');
+        $this->post('/catalog', ['location_ids' => [$this->centro->id], 'name' => 'SVG', 'price' => '1', 'image' => UploadedFile::fake()->createWithContent('x.svg', '<svg xmlns="http://www.w3.org/2000/svg"></svg>')])->assertSessionHasErrors('image');
+        $this->post('/catalog', ['location_ids' => [$this->centro->id], 'name' => 'Grande', 'price' => '1', 'image' => UploadedFile::fake()->image('x.png')->size(3000)])->assertSessionHasErrors('image');
 
         $this->assertSame(0, $this->workspace->products()->count());
     }
 
     public function test_a_picture_is_not_served_across_workspaces_or_without_permission(): void
     {
-        $this->post('/catalog', ['name' => 'Foto', 'price' => '1', 'image' => UploadedFile::fake()->image('a.png')])->assertSessionHasNoErrors();
+        $this->post('/catalog', ['location_ids' => [$this->centro->id], 'name' => 'Foto', 'price' => '1', 'image' => UploadedFile::fake()->image('a.png')])->assertSessionHasNoErrors();
         $product = $this->workspace->products()->firstOrFail();
         $foreign = $this->bookingWorkspace('OTRA', ['dashboard', 'product_catalog']);
 
@@ -205,7 +205,7 @@ class InventoryTest extends TestCase
 
         $this->actAsMember($this->workspace, 'supervisor'); // no view-catalog
         $this->get("/catalog/{$product->id}/image")->assertForbidden();
-        $this->post("/catalog/{$product->id}", ['_method' => 'put', 'name' => 'X', 'price' => '1', 'image' => UploadedFile::fake()->image('c.png')])->assertForbidden();
+        $this->post("/catalog/{$product->id}", ['location_ids' => [$this->centro->id], '_method' => 'put', 'name' => 'X', 'price' => '1', 'image' => UploadedFile::fake()->image('c.png')])->assertForbidden();
     }
 
     // --- 3 & 4. one product, a different stock in each location; isolation --------------------------------------------------------------------
@@ -283,7 +283,7 @@ class InventoryTest extends TestCase
         $this->assertSame(5, $this->quantity($product, $this->centro));
         $this->assertSame(1, InventoryMovement::where('product_id', $product->id)->count());
 
-        $this->post('/catalog', ['name' => 'Neg', 'price' => '1', 'tracks_inventory' => true, 'stocks' => [['location_id' => $this->centro->id, 'quantity' => -4]]])->assertSessionHasErrors('stocks.0.quantity');
+        $this->post('/catalog', ['location_ids' => [$this->centro->id], 'name' => 'Neg', 'price' => '1', 'tracks_inventory' => true, 'stocks' => [['location_id' => $this->centro->id, 'quantity' => -4]]])->assertSessionHasErrors('stocks.0.quantity');
     }
 
     // --- 7. movements -----------------------------------------------------------------------------------------------------------------------
@@ -308,7 +308,7 @@ class InventoryTest extends TestCase
 
     public function test_editing_the_product_never_changes_its_stock_and_a_new_product_records_its_first_stock_as_an_entry(): void
     {
-        $this->post('/catalog', ['name' => 'Nuevo', 'price' => '5000', 'tracks_inventory' => true, 'stocks' => [['location_id' => $this->centro->id, 'quantity' => 8, 'min_quantity' => 2], ['location_id' => $this->norte->id, 'quantity' => 0]]])->assertSessionHasNoErrors();
+        $this->post('/catalog', ['location_ids' => [$this->centro->id], 'name' => 'Nuevo', 'price' => '5000', 'tracks_inventory' => true, 'stocks' => [['location_id' => $this->centro->id, 'quantity' => 8, 'min_quantity' => 2], ['location_id' => $this->norte->id, 'quantity' => 0]]])->assertSessionHasNoErrors();
         $product = $this->workspace->products()->where('name', 'Nuevo')->firstOrFail();
 
         $this->assertSame([8, 0], [$this->quantity($product, $this->centro), $this->quantity($product, $this->norte)]);
@@ -317,8 +317,8 @@ class InventoryTest extends TestCase
         $this->assertCount(1, $first, 'only the stock with units has an entry');
         $this->assertSame(['entry', 'Existencia inicial', 0, 8], [$first[0]->type, $first[0]->reason, $first[0]->quantity_before, $first[0]->quantity_after]);
 
-        $this->post("/catalog/{$product->id}", ['_method' => 'put', 'name' => 'Nuevo 2', 'price' => '6000'])->assertSessionHasNoErrors();
-        $this->post("/catalog/{$product->id}", ['_method' => 'put', 'name' => 'Nuevo 2', 'price' => '6000', 'stocks' => [['location_id' => $this->centro->id, 'quantity' => 999]]])->assertStatus(422);
+        $this->post("/catalog/{$product->id}", ['location_ids' => [$this->centro->id], '_method' => 'put', 'name' => 'Nuevo 2', 'price' => '6000'])->assertSessionHasNoErrors();
+        $this->post("/catalog/{$product->id}", ['location_ids' => [$this->centro->id], '_method' => 'put', 'name' => 'Nuevo 2', 'price' => '6000', 'stocks' => [['location_id' => $this->centro->id, 'quantity' => 999]]])->assertStatus(422);
 
         $this->assertSame(8, $this->quantity($product, $this->centro));
         $this->assertSame(1, InventoryMovement::where('product_id', $product->id)->count());
@@ -481,7 +481,7 @@ class InventoryTest extends TestCase
         $before = [$snapshot($old->refresh()), $snapshot($delivered->refresh())];
 
         // The product is configured afterwards (control on, new price): the past stays as it was and no movement exists for it.
-        $this->post("/catalog/{$product->id}", ['_method' => 'put', 'name' => $product->name, 'price' => '30000', 'tracks_inventory' => true])->assertSessionHasNoErrors();
+        $this->post("/catalog/{$product->id}", ['location_ids' => [$this->centro->id], '_method' => 'put', 'name' => $product->name, 'price' => '30000', 'tracks_inventory' => true])->assertSessionHasNoErrors();
         $this->assertSame($before, [$snapshot($old->refresh()), $snapshot($delivered->refresh())]);
         $this->assertSame(0, InventoryMovement::count(), 'no history is invented for orders that already existed');
         $this->assertSame(0, InventoryStock::count(), 'no quantity is invented for the product');
@@ -524,9 +524,9 @@ class InventoryTest extends TestCase
         $this->get("/catalog/{$product->id}")->assertInertia(fn (AssertableInertia $page) => $page->where('movements', null)->where('product.stock', null));
         $this->get('/catalog?availability=out&place='.$this->centro->id)->assertInertia(fn (AssertableInertia $page) => $page->where('filters.availability', '')->where('filters.place', ''));
         // The product form cannot turn stock control on or off, nor send stock, without the permission.
-        $this->post('/catalog', ['name' => 'X', 'price' => '1', 'tracks_inventory' => true])->assertForbidden();
-        $this->post("/catalog/{$product->id}", ['_method' => 'put', 'name' => $product->name, 'price' => '25000', 'tracks_inventory' => false])->assertForbidden();
-        $this->post("/catalog/{$product->id}", ['_method' => 'put', 'name' => $product->name, 'price' => '25000', 'is_active' => false])->assertForbidden();
+        $this->post('/catalog', ['location_ids' => [$this->centro->id], 'name' => 'X', 'price' => '1', 'tracks_inventory' => true])->assertForbidden();
+        $this->post("/catalog/{$product->id}", ['location_ids' => [$this->centro->id], '_method' => 'put', 'name' => $product->name, 'price' => '25000', 'tracks_inventory' => false])->assertForbidden();
+        $this->post("/catalog/{$product->id}", ['location_ids' => [$this->centro->id], '_method' => 'put', 'name' => $product->name, 'price' => '25000', 'is_active' => false])->assertForbidden();
 
         $this->actAsMember($this->workspace, 'inventarista');
         $this->get("/catalog/{$product->id}")->assertInertia(fn (AssertableInertia $page) => $page->where('movements.meta.total', 1)->where('inventory.canAdjust', false));

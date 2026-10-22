@@ -25,12 +25,19 @@ class ReportFilterRequest extends FormRequest
             'granularity' => ['nullable', Rule::in(array_keys(config('reports.granularities')))],
             // Only a superuser inside the administrative Workspace may use it (WorkspaceScope); the server checks.
             'workspace' => ['nullable', 'string', 'regex:/^(all|\d+)$/'],
+            // A location of the ACTIVE Workspace the member is authorized for; the controller re-checks it (a forged or foreign id is refused, never ignored).
+            'location' => ['nullable', 'integer', 'min:1'],
         ];
     }
 
     public function attributes(): array
     {
-        return ['period' => 'periodo', 'granularity' => 'granularidad'];
+        return ['period' => 'periodo', 'granularity' => 'granularidad', 'location' => 'sede'];
+    }
+
+    public function locationFilter(): ?int
+    {
+        return $this->validated('location') ? (int) $this->validated('location') : null;
     }
 
     public function workspaceScope(): ?string

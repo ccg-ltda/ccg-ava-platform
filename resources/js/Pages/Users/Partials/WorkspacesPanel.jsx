@@ -1,4 +1,5 @@
 import { router, useForm, usePage } from '@inertiajs/react';
+import RoleLabel from '@/Components/RoleLabel';
 import { Building2, Pencil, Plus, Power, UserMinus, UsersRound } from 'lucide-react';
 import { useState } from 'react';
 import Alert from '@/Components/Alert';
@@ -18,7 +19,6 @@ import { TableWrap, Td, Th } from '@/Components/Table';
 import TextInput from '@/Components/TextInput';
 import UserCombobox from '@/Components/UserCombobox';
 import { useToast } from '@/Components/Toast';
-import { roleTone } from '@/config/roles';
 import usePagedList from '@/Hooks/usePagedList';
 
 const FIELD = 'mt-1';
@@ -125,7 +125,7 @@ function MembersModal({ workspace, canAdd, listMeta, perPageOptions, onClose }) 
                                                     options={roleOptions(member.role)}
                                                 />
                                             ) : (
-                                                <Badge tone={roleTone(member.role)}>{member.role}</Badge>
+                                                <RoleLabel role={member.role} />
                                             )}
                                         </Td>
                                         <Td>

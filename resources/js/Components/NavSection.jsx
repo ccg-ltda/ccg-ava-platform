@@ -31,15 +31,15 @@ export default function NavSection({ section, onNavigate }) {
                     aria-expanded={open}
                     aria-controls={panelId}
                     title={section.label}
-                    className="flex h-8 w-full min-w-0 items-center gap-1.5 rounded-full px-3 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-white/70 hover:text-white focus-visible:outline-2 focus-visible:outline-white md:hidden lg:flex"
+                    className="flex h-8 w-full min-w-0 items-center gap-1.5 rounded-full px-3 text-left lg:group-data-[collapsed=true]/side:hidden text-[10px] font-bold uppercase tracking-[0.1em] text-white/70 hover:text-white focus-visible:outline-2 focus-visible:outline-white md:hidden lg:flex"
                 >
                     <span className="min-w-0 flex-1 truncate">{section.label}</span>
                     {folded && hasActive && <span className="size-1.5 shrink-0 rounded-full bg-accent-green" aria-label="Contiene la página actual" />}
                     <ChevronDown className={`size-3.5 shrink-0 transition-transform duration-150 ${folded ? '-rotate-90' : ''}`} aria-hidden="true" />
                 </button>
             )}
-            <div className="hidden h-px bg-white/20 md:block lg:hidden" />
-            <div id={panelId} className={`space-y-1 ${folded ? 'hidden md:block lg:hidden' : ''}`}>
+            <div className="hidden h-px bg-white/20 md:block lg:hidden lg:group-data-[collapsed=true]/side:block" />
+            <div id={panelId} className={`space-y-1 ${folded ? 'hidden md:block lg:hidden lg:group-data-[collapsed=true]/side:block' : ''}`}>
                 {section.items.map((item) => (
                     <NavItem key={item.route} item={item} active={isCurrentRoute(item.route, (name) => route().current(name))} onNavigate={onNavigate} />
                 ))}

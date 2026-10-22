@@ -1,5 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { Boxes, MapPin, Package, PackageX, Pencil, Plus, Settings2, SlidersHorizontal, Tag, TriangleAlert } from 'lucide-react';
+import { BellRing, Boxes, MapPin, Package, PackageX, Pencil, Plus, Settings2, SlidersHorizontal, Tag, TriangleAlert } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import Alert from '@/Components/Alert';
 import Badge from '@/Components/Badge';
@@ -179,6 +179,7 @@ export default function Index({ schemaPending, categoryAdmin, products, filters,
                                             </div>
                                             <span className="self-start">
                                                 <StateBadge product={product} />
+                                                {product.needsLocation && <Badge tone="amber" className="ml-1">Sin sede asignada</Badge>}
                                             </span>
                                         </div>
                                         {showStock && <StockInfo stock={product.stock} locations={locations} />}
@@ -254,6 +255,12 @@ export default function Index({ schemaPending, categoryAdmin, products, filters,
             <Head title="Catálogo" />
 
             <PageHeader title="Catálogo de productos" description="Lo que vende este Workspace y cuánto hay de cada producto en cada sede. Nunca se borra: se desactiva.">
+                {permissions.includes('view-catalog-reminders') && (
+                    <Link href={route('catalog.reminders.index')} className="inline-flex items-center gap-2 rounded-lg border border-field px-3.5 py-2 text-sm font-semibold text-ink hover:bg-canvas">
+                        <BellRing className="size-4" aria-hidden="true" />
+                        Recordatorios
+                    </Link>
+                )}
                 {canCreate && (
                     <PrimaryButton type="button" onClick={() => setEditing({})} className="gap-2">
                         <Plus className="size-4" aria-hidden="true" />

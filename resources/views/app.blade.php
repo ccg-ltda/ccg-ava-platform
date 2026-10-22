@@ -4,7 +4,8 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
 
-        <title inertia>{{ config('app.name', 'Laravel') }}</title>
+        <title inertia>{{ config('branding.name') }}</title>
+        <meta name="brand" content="{{ config('branding.name') }}">
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
         <!-- Theme before first paint (light by default, choice persisted by the ThemeToggle) -->

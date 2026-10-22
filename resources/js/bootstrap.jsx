@@ -6,7 +6,8 @@ import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
 createInertiaApp({
-    title: (title) => `${title} - ${appName}`,
+    // The visible brand comes from the server (config/branding.php), not from a build-time variable.
+    title: (title) => `${title} - ${document.querySelector('meta[name="brand"]')?.content || appName}`,
     resolve: (name) =>
         resolvePageComponent(
             `./Pages/${name}.jsx`,

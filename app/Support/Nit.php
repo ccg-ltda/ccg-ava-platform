@@ -49,6 +49,18 @@ class Nit
         return null;
     }
 
+    /**
+     * The tax id as it is stored for ANY country (optional): null when blank, otherwise trimmed with inner spaces collapsed. A well-formed Colombian NIT
+     * keeps its canonical form ("900123456-7"); anything else (letters, dots, hyphens, slashes: "GB 123 4567 89", "RFC-ABC010101AB1") is kept as typed.
+     * No check digit and no country rule is imposed: the id is informative, never a login or a payment condition.
+     */
+    public static function identifier(?string $input): ?string
+    {
+        $clean = trim(preg_replace('/\s+/u', ' ', (string) $input) ?? '');
+
+        return $clean === '' ? null : (self::normalize($clean) ?? $clean);
+    }
+
     /** The base number of a canonical NIT (without DV). */
     public static function body(string $normalized): string
     {

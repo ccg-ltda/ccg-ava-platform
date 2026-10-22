@@ -2,6 +2,7 @@ import { AccessProvider } from '@/Components/Access/AccessContext';
 import ThemeToggle from '@/Components/Access/ThemeToggle';
 import ToastContainer from '@/Components/Access/ToastContainer';
 import LegalLinks from '@/Components/LegalLinks';
+import useBrand from '@/Hooks/useBrand';
 import SupportChat from '@/Components/SupportChat';
 import { AvaBackground } from '@/Layouts/AccessLayout';
 
@@ -10,6 +11,8 @@ import { AvaBackground } from '@/Layouts/AccessLayout';
  * (`.signup-card`, resources/css/ava.css). Use as a persistent Inertia layout.
  */
 export default function SignupLayout({ children }) {
+    const brand = useBrand();
+
     return (
         <AccessProvider>
             <div className="ava">
@@ -25,7 +28,7 @@ export default function SignupLayout({ children }) {
                                     <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
                                 </svg>
                             </div>
-                            <h1>CCG Platform</h1>
+                            <h1>{brand}</h1>
                             <p>Crea tu cuenta empresarial</p>
                         </div>
 

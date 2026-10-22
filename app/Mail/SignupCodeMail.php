@@ -2,6 +2,7 @@
 
 namespace App\Mail;
 
+use App\Services\EmailTemplates;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -17,11 +18,15 @@ class SignupCodeMail extends Mailable
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: 'Tu código de verificación de Ava Platform');
+        return new Envelope(subject: 'Tu código de verificación de '.config('branding.name'));
     }
 
     public function content(): Content
     {
-        return new Content(text: 'emails.signup-code');
+        // The code, its lifetime and the plain-text twin are exactly what they were; only the HTML presentation comes from the global template.
+        $brand = (string) config('branding.name');
+        $blocks = ["Tu código de verificación de {$brand} es:", ['code' => $this->code], "Caduca en {$this->minutes} minutos y solo sirve una vez. Escríbelo en la pantalla de registro.", 'Si no pediste este código, ignora este mensaje: no se creó ninguna cuenta.'];
+
+        return new Content(view: 'emails.html', text: 'emails.signup-code', with: ['html' => app(EmailTemplates::class)->render('Tu código de verificación', $blocks), 'text' => '']);
     }
 }

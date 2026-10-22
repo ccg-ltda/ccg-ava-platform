@@ -4,6 +4,7 @@ use App\Http\Controllers\AuditController;
 use App\Http\Controllers\BookableResourceController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\CampaignController;
+use App\Http\Controllers\CatalogReminderController;
 use App\Http\Controllers\ChannelAppearanceController;
 use App\Http\Controllers\ChatbotController;
 use App\Http\Controllers\ConversationActionController;
@@ -11,6 +12,7 @@ use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DemoConversationController;
+use App\Http\Controllers\EmailTemplateController;
 use App\Http\Controllers\IntegrationController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\LegalController;
@@ -35,6 +37,7 @@ use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SignupController;
 use App\Http\Controllers\SupportAccessController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\UserLocationScopeController;
 use App\Http\Controllers\WorkspaceController;
 use App\Http\Controllers\WorkspaceEmptyController;
 use App\Http\Controllers\WorkspaceLimitController;
@@ -165,6 +168,14 @@ Route::middleware(['auth', 'workspace'])->group(function () {
     // (cancelling is `cancel-orders`, re-checked inside).
     Route::middleware(['workspace.module:product_catalog', 'workspace.permission:view-catalog'])->prefix('catalog')->name('catalog.')->group(function () {
         Route::get('/', [ProductController::class, 'index'])->name('index');
+        // Recordatorios del catálogo: scheduled emails to the member who writes them. Defined before the product routes; reading and writing have their own permissions.
+        Route::prefix('reminders')->name('reminders.')->group(function () {
+            Route::get('/', [CatalogReminderController::class, 'index'])->middleware('workspace.permission:view-catalog-reminders')->name('index');
+            Route::post('/', [CatalogReminderController::class, 'store'])->middleware(['workspace.permission:manage-catalog-reminders', 'throttle:30,1'])->name('store');
+            Route::put('/{reminder}', [CatalogReminderController::class, 'update'])->whereNumber('reminder')->middleware('workspace.permission:manage-catalog-reminders')->name('update');
+            Route::post('/{reminder}/cancel', [CatalogReminderController::class, 'cancel'])->whereNumber('reminder')->middleware('workspace.permission:manage-catalog-reminders')->name('cancel');
+            Route::post('/{reminder}/retry', [CatalogReminderController::class, 'retry'])->whereNumber('reminder')->middleware('workspace.permission:manage-catalog-reminders')->name('retry');
+        });
         Route::post('/', [ProductController::class, 'store'])->middleware('workspace.permission:create-products')->name('store');
         // Categories (tab «Categorías»): a product chooses one from the Workspace's own list. Creating needs create or edit products; renaming and switching one off, edit products.
         Route::prefix('categories')->name('categories.')->group(function () {
@@ -292,6 +303,9 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         // Editing the account needs `edit-users`; changing the role or the Workspace needs `assign-roles` (UserController checks which one applies).
         Route::put('/users/{user}', [UserController::class, 'update'])->middleware('workspace.permission:edit-users,assign-roles')->name('users.update');
         // Users are never deleted: they are deactivated (and can be reactivated) so history and ID stay.
+        // Which locations a member works with (all, or exactly the ones chosen). Changing it needs `assign-roles`; the controller re-checks the member and the actor.
+        Route::get('/users/{user}/locations', [UserLocationScopeController::class, 'show'])->whereNumber('user')->middleware('workspace.permission:assign-roles')->name('users.locations.show');
+        Route::put('/users/{user}/locations', [UserLocationScopeController::class, 'update'])->whereNumber('user')->middleware('workspace.permission:assign-roles')->name('users.locations.update');
         Route::post('/users/{user}/deactivate', [UserController::class, 'deactivate'])->middleware('workspace.permission:deactivate-users')->name('users.deactivate');
         Route::post('/users/{user}/activate', [UserController::class, 'activate'])->middleware('workspace.permission:deactivate-users')->name('users.activate');
     });
@@ -345,7 +359,15 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         Route::put('/module-categories/{category}', [ModuleCategoryController::class, 'update'])->whereNumber('category')->middleware('workspace.platform:edit-modules')->name('module-categories.update');
         Route::post('/module-categories/{category}/activate', [ModuleCategoryController::class, 'activate'])->whereNumber('category')->middleware('workspace.platform:activate-modules')->name('module-categories.activate');
         Route::post('/module-categories/{category}/deactivate', [ModuleCategoryController::class, 'deactivate'])->whereNumber('category')->middleware('workspace.platform:activate-modules')->name('module-categories.deactivate');
+        Route::post('/module-categories/{category}/publish', [ModuleCategoryController::class, 'publish'])->whereNumber('category')->middleware('workspace.platform:activate-modules')->name('module-categories.publish');
+        Route::post('/module-categories/{category}/unpublish', [ModuleCategoryController::class, 'unpublish'])->whereNumber('category')->middleware('workspace.platform:activate-modules')->name('module-categories.unpublish');
     });
+
+    // Global email template (its own permissions, not part of the module catalog group above).
+    // Plantilla HTML global de los correos: solo la administración de la plataforma dentro de Desarrollo_DEV (middleware + permiso; un cliente recibe 403).
+    Route::put('/settings/email-template', [EmailTemplateController::class, 'update'])->middleware('workspace.platform:edit-email-template')->name('email-template.update');
+    Route::post('/settings/email-template/preview', [EmailTemplateController::class, 'preview'])->middleware(['workspace.platform:view-email-template', 'throttle:60,1'])->name('email-template.preview');
+    Route::post('/settings/email-template/restore', [EmailTemplateController::class, 'restore'])->middleware('workspace.platform:edit-email-template')->name('email-template.restore');
 
     // Temporary, justified access of a platform administrator to the private data of another Workspace. Being superuser is not enough:
     // it needs `access-private-data` and to work inside the administrative Workspace (App\Privacy\SupportAccess).

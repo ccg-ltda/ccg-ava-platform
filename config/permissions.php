@@ -35,6 +35,7 @@ return [
         'catalog' => ['label' => 'Catálogo de productos', 'description' => 'Productos, precios, categorías e inventario por sede.', 'list' => 'view-catalog', 'module' => 'product_catalog'],
         'orders' => ['label' => 'Pedidos', 'description' => 'Pedidos, su detalle y su flujo de estados.', 'list' => 'view-orders', 'module' => 'orders'],
         'plans' => ['label' => 'Planes comerciales', 'description' => 'Planes de CCG y su asignación a los Workspaces de clientes.', 'list' => 'view-plans'],
+        'email' => ['label' => 'Correo de la plataforma', 'description' => 'Plantilla HTML global de los correos. Solo opera en Desarrollo_DEV.', 'list' => 'view-email-template'],
         'modules' => ['label' => 'Catálogo de módulos', 'description' => 'Módulos y categorías que los planes pueden incluir.', 'list' => 'view-modules'],
         'platform' => ['label' => 'Soporte de la plataforma', 'description' => 'Accesos temporales y justificados de soporte de CCG.'],
     ],
@@ -132,6 +133,8 @@ return [
         'edit-products' => ['group' => 'catalog', 'label' => 'Editar productos y precios', 'description' => 'Cambia los datos y el precio de un producto. Los pedidos ya hechos conservan su copia.'],
         'activate-products' => ['group' => 'catalog', 'label' => 'Activar y desactivar productos', 'description' => 'Ofrece o retira un producto. Nunca se borra.'],
         'view-inventory' => ['group' => 'catalog', 'label' => 'Consultar el inventario', 'description' => 'Ve las existencias de cada sede, el stock mínimo y el historial de movimientos.'],
+        'view-catalog-reminders' => ['group' => 'catalog', 'label' => 'Consultar los recordatorios del catálogo', 'description' => 'Ve los recordatorios programados del Workspace, su estado y su historial. El texto es de quien lo escribió.'],
+        'manage-catalog-reminders' => ['group' => 'catalog', 'label' => 'Programar recordatorios del catálogo', 'description' => 'Crea recordatorios que llegan por correo a quien los crea, edita los suyos mientras no se hayan enviado y cancela los pendientes.'],
         'adjust-inventory' => ['group' => 'catalog', 'label' => 'Registrar entradas y ajustes de inventario', 'description' => 'Anota entradas de mercancía, corrige existencias con un motivo y fija el stock mínimo de cada sede. Cada cambio queda en el historial.'],
 
         // Pedidos
@@ -154,6 +157,10 @@ return [
         'create-modules' => ['group' => 'modules', 'label' => 'Registrar módulos y categorías', 'description' => 'Reserva el lugar de un módulo pendiente o crea una categoría. Solo opera en Desarrollo_DEV.', 'platform' => true],
         'edit-modules' => ['group' => 'modules', 'label' => 'Editar módulos y categorías', 'description' => 'Cambia el nombre, la descripción y la categoría de un módulo. Solo opera en Desarrollo_DEV.', 'platform' => true],
         'activate-modules' => ['group' => 'modules', 'label' => 'Activar y desactivar módulos y categorías', 'description' => 'Ofrece o retira un módulo o una categoría de los planes. Nunca se borra. Solo opera en Desarrollo_DEV.', 'platform' => true],
+
+        // Correo de la plataforma (solo Desarrollo_DEV)
+        'view-email-template' => ['group' => 'email', 'label' => 'Consultar la plantilla HTML de correos', 'description' => 'Ve la plantilla global de los correos y su vista previa. Solo opera en Desarrollo_DEV.', 'platform' => true],
+        'edit-email-template' => ['group' => 'email', 'label' => 'Editar y restaurar la plantilla HTML de correos', 'description' => 'Cambia la plantilla global de todos los correos de la plataforma o la restaura a la predeterminada. Solo opera en Desarrollo_DEV.', 'platform' => true],
 
         // Soporte de la plataforma
         'access-private-data' => ['group' => 'platform', 'label' => 'Abrir accesos de soporte', 'description' => 'Permite abrir un acceso temporal, justificado y auditado a datos privados de otro Workspace. Solo opera en Desarrollo_DEV.', 'platform' => true, 'private' => true],

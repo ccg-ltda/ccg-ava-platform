@@ -4,6 +4,7 @@ import SupportChat from '@/Components/SupportChat';
 import { ConfirmProvider } from '@/Components/ConfirmDialog';
 import Sidebar from '@/Components/Sidebar';
 import { FlashToasts, ToastProvider } from '@/Components/Toast';
+import useSidebarCollapsed from '@/Hooks/useSidebarCollapsed';
 import useWorkspaceTheme from '@/Hooks/useWorkspaceTheme';
 import Topbar from '@/Components/Topbar';
 
@@ -19,6 +20,7 @@ export default function AppLayout({ children }) {
     const user = props.auth.user;
     const role = user?.roles?.[0];
     const [menuOpen, setMenuOpen] = useState(false);
+    const [collapsed, toggleCollapsed] = useSidebarCollapsed();
 
     // The Workspace's primary color and light/dark/system mode, applied while the app shell is mounted.
     useWorkspaceTheme(props.workspace?.settings);
@@ -33,7 +35,7 @@ export default function AppLayout({ children }) {
                     <Topbar user={user} role={role} onMenu={() => setMenuOpen(true)} />
 
                     <div className="flex min-h-0 flex-1">
-                        <Sidebar workspace={props.workspace} open={menuOpen} onClose={() => setMenuOpen(false)} />
+                        <Sidebar workspace={props.workspace} open={menuOpen} onClose={() => setMenuOpen(false)} collapsed={collapsed} onToggleCollapsed={toggleCollapsed} />
 
                         <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
                             <div key={url.split('?')[0]} className="mx-auto w-full max-w-screen-2xl space-y-6 motion-safe:animate-fade-in">

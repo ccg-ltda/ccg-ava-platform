@@ -5,9 +5,11 @@ namespace App\Http\Requests;
 use App\Booking\Locations;
 use App\Models\ProductCategory;
 use App\Orders\CommerceSchema;
+use App\Services\LocationScope;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
@@ -67,8 +69,41 @@ class SaveProductRequest extends FormRequest
     public function after(): array
     {
         return [function (Validator $validator) {
-            if (filled($this->input('location_ids')) && ! app(Locations::class)->enabled($this->attributes->get('workspace'))) {
+            $workspace = $this->attributes->get('workspace');
+            $ids = collect((array) $this->input('location_ids', []))->filter(fn ($id) => is_numeric($id))->map(fn ($id) => (int) $id)->unique()->values();
+
+            if ($ids->isNotEmpty() && ! app(Locations::class)->enabled($workspace)) {
                 $validator->errors()->add('location_ids', 'El plan de este Workspace no incluye Sedes.');
+            }
+
+            // A product is offered in at least one ACTIVE location of this Workspace whenever the Workspace uses locations (a previously assigned location that
+            // was switched off may stay). Without locations there is nothing to assign: the stock is the general one.
+            $usesLocations = app(Locations::class)->enabled($workspace) && $workspace->locations()->where('is_active', true)->exists();
+
+            if ($usesLocations) {
+                $kept = $this->route('product') ? DB::table('location_product')->where('product_id', $this->route('product'))->pluck('location_id')->map(fn ($id) => (int) $id) : collect();
+                $active = $workspace->locations()->where('is_active', true)->whereIn('id', $ids)->pluck('id')->map(fn ($id) => (int) $id);
+
+                if ($active->isEmpty()) {
+                    $validator->errors()->add('location_ids', 'Elige al menos una sede activa donde se ofrece el producto.');
+                } elseif ($ids->diff($active)->diff($kept)->isNotEmpty()) {
+                    $validator->errors()->add('location_ids', 'Una de las sedes elegidas no está activa.');
+                }
+            }
+
+            // A member limited to selected locations can only offer a product in their own, and only start stock there.
+            $scope = app(LocationScope::class);
+
+            if ($scope->restricted($workspace, $this->user())) {
+                $kept = $this->route('product') ? DB::table('location_product')->where('product_id', $this->route('product'))->pluck('location_id')->map(fn ($id) => (int) $id) : collect();
+
+                if ($ids->diff($scope->allowedIds($workspace, $this->user()))->diff($kept)->isNotEmpty()) {
+                    $validator->errors()->add('location_ids', 'No tienes acceso a una de las sedes elegidas.');
+                }
+
+                if (collect($this->input('stocks', []))->pluck('location_id')->contains(fn ($id) => ! $scope->allows($workspace, $this->user(), filled($id) ? (int) $id : null))) {
+                    $validator->errors()->add('stocks', 'No tienes acceso a una de las sedes de las existencias.');
+                }
             }
 
             // A free-text category is not a valid one any more: the category is chosen from the Workspace's list.

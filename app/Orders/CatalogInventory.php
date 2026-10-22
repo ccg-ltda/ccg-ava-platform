@@ -8,6 +8,7 @@ use App\Models\InventoryStock;
 use App\Models\Location;
 use App\Models\Product;
 use App\Models\Workspace;
+use App\Services\LocationScope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -25,7 +26,13 @@ class CatalogInventory
     /** The selector value of the general stock (a Workspace without locations). */
     public const GENERAL = 'general';
 
-    public function __construct(private readonly Locations $locations, private readonly CommerceSchema $schema) {}
+    public function __construct(private readonly Locations $locations, private readonly CommerceSchema $schema, private readonly LocationScope $scope) {}
+
+    /** @return ?list<int> the locations the signed-in member is limited to (null = every one) */
+    private function allowed(Workspace $workspace): ?array
+    {
+        return $this->scope->allowedIds($workspace, auth()->user());
+    }
 
     /** @return Collection<int, Location> the locations whose stock can be consulted (empty when the Workspace has none: the stock is then the general one) */
     public function locations(Workspace $workspace): Collection
@@ -36,21 +43,23 @@ class CatalogInventory
     /**
      * The consulted place from the request: `''` = every location, `general` or the id of an active location. Anything else is «every location».
      *
-     * @return array{value: string, id: ?int, general: bool}
+     * @return array{value: string, id: ?int, general: bool, scope: ?list<int>} `scope` = the locations a limited member may see (null = every one)
      */
     public function place(Workspace $workspace, mixed $requested): array
     {
         $requested = (string) $requested;
+        $scope = $this->allowed($workspace);
 
-        if ($requested === self::GENERAL && $this->locations($workspace)->isEmpty()) {
-            return ['value' => self::GENERAL, 'id' => null, 'general' => true];
+        // The general stock (no location) belongs to nobody who is limited to selected locations.
+        if ($requested === self::GENERAL && $scope === null && $this->locations($workspace)->isEmpty()) {
+            return ['value' => self::GENERAL, 'id' => null, 'general' => true, 'scope' => null];
         }
 
         if (ctype_digit($requested) && $this->locations($workspace)->contains('id', (int) $requested)) {
-            return ['value' => $requested, 'id' => (int) $requested, 'general' => false];
+            return ['value' => $requested, 'id' => (int) $requested, 'general' => false, 'scope' => $scope];
         }
 
-        return ['value' => '', 'id' => null, 'general' => false];
+        return ['value' => '', 'id' => null, 'general' => false, 'scope' => $scope];
     }
 
     /** @return Builder<Product> */
@@ -59,6 +68,7 @@ class CatalogInventory
         $inventory = $this->schema->inventoryReady();
 
         return Product::where('workspace_id', $workspace->id)
+            ->when($place['scope'] !== null, fn ($q) => $q->whereExists($this->offeredInScope($place['scope'])))
             ->when($filters['search'] !== '', function ($q) use ($filters) {
                 $like = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($filters['search'])).'%';
                 $q->where(fn ($w) => $w->whereRaw("lower(name) like ? escape '!'", [$like])->orWhereRaw("lower(coalesce(sku, '')) like ? escape '!'", [$like]));
@@ -70,13 +80,25 @@ class CatalogInventory
             ->orderByDesc('is_active')->orderBy('name')->orderBy('id');
     }
 
+    /**
+     * A limited member only works with products offered in one of their locations: a product offered nowhere (historical, "everywhere") or only in other
+     * locations is not theirs, so it is neither listed nor counted.
+     *
+     * @param  list<int>  $scope
+     */
+    private function offeredInScope(array $scope): callable
+    {
+        return fn ($q) => $q->select(DB::raw(1))->from('location_product')->whereColumn('location_product.product_id', 'products.id')->whereIn('location_product.location_id', $scope);
+    }
+
     /** Whether the product has a stock row in the consulted place that satisfies `$extra` (a correlated EXISTS subquery). */
     private function stockExists(array $place, ?callable $extra = null): callable
     {
         return function ($q) use ($place, $extra) {
             $q->select(DB::raw(1))->from('inventory_stocks')->whereColumn('inventory_stocks.product_id', 'products.id')
                 ->when($place['general'], fn ($w) => $w->whereNull('inventory_stocks.location_id'))
-                ->when($place['id'] !== null, fn ($w) => $w->where('inventory_stocks.location_id', $place['id']));
+                ->when($place['id'] !== null, fn ($w) => $w->where('inventory_stocks.location_id', $place['id']))
+                ->when($place['id'] === null && ! $place['general'] && $place['scope'] !== null, fn ($w) => $w->whereIn('inventory_stocks.location_id', $place['scope']));
             $extra && $extra($q);
         };
     }
@@ -114,9 +136,11 @@ class CatalogInventory
             return ['tracked' => 0, 'low' => 0, 'out' => 0, 'unconfigured' => 0, 'units' => 0];
         }
 
-        $base = fn () => Product::where('workspace_id', $workspace->id)->where('is_active', true)->where('tracks_inventory', true);
+        $base = fn () => Product::where('workspace_id', $workspace->id)->where('is_active', true)->where('tracks_inventory', true)
+            ->when($place['scope'] !== null, fn ($q) => $q->whereExists($this->offeredInScope($place['scope'])));
         $units = DB::table('inventory_stocks')->where('workspace_id', $workspace->id)
             ->when($place['general'], fn ($q) => $q->whereNull('location_id'))->when($place['id'] !== null, fn ($q) => $q->where('location_id', $place['id']))
+            ->when($place['id'] === null && ! $place['general'] && $place['scope'] !== null, fn ($q) => $q->whereIn('location_id', $place['scope']))
             ->whereIn('product_id', $workspace->products()->where('is_active', true)->where('tracks_inventory', true)->select('id'))->sum('quantity');
 
         return [

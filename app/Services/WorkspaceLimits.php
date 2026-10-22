@@ -30,6 +30,7 @@ class WorkspaceLimits
     /** @var array<string, array{label: string, unit: string, help: string}> metrics that are enforced and may carry a limit */
     public const METRICS = [
         'users' => ['label' => 'Usuarios', 'unit' => 'usuarios', 'help' => 'Cuentas que pueden ser miembros del Workspace a la vez. Al llegar al máximo no se pueden añadir más; los miembros existentes no se tocan.'],
+        'locations' => ['label' => 'Sedes', 'unit' => 'sedes activas', 'help' => 'Sedes activas del Workspace a la vez. Al llegar al máximo no se pueden crear ni reactivar más; las existentes no se tocan ni se desactivan.'],
         'ai_executions' => ['label' => 'Ejecuciones de IA', 'unit' => 'ejecuciones al mes', 'help' => 'Respuestas automáticas del asistente por mes calendario (una por mensaje entrante atendido). Al llegar al máximo el asistente deja de responder: la conversación pasa a una persona hasta el mes siguiente o hasta que se amplíe el límite. El historial y el resto del panel siguen funcionando.'],
     ];
 
@@ -78,6 +79,7 @@ class WorkspaceLimits
     {
         return match ($metric) {
             'users' => DB::table('workspace_user')->where('workspace_id', $workspace->id)->count(),
+            'locations' => Schema::hasTable('locations') ? DB::table('locations')->where('workspace_id', $workspace->id)->where('is_active', true)->count() : 0,
             'ai_executions' => $this->aiExecutionsInPeriod($workspace),
             default => 0,
         };
@@ -127,6 +129,34 @@ class WorkspaceLimits
         $this->audit->record('created', 'membership', null, $workspace->name, [AuditLogger::change('Límite de usuarios', null, "Rechazado: el máximo es {$limit}")], $workspace, AuditLogger::FAILED);
 
         throw ValidationException::withMessages([$field => "Este Workspace alcanzó el máximo de {$limit} usuario(s) que permite su suscripción. Contacta con CCG para ampliarlo."]);
+    }
+
+    /**
+     * Refuses to ACTIVATE one more location past the limit (creating one and reactivating one both add an active location). Call it inside the transaction
+     * that writes, after `lockWorkspace`, so two simultaneous requests can not both take the last slot. No limit = no refusal.
+     */
+    public function assertCanAddLocation(Workspace $workspace): void
+    {
+        $limit = $this->effective($workspace, 'locations')['value'];
+
+        if ($limit === null || $this->usage($workspace, 'locations') + 1 <= $limit) {
+            return;
+        }
+
+        throw ValidationException::withMessages(['name' => "Este Workspace alcanzó el máximo de {$limit} sede(s) activas que permite su suscripción. Contacta con CCG para ampliarlo."]);
+    }
+
+    /** Audits a refused location (call it OUTSIDE the transaction that was rolled back, or the record would be rolled back with it). */
+    public function recordLocationRefused(Workspace $workspace): void
+    {
+        $limit = $this->effective($workspace, 'locations')['value'];
+        $this->audit->record('created', 'location', null, $workspace->name, [AuditLogger::change('Límite de sedes', null, 'Rechazado: el máximo es '.($limit ?? '—'))], $workspace, AuditLogger::FAILED);
+    }
+
+    /** Takes the row lock of the Workspace for the rest of the transaction (serializes the creations that count against a limit). No-op outside PostgreSQL's row locks. */
+    public function lockWorkspace(Workspace $workspace): void
+    {
+        Workspace::whereKey($workspace->id)->lockForUpdate()->value('id');
     }
 
     // --- standard limits of a plan -------------------------------------------------------------------------------

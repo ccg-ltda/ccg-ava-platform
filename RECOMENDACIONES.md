@@ -1794,3 +1794,399 @@ El panel autenticado **sí** tiene modo oscuro: `useWorkspaceTheme` pone `data-a
 - **Widget antiguo (webhook propio):** con límite de IA efectivo no se usa (el mensaje pasa a una persona); **sin** límite definido sigue sin medirse. No se declara cobertura total. Falta unificarlo con `schedule`.
 - **Ejecuciones ya encoladas** antes de llegar al límite siguen su curso (pueden superar el tope).
 - **PostgreSQL desechable:** no se creó `ccg_ava_test` (sin autorización). La suite completa corre en SQLite en memoria; los flujos prioritarios se comprobaron a mano contra `ccg_ava`, no con PHPUnit sobre PostgreSQL.
+
+## 37. Identificador fiscal opcional en el registro público (2026-10-22)
+
+- **Decisión aplicada:** el NIT o identificador fiscal **no es obligatorio** y admite cualquier país. Vacío se guarda como `NULL` (la columna `tax_id` ya era `nullable`, `string(20)`, única; no hubo migración ni cambio de datos).
+- **Backend:** `SignupController` valida `nullable|max:20` y solo letras, números, espacios, puntos, guiones y barras (antes `required|max:30`; 30 superaba la columna de 20). `Nit::identifier()` recorta y colapsa espacios; un NIT colombiano bien formado conserva su forma canónica (`900123456-7`) y cualquier otro valor se guarda tal como se escribió. **Ya no se exige dígito verificador** (un DV incorrecto se acepta; antes se rechazaba).
+- **Duplicados:** sigue sin registrarse de nuevo un identificador que ya pertenece a una Organización o a otro registro abierto, ahora sin distinguir mayúsculas; vacío nunca cuenta como duplicado. Los identificadores existentes no se tocaron.
+- **Frontend:** etiqueta «NIT o identificador fiscal (opcional)», sin teclado numérico, 20 caracteres; la línea del resumen solo aparece si hay valor.
+- **Pruebas** (`PublicSignupTest`): vacío/nulo/espacios, identificadores extranjeros conservados tal cual, longitud y caracteres inválidos, duplicado sin distinguir mayúsculas y normalización del NIT colombiano. 46/46 con `SignupReadinessTest`.
+- **No verificado:** el aspecto en modo oscuro y claro del formulario en navegador (no se abrió ninguno en este bloque por restricción). Revisión de código: el asistente solo usa clases y tokens del tema, sin colores fijos.
+- **Pendiente para otro bloque:** plantilla HTML editable de los correos del registro (no iniciada).
+
+### 37.1 Recorrido completo del registro revisado (2026-10-22, segunda pasada)
+- **Reporte:** excepción HTTP al pulsar «Continuar» en el paso «Empresa». **No se pudo reproducir** con el código actual: con un servidor real (`artisan serve` en un puerto efímero, correo al log, sesión en archivo) contra PostgreSQL `ccg_ava` y `curl` con CSRF, el recorrido correo → código → empresa (NIT vacío y extranjero) → solución → plan → resumen → contratar llegó a `awaiting_payment` con precio y módulos congelados, sin Workspace, usuario ni suscripción nuevos. Los registros no escribieron ningún error en `laravel.log` (las `HttpException` no se registran).
+- **Causa más probable, no confirmada:** `requireDraft()` hacía `abort(409, 'Tu sesión de registro venció…')` cuando la sesión del navegador no apuntaba a un registro abierto (sesión perdida, otra pestaña, registro vencido); en modo depuración eso se ve como una excepción de Symfony. Hay un registro de hoy (#2) con correo verificado y sin empresa guardada, coherente con ese fallo. Sin la respuesta HTTP real del navegador no se puede afirmar que sea la causa.
+- **Cambio:** una sesión de registro perdida o vencida ya no lanza 409: se olvida el estado viejo y se redirige a `/registro` con un aviso («Tu sesión de registro venció o no se pudo continuar. Empieza de nuevo.»); el asistente muestra además `errors.signup` (antes ningún mensaje de `signup` se veía). Los nombres de los campos del paso «Empresa» salen en español en los errores («nombre de la empresa es obligatorio»).
+- **Pruebas nuevas (`PublicSignupTest`):** recorrido completo con NIT vacío, extranjero y colombiano con un GET tras cada POST; plan modificado tras aceptar no cambia lo aceptado; petición manipulada con plan no público, inactivo o de otra solución; sesión perdida. Las dos pruebas que esperaban 409 esperan ahora la redirección con aviso.
+- **Sin comprobar:** el navegador real del usuario (no se abrió ninguno), la respuesta HTTP exacta de su fallo y el modo claro/oscuro del asistente. Quedaron en `ccg_ava` un `signup_requests` (#4, correo `repro-curl@example.test`, en `awaiting_payment` sin pago) y sus verificaciones, creados por la comprobación; no se borraron.
+
+
+## 38. Plan maestro Zonno by CCG: matriz y bloque 1 (2026-10-22)
+
+### 38.1 Matriz de requisitos (estado verificado solo donde se dice «verificado»)
+| Requisito | Estado | Evidencia / decisión | Bloque |
+|---|---|---|---|
+| 2.1 Solución = datos editables (nombre, descripción) | **Implementado** (verificado en código y prueba) | La solución ya es `module_categories` (`key` técnica estable, `name`, `description`, `is_active`, `sort_order`); `Plan.module_category_id` la asocia y el editor de planes ya tiene el selector. Renombrar no cambia la clave (prueba nueva). Se añadió la etiqueta «Solución comercial / Capacidades compartidas» y el identificador técnico en el diálogo | 1 |
+| 2.2 ¿Persistencia nueva? | **No hace falta** | Ya hay tabla; no hay migración | 1 |
+| 2.3 Visibilidad pública | **Parcial** | `Plan::offerState()` ya exige plan activo, público, completo y solución activa; ocultar no borra nada (prueba nueva). **No existe** un indicador «pública» separado de «activa» en la solución: **D-SOL1** (requeriría migración aditiva `module_categories.is_public`; se decide si hace falta distinguir «oculta» de «desactivada») | 1 / decisión |
+| 2.3 Categoría «Prueba» | **Sin tocar** | Es una categoría técnica; no se confunde con una solución comercial salvo que un administrador la marque pública con un plan | — |
+| 2.4 Límites visibles | **Implementado** (usuarios y ejecuciones de IA) | `SignupCatalog::plan()` leía `limits => []`; ahora lee `WorkspaceLimits::planLimits` (la misma fuente que aplica el backend). Sin valor = «Sin límite definido». **Sedes, canales y «sesiones» no existen como métrica**, por lo que no se muestran (no se inventan) | 1 / 2 |
+| 2.5 Condiciones congeladas | **Implementado** (ampliado) | Precio, periodo y módulos ya estaban; los **límites** se guardan al elegir el plan y, si cambian antes de confirmar, se detiene el contrato y se muestra el resumen nuevo (como el precio). Tras confirmar el resumen muestra lo aceptado, no el plan de hoy | 1 |
+| 3 Resumen centrado | **Implementado** (sin verificar en navegador) | `Wizard.jsx` + `ava.css` (`.summary-table`): tres bloques (oferta, prestaciones y límites, cuenta), etiqueta y valor juntos y centrados, una columna centrada bajo 520 px; usa los tokens del tema. Impuestos no se muestran: no existen datos | 1 |
+| 4 Pruebas con inicio programado | **Pendiente** | Hoy empieza al conceder (D-PRU1) | 2 |
+| 4 Una solución por Workspace | **Pendiente de verificar** | | 2 |
+| 5.1 a 5.5 Sedes, productos, servicios, alcance por sede | **Sin inspeccionar** en esta pasada | Riesgo alto de datos: productos históricos sin sede no se asignan en masa | 3 |
+| 6 Agenda (margen entre citas, calendario, pestaña de recordatorios) | **Sin inspeccionar** | | 4 |
+| 7 Recordatorios de Catálogo | **Sin inspeccionar** (no existen según `pendientes.md`) | Depende del scheduler y correo | 5 |
+| 8 Plantilla HTML de correos | **Sin inspeccionar** (no existe) | Decisión de seguridad: marcadores escapados, sin Blade ni PHP | 5 |
+| 9 Filtro de sede en reportes | **Sin inspeccionar**; depende del alcance por sede | | 6 |
+| 10 Marca Zonno, fecha, scrollbar, sidebar, roles | **Sin inspeccionar** | Distinguir marca visible de nombre legal e identificadores | 6 |
+
+### 38.2 Bloque 1 implementado
+- `SignupCatalog::plan()` y `limitsOf()`: límites reales del plan en la ficha, el resumen y el estado previo al pago (lo aceptado, desde `limits_snapshot` y `modules_snapshot`).
+- `SignupService::choosePlan()` guarda `limits_snapshot`; `contract()` detiene el contrato si los límites cambiaron.
+- Resumen del registro rediseñado; fichas de plan con los límites; módulos y límites no se escriben en React, vienen del servidor.
+- Catálogo: etiqueta de tipo e identificador técnico visibles.
+- Pruebas (`PublicSignupTest`, +4 de este bloque): límites reales y «sin límite definido»; cambio de límites antes de confirmar y conservación de lo aceptado; renombrar sin alterar clave ni relaciones y la clave no editable por petición; solución desactivada no ofrecida ni elegible por petición manipulada y sin borrar planes.
+
+### 38.3 Decisiones y riesgos abiertos
+- **D-SOL1:** indicador de visibilidad pública separado de «activa» en la solución (migración aditiva; no aplicada ni escrita).
+- **Límite de sedes** y otras métricas: primero deben existir en `WorkspaceLimits::METRICS` con aplicación en backend (bloque 2); hasta entonces la oferta no los muestra.
+- **«Sesión»:** sigue sin definición (D-SES); ver §36.3.
+- **Marca:** «Zonno by CCG» no se aplicó; hay que inventariar textos visibles frente a identificadores técnicos antes de reemplazar nada.
+
+### 38.4 Siguientes bloques (prioridad)
+2) pruebas programadas, una solución por Workspace y límite de sedes; 3) sedes, productos, servicios y alcance por sede (con estrategia segura para productos históricos); 4) agenda; 5) recordatorios de Catálogo y plantilla de correos; 6) reportes por sede y marca/estilos.
+
+
+## 39. Bloque 2: solución pública, pruebas programadas, solución única y límite de sedes (2026-10-22)
+
+### 39.1 Matriz actualizada (sustituye a las filas del bloque 2 de §38.1)
+| Requisito | Estado | Evidencia |
+|---|---|---|
+| 2.3 Solución activa vs pública | **Implementado**, migración **creada y NO aplicada** | `module_categories.is_public`; `Plan::offerState()` exige solución activa **y** pública; el servidor rechaza solución privada, inactiva o plan ajeno aunque se manipule la petición (`SolutionVisibilityTrialsAndLocationLimitsTest`). Sin la columna se conserva el comportamiento anterior (activa = ofrecida) |
+| 4 Pruebas con inicio y fin | **Implementado** (verificado en SQLite) | estado `scheduled`; sin migración (`subscriptions.status` es `string(20)` y las columnas `trial_*` ya existían) |
+| 4 Una solución por Workspace | **Implementado** | `ModuleCatalog::solutionOf()` / `assertSameSolution()`, aplicada en `assertAssignable` (única puerta de `assignPlan` y de las pruebas) |
+| 5.3 Límite de sedes | **Implementado**, concurrencia **sin verificar en PostgreSQL** | métrica `locations` en `WorkspaceLimits::METRICS` |
+| 5.1, 5.2, 5.4, 5.5, 6 a 10 | Sin cambios (bloques 3 a 6) | |
+
+### 39.2 Solución activa y pública
+- **Migración** `2026_10_29_100000_split_solution_visibility_from_activation` (aditiva, `down()` borra la columna). Valor inicial: **pública** solo donde hoy hay al menos un plan activo y público de esa solución (lo que el registro ofrece ahora); todo lo demás y toda solución nueva nace **privada**. En `ccg_ava` hoy marcaría `health` y `ecommerce` (cada una con 1 plan público) y dejaría privadas las otras cinco. `migrate --pretend` muestra solo el `ALTER TABLE`; la sentencia de datos depende de la columna nueva y no se imprime en `--pretend`. **No se aplicó a ninguna base.**
+- **Reglas:** activa = usable por la administración; pública = ofrecida en el registro (requiere activa y ser solución comercial). Ocultar o desactivar no borra planes, módulos, Workspaces ni suscripciones y no cambia los módulos de nadie (probado). El identificador `key` no se edita ni por el formulario de nombre.
+- **Administración:** botón «Mostrar / Ocultar de la oferta pública» y etiqueta Pública/Privada en el catálogo (`POST /module-categories/{id}/publish|unpublish`, permiso `activate-modules` de plataforma; un administrador de cliente recibe 403); auditado por el modelo (`is_public` = «Pública»).
+
+### 39.3 Pruebas gratuitas con fechas
+- **Estados:** `scheduled` (inicio futuro), `trialing`, `expired`, y `schedule_cancelled` para una programada cancelada (o cuyo plan dejó de poder asignarse) **antes de empezar**.
+- **Semántica de fechas:** son días en la zona horaria de la aplicación; empieza a las 00:00 del día de inicio y termina al **final** del día de fin. Sin inicio, o con uno pasado o de hoy, empieza ahora. Inicio máximo a 400 días y duración máxima de 400 días (guardas técnicas, no reglas comerciales); el fin debe ser posterior al inicio.
+- **Antes del inicio:** una prueba programada **no concede ni quita acceso**: `ModuleAccess::subscription()` la trata como si no existiera, el plan del Workspace no se toca y sus condiciones quedan congeladas con las de ese momento (editar el plan después no las cambia). **Al llegar el inicio** la primera petición la arranca (bloqueo de fila, idempotente, asigna el plan y audita); el comando `subscriptions:expire-trials` (cada 10 min) también arranca las pendientes y luego expira las terminadas. El acceso nunca depende del scheduler. Cancelar una programada deja al Workspace exactamente como estaba.
+- **Idempotencia:** repetir el comando no cambia ni audita nada más; la expiración se audita una vez (probado).
+- **Públicas vs administrativas:** el registro público **nunca** concede pruebas (sin cambios); la asignación es solo administrativa (`assign-plans`, `Desarrollo_DEV`). `Desarrollo_DEV` rechaza pruebas y conserva todos los módulos al pasar el tiempo.
+- **Transiciones:** `scheduled → trialing | schedule_cancelled`; `trialing → cancelled | expired`; el resto como antes. No se reemplaza una suscripción vigente ni se duplica una prueba programada.
+
+### 39.4 Una solución por Workspace
+- **Cómo se determina (sin columna nueva):** la solución del plan explícito del Workspace; si ese plan no tiene solución (p. ej. «Plataforma completa» o un plan a medida), la de una prueba programada; si ninguna, el Workspace **no tiene solución identificable** y el primer plan con solución se la fija.
+- **Regla:** con solución fijada solo se aceptan planes de esa misma solución (cambio de plan dentro de ella: permitido); un plan de otra solución **o sin solución** se rechaza, por cambio de plan y por prueba (inmediata o programada), con ids manipulados incluidos. Una prueba programada reserva su solución.
+- **Casos ambiguos no tocados:** Workspaces con suscripción histórica o plan sin solución no se reasignan automáticamente (probado). Para detectarlos: Workspaces cuyo `plan_id` apunta a un plan con `module_category_id` nulo, o cuya suscripción tiene `plan_id` de una solución distinta a la de `workspaces.plan_id`. Acción manual: decidir la solución con el cliente y asignar un plan de esa solución.
+- **Decisión abierta D-SOL2:** no existe flujo para que un Workspace con solución cambie de solución (la regla lo impide a propósito). Si hace falta, requiere un procedimiento explícito y auditado.
+- **Cambio de comportamiento:** un cambio de plan de «Salud» a un plan sin solución, que antes se aceptaba, ahora se rechaza (se ajustaron dos pruebas que lo asumían).
+
+### 39.5 Límite de sedes
+- **Fuente:** el mismo patrón de usuarios: estándar del plan (`plan_limits`, métrica `locations`, pestaña «Límites» del plan), condiciones congeladas de la suscripción y excepción por Workspace; `Desarrollo_DEV` = `administrative` (sin límite). **No se inventó ningún valor:** sin valor configurado = «Sin límite definido» (no cero), y la oferta pública lo muestra así.
+- **Unidad:** **sedes activas**. Se rechaza **crear** una sede y **reactivar** una al llegar al máximo; editar, desactivar y consultar nunca se bloquean y las existentes no se tocan. Desactivar libera cupo. Se cuenta solo el propio Workspace (probado con otro Workspace).
+- **Puertas protegidas:** `LocationController::store` y `toggle` (activar), las únicas rutas que aumentan las sedes activas. `DemoBusinessData` también crea sedes, pero es un comando de demostración manual, sin límite.
+- **Concurrencia:** el chequeo y la escritura van en una transacción con `lockForUpdate` sobre la fila del Workspace (mismo patrón que el límite de IA). **SQLite no demuestra la serialización:** falta una prueba en PostgreSQL con dos conexiones creando la última sede a la vez; no se hizo (no hay base desechable autorizada).
+- **Auditoría:** un rechazo se audita fuera de la transacción revertida (resultado `failed`).
+
+### 39.6 Cobertura de pruebas
+`SolutionVisibilityTrialsAndLocationLimitsTest` (20 pruebas, 165 aserciones): solución activa/pública/privada/inactiva con ids manipulados; mostrar y ocultar con permisos; clave estable; prueba programada sin acceso antes, con acceso al inicio sin scheduler y restringida al vencer; idempotencia y auditoría única; validación de fechas; duplicado, ampliación y cancelación; plan inutilizable; `Desarrollo_DEV`; condiciones congeladas; solución única (con solución, sin solución, reserva, histórico, registro público); límite de sedes (plan, máximo, reactivar, sin límite, excepción, contrato congelado, aislamiento, `Desarrollo_DEV`).
+
+### 39.7 Riesgos y decisiones
+1. **Aplicar la migración** `2026_10_29` en el entorno autorizado (respaldo previo, como en §35); hasta entonces el catálogo no muestra el interruptor y el registro sigue como antes.
+2. **D-SOL2** (cambio de solución).
+3. Prueba de concurrencia de sedes en PostgreSQL.
+4. Pruebas existentes que fijaban comportamientos cambiados se actualizaron (solución pública en los fixtures, métrica `locations` en las listas de límites, planes de la misma solución).
+5. Visual: el formulario de inicio de prueba, la etiqueta «Prueba programada» y el interruptor de visibilidad no se vieron en navegador.
+
+### 39.8 Siguiente bloque
+Bloque 3: sedes, productos, servicios y alcance por sede (asignación obligatoria de productos a sedes con estrategia para históricos sin sede; servicios elegibles por sede desde el servicio; alcance de usuarios por sede aplicado en backend).
+
+
+## 40. Bloque 3: sedes, productos, servicios y alcance por sede (2026-10-22)
+
+### 40.1 Lo que ya existía (se reutilizó, no se duplicó)
+- `location_product` (producto ↔ sede) y `location_service` (servicio ↔ sede): pivotes con `workspace_id` y claves compuestas; **«sin filas = se ofrece en todas las sedes»** es la regla histórica y se conserva.
+- Inventario por sede: `inventory_stocks` (`location_id` NULL = existencias generales de un Workspace sin sedes) y `inventory_movements`. Es la única fuente de existencias: no se creó otra. El producto es uno solo; solo varían sus existencias por sede.
+- El formulario de producto ya tenía las sedes como **opcionales**; Servicios solo se asignaba desde cada sede; no existía alcance de usuario por sede.
+
+### 40.2 Productos por sede
+- **Alta y edición:** si el Workspace usa Sedes (módulo en el plan y al menos una sede activa), el servidor exige **al menos una sede activa del propio Workspace** (`SaveProductRequest`). Puede haber varias. Se rechazan sedes inactivas (salvo una ya asignada que se desactivó después), de otro Workspace o ausentes, aunque se manipule la petición. Sin sedes activas no hay nada que asignar y el producto sigue creándose sin sede (existencias generales). Cuando una sede se activa/desactiva no cambia ninguna asignación.
+- **Productos históricos sin sede:** hoy en `ccg_ava` hay 10 productos y 9 no tienen sede (lectura, sin cambios). Se **identifican**: `needsLocation` en el listado y la etiqueta «Sin sede asignada». Se **conservan** sin asignar nada: siguen vendiéndose como antes («en todas las sedes») para quien trabaja con todas las sedes. El camino explícito es **editar el producto**: al guardarlo el servidor pide la sede y la guarda (auditado como «Sedes que lo ofrecen»). Pedidos, líneas, existencias y movimientos existentes no se tocan (probado). Un miembro limitado a sedes seleccionadas **no ve ni puede vender** un producto sin sede (no es de sus sedes): así lo ambiguo nunca se vende desde una sede concreta sin revisión.
+- **Decisión abierta D-PROD1:** hoy un producto sin sede sigue vendiéndose para quien tiene acceso total. Si se quiere bloquear también esa venta hasta revisarlo, habría que añadir un estado de revisión (no se hizo para no paralizar la operación de los 9 productos actuales).
+
+### 40.3 Servicios por sede
+- **Desde el formulario de Servicios:** selección de sedes activas (mismo pivote `location_service` que ya edita la página de Sedes; no hay un segundo sistema). Validado en el servidor; auditoría «Sedes donde se ofrece». La tabla muestra dónde se ofrece cada servicio.
+- **Sin sedes = todas** (regla histórica); hoy 2 de 10 servicios de `ccg_ava` no tienen sede y se muestran como «Todas las sedes», sin asignar nada. Precios, duraciones, profesionales, horarios y citas existentes no cambian (probado). Tener un servicio en una sede no hace que un profesional lo ofrezca: sigue mandando su propia lista de servicios.
+- La disponibilidad ya respetaba las sedes del servicio (`Locations::offers`); no se modificó.
+
+### 40.4 Alcance de usuarios por sede
+- **Modelo (migración `2026_10_30_100000_limit_memberships_to_selected_locations`, NO aplicada):** `workspace_user.location_scope` (`all` por defecto, `selected`) y `workspace_user_locations` (usuario ↔ sedes, con claves compuestas que impiden una sede de otro Workspace; se borra con el usuario o la sede). No escribe datos: todo miembro existente queda en `all` (comportamiento actual). Sin la migración, nadie está limitado.
+- **Semántica inequívoca:** `all` = todas las sedes del Workspace; `selected` = **solo** las listadas; **`selected` vacío = ninguna sede, nunca «todas»**; sin configurar = `all`. Un miembro limitado tampoco trabaja con datos «sin sede» (pedidos o citas sin sede, productos ofrecidos en ninguna): no son suyos.
+- **Quién decide:** `App\Services\LocationScope` es el único punto de decisión. `Locations::active()` (de donde salen los selectores, la validación y la resolución de sede de agenda, pedidos e inventario) ya devuelve solo las sedes autorizadas del miembro con sesión; el público y Ava Chat actúan por el negocio y no están limitados. Para cambiarlo: `PUT /users/{id}/locations` (permiso `assign-roles`, módulo Usuarios y roles); el miembro debe ser del Workspace de la sesión, las sedes del mismo Workspace, el actor debe poder gestionar el rol del miembro y **un actor limitado no puede cambiar el alcance de nadie** (ni el suyo). Auditado («Alcance de sedes»). `Desarrollo_DEV` nunca queda limitado.
+- **Aplicación en el servidor (probada por HTTP y con los middleware de permiso y módulo):**
+  - Sedes: lista, edición, activar/desactivar solo las propias; **crear una sede** exige acceso total.
+  - Productos: lista, detalle, imagen; cambiar o desactivar solo un producto ofrecido en alguna sede propia **y solo en las propias** (si también se ofrece en otra, cambiarlo la cambiaría); no puede ofrecerlo en sedes ajenas.
+  - Inventario: entradas, ajustes, mínimos y control solo en sus sedes y sobre productos que ve; el inventario general (sin sede) no es suyo; el resumen y los filtros se calculan solo con sus sedes (no se filtran cifras de otras).
+  - Pedidos: lista, detalle, edición y cambios de estado solo de sus sedes; al crear **debe** indicar una sede propia.
+  - Servicios: lista (los de sus sedes y los de «todas las sedes», solo lectura), crear con sede propia obligatoria, editar o desactivar solo los que se ofrecen únicamente en sus sedes.
+  - Agenda: lista, estado, reprogramar, cancelar y confirmar citas solo de sus sedes; crear una cita o buscar horarios exige sede propia; **sin sedes activas autorizadas no puede reservar** (no se trata como «el Workspace no usa sedes»).
+  - Profesionales: reescribe **solo** los horarios de sus sedes; los de otras sedes y los «en todas» se conservan y no puede escribir horarios fuera de las suyas.
+  - Reportes: las cifras operativas de Agenda, Pedidos e Inventario (totales de todo el Workspace) **no se envían** a un miembro limitado hasta que exista el desglose por sede (bloque 6); las de conversaciones y equipo no dependen de sedes.
+- **No cubierto / límites:** la API del asistente (n8n) y la página pública de reservas actúan por el negocio y no por un miembro; clientes y campañas no tienen sede; profesionales y recursos no pertenecen a una sede (solo sus horarios); exportaciones: no existen para estos datos. Comando de demostración `demo:data` crea sedes sin pasar por el límite ni el alcance (es manual).
+
+### 40.5 Límites comerciales
+Sin cambios: la métrica `locations` del bloque 2 se reutilizó tal cual (crear o reactivar sigue pasando por `assertCanAddLocation`). No se añadió ningún límite nuevo de productos, servicios ni usuarios.
+
+### 40.6 Migraciones
+- Creada y **no aplicada**: `2026_10_30_100000_limit_memberships_to_selected_locations` (`migrate --pretend` solo da `ALTER TABLE workspace_user`, `CREATE TABLE workspace_user_locations` y sus claves). Con `2026_10_29` (visibilidad de soluciones) son **dos pendientes** en `ccg_ava`. El código degrada sin ellas (sin alcance, sin visibilidad pública).
+
+### 40.7 Pruebas
+`LocationScopeProductsAndServicesTest` (18 pruebas, 307 aserciones): alta obligatoria con sede y varias sedes; Workspace sin sedes; producto histórico (marca, sin asignación automática, arreglo explícito, pedidos intactos); miembro limitado en productos, inventario, pedidos, servicios, sedes, agenda, horarios de profesionales y reportes con ids y URLs manipulados; servicios con validación y auditoría; servicio histórico; administración del alcance (por defecto, vacío = ninguna, validación, auditoría, permisos, otro Workspace, actor limitado); roles/módulos no se ensanchan; `Desarrollo_DEV`; estado sin configurar. Se ajustaron `CatalogAdministrationTest` e `InventoryTest` (las altas ahora llevan sede).
+
+### 40.8 Sin verificar y riesgos
+1. **PostgreSQL:** nada de este bloque se ejecutó contra PostgreSQL. En concreto: las claves compuestas de `workspace_user_locations`, el `lockForUpdate` del límite de sedes (bloque 2) y las subconsultas `EXISTS` del filtro de productos. Prueba necesaria: aplicar ambas migraciones en un PostgreSQL desechable, repetir `LocationScopeProductsAndServicesTest` y una creación concurrente de sedes con dos conexiones.
+2. **Navegador:** no se vio el formulario de productos (sedes obligatorias), el de servicios (selector y columna «Sedes») ni el diálogo «Sedes» de Usuarios, ni su aspecto en modo claro/oscuro.
+3. **D-PROD1** (bloquear la venta de productos sin sede) y D-REP1 (qué desglose por sede reciben los miembros limitados en Reportes).
+4. El alcance no sustituye permisos: un rol sin `view-orders` sigue sin ver Pedidos con todas las sedes (probado).
+
+### 40.9 Siguiente bloque
+Bloque 4: Agenda (tiempo entre citas, calendario profesional con filtros por sede/profesional/servicio, pestaña visible de recordatorios y confirmaciones).
+
+
+## 41. Bloque 4: Agenda, calendario y recordatorios de citas (2026-10-22)
+
+### 41.1 «Tiempo entre citas»: qué significaba y cómo queda
+- **Hallazgo (investigado en el código, no supuesto):** es un **descanso DESPUÉS de cada cita**, por servicio (`services.buffer_minutes`, 0 a 240). Cada cita guarda `blocks_until = fin + descanso del servicio con el que se reservó`; el calculador (`AvailabilityCalculator`) ocupa `[inicio, blocks_until)` para el profesional y para el recurso, y una cita nueva debe caber con **su propio** descanso antes de la siguiente. No es una preparación previa, no es global ni por sede o profesional: es del servicio.
+- **Un solo cálculo para todos:** la agenda interna, la página pública y el asistente piden los horarios al mismo `AvailabilityCalculator` (la disponibilidad y la aceptación no pueden discrepar; probado con la misma consulta por la ruta pública y la del personal). Al reservar o mover se vuelve a calcular dentro de una transacción con bloqueo de fila del profesional, del recurso y de la sede, y en PostgreSQL las restricciones `EXCLUDE USING gist` (`appointments_professional_no_overlap`, `…_resource_no_overlap`) rechazan un solapamiento aunque dos solicitudes pasen a la vez.
+- **Cambiar el valor:** nunca reescribe lo ya reservado (cada cita conserva su `blocks_until`); solo afecta a las citas nuevas o movidas (probado). **No se encontró ningún defecto**, así que no se cambió la lógica. Sí se aclaró la interfaz: la etiqueta pasa de «Tiempo entre citas» a «Descanso después de cada cita (min)» con su explicación; el nombre de la columna y el significado histórico no cambian.
+- **Límite conocido:** el descanso puede extenderse más allá de la hora de cierre o de un bloqueo (solo la cita en sí debe caber en el horario). Es coherente con «descanso posterior» y no se modificó.
+
+### 41.2 Calendario
+- **Reutilizado:** la misma ruta `GET /bookings`, el mismo módulo, los mismos permisos y la misma lista; se añadió una cuadrícula **sin dependencias nuevas** (`CalendarGrid.jsx` y `lib/calendarLayout.js`, probado con `tests/js/calendarLayout.test.mjs`).
+- **Vistas:** Día y Semana en cuadrícula horaria (la zona horaria del Workspace la resuelve el servidor: la cita trae `startMinute`, `durationMinutes` y `restMinutes`), «Calendario | Lista», botón «Hoy», anterior/siguiente, etiqueta «Mostrando 26 Oct – 1 Nov 2026», estados vacíos distintos con y sin filtros y «Quitar los filtros». Mes y rangos personalizados siguen en lista. La preferencia de vista se recuerda en el navegador (opcional) y en móvil el valor inicial es la lista.
+- **Muchos profesionales:** las citas que coinciden comparten el ancho de **una** columna (no hay una columna por profesional); en un mismo momento se muestran hasta 3 (día: 4; semana: 2) y el resto se agrupa en «+N más» que abre una lista; el color identifica al profesional y la banda rayada es el descanso. El calendario hace scroll **dentro** de su caja (alto máximo 70 % de la pantalla), nunca la página.
+- **Filtros** (servidor): sede, servicio, profesional, estado y origen, combinables; `listLimit` (500) avisa si la lista puede estar incompleta. El selector de sede solo aparece con **más de una** sede autorizada (con una se muestra su nombre, sin selector); servicios y profesionales ofrecidos se acotan a los que de verdad van con la sede elegida (`options.services[].locationIds/everywhere`, `options.professionals[].locationIds/everywhere/serviceIds`).
+- **Fechas:** se mantienen los campos `date` nativos (teclado, lectores de pantalla, móvil) con la etiqueta visible del rango y «Hoy». No se emprendió un selector global de fechas.
+
+### 41.3 Protección (servidor)
+- Lista y filtros: un miembro limitado a sedes seleccionadas recibe **siempre** solo sus sedes; un filtro de sede manipulado solo puede devolver menos (probado con la sede ajena y un id inexistente). Los filtros de servicio/profesional se aplican dentro de eso. Otro Workspace nunca aparece, ni con ids ajenos en los filtros (ni sus citas se alcanzan por id: 404).
+- Crear, buscar horarios, estado, reprogramar, cancelar y confirmar: ya exigían sede autorizada (bloque 3), sin cambios. La página pública rechaza una sede de otro Workspace; el asistente y la página pública actúan por el negocio, no por un miembro, y siguen sus propias reglas.
+- **Concurrencia:** se probó en SQLite que la segunda reserva del mismo horario (agenda y página pública) es rechazada, pero las exclusiones y los bloqueos de fila **no se pueden demostrar en SQLite**: falta una prueba con dos conexiones en PostgreSQL.
+
+### 41.4 Recordatorios y confirmaciones
+- **Nueva pestaña** «Recordatorios y confirmaciones» entre «Clientes» y «Configuración de Agenda» (`?tab=recordatorios`). **Misma fuente y misma ruta:** `settings.notifications` y `PUT /bookings/settings/notifications` (`manage-booking-settings`); se **quitó** del final de «Configuración» para que no existan dos pantallas con el mismo ajuste (probado: sigue habiendo una sola ruta de escritura y un rol que solo lee Agenda recibe 403).
+- Lo que se muestra de cada cita (avisos enviados, «Cliente confirmó») y las reglas de idempotencia/estados del notificador no cambiaron: nada se marca como enviado ni confirmado que no lo esté. Con WhatsApp sin conectar la pestaña lo dice y no permite activar los avisos (comprobado en el navegador).
+
+### 41.5 Validación visual (hecha, en una base SQLite desechable, no en `ccg_ava`)
+Servidor temporal con `DB_DATABASE` apuntando a un archivo SQLite en el scratchpad (verificado antes de migrar), 10 profesionales y 30 citas inventadas: semana y día en claro, día en oscuro (tokens de la aplicación activados en el navegador), «+N más», lista de coincidencias, pestaña de recordatorios, 390 px sin desborde horizontal de la página, usuario limitado a una sede (sin selector, un filtro manipulado a otra sede no devuelve nada) y sin errores de consola salvo mi propio `GET /logout` (405). **No verificado:** lectores de pantalla reales, una tablet, varias semanas de datos reales, y el diálogo de reprogramación desde el calendario.
+
+### 41.6 Pendiente
+1. PostgreSQL desechable: restricciones de exclusión y concurrencia de reservas (con las migraciones `2026_10_29` y `2026_10_30` aún sin aplicar).
+2. El calendario muestra solo la ventana pedida (máx. 500 citas); un mes completo muy cargado debería paginarse por semana.
+3. Siguiente bloque: recordatorios programados dentro de Catálogo y plantilla HTML de correos (bloque 5).
+
+
+## 42. Bloque 5: recordatorios programados de Catálogo y plantilla HTML global de correos (2026-10-22)
+
+### 42.1 Infraestructura de correo encontrada (se reutilizó, no se creó otra)
+- Correo real de la aplicación: `SignupCodeMail` (Mailable, texto plano) y `ResetPasswordNotification` (notificación en cola, 3 intentos, retiro del token al fallar). **Las confirmaciones y recordatorios de Agenda NO son correo: salen por WhatsApp** (`AppointmentNotifier`), así que no usan esta plantilla. Colas y scheduler: Horizon/cola de base de datos y `routes/console.php`; el modelo de reclamo atómico y de «incierto» de `AppointmentNotifier` se tomó como patrón.
+- No existía un mecanismo central de marca: se creó `config/branding.php` (`BRAND_NAME`, por defecto «Ava Platform», y `BRAND_SUPPORT_EMAIL`, por defecto el contacto legal si existe). **No se inventó ningún dato de soporte**: sin dirección configurada la línea de soporte no se imprime. El rebranding «Zonno by CCG» se aplica cambiando `BRAND_NAME` (probado con ese valor); el rebranding de la interfaz sigue siendo del bloque 6.
+
+### 42.2 Recordatorios del Catálogo
+- **Dónde:** dentro del módulo Catálogo (`/catalog/reminders`, botón «Recordatorios» en la cabecera del catálogo; sin módulo comercial nuevo). Permisos nuevos `view-catalog-reminders` y `manage-catalog-reminders` (grupo Catálogo). Como todo permiso nuevo, un rol existente los recibe al ejecutar `RolesAndPermissionsSeeder` (`admin` los recibe siempre).
+- **Modelo (`catalog_reminders`, migración creada y NO aplicada):** Workspace, creador, asunto (≤160, una línea), mensaje (≤5000), `scheduled_at` en UTC (el formulario trabaja en la zona horaria del Workspace), estado, intentos, `next_attempt_at`, `sent_at`, `sent_to`, `reason` corta y saneada, quién canceló y cuándo. Sin enlace a productos (no se pidió).
+- **Destinatario:** siempre el **creador**, resuelto en el servidor en el momento de enviar (`created_by` sale del usuario autenticado y el Workspace de la sesión; `created_by`, `workspace_id`, correo, estado o intentos enviados en la petición se ignoran; probado). Otras personas como destinatarias **no están habilitadas**.
+- **Permisos y aislamiento:** ver/crear/editar/cancelar con permisos propios; otro Workspace → 404 en cada ruta; un módulo fuera del plan → 403. **Editar y reintentar: solo el creador. Cancelar: el creador o quien tenga `manage-catalog-reminders`** (cancelar no suplanta a nadie y queda auditado).
+- **Qué pasa al editar o cancelar (definido):** editable solo en `scheduled` o `failed` (vuelve a `scheduled`, intentos a 0); `queued`/`sending` (ya va en camino), `sent`, `cancelled`, `skipped` e `uncertain` **no se editan** (el historial no se reescribe; un incierto tiene «Reintentar» explícito). Cancelable en `scheduled`, `queued`, `failed` e `uncertain`; no en `sending` ni `sent`. Un cancelado jamás se envía (la reclamación del trabajador solo toma `queued`).
+- **Envío (programado de verdad):** `catalog:send-reminders` cada minuto (`withoutOverlapping`, `onOneServer`, vigilado por `ScheduledCommandMonitor`):
+  1. `recoverStuck`: lo que solo estaba en cola (>15 min) vuelve a esperar; lo que estaba `sending` (>15 min) pasa a **`uncertain`** y nunca se reenvía solo.
+  2. `dispatchDue`: los `scheduled` con `scheduled_at <= ahora` (y `next_attempt_at` vencido) se reclaman con un `UPDATE … WHERE status='scheduled'` atómico y se encolan **una sola vez** (`SendCatalogReminder`, 1 intento por trabajo).
+  3. `send`: reclamo atómico `queued → sending` (un segundo trabajador no hace nada), revalidación (creador activo, sigue siendo miembro, plan con Catálogo, no vencido más de 24 h, correo real disponible) y envío **síncrono** dentro del trabajador. **Solo se marca `sent` si el mailer lo aceptó.**
+- **Fallos y reintentos:** un error al enviar guarda clase y texto corto con las direcciones enmascaradas y programa otro intento (a los 5 y a los 30 min); a los 3 intentos queda `failed`. Sin transporte real (fuera de local/testing con `log`/`array`) queda `failed` con `mail_not_configured`, nunca `sent`. Cada intento, éxito o fallo se audita como evento automático (`outcome failed` cuando falla). Pasadas 24 h sin enviarse (scheduler o cola detenidos) **no se envía** (`skipped/expired`): un «alistar pedido» tardío engaña. Las 24 h son un límite técnico (`config/catalog_reminders.php`), no una regla comercial.
+- **Idempotencia y su límite (honesto):** el reclamo atómico, la cola de un intento y el estado `uncertain` evitan duplicados por concurrencia o caída del trabajador. SMTP no ofrece «exactamente una vez»: si el servidor acepta el mensaje y se pierde la confirmación, un reintento **automático** podría repetirlo; se mitiga con un `Message-ID` estable por recordatorio (`catalog-reminder-{id}@host`, el receptor puede reconocer el duplicado) y el tope de 3 intentos, no se elimina. Las garantías de bloqueo de fila de PostgreSQL no se pueden demostrar en SQLite.
+
+### 42.3 Plantilla HTML global
+- **Dónde y quién:** pestaña «Plantilla HTML para correos» de Configuraciones, **solo** para la administración de la plataforma dentro de `Desarrollo_DEV`. Permisos `view-email-template` / `edit-email-template` (grupo «Correo de la plataforma», solo plataforma, tratados como comerciales: ningún rol de cliente ni `admin` por seeder; solo la administración interna y `plataforma`). Las tres rutas (`PUT /settings/email-template`, `POST …/preview`, `POST …/restore`) usan `workspace.platform:<permiso>`: un administrador de un cliente, un superusuario dentro de un Workspace cliente y un invitado reciben 403 o la redirección al login, y la página de Configuraciones de un cliente ni siquiera recibe los datos (probado; en el navegador la pestaña no existe y la ruta responde 403).
+- **Qué es:** texto HTML con seis marcadores documentados (`{{brand}}`, `{{title}}`, `{{content}}` obligatorio, `{{action}}`, `{{footer}}`, `{{support}}`), sustituidos con una pasada de expresión regular sobre el propio texto de la plantilla. **Nada se compila ni se ejecuta** (ni Blade ni PHP), y un valor que contenga `{{x}}` no se vuelve a sustituir.
+- **Política de validación (lista blanca, al guardar y otra vez al usarla):** etiquetas de maquetación y texto (tablas, `div`, `p`, `h1`–`h4`, `a`, `strong`…); atributos de maquetación y `style` en línea; **rechazados** `script`, `style`, `img`, `iframe`, `form`, `link`, `object`, comentarios, `on*`, `http-equiv`, `url()`/`@import`/`expression`/`javascript:` en estilos, marcadores dentro de atributos, `<?`, `{!!`, `@php`, `@include`, `{%`, `{{ cualquier cosa }}` que no sea un marcador de la lista, llaves sueltas, tamaño > 60 000 bytes y los enlaces que no sean `http`, `https` o `mailto`. Cada rechazo dice qué cambiar.
+- **Escape:** título, marca, pie y soporte se escapan como texto HTML; el contenido se construye aquí a partir de **texto plano** (párrafos escapados con saltos de línea y un código destacado), nunca de HTML del mensaje; el botón de acción solo existe si la URL es `http(s)` válida, sin credenciales, espacios, comillas ni caracteres de control (probado con `javascript:`, `data:`, `vbscript:`, `ftp:`, `//host`, comillas, etc.).
+- **Vista previa y restauración:** la previsualización usa datos ficticios, no guarda ni envía nada y se dibuja en un `iframe sandbox` sin permisos. «Restaurar la predeterminada» pide confirmación, **reemplaza** la fila por la plantilla que mantiene la aplicación (`resources/email/default.html`) y se audita; no toca correos enviados ni otras configuraciones. Todo guardado queda auditado (autor y tamaño, sin copiar el HTML).
+- **Plantilla no válida o tabla ausente:** el correo usa la predeterminada; la pantalla avisa «La plantilla guardada no es válida» (probado escribiendo filas inválidas directamente en la base).
+
+### 42.4 Correos integrados
+| Correo | Estado |
+|---|---|
+| Código de verificación del registro | **Integrado**: HTML por la plantilla global; asunto, código, vigencia y vista de texto idénticos; flujo y seguridad sin cambios |
+| Recuperación de contraseña | **Integrado**: asunto, enlace, vigencia y reintentos iguales (se conservan las líneas y la acción del mensaje); el HTML sale por la plantilla solo si el enlace es una URL `http(s)` segura, si no se envía el diseño estándar de antes |
+| Recordatorios del Catálogo | **Integrado** (nuevo) |
+| Contratación y suscripciones | **No existe correo real todavía** (ni de contratación ni de vencimiento): la contratación se confirma en pantalla; el correo de bienvenida llegará con la pasarela de pagos |
+| Confirmaciones y recordatorios de Agenda | **Por WhatsApp, no por correo**: no aplican |
+
+### 42.5 Pruebas
+`CatalogRemindersAndEmailTemplateTest` (41 pruebas, 389 aserciones, con 22 plantillas inválidas por juego de datos): creación, validación, destinatario y propiedad desde el servidor, permisos y aislamiento por ruta, edición y cancelación con auditoría, no enviar antes de hora, una sola cola por recordatorio, un solo correo con dos trabajadores, cancelado tras encolar, tres intentos con espera y fallo definitivo, reintento explícito, incierto tras caída, omitidos con su motivo, sin transporte real, escape; plantilla (acceso, guardado, lectura, vista previa sin envío, restauración real, rechazos, escape, enlaces, no ejecución, respaldo seguro) y correos existentes. Se ajustaron dos pruebas de convenciones del repositorio: la lista de operaciones del catálogo (`InternalAdministrationTest`) y la regla de nombres de migración (que ya fallaba por los nombres `add_*` de los bloques 2 y 3, **renombrados porque seguían sin aplicar**).
+
+### 42.6 Migraciones (creadas, NO aplicadas a ninguna base; tres pendientes en `ccg_ava`)
+- `2026_10_29_100000_split_solution_visibility_from_activation` (bloque 2, renombrada), `2026_10_30_100000_limit_memberships_to_selected_locations` (bloque 3, renombrada) y `2026_10_31_100000_create_email_templates_and_catalog_reminders` (este bloque; reversible; `migrate --pretend` solo muestra `CREATE TABLE` y claves). Sin ellas todo degrada: la plantilla predeterminada se usa y los recordatorios avisan «falta aplicar la migración».
+
+### 42.7 Validación visual (SQLite desechable, no `ccg_ava`)
+Hecha: lista de recordatorios con todos los estados (programado, enviado, falló, incierto, cancelado) y sus motivos, formulario con el error de fecha pasada del servidor, un miembro que no es el creador (sin «Editar» ni «Reintentar», sí «Cancelar»), pestaña de plantilla (editor, vista previa viva, marcadores), error de HTML no permitido que desactiva «Guardar», guardado, restauración con confirmación (el editor vuelve a la predeterminada), tema oscuro, 390 px sin desborde, y que un administrador de cliente no ve la pestaña y recibe 403. **No verificado:** un envío real, el aspecto del correo en clientes reales (Gmail/Outlook), lectores de pantalla y el selector de fecha y hora en navegadores distintos de Chromium.
+
+### 42.8 Riesgos y decisiones pendientes
+1. **Aplicar las tres migraciones** con respaldo previo y ejecutar `RolesAndPermissionsSeeder` para repartir los permisos nuevos; después, un worker y el scheduler en marcha (P5).
+2. **Correo real:** nunca se ha enviado uno (P11); hasta configurarlo los recordatorios quedan «Falló» en lugar de fingir el envío.
+3. Probar en PostgreSQL con dos conexiones los reclamos atómicos y la cola; decidir si 24 h es la ventana correcta y si hace falta un aviso a quien tiene un recordatorio `failed`/`uncertain`.
+4. Si el negocio quiere recordatorios para otras personas, debe ser una capacidad explícita con permiso propio y consentimiento (no existe).
+5. El correo de contratación y vencimiento de suscripciones sigue sin existir (depende de la pasarela).
+
+### 42.9 Siguiente bloque
+Bloque 6: reportes por sede, marca «Zonno by CCG» en la interfaz (usando `config/branding.php`), selectores de fecha, barra de desplazamiento, sidebar contraíble y estilo de roles.
+
+## 43. Bloque 6: reportes por sede, identidad Zonno y ajustes transversales de interfaz (2026-10-22)
+
+### 43.1 Reportes por sede
+- `ReportController` resuelve el filtro `location` en el servidor. Un usuario con alcance limitado solo puede pedir sedes que ya tiene asignadas; una sede ajena devuelve 403. Para el resto, un identificador inexistente o de otro Workspace produce un error de validación. Nunca se confía en el valor que envía React.
+- `OperationsMetrics` recibe la lista de sedes autorizadas y filtra en la consulta (no en memoria): agenda del periodo, próximas citas, pedidos, productos más vendidos, existencias, movimientos, productos con seguimiento y sin configurar. Totales, series y tablas salen de las mismas consultas filtradas.
+- Un usuario sin restricción (y `Desarrollo_DEV`/perfiles administrativos) ve todas las sedes y puede elegir una; sin elegir, ve el total. Un usuario limitado sin selector explícito ve la suma de sus sedes; con lista vacía no ve datos operativos.
+- Los datos históricos sin sede solo aparecen en la vista sin filtro de un usuario sin restricción. No se asignó sede a ningún registro histórico.
+- Clientes, conversaciones y equipo no dependen de una sede y no cambian con el filtro; la interfaz lo dice en una nota.
+- No existen exportaciones de reportes en la aplicación, por lo que no hay nada que filtrar ahí. Si se crean, deben reutilizar `OperationsMetrics` con la misma lista autorizada.
+
+### 43.2 Identidad «Zonno by CCG»
+- Única fuente: `config/branding.php` (`BRAND_NAME`, `BRAND_SUPPORT_EMAIL`), compartida como prop `brand` de Inertia y como meta para el título. Se usa en barra superior, sidebar, layouts de acceso y registro, título de la pestaña y correos (`EmailTemplates`, código de registro, `mail:test`).
+- No se inventaron logotipos, dominios, datos de soporte ni textos legales. El valor por defecto de `BRAND_NAME` sigue siendo «Ava Platform»; para activar la marca hay que poner `BRAND_NAME="Zonno by CCG"` en el `.env` del entorno (decisión pendiente del equipo).
+- Se tocaron solo los puntos de presentación; los nombres técnicos del paquete, repositorio y rutas no cambiaron.
+
+### 43.3 Interfaz transversal
+- Selectores de fecha: componente `DateField` y utilidades `resources/js/lib/dates.js` (validación de fecha real, mínimo y máximo, acción «Hoy» con el día del servidor). Aplicado en Agenda, Auditoría, módulos del Workspace y Recordatorios del catálogo. Siguen con `<input type="date">` propio: Campañas (Show), Recursos y excepciones, Reserva pública y el diálogo de cita; conviene migrarlos en otro bloque.
+- Sidebar colapsable en pantallas grandes (`useSidebarCollapsed`): ancho de 64 px, etiquetas disponibles para lectores de pantalla (`sr-only`) y como tooltip, estado recordado en `localStorage` con `try/catch`. En tablet sigue plegado a iconos y en móvil se mantiene el panel deslizable. No cambia qué ve cada usuario: eso lo deciden módulos y permisos.
+- Desplazamiento: los contenedores del layout no generan scroll horizontal involuntario; las tablas y calendarios desplazan dentro de su propio contenedor y no se ocultaron barras.
+- Roles: `RoleLabel` muestra el rol como texto legible (no solo color), con corte de nombres largos. No se modificaron roles ni permisos.
+
+### 43.4 Pendientes y riesgos
+- Sin migraciones nuevas en este bloque; siguen sin aplicarse las de bloques anteriores.
+- La preferencia de sidebar es por navegador, no por usuario.
+- La validación visual con un usuario de alcance limitado se cubrió con pruebas de PHP (el usuario de la prueba visual resultó sin restricción de sede).
+
+### 43.5 Siguiente bloque
+A definir por el equipo.
+
+## 44. Bloque 7: cierre de regresión y preparación segura para despliegue (2026-10-22)
+
+Este bloque no activa nada: no se aplicó ninguna migración, no se ejecutó ningún sembrador ni sincronización, no se inició ningún worker y no se envió ningún correo. Cada afirmación indica si fue **verificada** (ejecutada), **inferida** (por lectura de código) o está **pendiente** de un entorno real.
+
+### 44.1 Regresión y corrección hecha
+- Corrección del bloque 6: `email-template.*` declarado en `core_routes` de `config/modules.php` (verificado: `ModuleArchitectureTest` en verde).
+- Hallazgo nuevo de este bloque: `catalog:send-reminders` estaba programado y escribía su salida y su último éxito en caché (`ScheduledCommandMonitor::watch`), pero faltaba en `ScheduledCommandMonitor::WATCHED`. Sin esa entrada, `integrations:diagnose` no avisaba de que el comando dejó de ejecutarse. Se añadió `'catalog-reminders' => 1` y se actualizó `ScheduledCommandMonitorTest`. El §42 decía que estaba vigilado; ahora lo está de verdad.
+- Resultado de la suite completa ejecutada después del último cambio de código (`php -d memory_limit=2G vendor/bin/phpunit`): 1871 pruebas, 1866 aprobadas, 0 fallidas, 0 errores, 5 omitidas, 18961 aserciones, 915 s. Sustituye al 1865/1871 anterior a la corrección. Complementarias: JS 72/72, Pint sin diferencias, build correcto, `git diff --check` solo con avisos de fin de línea (CRLF) en `RECOMENDACIONES.md` y `pendientes.md`.
+
+### 44.2 Las tres migraciones pendientes (revisión estática, sin aplicar)
+Estado verificado: las tres figuran como `Pending` en `ccg_ava` y conservan sus nombres. El orden por nombre es el correcto (29, 30, 31) y no hay dependencias entre ellas.
+
+**2026_10_29 `split_solution_visibility_from_activation`**
+- Añade `module_categories.is_public boolean not null default false` y marca como pública toda categoría con al menos un plan activo y público. Depende de `plans.is_public` y `plans.module_category_id` (verificado que existen en `ccg_ava`).
+- Datos: `ccg_ava` tiene 7 categorías y 3 planes; no hay riesgo de volumen. El `UPDATE` condicional no aparece en `migrate --pretend` (la guardia `hasColumn` se evalúa contra consultas simuladas), así que esa parte solo queda validada por revisión y por las pruebas SQLite.
+- Bloqueo: `ADD COLUMN` con valor por defecto constante es solo de catálogo en PostgreSQL 11 o superior; toma un bloqueo exclusivo muy breve.
+- Reversión: `down()` elimina la columna y pierde qué categorías eran públicas (recuperable por la misma regla, salvo que alguien las haya cambiado a mano después).
+- El código tolera el esquema anterior (`ModuleCategory::visibilityReady()`).
+
+**2026_10_30 `limit_memberships_to_selected_locations`**
+- Añade `workspace_user.location_scope varchar(10) not null default 'all'` y crea `workspace_user_locations` con claves foráneas hacia `workspaces`, `users` y la compuesta `(location_id, workspace_id)` hacia `locations(id, workspace_id)`. Verificado que existe `locations_id_workspace_id_unique`, requisito de esa clave compuesta.
+- Ningún miembro cambia: todos quedan en `all`, igual que hoy (`workspace_user` tiene 6 filas).
+- Bloqueo: las claves foráneas toman un bloqueo `SHARE ROW EXCLUSIVE` sobre `workspaces`, `users` y `locations`. Con transacciones largas abiertas puede esperar y, mientras espera, encolar consultas detrás de sí. Recomendado `SET lock_timeout` o una ventana corta.
+- Observación: el comentario de la migración dice que la tabla se ata también a la membresía, pero no hay clave foránea hacia `workspace_user`. Es inofensivo: al quitar y volver a añadir a un miembro, su `location_scope` vuelve a `all` y las filas viejas se ignoran; al pasar a `selected`, `LocationScope::save` borra y reinserta todo. Conviene corregir el comentario en un cambio futuro; no se tocó el archivo para no alterar una migración antes de su aplicación.
+- Reversión: `down()` borra las restricciones por sede configuradas. **Revertir amplía el acceso**: todos los miembros vuelven a ver todas las sedes. Si hubiera restricciones reales, una reversión exige revisarlas antes.
+
+**2026_10_31 `create_email_templates_and_catalog_reminders`**
+- Crea `email_templates` (clave única `key`) y `catalog_reminders` con índices `(status, scheduled_at)` y `(workspace_id, scheduled_at)`. Solo tablas nuevas, sin tocar datos existentes.
+- Reversión: `down()` elimina ambas tablas y pierde el historial de recordatorios y cualquier plantilla personalizada. Antes de revertir, respaldar esas tablas.
+- Hasta que exista la tabla, `catalog:send-reminders` termina sin hacer nada (`Schema::hasTable`).
+
+**Reintentos y despliegue parcial (inferido):** PostgreSQL admite DDL transaccional y Laravel ejecuta cada migración dentro de una transacción en `pgsql`; si una falla, esa migración se revierte entera y las anteriores del mismo lote quedan aplicadas. Volver a ejecutar continúa por la siguiente. Las migraciones no son idempotentes por sí mismas (no comprueban si la columna o la tabla ya existen), así que no deben aplicarse a mano fuera de `migrate`.
+
+**Qué no prueba `--pretend`:** muestra el SQL que Laravel generaría para PostgreSQL (verificado, ver arriba), pero no ejecuta nada ni detecta conflictos de datos, bloqueos ni permisos del rol de base de datos.
+
+### 44.3 Secuencia recomendada de aplicación (futura, con autorización)
+1. **Antes**: respaldo verificable (`make backup` con `BACKUP_DIR` fuera del repositorio, y `make restore-check` para demostrar que se restaura en una base desechable). Sin respaldo restaurado con éxito no se continúa.
+2. Comprobar `php artisan migrate:status` (las tres en `Pending`, ninguna otra) y `integrations:diagnose`.
+3. Ventana de mantenimiento corta recomendada (el estado `down` se comparte por Redis en producción), sobre todo por las claves foráneas de la segunda migración. No es obligatoria si no hay transacciones largas, pero es la opción prudente.
+4. `make prod-migrate` (`php artisan migrate --force`).
+5. Sincronizar permisos con `php artisan db:seed --class=RolesAndPermissionsSeeder --force` (ver 44.6) y reiniciar los procesos de larga duración (`horizon:terminate`, scheduler, app) para cargar permisos, marca y configuración.
+6. **Después**: `migrate:status` sin pendientes; `integrations:diagnose` sin bloqueos; comprobar `catalog-reminders` en la salida del diagnóstico; revisar que `Desarrollo_DEV` conserva todos los módulos y permisos; revisar un Workspace de cliente (sin permisos de plataforma); abrir Reportes por sede con un usuario limitado.
+7. **Contingencia**: si falla la aplicación, la migración fallida se revierte sola; mantener la ventana, corregir y repetir. Si falla algo después de aplicar, preferir una corrección hacia adelante antes que `migrate:rollback` (por la pérdida de datos y la ampliación de acceso descritas). La restauración del respaldo es el último recurso.
+
+### 44.4 Recordatorios: scheduler, cola y worker
+- **Implementado en código (verificado por lectura y pruebas SQLite):** `routes/console.php` programa `catalog:send-reminders` cada minuto con `withoutOverlapping()` y `onOneServer()`, vigilado por `ScheduledCommandMonitor`. El comando recupera atascados (`recoverStuck`) y entrega los vencidos (`dispatchDue`) con una reclamación atómica `UPDATE … WHERE status = 'scheduled'`, de modo que solo el proceso que cambia la fila encola el trabajo. `SendCatalogReminder` tiene `$tries = 1`; `send()` reclama `queued → sending`; solo marca `sent` si el transporte aceptó el mensaje; un trabajo caído deja el recordatorio como `uncertain` y no se reenvía solo. Límites en `config/catalog_reminders.php`: 3 intentos, esperas de 5 y 30 minutos, 15 minutos para considerar atascado, 24 h de gracia (después se omite como `expired`).
+- **Envíos anticipados o duplicados (inferido):** el comando solo toma recordatorios con `scheduled_at <= now()` y `next_attempt_at` vencido; una programación incorrecta (por ejemplo, ejecutarlo varias veces) no duplica porque cada traspaso es atómico. Los límites de PostgreSQL con concurrencia real no están probados (ver 44.7).
+- **Necesita configuración de despliegue:** un proceso `schedule:work` (o un `cron` con `schedule:run` cada minuto) y un worker de la cola `default`. `docker-compose.prod.yml` ya define ambos (`php artisan horizon` y `php artisan schedule:work`) con la cola `redis`; Horizon usa `timeout` 60 s frente a `retry_after` 90 s, coherente. El entorno local de esta máquina tiene `QUEUE_CONNECTION=database`, así que allí haría falta `php artisan queue:work` (no se inició).
+- **Señales de que no están activos:** `integrations:diagnose` informa `catalog-reminders: NO SE EJECUTA desde hace N min` (scheduler parado), y avisa de cola y Horizon; recordatorios que se quedan en `queued` más de 15 minutos indican un worker detenido (el propio comando los devuelve a `scheduled`).
+- Comandos de puesta en marcha: `php artisan schedule:work`, `php artisan horizon` (producción) o `php artisan queue:work --queue=default --tries=1 --timeout=55` (cola `database`), `php artisan integrations:diagnose`, `php artisan catalog:send-reminders` (una pasada manual, idempotente).
+
+### 44.5 Correo saliente y marca
+- **Variables del transporte:** `MAIL_MAILER`, `MAIL_SCHEME`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_TIMEOUT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME` (guía en §30 y `.env.example`). Con `log`, `array` o `null`, o con el remitente de ejemplo, `MailAvailability` considera que no hay correo real y el sistema lo dice en lugar de fingir el envío.
+- **Remitente, destinatario y respuesta:** el remitente es `MAIL_FROM_*`. El destinatario de los recordatorios es siempre quien los creó (nunca llega del cliente). El proyecto no define una dirección de respuesta (`Reply-To`): las respuestas van al remitente. `BRAND_SUPPORT_EMAIL` solo se imprime en el pie, no es una dirección de respuesta.
+- **Correos implementados:** código de verificación del registro (`SignupCodeMail`), recuperación de contraseña (`ResetPasswordNotification`), recordatorio del catálogo (`CatalogReminderMail`) y mensaje de prueba (`mail:test`). Los avisos de citas salen por WhatsApp, no por correo; no existen correos de bienvenida, de cambio de plan ni de vencimiento de suscripción.
+- **Comprobar sin exponer credenciales:** `php artisan integrations:diagnose` (no envía nada) indica si el transporte es real; la prueba controlada es `php artisan mail:test destinatario@dominio` hacia un buzón propio, con autorización del equipo.
+- **Aceptado frente a entregado:** que el transporte acepte el mensaje (el recordatorio pasa a `sent`) solo prueba que el servidor SMTP lo recibió. La entrega real se confirma por la bandeja del destinatario, los rebotes y los registros del proveedor; la aplicación no procesa rebotes.
+- **Presentación en Gmail y Outlook:** pendiente de un envío real de prueba con la plantilla global y la marca; revisar el modo claro y oscuro, el pie y los enlaces.
+- **Marca:** `BRAND_NAME="Zonno by CCG"` en el `.env` real (con comillas por los espacios) y reinicio de procesos de larga duración. Se documentó el bloque `BRAND_NAME` y `BRAND_SUPPORT_EMAIL` comentado en `.env.example`; el `.env` existente no se tocó. Si `config:cache` está activo, hay que regenerarlo después del cambio.
+
+### 44.6 Permisos y módulos
+- El mecanismo existente es `RolesAndPermissionsSeeder` (`php artisan db:seed --class=RolesAndPermissionsSeeder`): crea con `firstOrCreate` todos los permisos de `config/permissions.php`, da al rol `admin` todos los no reservados y nunca los comerciales ni el acceso de soporte; los demás roles solo reciben sus valores iniciales cuando se crean. Es idempotente y no quita permisos que un superusuario haya retirado.
+- Hoy `ccg_ava` no tiene los permisos `view-email-template`, `edit-email-template`, `view-catalog-reminders` ni `manage-catalog-reminders` (verificado con una consulta de solo lectura). Aplicar las migraciones no los crea: sin ejecutar el sembrador, esas pantallas responderían 403 salvo para quien reciba permisos efectivos por otra vía. Es un prerrequisito explícito, no una asignación automática.
+- Los permisos de plantilla de correo están marcados `platform` y pertenecen al grupo comercial reservado: `PlatformAccess::withinWorkspace` los descarta en un Workspace de cliente (inferido y cubierto por pruebas existentes), y el sembrador no los da a `admin`. Los de recordatorios del catálogo no son de plataforma y los recibe `admin` de cada cliente cuando el módulo lo permite.
+- `Desarrollo_DEV` conserva sus módulos y permisos por la regla de `PlatformAccess` (superusuario + Workspace administrativo + rol `admin`). Después del sembrador, comprobar en Usuarios y roles que ningún rol de un cliente contiene permisos `platform`.
+- No se ejecutó el sembrador ni ningún comando de reparación; no existe un comando de solo lectura que compare el catálogo con la base, y se anota como mejora futura.
+
+### 44.7 Pendiente de pruebas reales
+- PostgreSQL: las reclamaciones atómicas de `dispatchDue`, `send`, `recoverStuck` y `LocationScope::save` solo se probaron con SQLite en memoria; se validarán con PostgreSQL en una intervención autorizada (dos procesos simultáneos sobre una base desechable, con el worker real).
+- SMTP real: un envío de `mail:test` y de un recordatorio hacia un buzón de prueba, y su revisión en Gmail y Outlook.
+- Aplicación de las tres migraciones sobre una copia restaurada del respaldo, para medir bloqueos y confirmar los números.
+- Scheduler y Horizon corriendo de verdad: comprobar `catalog-reminders` en `integrations:diagnose` tras unos minutos.
+
+### 44.8 Siguiente bloque
+A definir por el equipo.
+
+## 45. Auditoría integral final: base de datos actualizada y publicación (2026-10-22)
+
+Resumen de lo hecho con la autorización explícita del propietario para aplicar las migraciones pendientes, sincronizar permisos y publicar. Cada punto indica si fue **verificado** (ejecutado y comprobado), **inferido** (por lectura de código) o está **pendiente** de una prueba real.
+
+### 45.1 Respaldo y comprobación de restauración (verificado)
+- Respaldo con el procedimiento oficial (`BACKUP_DIR=/c/Users/Trabajo/ava-backups sh docker/ops/backup.sh`, fuera del repositorio): `ava_20261022_211035.dump`, 290089 bytes, 67 tablas con datos. El propio script comprobó que `pg_restore --list` lee el índice y que contiene `conversations` y `migrations`. El SHA-256 del archivo coincide con el fichero `.sha256`.
+- Comprobación de restauración oficial (`docker/ops/restore-check.sh`): restauró el respaldo en una base desechable `ava_restore_check_<marca de tiempo>` (nombre generado por el script, que se niega a usar la base real) y la eliminó al terminar. Recuentos restaurados: `migrations` 34, `workspaces` 4, `users` 6, `conversations` 11, `messages` 76, `appointments` 10. Después solo quedaban las bases `ccg_ava`, `postgres` y las plantillas. No se creó ni se usó `ccg_ava_test`.
+
+### 45.2 Migraciones aplicadas (verificado)
+- Antes: las tres figuraban `Pending`; `migrate --pretend` generó el SQL esperado para PostgreSQL.
+- Aplicadas con `docker compose exec -T app php artisan migrate` (lote 27): `2026_10_29_100000_split_solution_visibility_from_activation` (45 ms), `2026_10_30_100000_limit_memberships_to_selected_locations` (41 ms) y `2026_10_31_100000_create_email_templates_and_catalog_reminders` (50 ms). Sin errores y sin intervención manual; no se marcó nada como ejecutado a mano.
+- Comprobación posterior: `migrate:status` sin pendientes (37 migraciones registradas); claves foráneas, claves únicas e índices de `workspace_user_locations`, `email_templates` y `catalog_reminders` tal como las describe cada migración (incluida la clave compuesta `(location_id, workspace_id)` hacia `locations`).
+- Datos: `module_categories` conserva sus 7 filas y `is_public` queda verdadero solo en `health` y `ecommerce`, exactamente las categorías con un plan activo y público; `workspace_user` conserva sus 6 filas, todas con `location_scope = 'all'`; las tablas nuevas están vacías. No se reasignó ningún registro histórico a una sede.
+
+### 45.3 Permisos y módulos (verificado)
+- Antes de ejecutar los sembradores se hizo un ensayo de solo lectura: `ModuleCatalogSeeder` no tenía nada que crear y `RolesAndPermissionsSeeder` solo crearía 4 permisos (`view-catalog-reminders`, `manage-catalog-reminders`, `view-email-template`, `edit-email-template`), daría a `admin` los 2 de recordatorios y no retiraría ni repartiría ningún permiso amplio (los 16 permisos «legacy» ya estaban resueltos). Los usuarios de ejemplo del sembrador ya existían, por lo que `firstOrCreate` no creó ninguno.
+- Ejecutados `php artisan db:seed --class=RolesAndPermissionsSeeder` y `--class=ModuleCatalogSeeder` en el contenedor `app`. Resultado: 86 permisos en la base de datos y 86 en el catálogo; ningún rol cambió de forma inesperada (`admin` solo ganó los 2 permisos de recordatorios; los de plantilla de correo no los tiene ningún rol).
+- Los permisos de plantilla de correo son de plataforma: la administración interna de `Desarrollo_DEV` (superusuario o administrador con rol `admin` en ese Workspace; hoy `daniel@gmail.com` y `admin@ava.com`) los tiene entre sus 85 permisos efectivos; en `OPERACION_PRD`, `PRUEBA` y `TEST_VERIF` ningún rol los tiene y los permisos de plataforma efectivos son 0. `Desarrollo_DEV` no tiene plan (`plan_id` nulo), así que no le afecta ninguna regla comercial. Los roles con permisos de plataforma siguen siendo los mismos antes y después (`admin` 1, `plataforma` 9, `soporte` 1).
+- `integrations:diagnose` (en el contenedor): 0 bloqueos, 8 avisos, todos de configuración externa o decisiones de negocio (Meta, n8n, chat público de CCG, proveedor de pagos y el contenido del plan por defecto).
+
+### 45.4 Estado operativo real (verificado)
+- Entorno de desarrollo en Docker (7 h arriba, todos «healthy»): `app` (puerto 8000), `worker` (Horizon sobre Redis), `scheduler` (`schedule:work`), `reverb`, `postgres` (puerto 5433, base `ccg_ava`), `redis`, `minio` y `node` (Vite). La cola de los contenedores es Redis; el `.env` del equipo anfitrión tiene `QUEUE_CONNECTION=database` y solo lo usan las órdenes ejecutadas desde Windows.
+- Diagnóstico: scheduler con latido reciente, Horizon corriendo, 0 trabajos pendientes, todos los comandos programados con último éxito de 0 a 5 minutos, incluido `catalog-reminders` (ahora vigilado). Humo HTTP sin sesión: `/up` 200, `/pre-login` 200, `/registro` 200, `/legal` 200, `/login`, `/dashboard` y `/reports` redirigen al acceso, el webhook de WhatsApp responde 404 (sin `META_*`).
+- `catalog-reminders` registra 1 fallo a las 19:37 UTC («Target class [App\Services\CatalogReminders] does not exist»): ocurrió mientras se escribía esa clase en el bloque 5 y desde entonces el comando termina bien cada minuto. No es un defecto del código publicado.
+- El código del contenedor es el del directorio de trabajo (volumen montado); no hizo falta reiniciar ningún servicio.
+- **Marca:** el título de la aplicación sigue siendo «Ava Platform» porque el `.env` del propietario no define `BRAND_NAME`. Un intento de añadir `BRAND_NAME="Zonno by CCG"` al `.env` fue denegado por el entorno y no se escribió nada. Para activarla: añadir esa línea al `.env` y reiniciar el contenedor `worker` (para los correos); la interfaz la toma en la siguiente petición.
+
+### 45.5 Auditoría de seguridad y calidad
+- Verificado: `composer audit` y `npm audit --omit=dev` sin vulnerabilidades; no hay `dd`, `dump`, `console.log`, `env()` fuera de `config/` ni `Model::unguard`; ninguna consulta SQL en bruto interpola datos de la petición (los `LIKE` usan parámetros y `escape '!'`); una búsqueda estática no encontró ningún controlador que tome el identificador de Workspace de la petición; las únicas salidas HTML sin escapar son las vistas de correo, que reciben texto ya validado y escapado por `EmailTemplates` (lista blanca de etiquetas y atributos, marcadores permitidos, sin PHP ni Blade, estilos y enlaces filtrados).
+- Suite PHP completa final (`php -d memory_limit=2G vendor/bin/phpunit`, SQLite en memoria): 1871 pruebas, 1866 aprobadas, 0 fallidas, 0 errores, 5 omitidas, 18961 aserciones, 934 s. JS 72/72, Pint sin diferencias, `npm run build` correcto, `git diff --check` solo con avisos de fin de línea (CRLF).
+- Verificado por la suite automatizada: aislamiento entre Workspaces y sedes, permisos y módulos en el servidor, rutas de plataforma, reservas, pedidos, recordatorios, plantilla y reportes por sede (ver el resultado exacto en el informe final).
+- Inferido: concurrencia de reservas, límites y recordatorios (reclamaciones atómicas por `UPDATE … WHERE`), que solo se ejecutó con SQLite.
+- Observación sobre secretos: el `.env` local, ignorado por Git, contiene una contraseña del administrador de desarrollo en texto claro. No se versiona ni se copió a ningún informe; conviene cambiarla antes de exponer el entorno fuera de esta máquina.
+
+### 45.6 Pendiente de validación real
+- Concurrencia en PostgreSQL con dos procesos (reservas, inventario, recordatorios, alcance por sede).
+- SMTP: el diagnóstico indica que el transporte es real, pero no se envió ningún correo; falta la prueba de `mail:test` y de un recordatorio hacia un buzón propio y su revisión en Gmail y Outlook.
+- Meta/WhatsApp y n8n (sin credenciales), proveedor de pagos y chat público de CCG.
+- Validación visual con sesión sobre `ccg_ava`: no se hizo (no se restablecieron ni usaron contraseñas); la validación visual del bloque 6 se hizo en una base desechable.
+- Activar `BRAND_NAME` en el `.env`.
+
+### 45.7 Siguiente paso
+Probar con la sesión real: entrar por `/pre-login` con el código de Workspace `DESARROLLO_DEV`, revisar Ajustes → Plantilla de correos (solo administración interna), Catálogo → Recordatorios, Usuarios → alcance por sede y Reportes por sede.

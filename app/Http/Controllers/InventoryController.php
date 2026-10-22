@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Orders\CatalogInventory;
 use App\Orders\CommerceSchema;
 use App\Orders\InventoryService;
+use App\Services\LocationScope;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -69,6 +70,7 @@ class InventoryController extends Controller
         abort_unless($this->schema->inventoryReady(), 409, 'Falta aplicar la última migración de la base de datos.');
 
         $model = $request->attributes->get('workspace')->products()->findOrFail($product);
+        abort_unless(app(LocationScope::class)->mayChange($request->attributes->get('workspace'), $request->user(), $model->locations()->pluck('locations.id')->map(fn ($id) => (int) $id)->all()), 403, 'Este producto también se ofrece en sedes a las que no tienes acceso.');
         $tracks = $request->validate(['tracks_inventory' => ['required', 'boolean']])['tracks_inventory'];
 
         if ($model->tracks_inventory === (bool) $tracks) {
@@ -91,6 +93,10 @@ class InventoryController extends Controller
         $places = $this->catalog->locations($workspace);
         $request->validate(['location_id' => ['nullable', 'integer', Rule::in($places->pluck('id')->all())]], ['location_id.in' => 'Elige una sede activa del Workspace.']);
         $locationId = $request->filled('location_id') ? (int) $request->input('location_id') : null;
+        $scope = app(LocationScope::class);
+
+        // The general stock (no location) and a product of other locations are not for a member limited to selected locations.
+        abort_unless($scope->allows($workspace, $request->user(), $locationId) && $scope->maySee($workspace, $request->user(), $model->locations()->pluck('locations.id')->map(fn ($id) => (int) $id)->all()), 403, 'No tienes acceso a esa sede o a este producto.');
 
         if ($locationId === null && $places->isNotEmpty()) {
             abort(422, 'Elige la sede: este Workspace lleva el inventario por sede.');

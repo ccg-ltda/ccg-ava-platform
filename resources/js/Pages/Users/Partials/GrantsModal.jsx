@@ -1,4 +1,5 @@
 import { Check, X } from 'lucide-react';
+import RoleLabel from '@/Components/RoleLabel';
 import { useMemo, useState } from 'react';
 import Badge from '@/Components/Badge';
 import Modal from '@/Components/Modal';
@@ -23,9 +24,8 @@ function GrantCard({ item }) {
 /**
  * What a person can do in the Workspace: the permissions their role grants, grouped by resource (read-only). A wide dialog with a bounded
  * height: the header (who, role, counters, search) and the footer stay in view while the groups scroll inside, so the page behind never moves.
- * `roleTone` is the badge colour of the role (shared with the users table).
  */
-export default function GrantsModal({ user, catalog, roleTone, onClose }) {
+export default function GrantsModal({ user, catalog, onClose }) {
     const [query, setQuery] = useState('');
     const role = user?.roles?.[0];
 
@@ -50,7 +50,7 @@ export default function GrantsModal({ user, catalog, roleTone, onClose }) {
                         <div className="min-w-0">
                             <h2 className="truncate text-lg font-bold text-ink">Permisos de {user?.name}</h2>
                             <p className="mt-1 text-sm text-ink-muted">
-                                Los da su rol <Badge tone={roleTone(role)}>{role || 'Sin rol'}</Badge> en este Workspace. Se cambian en la pestaña Roles.
+                                Los da su rol <RoleLabel role={role} /> en este Workspace. Se cambian en la pestaña Roles.
                             </p>
                         </div>
                         <button type="button" onClick={close} aria-label="Cerrar" className="shrink-0 rounded-md p-1.5 text-ink-muted hover:bg-canvas focus-visible:outline-2 focus-visible:outline-primary">

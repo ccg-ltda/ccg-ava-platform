@@ -50,6 +50,7 @@ class SignupReadinessTest extends TestCase
         $this->seedRoleCatalog();
         $this->seed(ModuleCatalogSeeder::class);
         $this->health = ModuleCategory::where('key', 'health')->firstOrFail();
+        $this->health->update(['is_public' => true]); // a solution is offered publicly only when an administrator made it public
     }
 
     /** @param  list<string>  $modules */
@@ -411,7 +412,7 @@ class SignupReadinessTest extends TestCase
 
         $this->get('/registro')->assertInertia(fn ($page) => $page->where('step', 'email'));
         $this->assertSame(SignupRequest::EXPIRED, SignupRequest::firstOrFail()->status);
-        $this->post('/registro/empresa', [])->assertStatus(409);
+        $this->post('/registro/empresa', [])->assertRedirect(route('signup.index'))->assertSessionHas('error');
 
         // A contract waiting for its payment reserves the name and the NIT only for a limited time.
         $this->flushSession();

@@ -27,6 +27,8 @@ class SubscriptionService
     /** from => allowed next statuses, other than activation (which has its own rules). */
     private const TRANSITIONS = [
         Subscription::PENDING => [Subscription::CANCELLED],
+        Subscription::SCHEDULED => [Subscription::TRIALING, Subscription::VOIDED],
+        Subscription::VOIDED => [],
         Subscription::TRIALING => [Subscription::CANCELLED, Subscription::EXPIRED],
         Subscription::ACTIVE => [Subscription::GRACE, Subscription::SUSPENDED, Subscription::CANCELLED, Subscription::EXPIRED],
         Subscription::GRACE => [Subscription::SUSPENDED, Subscription::CANCELLED, Subscription::EXPIRED],
@@ -295,7 +297,8 @@ class SubscriptionService
     {
         $subscription = Subscription::where('workspace_id', $workspace->id)->first();
 
-        if (! $subscription || $subscription->plan_id === $plan->id) {
+        // A scheduled trial keeps its own plan and conditions until it starts; changing the Workspace's plan does not rewrite it.
+        if (! $subscription || $subscription->plan_id === $plan->id || $subscription->status === Subscription::SCHEDULED) {
             return;
         }
 
@@ -313,7 +316,7 @@ class SubscriptionService
      * and the conditions are frozen from that plan with NO price. Refused for the administrative Workspace, for one that already has a live or paying
      * subscription, and for a duplicate. Nothing global changes and no other Workspace is touched.
      */
-    public function grantTrial(Workspace $workspace, Plan $plan, CarbonInterface $endsAt, string $reason, ?int $userId): Subscription
+    public function grantTrial(Workspace $workspace, Plan $plan, CarbonInterface $endsAt, string $reason, ?int $userId, ?CarbonInterface $startsAt = null): Subscription
     {
         $this->assertTrialsAvailable();
 
@@ -321,29 +324,38 @@ class SubscriptionService
             throw ValidationException::withMessages(['workspace_id' => 'El Workspace administrativo no tiene suscripción ni pruebas.']);
         }
 
-        $this->assertTrialEnd($endsAt, now());
+        // A start in the future SCHEDULES the trial: it grants nothing and takes nothing away until that moment. No start (or one that already arrived) = now.
+        $scheduled = $startsAt !== null && $startsAt->greaterThan(now());
+        $this->assertTrialEnd($endsAt, $scheduled ? $startsAt : now(), $scheduled ? $startsAt : null);
 
-        return DB::transaction(function () use ($workspace, $plan, $endsAt, $reason, $userId) {
+        return DB::transaction(function () use ($workspace, $plan, $endsAt, $reason, $userId, $scheduled, $startsAt) {
             $existing = Subscription::where('workspace_id', $workspace->id)->lockForUpdate()->first();
 
-            if ($existing && in_array($existing->status, [Subscription::TRIALING, Subscription::ACTIVE, Subscription::GRACE, Subscription::SUSPENDED], true)) {
-                throw ValidationException::withMessages(['trial' => $existing->status === Subscription::TRIALING ? 'Este Workspace ya tiene una prueba en curso.' : 'Este Workspace ya tiene una suscripción vigente: no se le concede una prueba.']);
+            if ($existing && in_array($existing->status, [Subscription::TRIALING, Subscription::SCHEDULED, Subscription::ACTIVE, Subscription::GRACE, Subscription::SUSPENDED], true)) {
+                throw ValidationException::withMessages(['trial' => match ($existing->status) {
+                    Subscription::TRIALING => 'Este Workspace ya tiene una prueba en curso.',
+                    Subscription::SCHEDULED => 'Este Workspace ya tiene una prueba programada.',
+                    default => 'Este Workspace ya tiene una suscripción vigente: no se le concede una prueba.',
+                }]);
             }
 
             if ($existing && ($existing->activates_workspace || $existing->payment_status === Subscription::PAYMENT_CONFIRMED)) {
                 throw ValidationException::withMessages(['trial' => 'Este Workspace tiene una contratación en curso: no se le concede una prueba.']);
             }
 
-            $this->catalog->assignPlan($workspace, $plan); // refuses an inactive or incomplete plan
+            // Refuses an inactive or incomplete plan and a plan of ANOTHER solution than the one the Workspace already has. A scheduled trial leaves the plan
+            // of the Workspace as it is until it starts (its access does not change meanwhile); an immediate one assigns it now.
+            $scheduled ? $this->catalog->assertAssignable($workspace, $plan) : $this->catalog->assignPlan($workspace, $plan);
 
             $subscription = $existing ?? new Subscription(['workspace_id' => $workspace->id]);
             $subscription->fill([
-                'plan_id' => $plan->id, 'status' => Subscription::TRIALING, 'payment_status' => Subscription::PAYMENT_PENDING, 'payment_reference' => null,
-                'trial_starts_at' => now(), 'trial_ends_at' => $endsAt, 'trial_reason' => $reason, 'trial_granted_by' => $userId, 'ends_at' => null, 'grace_ends_at' => null,
+                'plan_id' => $plan->id, 'status' => $scheduled ? Subscription::SCHEDULED : Subscription::TRIALING, 'payment_status' => Subscription::PAYMENT_PENDING, 'payment_reference' => null,
+                'trial_starts_at' => $scheduled ? $startsAt : now(), 'trial_ends_at' => $endsAt, 'trial_reason' => $reason, 'trial_granted_by' => $userId, 'ends_at' => null, 'grace_ends_at' => null,
             ]);
             $subscription->save();
             $this->freezeTerms($subscription, $this->buildTerms($plan, 'trial'), 'trial');
-            $this->record($subscription, $existing?->status, Subscription::TRIALING, [
+            $this->record($subscription, $existing?->status, $scheduled ? Subscription::SCHEDULED : Subscription::TRIALING, [
+                ...($scheduled ? [AuditLogger::change('Prueba gratuita desde', null, $startsAt->toDateString())] : []),
                 AuditLogger::change('Prueba gratuita hasta', null, $endsAt->toDateString()),
                 AuditLogger::change('Motivo', null, $reason),
             ]);
@@ -357,14 +369,14 @@ class SubscriptionService
     {
         $this->assertTrialsAvailable();
 
-        if ($subscription->status !== Subscription::TRIALING) {
-            throw ValidationException::withMessages(['trial' => 'Este Workspace no tiene una prueba en curso.']);
+        if (! in_array($subscription->status, [Subscription::TRIALING, Subscription::SCHEDULED], true)) {
+            throw ValidationException::withMessages(['trial' => 'Este Workspace no tiene una prueba en curso ni programada.']);
         }
 
-        $this->assertTrialEnd($endsAt, $subscription->trial_starts_at ?? now());
+        $this->assertTrialEnd($endsAt, $subscription->trial_starts_at ?? now(), $subscription->status === Subscription::SCHEDULED ? $subscription->trial_starts_at : null);
         $before = $subscription->trial_ends_at?->toDateString();
         $subscription->update(['trial_ends_at' => $endsAt]);
-        $this->record($subscription, Subscription::TRIALING, Subscription::TRIALING, [
+        $this->record($subscription, $subscription->status, $subscription->status, [
             AuditLogger::change('Prueba gratuita hasta', $before, $endsAt->toDateString()),
             AuditLogger::change('Motivo', null, $reason),
         ]);
@@ -377,14 +389,69 @@ class SubscriptionService
     {
         $this->assertTrialsAvailable();
 
-        if ($subscription->status !== Subscription::TRIALING) {
-            throw ValidationException::withMessages(['trial' => 'Este Workspace no tiene una prueba en curso.']);
+        if (! in_array($subscription->status, [Subscription::TRIALING, Subscription::SCHEDULED], true)) {
+            throw ValidationException::withMessages(['trial' => 'Este Workspace no tiene una prueba en curso ni programada.']);
         }
 
-        $this->transition($subscription, Subscription::CANCELLED);
-        $this->record($subscription, Subscription::CANCELLED, Subscription::CANCELLED, [AuditLogger::change('Prueba cancelada', null, $reason)]);
+        // A trial that never started is voided (the Workspace is left exactly as it was); one in course is cancelled, which withdraws the access.
+        $to = $subscription->status === Subscription::SCHEDULED ? Subscription::VOIDED : Subscription::CANCELLED;
+        $this->transition($subscription, $to);
+        $this->record($subscription, $to, $to, [AuditLogger::change('Prueba cancelada', null, $reason)]);
 
         return $subscription;
+    }
+
+    /**
+     * Starts every scheduled trial whose start date arrived. Idempotent (a row already started is not touched) and safe to run at any time: access never
+     * waits for it, because `ModuleAccess::subscription` starts a due trial on the first request. Returns how many it started.
+     */
+    public function startDueTrials(): int
+    {
+        if (! Subscription::termsReady()) {
+            return 0;
+        }
+
+        $started = 0;
+
+        Subscription::where('status', Subscription::SCHEDULED)->where('trial_starts_at', '<=', now())->orderBy('trial_starts_at')->pluck('id')->each(function (int $id) use (&$started) {
+            if ($this->startScheduledTrial(Subscription::findOrFail($id))->status !== Subscription::SCHEDULED) {
+                $started++;
+            }
+        });
+
+        return $started;
+    }
+
+    /**
+     * Starts ONE scheduled trial that is due: the plan of the trial is assigned to the Workspace, the subscription becomes `trialing` and the start is audited.
+     * Locked and re-checked, so two requests (or a request and the scheduler) start it once. A trial that is not due, or already started, is returned as it is.
+     */
+    public function startScheduledTrial(Subscription $subscription): Subscription
+    {
+        return DB::transaction(function () use ($subscription) {
+            $locked = Subscription::whereKey($subscription->id)->lockForUpdate()->first();
+
+            if (! $locked || ! $locked->trialDue()) {
+                return $locked ?? $subscription;
+            }
+
+            $workspace = Workspace::findOrFail($locked->workspace_id);
+            $plan = Plan::findOrFail($locked->plan_id);
+
+            try {
+                $this->catalog->assignPlan($workspace, $plan);
+            } catch (ValidationException) {
+                // The plan became unassignable (deactivated or changed to another solution) after it was scheduled: it is not started and the change is audited.
+                $locked->update(['status' => Subscription::VOIDED]);
+                $this->record($locked, Subscription::SCHEDULED, Subscription::VOIDED, [AuditLogger::change('Prueba programada cancelada', null, 'El plan ya no se puede asignar')]);
+
+                return $locked;
+            }
+
+            $this->transition($locked, Subscription::TRIALING);
+
+            return $locked;
+        });
     }
 
     /**
@@ -424,10 +491,18 @@ class SubscriptionService
         }
     }
 
-    private function assertTrialEnd(CarbonInterface $endsAt, CarbonInterface $from): void
+    private function assertTrialEnd(CarbonInterface $endsAt, CarbonInterface $from, ?CarbonInterface $startsAt = null): void
     {
         if ($endsAt->lessThanOrEqualTo(now())) {
             throw ValidationException::withMessages(['ends_at' => 'La fecha de fin debe ser posterior a ahora.']);
+        }
+
+        if ($startsAt !== null && $endsAt->lessThanOrEqualTo($startsAt)) {
+            throw ValidationException::withMessages(['ends_at' => 'La fecha de fin debe ser posterior a la de inicio.']);
+        }
+
+        if ($startsAt !== null && $startsAt->greaterThan(now()->addDays(self::TRIAL_MAX_DAYS))) {
+            throw ValidationException::withMessages(['starts_at' => 'El inicio no puede estar a más de '.self::TRIAL_MAX_DAYS.' días: revisa la fecha.']);
         }
 
         if ($endsAt->greaterThan($from->copy()->addDays(self::TRIAL_MAX_DAYS))) {

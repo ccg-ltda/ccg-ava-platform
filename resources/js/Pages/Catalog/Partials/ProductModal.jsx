@@ -240,8 +240,8 @@ export default function ProductModal({ product, locations, categories, currency,
 
                     {locations.length > 0 && (
                         <fieldset>
-                            <legend className="text-sm font-medium text-ink">Sedes que lo ofrecen (opcional)</legend>
-                            <p className="mt-0.5 text-xs text-ink-muted">Si no marcas ninguna, el producto se ofrece en todas las sedes.</p>
+                            <legend className="text-sm font-medium text-ink">Sedes que lo ofrecen (obligatorio)</legend>
+                            <p className="mt-0.5 text-xs text-ink-muted">Marca al menos una sede activa. Es el mismo producto en todas; las existencias se llevan por sede.{editing && product?.needsLocation ? ' Este producto es anterior y no tenía sede: asígnalo a la que corresponda.' : ''}</p>
                             <div className="mt-2 grid gap-2 sm:grid-cols-2">
                                 {locations.map((location) => (
                                     <label key={location.id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-field px-3 py-2 text-sm text-ink has-checked:border-primary/50 has-checked:bg-primary-soft/40">

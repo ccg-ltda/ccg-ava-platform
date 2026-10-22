@@ -3,6 +3,7 @@ import ParticleBackground from '@/Components/Access/ParticleBackground';
 import ThemeToggle from '@/Components/Access/ThemeToggle';
 import ToastContainer from '@/Components/Access/ToastContainer';
 import LegalLinks from '@/Components/LegalLinks';
+import useBrand from '@/Hooks/useBrand';
 import SupportChat from '@/Components/SupportChat';
 
 /** Animated background shared by every Ava screen: grid, particle sphere and field connection lines. */
@@ -19,6 +20,8 @@ export function AvaBackground() {
 }
 
 function AccessShell({ children }) {
+    const brand = useBrand();
+
     return (
         <div className="ava">
             <AvaBackground />
@@ -33,7 +36,7 @@ function AccessShell({ children }) {
                                 <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
                             </svg>
                         </div>
-                        <h1>CCG Platform</h1>
+                        <h1>{brand}</h1>
                         <p>Secure Access Portal</p>
                     </div>
 

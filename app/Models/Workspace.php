@@ -133,6 +133,11 @@ class Workspace extends Model
         return $this->hasMany(Product::class);
     }
 
+    public function catalogReminders(): HasMany
+    {
+        return $this->hasMany(CatalogReminder::class);
+    }
+
     public function orders(): HasMany
     {
         return $this->hasMany(Order::class);

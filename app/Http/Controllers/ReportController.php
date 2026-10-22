@@ -2,14 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use App\Booking\Locations;
 use App\Http\Controllers\Concerns\ReadsSections;
 use App\Http\Requests\ReportFilterRequest;
+use App\Models\Workspace;
 use App\Orders\CommerceSchema;
 use App\Services\DashboardMetrics;
+use App\Services\LocationScope;
 use App\Services\ModuleAccess;
 use App\Services\OperationsMetrics;
 use App\Services\WorkspaceReport;
 use App\Services\WorkspaceScope;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -46,6 +50,10 @@ class ReportController extends Controller
         // Agenda, Pedidos and Clientes: only for the ACTIVE Workspace (never for "all" nor another one), only when its plan includes the module AND the role may read
         // that module (the figures include money and customers, so `view-dashboard` alone is not enough).
         $own = $target !== null && $target->is($active);
+        // The location filter of the operational figures (agenda, orders, inventory). A member limited to selected locations ALWAYS gets only theirs (without a
+        // filter: all of theirs; with one: that one, and only if it is theirs); anybody else gets the whole Workspace unless they choose a location. A foreign,
+        // unauthorized or unknown id is refused here, on the server, whatever the interface offered.
+        $where = $this->locationFilter($request, $active, $own);
         $has = fn (string $module, string $permission) => $own && in_array($module, $modules, true) && in_array($permission, $permissions, true);
         // Inventory belongs to the product catalog module and to `view-inventory`, and only exists once its migration is applied: without all three nothing of it is read.
         $ops = ['bookings' => $has('bookings', 'view-bookings'), 'orders' => $has('orders', 'view-orders'), 'customers' => $has('customers', 'view-customers'), 'inventory' => $has('product_catalog', 'view-inventory') && app(CommerceSchema::class)->inventoryReady()];
@@ -54,11 +62,12 @@ class ReportController extends Controller
             + array_merge($analytics, ['metrics' => $conversations ? $analytics['metrics'] : []])
             + [
                 'sources' => ['conversations' => $conversations, 'team' => $team] + $ops,
+                'locations' => $where['view'],
                 'operations' => [
-                    'bookings' => $ops['bookings'] ? $this->section('bookings', fn () => $operations->bookings($active, $period)) : null,
-                    'orders' => $ops['orders'] ? $this->section('orders', fn () => $operations->orders($active, $period)) : null,
+                    'bookings' => $ops['bookings'] ? $this->section('bookings', fn () => $operations->bookings($active, $period, $where['ids'])) : null,
+                    'orders' => $ops['orders'] ? $this->section('orders', fn () => $operations->orders($active, $period, $where['ids'])) : null,
                     'customers' => $ops['customers'] ? $this->section('customers', fn () => $operations->customers($active, $period)) : null,
-                    'inventory' => $ops['inventory'] ? $this->section('inventory', fn () => $operations->inventory($active, $period)) : null,
+                    'inventory' => $ops['inventory'] ? $this->section('inventory', fn () => $operations->inventory($active, $period, $where['ids'])) : null,
                 ],
                 'figures' => $conversations ? $this->section('figures', fn () => $metrics->comparison($target, $period)) : null,
                 'activity' => $conversations ? $this->section('activity', fn () => $metrics->series($target, $period, $settings)) : null,
@@ -72,5 +81,42 @@ class ReportController extends Controller
                     'workspace' => $target ? ['id' => $target->id, 'name' => $target->name, 'code' => $target->code] : null,
                 ],
             ]);
+    }
+
+    /**
+     * Which locations the operational reports are computed for, and what the page may offer.
+     *
+     * @return array{ids: ?list<int>, view: array{options: list<array{id: int, name: string, isActive: bool}>, selected: ?int, limited: bool, enabled: bool}}
+     */
+    private function locationFilter(ReportFilterRequest $request, Workspace $active, bool $own): array
+    {
+        $scope = app(LocationScope::class);
+        $enabled = $own && app(Locations::class)->schemaReady() && app(ModuleAccess::class)->allows($active, 'locations');
+        $none = ['ids' => null, 'view' => ['options' => [], 'selected' => null, 'limited' => false, 'enabled' => false]];
+
+        // Not the active Workspace's own figures (an administrator looking at "all" or at another one), or the Workspace does not use locations: nothing to filter.
+        if (! $enabled) {
+            return $none;
+        }
+
+        $allowed = $scope->allowedIds($active, $request->user()); // null = every location
+        $authorized = $active->locations()->orderBy('name')->get(['id', 'name', 'is_active'])->filter(fn ($location) => $allowed === null || in_array($location->id, $allowed, true))->values();
+        $requested = $request->locationFilter();
+
+        if ($requested !== null && ! $authorized->contains('id', $requested)) {
+            abort_if($allowed !== null, 403, 'No tienes acceso a esa sede.');
+
+            throw ValidationException::withMessages(['location' => 'Esa sede no existe en este Workspace.']);
+        }
+
+        return [
+            'ids' => $requested !== null ? [$requested] : ($allowed === null ? null : $authorized->pluck('id')->map(fn ($id) => (int) $id)->all()),
+            'view' => [
+                'options' => $authorized->map(fn ($location) => ['id' => (int) $location->id, 'name' => $location->name, 'isActive' => (bool) $location->is_active])->all(),
+                'selected' => $requested,
+                'limited' => $allowed !== null,
+                'enabled' => true,
+            ],
+        ];
     }
 }

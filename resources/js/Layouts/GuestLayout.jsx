@@ -1,5 +1,6 @@
 import Card from '@/Components/Card';
 import LegalLinks from '@/Components/LegalLinks';
+import useBrand from '@/Hooks/useBrand';
 import SupportChat from '@/Components/SupportChat';
 
 /**
@@ -8,9 +9,11 @@ import SupportChat from '@/Components/SupportChat';
  * `wide` is for long reading (legal texts).
  */
 export default function GuestLayout({ title, children, wide = false }) {
+    const brand = useBrand();
+
     return (
         <div className="flex min-h-screen min-h-dvh flex-col items-center justify-center bg-canvas px-4 py-10 font-sans text-ink">
-            <p className="text-sm font-extrabold tracking-[0.2em] text-primary uppercase">CCG Avachat</p>
+            <p className="max-w-full text-center text-sm font-extrabold tracking-[0.2em] break-words text-primary uppercase">{brand}</p>
 
             <main className={'mt-6 w-full ' + (wide ? 'max-w-3xl' : 'max-w-md')}>
                 <Card className="w-full p-6 sm:p-8">

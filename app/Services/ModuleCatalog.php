@@ -85,6 +85,27 @@ class ModuleCatalog
         $category->update(['is_active' => $active]);
     }
 
+    /**
+     * Shows or hides a solution in the PUBLIC offer. Hiding it deletes nothing and changes nothing for Workspaces, subscriptions or historical plans: it only
+     * stops being offered to new customers. A solution that is not active can not be made public. Audited by the model.
+     */
+    public function setCategoryPublic(ModuleCategory $category, bool $public): void
+    {
+        if (! ModuleCategory::visibilityReady()) {
+            throw ValidationException::withMessages(['category' => 'La visibilidad pública todavía no está disponible: falta aplicar la migración pendiente.']);
+        }
+
+        if ($public && ! $category->is_active) {
+            throw ValidationException::withMessages(['category' => 'Activa la solución antes de hacerla pública.']);
+        }
+
+        if (! $category->isSolution()) {
+            throw ValidationException::withMessages(['category' => 'Esta categoría agrupa capacidades compartidas: no es una solución comercial y no se ofrece públicamente.']);
+        }
+
+        $category->update(['is_public' => $public]);
+    }
+
     // --- modules ---------------------------------------------------------------------------------------------
 
     /** @param  array{name: string, description?: ?string, module_category_id: int}  $data */
@@ -236,7 +257,7 @@ class ModuleCatalog
         $inPlan = $this->access->baseKeys($workspace, $plan, false); // what its contract names: the frozen conditions, or the plan for a historical one
         $overrides = WorkspaceModuleOverride::where('workspace_id', $workspace->id)->pluck('mode', 'module_id');
         $effective = $this->access->keys($workspace);
-        $subscription = $this->access->subscription($workspace);
+        $subscription = $this->access->subscriptionRow($workspace); // as it is, a scheduled trial included (the administration must see it)
 
         return [
             'plan' => $plan ? [
@@ -258,7 +279,7 @@ class ModuleCatalog
                 'trial' => Subscription::termsReady() && $subscription->trial_ends_at ? [
                     'startsAt' => $subscription->trial_starts_at?->toIso8601String(), 'endsAt' => $subscription->trial_ends_at->toIso8601String(), 'reason' => $subscription->trial_reason,
                     'by' => $subscription->trial_granted_by ? User::whereKey($subscription->trial_granted_by)->value('name') : null,
-                    'active' => $subscription->status === Subscription::TRIALING, 'expired' => $subscription->trialExpired(),
+                    'active' => $subscription->status === Subscription::TRIALING, 'scheduled' => $subscription->status === Subscription::SCHEDULED, 'expired' => $subscription->trialExpired(),
                 ] : null,
             ] : null,
             'isActive' => $workspace->is_active,
@@ -343,8 +364,45 @@ class ModuleCatalog
         return collect($overrides)->map(fn (string $mode, int $id) => ($mode === WorkspaceModuleOverride::GRANT ? '+ ' : '− ').($names[$id] ?? $id))->sort()->implode(', ');
     }
 
-    /** Assigns a plan to a client Workspace. The administrative Workspace takes no commercial restrictions. */
-    public function assignPlan(Workspace $workspace, Plan $plan): void
+    /**
+     * The commercial solution (module category id) a client Workspace belongs to, or null when it has none identifiable: its explicit plan decides, and a
+     * trial scheduled for later reserves the solution of ITS plan. A plan without a solution (the default plan, a custom one) fixes nothing.
+     */
+    public function solutionOf(Workspace $workspace): ?int
+    {
+        $planSolution = $workspace->plan_id ? Plan::whereKey($workspace->plan_id)->value('module_category_id') : null;
+
+        if ($planSolution !== null) {
+            return (int) $planSolution;
+        }
+
+        if (! Subscription::termsReady()) {
+            return null;
+        }
+
+        $scheduled = Subscription::where('workspace_id', $workspace->id)->where('status', Subscription::SCHEDULED)->value('plan_id');
+        $reserved = $scheduled ? Plan::whereKey($scheduled)->value('module_category_id') : null;
+
+        return $reserved !== null ? (int) $reserved : null;
+    }
+
+    /**
+     * One commercial solution per Workspace: a Workspace that already has one only takes plans of that same solution (changing plan inside it is fine).
+     * Historical or ambiguous Workspaces (no identifiable solution) are never reassigned by this check.
+     */
+    public function assertSameSolution(Workspace $workspace, Plan $plan): void
+    {
+        $current = $this->solutionOf($workspace);
+
+        if ($current !== null && (int) $plan->module_category_id !== $current) {
+            $name = ModuleCategory::whereKey($current)->value('name');
+
+            throw ValidationException::withMessages(['plan_id' => "Este Workspace ya pertenece a la solución «{$name}»: solo puede recibir planes de esa solución."]);
+        }
+    }
+
+    /** Every reason a plan can NOT be assigned to this Workspace (inactive, incomplete, another solution); throws the first one. Changes nothing. */
+    public function assertAssignable(Workspace $workspace, Plan $plan): void
     {
         if ($workspace->isAdministrative()) {
             throw ValidationException::withMessages(['workspace_id' => 'El Workspace administrativo de Ava Platform no tiene plan: siempre dispone de todos los módulos.']);
@@ -363,6 +421,13 @@ class ModuleCatalog
             throw ValidationException::withMessages(['plan_id' => "El plan «{$plan->name}» está incompleto y no se puede asignar: {$detail}. Complétalo en Planes."]);
         }
 
+        $this->assertSameSolution($workspace, $plan);
+    }
+
+    /** Assigns a plan to a client Workspace. The administrative Workspace takes no commercial restrictions. */
+    public function assignPlan(Workspace $workspace, Plan $plan): void
+    {
+        $this->assertAssignable($workspace, $plan);
         $workspace->update(['plan_id' => $plan->id]);
     }
 
@@ -416,6 +481,8 @@ class ModuleCatalog
                 'name' => $category->name,
                 'description' => $category->description,
                 'isActive' => $category->is_active,
+                'isSolution' => $category->isSolution(),
+                'isPublic' => ModuleCategory::visibilityReady() ? (bool) $category->is_public : null,
                 'modules' => $category->modules->map(fn (Module $module) => [
                     'id' => $module->id,
                     'key' => $module->key,

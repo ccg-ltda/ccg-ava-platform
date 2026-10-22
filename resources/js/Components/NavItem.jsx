@@ -13,10 +13,10 @@ export default function NavItem({ item, active, onNavigate }) {
             onClick={onNavigate}
             title={item.label}
             aria-current={active ? 'page' : undefined}
-            className={`flex items-center gap-3 rounded-full px-3 py-2.5 text-sm font-semibold transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white md:justify-center lg:justify-start ${state}`}
+            className={`flex items-center gap-3 rounded-full px-3 py-2.5 lg:group-data-[collapsed=true]/side:justify-center text-sm font-semibold transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white md:justify-center lg:justify-start ${state}`}
         >
             <Icon className="size-5 shrink-0" aria-hidden="true" />
-            <span className="md:hidden lg:inline">{item.label}</span>
+            <span className="md:sr-only lg:not-sr-only lg:group-data-[collapsed=true]/side:sr-only">{item.label}</span>
         </Link>
     );
 }

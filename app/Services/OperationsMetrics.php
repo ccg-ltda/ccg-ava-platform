@@ -14,6 +14,11 @@ use Illuminate\Support\Facades\DB;
  * Like DashboardMetrics it has no presentation and no permission checks: the controller decides who may ask and passes ONE Workspace (the one
  * WorkspaceScope resolved), and every query starts from it, so a figure can never include another Workspace. A count of zero is a real zero; a figure that
  * cannot be computed honestly (money in two currencies, a price nobody recorded) is left out or flagged, never invented.
+ *
+ * Location filter (`$locationIds`): null = no filter (the Workspace as a whole, exactly as before); a list = ONLY those locations, applied inside every query, the
+ * totals, the rankings, the second queries and the counts (never to the rows after the totals were computed). The controller decides which locations a member may
+ * ask for and passes the list; here an empty list means no location at all. Records of no location (history before the locations existed) belong to no
+ * location: they appear only when no filter is applied, and are never attributed to one.
  */
 class OperationsMetrics
 {
@@ -23,9 +28,9 @@ class OperationsMetrics
      *
      * @return array<string, mixed>
      */
-    public function bookings(Workspace $workspace, ReportPeriod $period): array
+    public function bookings(Workspace $workspace, ReportPeriod $period, ?array $locationIds = null): array
     {
-        $inPeriod = fn () => Appointment::query()->where('workspace_id', $workspace->id)->whereBetween('starts_at', [$period->from, $period->to]);
+        $inPeriod = fn () => Appointment::query()->where('workspace_id', $workspace->id)->whereBetween('starts_at', [$period->from, $period->to])->when($locationIds !== null, fn ($q) => $q->whereIn('location_id', $locationIds));
         $byStatus = $inPeriod()->selectRaw('status, count(*) as total')->groupBy('status')->pluck('total', 'status');
         $completed = $inPeriod()->where('status', Appointment::COMPLETED);
         $priced = (clone $completed)->whereNotNull('price_amount');
@@ -36,7 +41,7 @@ class OperationsMetrics
                 'completed' => (int) ($byStatus[Appointment::COMPLETED] ?? 0),
                 'cancelled' => (int) ($byStatus[Appointment::CANCELLED] ?? 0),
                 'noShow' => (int) ($byStatus[Appointment::NO_SHOW] ?? 0),
-                'upcoming' => Appointment::query()->where('workspace_id', $workspace->id)->where('starts_at', '>', $period->to)->whereIn('status', Appointment::BLOCKING)->count(),
+                'upcoming' => Appointment::query()->where('workspace_id', $workspace->id)->where('starts_at', '>', $period->to)->whereIn('status', Appointment::BLOCKING)->when($locationIds !== null, fn ($q) => $q->whereIn('location_id', $locationIds))->count(),
                 'recordedValue' => round((float) (clone $priced)->sum('price_amount'), 2),
                 'withoutPrice' => (clone $completed)->whereNull('price_amount')->count(),
                 'currency' => (clone $priced)->value('price_currency') ?? $workspace->settingsOrDefault()->currency,
@@ -55,9 +60,9 @@ class OperationsMetrics
      *
      * @return array<string, mixed>
      */
-    public function orders(Workspace $workspace, ReportPeriod $period): array
+    public function orders(Workspace $workspace, ReportPeriod $period, ?array $locationIds = null): array
     {
-        $inPeriod = fn () => Order::query()->where('workspace_id', $workspace->id)->whereBetween('created_at', [$period->from, $period->to]);
+        $inPeriod = fn () => Order::query()->where('workspace_id', $workspace->id)->whereBetween('created_at', [$period->from, $period->to])->when($locationIds !== null, fn ($q) => $q->whereIn('location_id', $locationIds));
         $byStatus = $inPeriod()->selectRaw('status, count(*) as total')->groupBy('status')->pluck('total', 'status');
         $sold = fn () => $inPeriod()->where('status', '!=', 'cancelled');
         $currencies = $sold()->distinct()->pluck('currency');
@@ -81,7 +86,7 @@ class OperationsMetrics
             // Units sold of each product (what the order kept: its name at that moment), over the orders that were not cancelled.
             'topProducts' => DB::table('order_lines')
                 ->join('orders', fn ($join) => $join->on('orders.id', '=', 'order_lines.order_id')->on('orders.workspace_id', '=', 'order_lines.workspace_id'))
-                ->where('orders.workspace_id', $workspace->id)->where('orders.status', '!=', 'cancelled')->whereBetween('orders.created_at', [$period->from, $period->to])
+                ->where('orders.workspace_id', $workspace->id)->where('orders.status', '!=', 'cancelled')->whereBetween('orders.created_at', [$period->from, $period->to])->when($locationIds !== null, fn ($q) => $q->whereIn('orders.location_id', $locationIds))
                 ->selectRaw('order_lines.product_name as name, sum(order_lines.quantity) as units')->groupBy('order_lines.product_name')->orderByDesc('units')->orderBy('name')->limit(6)->get()
                 ->map(fn ($row) => ['key' => $row->name, 'label' => $row->name, 'value' => (int) $row->units])->all(),
         ];
@@ -94,24 +99,30 @@ class OperationsMetrics
      *
      * @return array<string, mixed>
      */
-    public function inventory(Workspace $workspace, ReportPeriod $period): array
+    public function inventory(Workspace $workspace, ReportPeriod $period, ?array $locationIds = null): array
     {
         $stocks = fn () => DB::table('inventory_stocks')->join('products', fn ($join) => $join->on('products.id', '=', 'inventory_stocks.product_id')->on('products.workspace_id', '=', 'inventory_stocks.workspace_id'))
-            ->where('inventory_stocks.workspace_id', $workspace->id)->where('products.is_active', true)->where('products.tracks_inventory', true);
+            ->where('inventory_stocks.workspace_id', $workspace->id)->where('products.is_active', true)->where('products.tracks_inventory', true)
+            ->when($locationIds !== null, fn ($q) => $q->whereIn('inventory_stocks.location_id', $locationIds));
         $locations = $workspace->locations()->pluck('name', 'id');
         $low = fn ($q) => $q->where('inventory_stocks.quantity', '>', 0)->where('inventory_stocks.min_quantity', '>', 0)->whereColumn('inventory_stocks.quantity', '<=', 'inventory_stocks.min_quantity');
-        $moved = fn () => DB::table('inventory_movements')->where('workspace_id', $workspace->id)->whereBetween('created_at', [$period->from, $period->to]);
+        $moved = fn () => DB::table('inventory_movements')->where('workspace_id', $workspace->id)->whereBetween('created_at', [$period->from, $period->to])->when($locationIds !== null, fn ($q) => $q->whereIn('location_id', $locationIds));
+        // The tracked products the figures are about: all of them without a filter; with one, those that have a stock row in the chosen locations or are explicitly
+        // offered there (a product offered nowhere is attributed to no location, so it only counts through its stock rows).
+        $tracked = fn () => $workspace->products()->where('is_active', true)->where('tracks_inventory', true)->when($locationIds !== null, fn ($q) => $q->where(fn ($w) => $w
+            ->whereExists(fn ($s) => $s->select(DB::raw(1))->from('inventory_stocks')->whereColumn('inventory_stocks.product_id', 'products.id')->whereIn('inventory_stocks.location_id', $locationIds))
+            ->orWhereExists(fn ($s) => $s->select(DB::raw(1))->from('location_product')->whereColumn('location_product.product_id', 'products.id')->whereIn('location_product.location_id', $locationIds))));
         $sumOf = fn (string $type) => (int) $moved()->where('type', $type)->sum('quantity_change');
 
         return [
             'kpis' => [
-                'tracked' => (int) $workspace->products()->where('is_active', true)->where('tracks_inventory', true)->count(),
+                'tracked' => (int) $tracked()->count(),
                 'units' => (int) $stocks()->sum('inventory_stocks.quantity'),
                 // A product is low or out PER LOCATION: the count is of stocks (product in a location), so two locations of one product count twice.
                 'low' => (int) $low($stocks())->count(),
                 'out' => (int) $stocks()->where('inventory_stocks.quantity', '<=', 0)->count(),
                 // Control on but not one stock row yet: pending to configure, neither low nor out.
-                'unconfigured' => (int) $workspace->products()->where('is_active', true)->where('tracks_inventory', true)->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('inventory_stocks')->whereColumn('inventory_stocks.product_id', 'products.id'))->count(),
+                'unconfigured' => (int) $tracked()->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('inventory_stocks')->whereColumn('inventory_stocks.product_id', 'products.id')->when($locationIds !== null, fn ($w) => $w->whereIn('inventory_stocks.location_id', $locationIds)))->count(),
                 'entries' => $sumOf('entry'),
                 'sold' => -$sumOf('sale'),
             ],

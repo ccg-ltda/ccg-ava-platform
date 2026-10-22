@@ -12,7 +12,6 @@ import SegmentedControl from '@/Components/SegmentedControl';
 import Select from '@/Components/Select';
 import TextInput from '@/Components/TextInput';
 import Toggle from '@/Components/Toggle';
-import NotificationSettings from './NotificationSettings';
 
 /** The booking rules of the Workspace: which agenda, how far ahead, how to cancel, what to ask and the open booking page. */
 export default function SettingsPanel({ settings, capabilities, canManage }) {
@@ -123,7 +122,6 @@ export default function SettingsPanel({ settings, capabilities, canManage }) {
                 </div>
             )}
         </form>
-        <NotificationSettings notifications={settings.notifications} canManage={canManage} />
         </div>
     );
 }

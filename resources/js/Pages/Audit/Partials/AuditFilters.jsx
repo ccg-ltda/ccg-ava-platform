@@ -1,4 +1,5 @@
 import { FilterX } from 'lucide-react';
+import DateField from '@/Components/DateField';
 import { useEffect, useRef, useState } from 'react';
 import Card from '@/Components/Card';
 import InputLabel from '@/Components/InputLabel';
@@ -45,14 +46,8 @@ export default function AuditFilters({ filters, options, scope, onChange, onClea
                     <SearchInput value={search} onChange={setSearch} placeholder="Buscar por usuario, registro, descripción o IP" label="Buscar en la auditoría" />
                 </div>
 
-                <div className="lg:col-span-1">
-                    <InputLabel htmlFor="audit_from" value="Desde" />
-                    <TextInput id="audit_from" type="date" className="mt-1" value={value('from')} max={filters.to ?? undefined} onChange={(e) => onChange({ from: e.target.value })} />
-                </div>
-                <div className="lg:col-span-1">
-                    <InputLabel htmlFor="audit_to" value="Hasta" />
-                    <TextInput id="audit_to" type="date" className="mt-1" value={value('to')} min={filters.from ?? undefined} onChange={(e) => onChange({ to: e.target.value })} />
-                </div>
+                <DateField id="audit_from" label="Desde" value={value('from')} max={filters.to ?? undefined} onChange={(from) => onChange({ from })} className="lg:col-span-1" />
+                <DateField id="audit_to" label="Hasta" value={value('to')} min={filters.from ?? undefined} onChange={(to) => onChange({ to })} className="lg:col-span-1" />
                 <div className="lg:col-span-2">
                     <InputLabel htmlFor="audit_user" value="Usuario" />
                     <Select id="audit_user" className="mt-1" value={value('user') === ALL ? ALL : String(filters.user)} onChange={(user) => onChange({ user })} options={withAll('Todos los usuarios', options.users)} />

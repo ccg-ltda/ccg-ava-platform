@@ -19,6 +19,9 @@ ScheduledCommandMonitor::watch(Schedule::command('executions:recover')->everyMin
 // Plans and queues the confirmations and reminders of appointments (idempotent; needs the queue worker to deliver what it queues).
 ScheduledCommandMonitor::watch(Schedule::command('appointments:notify')->everyMinute()->withoutOverlapping()->onOneServer(), 'appointments-notify');
 
+// Queues the due reminders of the Catálogo (emails to the person who wrote them) and recovers the stuck ones. Idempotent; needs the queue worker to deliver them.
+ScheduledCommandMonitor::watch(Schedule::command('catalog:send-reminders')->everyMinute()->withoutOverlapping()->onOneServer(), 'catalog-reminders');
+
 // Settles the traces of assistant tool calls that never recorded an outcome (see AgentToolTrace::reconcile; a no-op until its table exists).
 ScheduledCommandMonitor::watch(Schedule::command('agent:tools:reconcile')->everyFiveMinutes()->withoutOverlapping()->onOneServer(), 'agent-tools-reconcile');
 

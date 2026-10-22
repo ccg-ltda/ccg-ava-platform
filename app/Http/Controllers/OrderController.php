@@ -13,9 +13,11 @@ use App\Orders\OrderException;
 use App\Orders\OrderNotifier;
 use App\Orders\OrderService;
 use App\Services\ListPagination;
+use App\Services\LocationScope;
 use App\Services\ModuleAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -47,7 +49,9 @@ class OrderController extends Controller
 
         $search = ltrim($filters['search'], '#');
         $like = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($filters['search'])).'%';
+        $allowed = app(LocationScope::class)->allowedIds($workspace, $request->user()); // a limited member sees only the orders of their locations
         $query = $workspace->orders()
+            ->when($allowed !== null, fn ($q) => $q->whereIn('location_id', $allowed))
             ->when($filters['search'] !== '', fn ($q) => $q->where(fn ($w) => $w->whereRaw("lower(customer_name) like ? escape '!'", [$like])->when(ctype_digit($search), fn ($n) => $n->orWhere('number', (int) $search))))
             ->when($filters['status'] !== '', fn ($q) => $q->where('status', $filters['status']))
             ->when($filters['method'] !== '', fn ($q) => $q->where('delivery_method', $filters['method']))
@@ -59,7 +63,7 @@ class OrderController extends Controller
             'orders' => ['data' => $page->getCollection()->map(fn (Order $order) => $this->summary($order))->values()->all(), 'meta' => ListPagination::meta($page)],
             'filters' => $filters + ['perPage' => ListPagination::size($request, 'orders')],
             'perPageOptions' => ListPagination::OPTIONS,
-            'counts' => $workspace->orders()->selectRaw('status, count(*) as orders_count')->groupBy('status')->pluck('orders_count', 'status')->map(fn ($count) => (int) $count)->all(),
+            'counts' => $workspace->orders()->when($allowed !== null, fn ($q) => $q->whereIn('location_id', $allowed))->selectRaw('status, count(*) as orders_count')->groupBy('status')->pluck('orders_count', 'status')->map(fn ($count) => (int) $count)->all(),
             'form' => in_array('create-orders', $request->attributes->get('workspace_permissions', []), true) ? $this->formOptions($request, $workspace) : null,
             'canDetail' => in_array('view-order-details', $request->attributes->get('workspace_permissions', []), true),
         ]);
@@ -70,6 +74,7 @@ class OrderController extends Controller
         $workspace = $request->attributes->get('workspace');
         abort_unless($this->schema->ready(), 404);
         $model = $workspace->orders()->with(['lines', 'statusChanges.user:id,name'])->findOrFail($order);
+        app(LocationScope::class)->assertAllows($workspace, $request->user(), $model->location_id);
         $permissions = $request->attributes->get('workspace_permissions', []);
 
         return Inertia::render('Orders/Show', [
@@ -107,6 +112,7 @@ class OrderController extends Controller
     public function update(UpdateOrderRequest $request, int $order): RedirectResponse
     {
         $model = $request->attributes->get('workspace')->orders()->findOrFail($order);
+        app(LocationScope::class)->assertAllows($request->attributes->get('workspace'), $request->user(), $model->location_id);
 
         try {
             $this->orders->updateDetails($model, $request->validated());
@@ -122,6 +128,7 @@ class OrderController extends Controller
     {
         $data = $request->validate(['status' => ['required', 'string', 'in:'.implode(',', array_keys(config('orders.statuses')))], 'reason' => ['nullable', 'required_if:status,cancelled', 'string', 'max:'.config('orders.limits.reason')]], [], ['reason' => 'motivo']);
         $model = $request->attributes->get('workspace')->orders()->findOrFail($order);
+        app(LocationScope::class)->assertAllows($request->attributes->get('workspace'), $request->user(), $model->location_id);
         $permissions = $request->attributes->get('workspace_permissions', []);
         $needed = $data['status'] === 'cancelled' ? 'cancel-orders' : 'process-orders';
 
@@ -158,7 +165,7 @@ class OrderController extends Controller
         return [
             // A product with stock control carries what is on hand in each location (key = the location id, `general` for the general stock), so the form can say
             // «sin existencias aquí» before the server refuses it; a product without control has no `stock` and is always offered.
-            'products' => $workspace->products()->with(app(CommerceSchema::class)->inventoryReady() ? ['locations:id', 'stocks'] : ['locations:id'])->where('is_active', true)->orderBy('name')->limit(500)->get()
+            'products' => $workspace->products()->when(($scoped = app(LocationScope::class)->allowedIds($workspace, $request->user())) !== null, fn ($q) => $q->whereIn('id', DB::table('location_product')->whereIn('location_id', $scoped)->select('product_id')))->with(app(CommerceSchema::class)->inventoryReady() ? ['locations:id', 'stocks'] : ['locations:id'])->where('is_active', true)->orderBy('name')->limit(500)->get()
                 ->map(fn ($product) => ['id' => $product->id, 'sku' => $product->sku, 'name' => $product->name, 'price' => (float) $product->price, 'locationIds' => $product->locations->pluck('id')->all(),
                     'stock' => app(CommerceSchema::class)->inventoryReady() && $product->tracks_inventory ? $product->stocks->mapWithKeys(fn ($stock) => [($stock->location_id ?? 'general') => $stock->quantity])->all() : null])->all(),
             'locations' => $this->locations->active($workspace)->map(fn ($location) => ['id' => $location->id, 'name' => $location->name])->values()->all(),

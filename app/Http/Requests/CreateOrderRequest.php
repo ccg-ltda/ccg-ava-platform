@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Orders\CommerceSchema;
 use App\Rules\InternationalPhone;
+use App\Services\LocationScope;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -40,12 +41,26 @@ class CreateOrderRequest extends FormRequest
             'delivery_reference' => ['nullable', 'string', 'max:255'],
             'recipient_name' => ['nullable', 'string', 'max:120'],
             'recipient_phone' => ['nullable', 'string', 'max:32', new InternationalPhone],
-            'location_id' => ['nullable', 'integer', Rule::exists('locations', 'id')->where('workspace_id', $workspace->id)],
+            'location_id' => $this->locationRules($workspace),
             'notes' => ['nullable', 'string', 'max:'.$limits['notes']],
             'lines' => ['required', 'array', 'min:1', 'max:'.$limits['lines']],
             'lines.*.product_id' => ['required', 'integer', Rule::exists('products', 'id')->where('workspace_id', $workspace->id)],
             'lines.*.quantity' => ['required', 'integer', 'min:1', 'max:'.$limits['quantity']],
         ];
+    }
+
+    /**
+     * The location of the order. A member limited to selected locations MUST name one of theirs (an order of no location, or of another one, is not theirs);
+     * anybody else may leave it empty exactly as before.
+     *
+     * @return list<mixed>
+     */
+    private function locationRules($workspace): array
+    {
+        $allowed = app(LocationScope::class)->allowedIds($workspace, $this->user());
+        $rules = ['integer', Rule::exists('locations', 'id')->where('workspace_id', $workspace->id)];
+
+        return $allowed === null ? ['nullable', ...$rules] : ['required', ...$rules, Rule::in($allowed)];
     }
 
     public function attributes(): array

@@ -1,4 +1,4 @@
-Tu código de verificación de Ava Platform es:
+Tu código de verificación de {{ config('branding.name') }} es:
 
 {{ $code }}
 

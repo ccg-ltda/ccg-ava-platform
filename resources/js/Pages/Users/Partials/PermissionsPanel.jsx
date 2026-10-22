@@ -1,4 +1,5 @@
 import { Check, Minus } from 'lucide-react';
+import RoleLabel from '@/Components/RoleLabel';
 import { useEffect, useRef, useState } from 'react';
 import Badge from '@/Components/Badge';
 import Card from '@/Components/Card';
@@ -7,7 +8,6 @@ import Pagination from '@/Components/Pagination';
 import SearchInput from '@/Components/SearchInput';
 import Select from '@/Components/Select';
 import { TableWrap, Td, Th } from '@/Components/Table';
-import { roleTone } from '@/config/roles';
 import usePagedList from '@/Hooks/usePagedList';
 
 /**
@@ -72,7 +72,7 @@ export default function PermissionsPanel({ roles, permissions, permissionCatalog
                             <Th>Permiso</Th>
                             {roles.map((role) => (
                                 <Th key={role.id} className="text-center">
-                                    <Badge tone={roleTone(role.name)}>{role.name}</Badge>
+                                    <RoleLabel role={role.name} />
                                 </Th>
                             ))}
                         </tr>

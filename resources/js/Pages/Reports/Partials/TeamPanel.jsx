@@ -1,12 +1,11 @@
 import { UserPlus, Users } from 'lucide-react';
-import Badge from '@/Components/Badge';
+import RoleLabel from '@/Components/RoleLabel';
 import Card from '@/Components/Card';
 import ChartCard from '@/Components/Charts/ChartCard';
 import ChartEmpty from '@/Components/Charts/ChartEmpty';
 import RankingList from '@/Components/Charts/RankingList';
 import TimeChart from '@/Components/Charts/TimeChart';
 import EmptyState from '@/Components/EmptyState';
-import { roleTone } from '@/config/roles';
 
 const initials = (name = '') =>
     name
@@ -89,7 +88,7 @@ export default function TeamPanel({ stats, roleBreakdown, recentUsers, teamGrowt
                     {roleBreakdown.length === 0 ? (
                         <ChartEmpty type="ranking" icon={Users} title="Todavía no hay usuarios" height={200} />
                     ) : (
-                        <RankingList share items={roleBreakdown.map((row) => ({ key: row.role, label: row.role, value: row.count }))} renderLabel={(item) => <Badge tone={roleTone(item.label)}>{item.label}</Badge>} />
+                        <RankingList share items={roleBreakdown.map((row) => ({ key: row.role, label: row.role, value: row.count }))} renderLabel={(item) => <RoleLabel role={item.label} />} />
                     )}
                 </ChartCard>
             </div>
@@ -110,7 +109,7 @@ export default function TeamPanel({ stats, roleBreakdown, recentUsers, teamGrowt
                                     <p className="truncate text-xs text-ink-muted">{user.workspace ? `${user.email} · ${user.workspace}` : user.email}</p>
                                 </div>
                                 <div className="flex shrink-0 flex-col items-end gap-1">
-                                    <Badge tone={roleTone(user.role)}>{user.role}</Badge>
+                                    <RoleLabel role={user.role} />
                                     <span className="text-[11px] text-ink-muted">{user.createdAt}</span>
                                 </div>
                             </li>

@@ -356,6 +356,7 @@ class PlansTest extends TestCase
         $this->platformAdmin();
         $module = Module::where('key', 'audit')->firstOrFail();
         $health = ModuleCategory::where('key', 'health')->firstOrFail();
+        $health->update(['is_public' => true]);
 
         $this->put("/modules/{$module->id}", ['name' => 'Bitácora', 'description' => 'x', 'module_category_id' => $health->id, 'key' => 'hacked'])->assertSessionHasNoErrors();
 

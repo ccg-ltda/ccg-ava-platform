@@ -1,4 +1,5 @@
 import { router, useForm } from '@inertiajs/react';
+import RoleLabel from '@/Components/RoleLabel';
 import { Camera, CheckCircle2, KeyRound, MailCheck, MailWarning, Megaphone, Pencil, Trash2, UserCheck } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Avatar from '@/Components/Avatar';
@@ -9,7 +10,6 @@ import InputError from '@/Components/InputError';
 import Modal from '@/Components/Modal';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
-import { roleTone } from '@/config/roles';
 
 /** A small status of the account, with an icon and plain words (never colour alone). */
 function Chip({ icon: Icon, children, tone = 'neutral' }) {
@@ -97,7 +97,7 @@ export default function ProfileHero({ account, photoUrl, photoRules, marketing, 
                     <h2 className="truncate text-xl font-bold text-ink">{account.name}</h2>
                     <p className="truncate text-sm text-ink-muted">{account.email}</p>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
-                        {account.role && <Badge tone={roleTone(account.role)}>{account.role}</Badge>}
+                        {account.role && <RoleLabel role={account.role} />}
                         <span className="text-xs text-ink-muted">en {account.workspace}</span>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2" aria-label="Estado de la cuenta">

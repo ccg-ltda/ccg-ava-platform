@@ -8,6 +8,7 @@ use App\Models\Module;
 use App\Models\ModuleCategory;
 use App\Models\Organization;
 use App\Models\Plan;
+use App\Models\PlanLimit;
 use App\Models\SignupRequest;
 use App\Models\SignupVerification;
 use App\Models\Subscription;
@@ -26,6 +27,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 use Inertia\Testing\AssertableInertia;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -56,6 +58,7 @@ class PublicSignupTest extends TestCase
         $this->seedRoleCatalog();
         $this->seed(ModuleCatalogSeeder::class);
         $this->health = ModuleCategory::where('key', 'health')->firstOrFail();
+        $this->health->update(['is_public' => true]); // a solution is offered publicly only when an administrator made it public
 
         // The commercial offer is DATA (Planes), exactly as an administrator would configure it.
         $this->starter = $this->plan('Starter', ['dashboard', 'reports'], 4990000, 'monthly');
@@ -179,14 +182,80 @@ class PublicSignupTest extends TestCase
         $this->get('/registro/bienvenida')->assertRedirect(route('signup.index')); // never a success screen before the payment
     }
 
+    /** @return array<string, array{0: ?string}> */
+    public static function taxIds(): array
+    {
+        return ['blank' => [null], 'foreign with letters and separators' => ['GB 123 4567 89'], 'colombian' => ['900.123.456-7']];
+    }
+
+    #[DataProvider('taxIds')]
+    public function test_the_whole_journey_works_with_an_optional_tax_id_up_to_the_pending_payment(?string $taxId): void
+    {
+        $this->verified();
+        $this->get('/registro')->assertInertia(fn ($page) => $page->where('step', 'company'));
+
+        // Step 2 -> 3: no HTTP exception, the draft keeps what was typed (tax id as typed, or null) and the solutions come from the public offer.
+        $this->post('/registro/empresa', $this->company(['tax_id' => $taxId]))->assertSessionHasNoErrors()->assertRedirect(route('signup.index'));
+        $this->get('/registro')->assertOk()->assertInertia(fn ($page) => $page->where('step', 'solution')->where('draft.taxId', $taxId === '900.123.456-7' ? Nit::normalize($taxId) ?? $taxId : $taxId)->has('solutions', 2));
+        $this->assertSame(1, Organization::where('tax_id', $taxId)->count() + 1, 'nothing definitive: no Organization was created');
+
+        $this->post('/registro/solucion', ['solution' => (string) $this->health->id])->assertSessionHasNoErrors();
+        $this->get('/registro')->assertInertia(fn ($page) => $page->where('step', 'plan')->has('plans', 2));
+        $this->post('/registro/plan', ['plan_id' => $this->starter->id])->assertSessionHasNoErrors();
+        $this->get('/registro')->assertInertia(fn ($page) => $page->where('step', 'summary')->where('selected.name', 'Starter')->where('selected.snapshot.amount', 49900)->where('selected.snapshot.period', 'monthly'));
+
+        $this->post('/registro/contratar', ['accepted' => $this->accepted()])->assertRedirect(route('signup.index'));
+        // The plan changes after the customer accepted: what was shown and accepted is what is kept (a change BEFORE confirming stops the contract, see below).
+        $this->starter->update(['price_monthly_cents' => 99900000]);
+        $request = SignupRequest::where('email', self::EMAIL)->firstOrFail();
+
+        $this->assertSame([SignupRequest::AWAITING_PAYMENT, 4990000, 'monthly', $taxId === '900.123.456-7' ? (Nit::normalize($taxId) ?? $taxId) : $taxId], [$request->status, $request->price_cents, $request->billing_period, $request->tax_id]);
+        $this->assertSame(['dashboard', 'reports'], collect($request->modules_snapshot)->sort()->values()->all());
+        $this->assertEqualsCanonicalizing($this->accepted(), array_keys($request->accepted_documents));
+        $this->get('/registro')->assertInertia(fn ($page) => $page->where('step', 'payment')->where('payment.status', 'awaiting_payment')->where('payment.available', false));
+        $this->assertSame([0, 0, 0], [Workspace::where('code', 'CLINICA-CENTRAL')->count(), User::where('email', self::EMAIL)->count(), Subscription::count()], 'no payment was simulated: nothing is active');
+    }
+
+    public function test_a_manipulated_request_cannot_choose_a_plan_that_is_not_public_active_or_of_the_selected_solution(): void
+    {
+        $other = ModuleCategory::where('key', '!=', 'health')->firstOrFail();
+        $private = $this->plan('Privado', ['dashboard'], 1000000, 'monthly', false);
+        $inactive = $this->plan('Inactivo', ['dashboard'], 1000000, 'monthly');
+        $inactive->update(['is_active' => false]);
+        $foreign = $this->plan('Ajeno', ['dashboard'], 1000000, 'monthly');
+        $foreign->update(['module_category_id' => $other->id]);
+
+        $this->toSummary();
+        $this->post('/registro/atras', ['to' => 'plan']);
+
+        foreach ([$private, $inactive, $foreign] as $plan) {
+            $this->post('/registro/plan', ['plan_id' => $plan->id])->assertSessionHasErrors();
+            $this->assertNotSame($plan->id, SignupRequest::firstOrFail()->plan_id);
+        }
+
+        $this->post('/registro/solucion', ['solution' => '999999'])->assertSessionHasErrors('solution');
+    }
+
+    public function test_a_lost_or_expired_session_sends_the_visitor_back_to_the_wizard_with_a_message_not_an_exception(): void
+    {
+        $this->verified();
+        $this->flushSession(); // the cookie of the browser no longer matches any sign-up
+
+        foreach (['empresa' => $this->company(), 'solucion' => ['solution' => '1'], 'plan' => ['plan_id' => $this->starter->id], 'contratar' => ['accepted' => ['terms']], 'cotizacion' => []] as $path => $payload) {
+            $this->post("/registro/{$path}", $payload)->assertRedirect(route('signup.index'))->assertSessionHas('error');
+        }
+
+        $this->get('/registro')->assertOk()->assertInertia(fn ($page) => $page->where('step', 'email'));
+    }
+
     public function test_a_step_cannot_be_reached_or_posted_without_verifying_the_email(): void
     {
         foreach (['empresa' => $this->company(), 'solucion' => ['solution' => '1'], 'plan' => ['plan_id' => $this->starter->id], 'contratar' => ['accepted' => ['terms']], 'cotizacion' => []] as $path => $payload) {
-            $this->post("/registro/{$path}", $payload)->assertStatus(409);
+            $this->post("/registro/{$path}", $payload)->assertRedirect(route('signup.index'))->assertSessionHas('error');
         }
 
         $this->post('/registro/correo', ['email' => self::EMAIL]); // a code was sent but not verified
-        $this->post('/registro/empresa', $this->company())->assertStatus(409);
+        $this->post('/registro/empresa', $this->company())->assertRedirect(route('signup.index'))->assertSessionHas('error');
         $this->get('/registro')->assertInertia(fn ($page) => $page->where('step', 'code'));
 
         // Going "forward" by URL state is not possible either: the server only honors steps already reached.
@@ -269,18 +338,46 @@ class PublicSignupTest extends TestCase
 
     // --- company, Workspace and NIT -----------------------------------------------------------------------------
 
-    public function test_the_nit_is_validated_with_its_check_digit_and_stored_normalized(): void
+    public function test_a_colombian_nit_is_normalized_but_a_wrong_check_digit_is_no_longer_a_reason_to_refuse(): void
     {
         $this->assertSame('900123456-'.Nit::checkDigit('900123456'), Nit::normalize('900.123.456-'.Nit::checkDigit('900123456')));
         $this->assertSame('900123456-'.Nit::checkDigit('900123456'), Nit::normalize('900123456'.Nit::checkDigit('900123456')));
-        $this->assertNull(Nit::normalize('900123456'), 'a bare number is ambiguous and is not guessed');
-        $this->assertNull(Nit::normalize('900123456-'.((Nit::checkDigit('900123456') + 1) % 10)));
         $this->assertNull(Nit::normalize('abc'));
 
         $this->verified();
-        $this->post('/registro/empresa', $this->company(['tax_id' => '900123456-'.((Nit::checkDigit('900123456') + 1) % 10)]))->assertSessionHasErrors('tax_id');
         $this->post('/registro/empresa', $this->company(['tax_id' => '900.123.456-'.Nit::checkDigit('900123456')]))->assertSessionHasNoErrors();
         $this->assertSame($this->nit(), SignupRequest::firstOrFail()->tax_id);
+    }
+
+    public function test_the_tax_id_is_optional_and_a_blank_one_is_stored_as_null(): void
+    {
+        $this->verified();
+
+        foreach ([null, '', '   '] as $blank) {
+            $this->post('/registro/empresa', $this->company(['tax_id' => $blank]))->assertSessionHasNoErrors();
+            $this->assertNull(SignupRequest::firstOrFail()->tax_id);
+        }
+    }
+
+    public function test_a_foreign_tax_id_is_accepted_and_kept_as_typed_without_a_check_digit_rule(): void
+    {
+        $this->verified();
+
+        foreach (['GB 123 4567 89', 'RFC-ABC010101AB1', '12.345.678/0001-95', '900123456-0'] as $id) {
+            $this->post('/registro/empresa', $this->company(['tax_id' => $id]))->assertSessionHasNoErrors();
+            $this->assertSame($id, SignupRequest::firstOrFail()->tax_id, 'the value typed is kept');
+        }
+
+        $this->post('/registro/empresa', $this->company(['tax_id' => str_repeat('A', 21)]))->assertSessionHasErrors('tax_id');
+        $this->post('/registro/empresa', $this->company(['tax_id' => 'AB<script>']))->assertSessionHasErrors('tax_id');
+    }
+
+    public function test_the_same_tax_id_of_an_existing_company_is_still_not_registered_again_whatever_its_case(): void
+    {
+        Organization::create(['name' => 'Ya existe', 'tax_id' => 'ab-123']);
+        $this->verified();
+
+        $this->post('/registro/empresa', $this->company(['tax_id' => 'AB-123']))->assertSessionHasErrors('tax_id');
     }
 
     public function test_the_workspace_name_availability_follows_the_real_rules(): void
@@ -577,6 +674,93 @@ class PublicSignupTest extends TestCase
         $this->flushSession();
         $adminA = User::where('email', 'ana@empresa.co')->firstOrFail();
         $this->actingAs($adminA)->withSession(['workspace_id' => $wsB->id])->get('/reports')->assertRedirect(route('pre-login'));
+    }
+
+    // --- block 1: solutions as commercial data, limits shown and frozen ---------------------------------------------------
+
+    private function platformAdmin(): User
+    {
+        $dev = Workspace::firstOrCreate(['code' => config('workspace.admin_code')], ['organization_id' => Organization::firstOrCreate(['name' => 'CCG'])->id, 'name' => 'Dev']);
+        $user = User::factory()->create();
+        Role::findOrCreate('plataforma', 'web');
+        $dev->users()->attach($user->id, ['role' => 'plataforma']);
+        $this->actingAs($user)->withSession(['workspace_id' => $dev->id]);
+
+        return $user;
+    }
+
+    public function test_the_offer_and_the_summary_show_the_limits_the_plan_really_sets_and_never_invent_one(): void
+    {
+        PlanLimit::create(['plan_id' => $this->starter->id, 'metric' => 'users', 'value' => 5]);
+        PlanLimit::create(['plan_id' => $this->starter->id, 'metric' => 'ai_executions', 'value' => 1500]);
+
+        $this->verified();
+        $this->post('/registro/empresa', $this->company());
+        $this->post('/registro/solucion', ['solution' => (string) $this->health->id]);
+        $this->get('/registro')->assertInertia(fn ($page) => $page->where('step', 'plan')
+            ->where('plans', fn ($plans) => collect($plans)->firstWhere('name', 'Starter')['limits'] === [
+                ['key' => 'users', 'label' => 'Usuarios', 'unit' => 'usuarios', 'value' => 5],
+                ['key' => 'locations', 'label' => 'Sedes', 'unit' => 'sedes activas', 'value' => null],
+                ['key' => 'ai_executions', 'label' => 'Ejecuciones de IA', 'unit' => 'ejecuciones al mes', 'value' => 1500],
+            ] && collect(collect($plans)->firstWhere('name', 'Pro')['limits'])->every(fn ($limit) => $limit['value'] === null), 'a plan without limits says none is defined'));
+
+        $this->post('/registro/plan', ['plan_id' => $this->starter->id]);
+        $this->get('/registro')->assertInertia(fn ($page) => $page->where('step', 'summary')->where('selected.limits.0.value', 5)->where('selected.limits.2.value', 1500)->where('selected.solutionName', $this->health->name));
+    }
+
+    public function test_the_limits_accepted_are_kept_and_a_change_before_confirming_stops_the_contract(): void
+    {
+        $limit = PlanLimit::create(['plan_id' => $this->starter->id, 'metric' => 'users', 'value' => 5]);
+        $this->toSummary();
+
+        // The limit changes while the customer reads the summary: nothing is confirmed with a number they did not see.
+        $limit->update(['value' => 2]);
+        $this->post('/registro/contratar', ['accepted' => $this->accepted()])->assertSessionHasErrors('plan');
+        $this->assertSame(SignupRequest::DRAFT, SignupRequest::firstOrFail()->status);
+        $this->get('/registro')->assertInertia(fn ($page) => $page->where('step', 'summary')->where('selected.limits.0.value', 2));
+
+        $this->post('/registro/contratar', ['accepted' => $this->accepted()])->assertSessionHasNoErrors();
+        $limit->update(['value' => 99]); // later edits of the plan never change what was accepted
+        $this->assertSame(2, SignupRequest::firstOrFail()->limits_snapshot['users']);
+        $this->get('/registro')->assertInertia(fn ($page) => $page->where('step', 'payment')->where('selected.limits.0.value', 2));
+    }
+
+    public function test_renaming_a_solution_keeps_its_technical_identity_and_every_relation(): void
+    {
+        $this->platformAdmin();
+        $key = $this->health->key;
+        $planIds = Plan::where('module_category_id', $this->health->id)->pluck('id')->sort()->values()->all();
+
+        $this->put("/module-categories/{$this->health->id}", ['name' => 'Clínicas y Bienestar', 'description' => 'Para centros de salud'])->assertSessionHasNoErrors();
+
+        $this->health->refresh();
+        $this->assertSame([$key, 'Clínicas y Bienestar'], [$this->health->key, $this->health->name]);
+        $this->assertSame($planIds, Plan::where('module_category_id', $this->health->id)->pluck('id')->sort()->values()->all());
+        $this->put("/module-categories/{$this->health->id}", ['name' => 'Otro', 'description' => 'x', 'key' => 'hacked'])->assertSessionHasNoErrors();
+        $this->assertSame($key, $this->health->fresh()->key, 'the technical key can not be edited');
+
+        auth()->logout();
+        $this->flushSession();
+        $this->get('/registro')->assertOk();
+        $this->verified();
+        $this->post('/registro/empresa', $this->company());
+        $this->get('/registro')->assertInertia(fn ($page) => $page->where('step', 'solution')->where('solutions', fn ($solutions) => collect($solutions)->contains(fn ($s) => $s['key'] === (string) $this->health->id && $s['name'] === 'Otro')));
+    }
+
+    public function test_a_solution_switched_off_is_not_offered_but_nothing_is_deleted(): void
+    {
+        $this->platformAdmin();
+        $this->post("/module-categories/{$this->health->id}/deactivate")->assertSessionHasNoErrors();
+
+        auth()->logout();
+        $this->flushSession();
+        $this->verified();
+        $this->post('/registro/empresa', $this->company());
+        $this->get('/registro')->assertInertia(fn ($page) => $page->where('step', 'solution')->where('solutions', fn ($solutions) => ! collect($solutions)->contains(fn ($s) => $s['key'] === (string) $this->health->id)));
+        $this->post('/registro/solucion', ['solution' => (string) $this->health->id])->assertSessionHasErrors('solution');
+
+        $this->assertSame(2, Plan::where('module_category_id', $this->health->id)->count(), 'its plans are kept');
+        $this->assertNotNull($this->starter->fresh());
     }
 
     // --- administration of the offer -----------------------------------------------------------------------------

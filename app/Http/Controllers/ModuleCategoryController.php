@@ -40,6 +40,20 @@ class ModuleCategoryController extends Controller
         return $this->back('Categoría desactivada correctamente');
     }
 
+    public function publish(ModuleCategory $category): RedirectResponse
+    {
+        $this->catalog->setCategoryPublic($category, true);
+
+        return $this->back('Solución visible en la oferta pública');
+    }
+
+    public function unpublish(ModuleCategory $category): RedirectResponse
+    {
+        $this->catalog->setCategoryPublic($category, false);
+
+        return $this->back('Solución oculta de la oferta pública');
+    }
+
     private function back(string $message): RedirectResponse
     {
         return redirect()->back(fallback: route('plans.index', ['tab' => 'modulos']))->with('success', $message);

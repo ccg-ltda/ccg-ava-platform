@@ -1,5 +1,6 @@
 import { router, useForm } from '@inertiajs/react';
-import { KeyRound, Lock, Pencil, Plus, Power, SearchX, Users } from 'lucide-react';
+import RoleLabel from '@/Components/RoleLabel';
+import { KeyRound, Lock, MapPin, Pencil, Plus, Power, SearchX, Users } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import Alert from '@/Components/Alert';
 import Badge from '@/Components/Badge';
@@ -19,10 +20,10 @@ import { TableWrap, Td, Th } from '@/Components/Table';
 import TextInput from '@/Components/TextInput';
 import WorkspaceCombobox from '@/Components/WorkspaceCombobox';
 import { useToast } from '@/Components/Toast';
-import { roleTone } from '@/config/roles';
 import useAccess from '@/Hooks/useAccess';
 import usePagedList from '@/Hooks/usePagedList';
 import GrantsModal from './GrantsModal';
+import LocationScopeModal from './LocationScopeModal';
 
 const FIELD = 'mt-1';
 
@@ -144,6 +145,8 @@ export default function UsersPanel({ users, filters, perPageOptions, createTarge
     const toast = useToast();
     const [showCreate, setShowCreate] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
+    const [scopeOf, setScopeOf] = useState(null);
+    const canScope = permissions.includes('assign-roles');
 
     const [search, setSearch] = useState(filters.search);
     const firstRender = useRef(true);
@@ -273,7 +276,7 @@ export default function UsersPanel({ users, filters, perPageOptions, createTarge
                                 </Td>
                                 <Td className="whitespace-nowrap text-ink-muted">{user.email}</Td>
                                 <Td className="whitespace-nowrap">
-                                    <Badge tone={roleTone(user.roles[0])}>{user.roles[0] || 'Sin rol'}</Badge>
+                                    <RoleLabel role={user.roles[0]} />
                                 </Td>
                                 <Td className="whitespace-nowrap">
                                     <Badge tone={user.isActive ? 'green' : 'neutral'}>{user.isActive ? 'Activo' : 'Inactivo'}</Badge>
@@ -282,6 +285,7 @@ export default function UsersPanel({ users, filters, perPageOptions, createTarge
                                 <Td>
                                     <div className="flex items-center justify-center gap-1">
                                         <IconButton icon={KeyRound} label="Ver permisos" context={user.name} onClick={() => setGrantsOf(user)} />
+                                        {canScope && <IconButton icon={MapPin} label="Sedes" context={user.name} onClick={() => setScopeOf(user)} />}
                                         {canEdit && <IconButton icon={Pencil} label="Editar" context={user.name} onClick={() => openEdit(user)} />}
                                         {canToggle && user.canToggleStatus && (
                                             <IconButton
@@ -302,7 +306,8 @@ export default function UsersPanel({ users, filters, perPageOptions, createTarge
 
             <Pagination noun="usuarios" {...list.paginationProps} />
 
-            <GrantsModal user={grantsOf} catalog={permissionCatalog} roleTone={roleTone} onClose={() => setGrantsOf(null)} />
+            <GrantsModal user={grantsOf} catalog={permissionCatalog} onClose={() => setGrantsOf(null)} />
+            {scopeOf && <LocationScopeModal user={scopeOf} onClose={() => setScopeOf(null)} />}
 
             <FormModal show={showCreate} title="Nuevo usuario" onClose={() => setShowCreate(false)} onSubmit={submitCreate} processing={create.processing} submitLabel={create.processing ? 'Guardando...' : 'Crear usuario'}>
                 <UserFields data={create.data} setData={create.setData} errors={create.errors} roles={rolesFor(create.data.workspace_option)} withPassword />

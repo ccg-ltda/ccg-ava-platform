@@ -51,6 +51,10 @@ class BookingPresenter
             'date' => $start->setTimezone($settings->timezone)->toDateString(),
             'dateLabel' => $settings->formatDate($start),
             'timeLabel' => $settings->formatTime($start),
+            // For the calendar grid: minutes since LOCAL midnight (Workspace time zone), the length, and the rest after it (`blocks_until`) the service reserves.
+            'startMinute' => (int) $start->setTimezone($settings->timezone)->format('G') * 60 + (int) $start->setTimezone($settings->timezone)->format('i'),
+            'durationMinutes' => max(0, (int) $start->diffInMinutes(CarbonImmutable::instance($appointment->ends_at), false)),
+            'restMinutes' => $appointment->blocks_until ? max(0, (int) CarbonImmutable::instance($appointment->ends_at)->diffInMinutes(CarbonImmutable::instance($appointment->blocks_until), false)) : 0,
             'status' => $appointment->status,
             'statusLabel' => Appointment::LABELS[$appointment->status],
             'provider' => $appointment->provider,

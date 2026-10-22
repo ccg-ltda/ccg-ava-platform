@@ -11,14 +11,14 @@ use Illuminate\Support\Facades\Schema;
 /**
  * What the public sign-up offers, read from the real commercial configuration (Planes): a plan is offered only while it is active and marked public; a
  * solution is a module category that has at least one such plan; "Personalizado" exists only while there is a public plan sold by quote that belongs to
- * no solution. Prices, currencies, periods and modules come from the plan; a missing price is shown as missing, never filled in. Plan limits are not
- * modelled yet (an open commercial decision), so none is shown. Read only: nothing here grants access to a module.
+ * no solution. Prices, currencies, periods and modules come from the plan; a missing price is shown as missing, never filled in. The limits shown are the ones the plan really
+ * sets (`WorkspaceLimits::METRICS`, the same source the backend enforces); a metric without a value is shown as "sin límite definido", never invented. Read only: nothing here grants access to a module.
  */
 class SignupCatalog
 {
     public const CUSTOM = 'custom';
 
-    public function __construct(private readonly ModuleAccess $access) {}
+    public function __construct(private readonly ModuleAccess $access, private readonly WorkspaceLimits $limits) {}
 
     private ?bool $ready = null;
 
@@ -117,8 +117,20 @@ class SignupCatalog
                 'description' => $module->description,
                 'operative' => in_array($module->key, $operative, true),
             ])->values()->all(),
-            'limits' => [],
+            'limits' => $this->limitsOf($this->limits->planLimits($plan)),
         ];
+    }
+
+    /**
+     * The limits as the pages show them: one row per metric the backend enforces, with its unit (e.g. executions per calendar month). A null value means the
+     * plan sets none (not that it is zero).
+     *
+     * @param  array<string, ?int>  $values  metric => value
+     * @return list<array{key: string, label: string, unit: string, value: ?int}>
+     */
+    public function limitsOf(array $values): array
+    {
+        return collect(WorkspaceLimits::METRICS)->map(fn (array $meta, string $key) => ['key' => $key, 'label' => $meta['label'], 'unit' => $meta['unit'], 'value' => $values[$key] ?? null])->values()->all();
     }
 
     /** @return array{amount: float, amountCents: int, currency: string, period: string, periodLabel: string} the price of one period of a plan that sells it */

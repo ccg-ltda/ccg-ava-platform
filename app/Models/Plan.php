@@ -92,6 +92,10 @@ class Plan extends Model
             $issues[] = 'La solución está desactivada.';
         }
 
+        if ($this->module_category_id !== null && $this->solution?->is_active === true && ! $this->solution->isPubliclyOffered()) {
+            $issues[] = 'La solución no es pública: actívala como pública en Planes para ofrecer este plan.';
+        }
+
         if ($this->module_category_id !== null && $this->solution !== null && ! $this->solution->isSolution()) {
             $issues[] = 'La categoría elegida agrupa capacidades compartidas, no es una solución comercial.';
         }

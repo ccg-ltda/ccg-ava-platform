@@ -1,5 +1,5 @@
 import { Head, router, usePage } from '@inertiajs/react';
-import { ArrowDownRight, ArrowUpRight, CalendarRange, LineChart, Minus } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, CalendarRange, LineChart, MapPin, Minus } from 'lucide-react';
 import { useState } from 'react';
 import Alert from '@/Components/Alert';
 import Card from '@/Components/Card';
@@ -50,7 +50,7 @@ function Variation({ change, previous }) {
  * server data. Every section arrives on its own: one that could not be read shows an error and never a zero, and a real
  * zero shows an explicit empty state. Questions and surveys have no data source and say so.
  */
-export default function Index({ stats, roleBreakdown, recentUsers, sources, filters, range, options, metrics, teamGrowth, figures, activity, channels, states, chatHours, messageHours, scope, operations }) {
+export default function Index({ stats, roleBreakdown, recentUsers, sources, filters, range, options, metrics, teamGrowth, figures, activity, channels, states, chatHours, messageHours, scope, operations, locations }) {
     const { workspace, errors } = usePage().props;
     // Only the sections whose data the plan of the Workspace includes; the server sends nothing for the rest.
     const sections = reportSections.filter((section) => section.needs.some((source) => sources[source]));
@@ -71,9 +71,14 @@ export default function Index({ stats, roleBreakdown, recentUsers, sources, filt
         });
 
     // A new period starts with its own default grouping; a grouping change keeps the period.
-    const changePeriod = (period) => visit({ period, workspace: workspaceParam });
-    const changeGranularity = (granularity) => visit({ period: filters.period, granularity, workspace: workspaceParam });
+    // The location filter (agenda, orders and inventory) travels with every change of period or grouping; the server validates it again.
+    const locationParam = locations?.selected ?? undefined;
+    const changePeriod = (period) => visit({ period, workspace: workspaceParam, location: locationParam });
+    const changeGranularity = (granularity) => visit({ period: filters.period, granularity, workspace: workspaceParam, location: locationParam });
     const changeWorkspace = (option) => option && visit({ period: filters.period, workspace: option.id });
+    const changeLocation = (value) => visit({ period: filters.period, granularity: filters.granularity, workspace: workspaceParam, location: value || undefined });
+    const places = locations?.enabled ? locations.options : [];
+    const placeLabel = places.find((place) => place.id === locations?.selected)?.name ?? null;
 
     const scopeLabel = scope.mode === 'all' ? 'todos los Workspaces' : (scope.workspace?.name ?? workspace?.name);
     const noActivity = activity?.data && activity.data.total === 0;
@@ -249,13 +254,21 @@ export default function Index({ stats, roleBreakdown, recentUsers, sources, filt
         <>
             <Head title="Reportes" />
 
-            <PageHeader title="Reportes" description={`Analítica de ${scopeLabel} · ${range.from} – ${range.to}`}>
+            <PageHeader title="Reportes" description={`Analítica de ${scopeLabel} · ${range.from} – ${range.to}${placeLabel ? ` · Sede: ${placeLabel}` : ''}`}>
                 {scope.canChoose && (
                     <div className="w-full sm:w-72">
                         <InputLabel htmlFor="report_workspace" value="Workspace" className="sr-only" />
                         <WorkspaceCombobox id="report_workspace" purpose="view" includeAll value={selectedWorkspace} onChange={changeWorkspace} placeholder="Buscar Workspace" />
                     </div>
                 )}
+                {places.length > 1 && (
+                    <div className="flex items-center gap-2">
+                        <MapPin className="hidden size-4 text-ink-muted sm:block" aria-hidden="true" />
+                        <InputLabel htmlFor="report_location" value="Sede" className="sr-only" />
+                        <Select id="report_location" className="w-full sm:w-52" value={locations.selected ?? ''} onChange={changeLocation} options={[{ value: '', label: locations.limited ? 'Todas mis sedes' : 'Todas las sedes' }, ...places.map((place) => ({ value: place.id, label: place.name }))]} />
+                    </div>
+                )}
+                {places.length === 1 && <p className="text-sm text-ink-muted">Sede: <strong className="text-ink">{places[0].name}</strong></p>}
                 <div className="flex items-center gap-2">
                     <CalendarRange className="hidden size-4 text-ink-muted sm:block" aria-hidden="true" />
                     <InputLabel htmlFor="report_period" value="Periodo" className="sr-only" />
@@ -263,7 +276,8 @@ export default function Index({ stats, roleBreakdown, recentUsers, sources, filt
                 </div>
             </PageHeader>
 
-            {(errors?.period || errors?.granularity) && <Alert tone="warning">{errors.period ?? errors.granularity}</Alert>}
+            {(errors?.period || errors?.granularity || errors?.location) && <Alert tone="warning">{errors.period ?? errors.granularity ?? errors.location}</Alert>}
+            {placeLabel && <p className="text-xs text-ink-muted" role="note">La agenda, los pedidos y el inventario muestran solo la sede elegida. Clientes, conversaciones y equipo no dependen de una sede y no cambian con este filtro.</p>}
 
             {sections.length === 0 ? (
                 <EmptyState icon={LineChart} title="Aún no hay reportes disponibles" description="Aquí aparecerán los reportes de los módulos que incluya tu plan." />

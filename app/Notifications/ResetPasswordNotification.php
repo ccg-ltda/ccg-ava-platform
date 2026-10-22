@@ -3,6 +3,7 @@
 namespace App\Notifications;
 
 use App\Models\User;
+use App\Services\EmailTemplates;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -48,13 +49,24 @@ class ResetPasswordNotification extends ResetPassword implements ShouldQueue
     {
         $minutes = (int) config('auth.passwords.'.config('auth.defaults.passwords').'.expire');
 
-        return (new MailMessage)
+        $url = $this->resetUrl($notifiable);
+        $templates = app(EmailTemplates::class);
+        $blocks = ['Hola', 'Recibimos una solicitud para restablecer la contraseña de tu cuenta.', "El enlace caduca en {$minutes} minutos y solo sirve una vez.", 'Si no fuiste tú, ignora este mensaje: tu contraseña no cambia.'];
+        $action = ['label' => 'Elegir una contraseña nueva', 'url' => $url];
+
+        $message = (new MailMessage)
             ->subject('Restablece tu contraseña')
             ->greeting('Hola')
-            ->line('Recibimos una solicitud para restablecer la contraseña de tu cuenta.')
-            ->action('Elegir una contraseña nueva', $this->resetUrl($notifiable))
-            ->line("El enlace caduca en {$minutes} minutos y solo sirve una vez.")
-            ->line('Si no fuiste tú, ignora este mensaje: tu contraseña no cambia.')
-            ->salutation('CCG Avachat');
+            ->line($blocks[1])
+            ->action($action['label'], $url)
+            ->line($blocks[2])
+            ->line($blocks[3])
+            ->salutation((string) config('branding.name'));
+
+        // The message keeps its lines and its action (what the standard layout would print); the HTML goes through the global template only when the link is a
+        // safe http(s) URL (it always is for this app). Otherwise the standard layout is sent, as before.
+        return $templates->safeUrl($url)
+            ? $message->view(['emails.html', 'emails.plain'], ['html' => $templates->render('Restablece tu contraseña', $blocks, $action), 'text' => $templates->text('Restablece tu contraseña', $blocks, $action)])
+            : $message;
     }
 }

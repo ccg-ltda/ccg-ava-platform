@@ -17,13 +17,16 @@ use App\Http\Requests\SaveBookingSettingsRequest;
 use App\Models\Appointment;
 use App\Models\BookingCustomer;
 use App\Models\BookingSetting;
+use App\Models\ScheduleRule;
 use App\Models\Workspace;
 use App\Services\ListPagination;
+use App\Services\LocationScope;
 use App\Services\ModuleAccess;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -58,24 +61,32 @@ class BookingController extends Controller
         $days = in_array((int) $request->query('days'), [1, 7, 31], true) ? (int) $request->query('days') : 7;
         [$end, $span] = $this->window($request->query('to'), $from, $days, $timezone);
         $professionalId = ctype_digit((string) $request->query('professional')) ? (int) $request->query('professional') : null;
+        $locationId = ctype_digit((string) $request->query('location')) ? (int) $request->query('location') : null;
+        $serviceId = ctype_digit((string) $request->query('service')) ? (int) $request->query('service') : null;
         $status = in_array($request->query('status'), Appointment::STATUSES, true) ? $request->query('status') : null;
         $origin = in_array($request->query('origin'), Appointment::CHANNELS, true) ? $request->query('origin') : null;
         $setting = BookingSetting::for($workspace);
 
         return Inertia::render('Bookings/Index', [
             'capabilities' => $capabilities,
-            'filters' => ['from' => $from->setTimezone($timezone)->toDateString(), 'to' => $span['to'], 'days' => $span['days'], 'professional' => $professionalId, 'status' => $status, 'origin' => $origin, 'search' => trim((string) $request->query('search', ''))],
+            'filters' => ['from' => $from->setTimezone($timezone)->toDateString(), 'to' => $span['to'], 'days' => $span['days'], 'professional' => $professionalId, 'location' => $locationId, 'service' => $serviceId, 'status' => $status, 'origin' => $origin, 'search' => trim((string) $request->query('search', ''))],
             'appointments' => $workspace->appointments()->with(['customer', 'workspace'])->when($this->notifier->ready(), fn ($query) => $query->with('notifications'))
+                ->when(($allowed = app(LocationScope::class)->allowedIds($workspace, $request->user())) !== null, fn ($query) => $query->whereIn('location_id', $allowed))
                 ->where('starts_at', '>=', $from)->where('starts_at', '<', $end)
                 ->when($professionalId, fn ($query) => $query->where('professional_id', $professionalId))
+                // The location filter narrows INSIDE what the member may see: a limited member's own locations always apply first, so a manipulated filter can only
+                // return less, never another location's appointments. The service filter is the appointment's own service.
+                ->when($locationId, fn ($query) => $query->where('location_id', $locationId))
+                ->when($serviceId, fn ($query) => $query->where('service_id', $serviceId))
                 ->when($status, fn ($query) => $query->where('status', $status))
                 ->when($origin, fn ($query) => $query->where('channel', $origin))
-                ->orderBy('starts_at')->limit(500)->get()->map(fn (Appointment $appointment) => $this->present->appointment($appointment))->all(),
-            'options' => $this->options($workspace, $capabilities),
+                ->orderBy('starts_at')->limit(self::LIST_LIMIT)->get()->map(fn (Appointment $appointment) => $this->present->appointment($appointment))->all(),
+            'options' => $this->options($workspace, $capabilities, $request),
             'customers' => $this->customers($request, $workspace),
             'settings' => $this->settings($workspace, $setting),
             'perPageOptions' => ListPagination::OPTIONS,
             'today' => CarbonImmutable::now($timezone)->toDateString(),
+            'listLimit' => self::LIST_LIMIT,
         ]);
     }
 
@@ -83,6 +94,7 @@ class BookingController extends Controller
     public function availability(AvailabilityRequest $request): JsonResponse
     {
         $workspace = $request->attributes->get('workspace');
+        $this->guardLocation($request, $request->validated('location_id') ? (int) $request->validated('location_id') : null);
 
         try {
             $ignore = $request->validated('ignore_appointment') ? $workspace->appointments()->findOrFail($request->validated('ignore_appointment')) : null;
@@ -97,6 +109,7 @@ class BookingController extends Controller
     public function store(BookAppointmentRequest $request): RedirectResponse
     {
         $workspace = $request->attributes->get('workspace');
+        $this->guardLocation($request, $request->booking()['location_id']);
 
         return $this->attempt(fn () => $this->bookings->request($workspace, $request->booking(), 'admin'), 'Cita creada correctamente');
     }
@@ -187,8 +200,33 @@ class BookingController extends Controller
 
     private function find(Request $request, int $id): Appointment
     {
-        return $request->attributes->get('workspace')->appointments()->with(['customer', 'workspace'])->findOrFail($id);
+        $appointment = $request->attributes->get('workspace')->appointments()->with(['customer', 'workspace'])->findOrFail($id);
+
+        // An appointment of another location (or of none) is not for a member limited to selected locations, whatever id the request carries.
+        app(LocationScope::class)->assertAllows($request->attributes->get('workspace'), $request->user(), $appointment->location_id);
+
+        return $appointment;
     }
+
+    /**
+     * A member limited to selected locations needs at least one active authorized location to book or look for free hours, and the one they name must be theirs.
+     * (Without this a member with no authorized location would be treated as "the Workspace has no locations" and book without one.)
+     */
+    private function guardLocation(Request $request, ?int $locationId): void
+    {
+        $workspace = $request->attributes->get('workspace');
+        $scope = app(LocationScope::class);
+
+        if (! $scope->restricted($workspace, $request->user())) {
+            return;
+        }
+
+        abort_if(app(Locations::class)->active($workspace)->isEmpty(), 403, 'No tienes ninguna sede activa autorizada.');
+        abort_if($locationId !== null && ! $scope->allows($workspace, $request->user(), $locationId), 403, 'No tienes acceso a esa sede.');
+    }
+
+    /** Appointments the agenda sends for a window; when it is reached the page says the list may be incomplete (narrow the dates or the filters). */
+    public const LIST_LIMIT = 500;
 
     /** Longest range the agenda lists at once (a day in the list is a block of appointments, and the list is capped). */
     private const MAX_RANGE_DAYS = 92;
@@ -237,14 +275,23 @@ class BookingController extends Controller
     }
 
     /** What the new-appointment dialog may choose: the agenda's own services and professionals, or a clear reason they are not available. @return array<string, mixed> */
-    private function options(Workspace $workspace, array $capabilities): array
+    private function options(Workspace $workspace, array $capabilities, ?Request $request = null): array
     {
         try {
             $locations = $this->locations->active($workspace);
 
+            $services = $capabilities['services'] ? $this->bookings->services($workspace) : [];
+            $professionals = $capabilities['professionals'] ? $this->bookings->professionals($workspace) : [];
+
+            // Ava's own agenda: say where each service is offered and where each professional works, so the filters and the dialog only combine what really
+            // exists together; a member limited to selected locations only gets what is offered in theirs (or everywhere).
+            if (! $capabilities['external'] && $this->locations->enabled($workspace)) {
+                [$services, $professionals] = $this->relatedToLocations($workspace, $request, $services, $professionals);
+            }
+
             return [
-                'services' => $capabilities['services'] ? $this->bookings->services($workspace) : [],
-                'professionals' => $capabilities['professionals'] ? $this->bookings->professionals($workspace) : [],
+                'services' => $services,
+                'professionals' => $professionals,
                 // Locations of Ava's own agenda only; `locationRequired` = the Workspace has several, so every booking must name one.
                 'locations' => $capabilities['external'] ? [] : $locations->map(fn ($location) => ['id' => $location->id, 'name' => $location->name])->values()->all(),
                 'locationRequired' => ! $capabilities['external'] && $locations->count() > 1,
@@ -254,6 +301,37 @@ class BookingController extends Controller
         } catch (BookingException $exception) {
             return ['services' => [], 'professionals' => [], 'locations' => [], 'locationRequired' => false, 'currency' => $workspace->settingsOrDefault()->currency, 'error' => $exception->getMessage()];
         }
+    }
+
+    /**
+     * Adds to Ava's own services and professionals the locations they belong to: a service is offered where `location_service` says (no rows = everywhere), a
+     * professional works where their weekly hours say (an hour with no location = everywhere), and the services a professional gives. A member limited to selected
+     * locations only keeps what is offered in one of theirs or everywhere.
+     *
+     * @param  list<array<string, mixed>>  $services
+     * @param  list<array<string, mixed>>  $professionals
+     * @return array{0: list<array<string, mixed>>, 1: list<array<string, mixed>>}
+     */
+    private function relatedToLocations(Workspace $workspace, ?Request $request, array $services, array $professionals): array
+    {
+        $serviceLocations = DB::table('location_service')->where('workspace_id', $workspace->id)->get(['service_id', 'location_id'])->groupBy('service_id')->map(fn ($rows) => $rows->pluck('location_id')->map(fn ($id) => (int) $id)->all());
+        $hours = ScheduleRule::where('workspace_id', $workspace->id)->get(['professional_id', 'location_id'])->groupBy('professional_id');
+        $gives = DB::table('professional_service')->where('workspace_id', $workspace->id)->get(['professional_id', 'service_id'])->groupBy('professional_id')->map(fn ($rows) => $rows->pluck('service_id')->map(fn ($id) => (int) $id)->all());
+        $allowed = app(LocationScope::class)->allowedIds($workspace, $request?->user());
+
+        $services = array_map(fn (array $service) => $service + ['locationIds' => $serviceLocations[$service['id']] ?? [], 'everywhere' => ! isset($serviceLocations[$service['id']])], $services);
+        $professionals = array_map(fn (array $professional) => $professional + [
+            'locationIds' => collect($hours[$professional['id']] ?? [])->pluck('location_id')->filter()->map(fn ($id) => (int) $id)->unique()->values()->all(),
+            'everywhere' => collect($hours[$professional['id']] ?? [])->contains(fn ($rule) => $rule->location_id === null),
+            'serviceIds' => $gives[$professional['id']] ?? [],
+        ], $professionals);
+
+        if ($allowed !== null) {
+            $services = array_values(array_filter($services, fn (array $service) => $service['everywhere'] || array_intersect($service['locationIds'], $allowed) !== []));
+            $professionals = array_values(array_filter($professionals, fn (array $professional) => $professional['everywhere'] || array_intersect($professional['locationIds'], $allowed) !== []));
+        }
+
+        return [$services, $professionals];
     }
 
     /** Only the minimum about who books: name, phone, email. Searched by those. @return array<string, mixed> */

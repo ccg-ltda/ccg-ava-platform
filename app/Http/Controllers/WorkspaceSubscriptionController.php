@@ -26,13 +26,18 @@ class WorkspaceSubscriptionController extends Controller
     {
         $data = $request->validate([
             'plan_id' => ['required', 'integer', Rule::exists('plans', 'id')],
+            'starts_at' => ['nullable', 'date_format:Y-m-d'],
             'ends_at' => ['required', 'date_format:Y-m-d'],
             'reason' => ['required', 'string', 'min:5', 'max:500'],
-        ], ['reason.required' => 'Escribe el motivo de la prueba (al menos 5 caracteres).', 'ends_at.date_format' => 'Indica la fecha de fin con el formato año-mes-día.']);
+        ], ['reason.required' => 'Escribe el motivo de la prueba (al menos 5 caracteres).', 'ends_at.date_format' => 'Indica la fecha de fin con el formato año-mes-día.', 'starts_at.date_format' => 'Indica la fecha de inicio con el formato año-mes-día.']);
 
-        $this->subscriptions->grantTrial($workspace, Plan::findOrFail($data['plan_id']), Carbon::parse($data['ends_at'])->endOfDay(), $data['reason'], $request->user()->id);
+        // Dates are days in the application's time zone: a trial starts at 00:00 of its first day and ends at the END of its last day. Without a start date, or
+        // with today's, it starts now; a later day SCHEDULES it (no access from it until then).
+        $startsAt = filled($data['starts_at'] ?? null) ? Carbon::parse($data['starts_at'])->startOfDay() : null;
 
-        return back()->with('success', 'Prueba gratuita concedida correctamente');
+        $subscription = $this->subscriptions->grantTrial($workspace, Plan::findOrFail($data['plan_id']), Carbon::parse($data['ends_at'])->endOfDay(), $data['reason'], $request->user()->id, $startsAt);
+
+        return back()->with('success', $subscription->status === Subscription::SCHEDULED ? 'Prueba gratuita programada correctamente' : 'Prueba gratuita concedida correctamente');
     }
 
     public function updateTrial(Request $request, Workspace $workspace): RedirectResponse

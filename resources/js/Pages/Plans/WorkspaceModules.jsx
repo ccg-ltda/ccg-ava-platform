@@ -1,4 +1,5 @@
 import { Head, Link, router, useForm } from '@inertiajs/react';
+import DateField from '@/Components/DateField';
 import { ArrowLeft } from 'lucide-react';
 import { useState } from 'react';
 import Alert from '@/Components/Alert';
@@ -17,8 +18,8 @@ import { useToast } from '@/Components/Toast';
 import AppLayout from '@/Layouts/AppLayout';
 import { formatMoney } from '@/lib/format';
 
-const SUBSCRIPTION = { pending: 'Pendiente', trialing: 'Prueba gratuita', active: 'Activa', grace: 'En gracia', suspended: 'Suspendida', cancelled: 'Cancelada', expired: 'Vencida' };
-const statusText = (subscription) => (subscription.status === 'trialing' ? 'Prueba gratuita' : `${SUBSCRIPTION[subscription.status]} · ${PAYMENT[subscription.paymentStatus]}`);
+const SUBSCRIPTION = { pending: 'Pendiente', trialing: 'Prueba gratuita', scheduled: 'Prueba programada', schedule_cancelled: 'Prueba programada cancelada', active: 'Activa', grace: 'En gracia', suspended: 'Suspendida', cancelled: 'Cancelada', expired: 'Vencida' };
+const statusText = (subscription) => (['trialing', 'scheduled', 'schedule_cancelled'].includes(subscription.status) ? SUBSCRIPTION[subscription.status] : `${SUBSCRIPTION[subscription.status]} · ${PAYMENT[subscription.paymentStatus]}`);
 const PAYMENT = { pending: 'Pago pendiente', confirmed: 'Pago confirmado', failed: 'Pago fallido' };
 
 const dateOf = (iso) => (iso ? new Date(iso).toLocaleDateString('es-CO', { year: 'numeric', month: 'short', day: 'numeric' }) : null);
@@ -366,7 +367,7 @@ function ContractCard({ workspace, data, canEdit }) {
 }
 
 const LIMIT_LABEL = { users: 'Usuarios', ai_executions: 'Ejecuciones de IA al mes' };
-const TRIAL_BLOCKING = ['trialing', 'active', 'grace', 'suspended'];
+const TRIAL_BLOCKING = ['trialing', 'scheduled', 'active', 'grace', 'suspended'];
 
 /** A free trial is granted BY HAND to this one Workspace. When it ends the server restricts access (nothing is deleted) until a confirmed payment reopens it. */
 function TrialCard({ workspace, data, canEdit, plans }) {
@@ -374,7 +375,7 @@ function TrialCard({ workspace, data, canEdit, plans }) {
     const subscription = data.subscription;
     const trial = subscription?.trial;
     const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-    const grant = useForm({ plan_id: '', ends_at: '', reason: '' });
+    const grant = useForm({ plan_id: '', starts_at: '', ends_at: '', reason: '' });
     const extend = useForm({ ends_at: '', reason: '' });
     const cancel = useForm({ reason: '' });
     const live = subscription && TRIAL_BLOCKING.includes(subscription.status);
@@ -383,7 +384,9 @@ function TrialCard({ workspace, data, canEdit, plans }) {
         e.preventDefault();
         const confirmed = await confirm({
             title: 'Cancelar la prueba',
-            description: `«${workspace.name}» perderá el acceso a los módulos (la suscripción pasa a cancelada). No se borra ningún dato. Queda registrado con tu nombre y el motivo.`,
+            description: trial?.scheduled
+                ? `Se cancela la prueba programada de «${workspace.name}». Como todavía no empezó, el Workspace sigue exactamente igual. Queda registrado con tu nombre y el motivo.`
+                : `«${workspace.name}» perderá el acceso a los módulos (la suscripción pasa a cancelada). No se borra ningún dato. Queda registrado con tu nombre y el motivo.`,
             confirmLabel: 'Cancelar prueba',
         });
 
@@ -397,7 +400,7 @@ function TrialCard({ workspace, data, canEdit, plans }) {
                     <h2 className="text-base font-bold text-ink">Prueba gratuita</h2>
                     <p className="mt-0.5 text-sm text-ink-muted">Se concede a mano y solo a este Workspace (<strong className="text-ink">{workspace.name}</strong>). No cambia el catálogo ni a otros clientes, no se activa sola en ninguna contratación y al terminar restringe el acceso sin borrar datos.</p>
                 </div>
-                {trial && <Badge tone={trial.expired ? 'amber' : trial.active ? 'green' : 'neutral'}>{trial.expired ? 'Prueba vencida' : trial.active ? 'Prueba en curso' : 'Prueba cancelada'}</Badge>}
+                {trial && <Badge tone={trial.expired ? 'amber' : trial.active ? 'green' : trial.scheduled ? 'violet' : 'neutral'}>{trial.expired ? 'Prueba vencida' : trial.active ? 'Prueba en curso' : trial.scheduled ? 'Prueba programada' : 'Prueba cancelada'}</Badge>}
             </div>
 
             {subscription && !subscription.termsReady && <Alert tone="warning" className="mt-4">Las pruebas gratuitas todavía no están disponibles en esta base de datos (falta aplicar la migración pendiente).</Alert>}
@@ -417,7 +420,13 @@ function TrialCard({ workspace, data, canEdit, plans }) {
                 </Alert>
             )}
 
-            {trial?.active && canEdit && (
+            {trial?.scheduled && (
+                <Alert tone="info" className="mt-4">
+                    La prueba empieza el {dateOf(trial.startsAt)}. Hasta entonces no concede ningún acceso y el Workspace conserva lo que ya tiene; el plan se asigna cuando comienza.
+                </Alert>
+            )}
+
+            {(trial?.active || trial?.scheduled) && canEdit && (
                 <div className="mt-5 grid gap-5 border-t border-line pt-4 lg:grid-cols-2">
                     <form onSubmit={(e) => { e.preventDefault(); extend.put(route('workspaces.trial.update', workspace.id), { preserveScroll: true, onSuccess: () => extend.reset() }); }} className="space-y-3">
                         <h3 className="text-sm font-bold text-ink">Cambiar la fecha de fin</h3>
@@ -450,24 +459,21 @@ function TrialCard({ workspace, data, canEdit, plans }) {
             {canEdit && !live && (subscription ? subscription.termsReady : true) && (
                 <form
                     onSubmit={(e) => { e.preventDefault(); grant.post(route('workspaces.trial.store', workspace.id), { preserveScroll: true, onSuccess: () => grant.reset() }); }}
-                    className="mt-5 grid gap-3 border-t border-line pt-4 md:grid-cols-[1fr_auto_2fr_auto] md:items-end"
+                    className="mt-5 grid gap-3 border-t border-line pt-4 md:grid-cols-[1fr_auto_auto_2fr_auto] md:items-end"
                 >
                     <div>
                         <InputLabel htmlFor="trial_plan" value="Plan de la prueba" />
                         <Select id="trial_plan" className="mt-1" value={grant.data.plan_id} onChange={(value) => grant.setData('plan_id', value)} options={[{ value: '', label: 'Elige un plan' }, ...plans]} />
                         <InputError message={grant.errors.plan_id} className="mt-1" />
                     </div>
-                    <div>
-                        <InputLabel htmlFor="trial_end" value="Termina el" />
-                        <TextInput id="trial_end" className="mt-1" type="date" min={tomorrow} value={grant.data.ends_at} onChange={(e) => grant.setData('ends_at', e.target.value)} invalid={Boolean(grant.errors.ends_at)} />
-                        <InputError message={grant.errors.ends_at} className="mt-1" />
-                    </div>
+                    <DateField id="trial_start" label="Empieza el (opcional)" value={grant.data.starts_at} onChange={(value) => grant.setData('starts_at', value)} error={grant.errors.starts_at} />
+                    <DateField id="trial_end" label="Termina el" min={tomorrow} value={grant.data.ends_at} onChange={(value) => grant.setData('ends_at', value)} error={grant.errors.ends_at} />
                     <div>
                         <InputLabel htmlFor="trial_reason" value="Motivo (obligatorio)" />
                         <TextInput id="trial_reason" className="mt-1" maxLength={500} value={grant.data.reason} onChange={(e) => grant.setData('reason', e.target.value)} invalid={Boolean(grant.errors.reason)} />
                         <InputError message={grant.errors.reason ?? grant.errors.trial ?? grant.errors.workspace_id} className="mt-1" />
                     </div>
-                    <PrimaryButton type="submit" disabled={grant.processing || !grant.data.plan_id || !grant.data.ends_at}>Conceder prueba</PrimaryButton>
+                    <PrimaryButton type="submit" disabled={grant.processing || !grant.data.plan_id || !grant.data.ends_at}>{grant.data.starts_at && grant.data.starts_at > tomorrow.slice(0, 10) ? 'Programar prueba' : 'Conceder prueba'}</PrimaryButton>
                     <p className="text-xs text-ink-muted md:col-span-4">Empieza ahora. Aplica el plan elegido con sus módulos y límites de hoy, congelados para esta prueba, y solo a este Workspace.</p>
                 </form>
             )}

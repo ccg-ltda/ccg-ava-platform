@@ -6,6 +6,7 @@ use App\Models\Appointment;
 use App\Models\Location;
 use App\Models\ScheduleRule;
 use App\Models\Workspace;
+use App\Services\LocationScope;
 use App\Services\ModuleAccess;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -23,7 +24,7 @@ class Locations
 {
     private ?bool $schemaReady = null;
 
-    public function __construct(private readonly ModuleAccess $modules) {}
+    public function __construct(private readonly ModuleAccess $modules, private readonly LocationScope $scope) {}
 
     /**
      * Whether the database has the structure of locations (migration `create_locations_and_booking_traceability`). The code ships before a
@@ -40,10 +41,19 @@ class Locations
         return $this->schemaReady() && $this->modules->allows($workspace, 'locations');
     }
 
-    /** @return Collection<int, Location> */
+    /**
+     * The active locations the CURRENT member may work with: every one for an unrestricted member (and for the public page and Ava Chat, which act for the
+     * business and have no signed-in member), only the authorized ones for a member limited to selected locations. Everything that lists, validates or resolves
+     * a location of a signed-in member goes through here, so none can name a location the member is not authorized for.
+     *
+     * @return Collection<int, Location>
+     */
     public function active(Workspace $workspace): Collection
     {
-        return $this->enabled($workspace) ? $workspace->locations()->where('is_active', true)->orderBy('name')->get() : new Collection;
+        $all = $this->enabled($workspace) ? $workspace->locations()->where('is_active', true)->orderBy('name')->get() : new Collection;
+        $allowed = $this->scope->allowedIds($workspace, auth()->user());
+
+        return $allowed === null ? $all : $all->filter(fn (Location $location) => in_array($location->id, $allowed, true))->values();
     }
 
     /** True when a booking must name its location (two or more are active). */

@@ -11,6 +11,8 @@ const SOLUTION_ICONS = {
     custom: 'M12 3l2.5 5 5.5.8-4 3.9.9 5.5L12 15.6 7.1 18.2l.9-5.5-4-3.9 5.5-.8L12 3z',
     default: 'M3 7h18M3 12h18M3 17h18',
 };
+/** A limit as it is really configured: no value = the plan sets none (never presented as zero or invented). */
+const limitText = (limit) => (limit.value === null || limit.value === undefined ? 'Sin límite definido' : `${Number(limit.value).toLocaleString('es-CO')} ${limit.unit}`);
 const isEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
 /** Progress indicator: the steps the server computed (done / current / todo). */
@@ -228,7 +230,7 @@ function StepCompany({ email, draft, passwordMin }) {
                 <AccessPasswordInput id="password_confirmation" label="Repite la contraseña" value={form.data.password_confirmation} onChange={set('password_confirmation')} message={form.errors.password_confirmation} autoComplete="new-password" visible={showPassword} onToggle={() => setShowPassword((v) => !v)} />
                 <AccessInput id="company_name" label="Nombre de la empresa" value={form.data.company_name} onChange={set('company_name')} message={form.errors.company_name} autoComplete="organization" maxLength={160} />
                 <div>
-                    <AccessInput id="tax_id" label="NIT (con dígito de verificación)" value={form.data.tax_id} onChange={set('tax_id')} message={form.errors.tax_id} placeholder="900123456-7" inputMode="numeric" maxLength={30} />
+                    <AccessInput id="tax_id" label="NIT o identificador fiscal (opcional)" value={form.data.tax_id} onChange={set('tax_id')} message={form.errors.tax_id} placeholder="900123456-7 · RFC · VAT · EIN" maxLength={20} />
                 </div>
                 <AccessInput id="phone" label="Teléfono de contacto" type="tel" value={form.data.phone} onChange={set('phone')} message={form.errors.phone} placeholder="+57 300 000 0000" autoComplete="tel" maxLength={20} />
                 <div>
@@ -422,7 +424,10 @@ function StepPlan({ plans }) {
                                 : <PriceOptions prices={plan.prices} period={period} active={choice === plan.id} onPick={(chosenPeriod) => pick(plan, chosenPeriod)} />}
                             {plan.description && <span className="choice-text">{plan.description}</span>}
                             {!usable(plan) && <span className="choice-text">Este plan todavía no está disponible para contratar en línea.</span>}
-                            <span className="choice-tags"><span className="choice-tag">{plan.modules.length} {plan.modules.length === 1 ? 'módulo' : 'módulos'}</span></span>
+                            <span className="choice-tags">
+                                <span className="choice-tag">{plan.modules.length} {plan.modules.length === 1 ? 'módulo' : 'módulos'}</span>
+                                {(plan.limits ?? []).map((limit) => <span key={limit.key} className="choice-tag">{limit.label}: {limitText(limit)}</span>)}
+                            </span>
                             <button type="button" className="plan-link" onClick={(e) => { e.stopPropagation(); setViewing(plan); }}>Ver módulos</button>
                         </div>
                     ))}
@@ -464,17 +469,33 @@ function StepSummary({ email, draft, selected, documents }) {
             <p className="signup-lead">Confirma que todo está bien. Puedes volver a cualquier paso para corregirlo.</p>
 
             {selected ? (
-                <ul className="summary-list">
-                    <li><span>Solución</span><strong>{selected.solutionName}</strong></li>
-                    <li><span>Plan</span><strong>{selected.name}</strong></li>
-                    {!quote && price && <li><span>Periodicidad</span><strong>{PERIOD_NAME[price.period]}</strong></li>}
-                    <li><span>Precio</span><strong>{quote ? 'Por cotización' : price ? `${formatMoney(price.amount, price.currency)} ${price.currency} · ${PERIOD[price.period]}` : 'No disponible'}</strong></li>
-                    <li><span>Módulos incluidos</span><strong>{selected.modules.length} · <button type="button" className="plan-link" onClick={() => setViewing(true)}>Ver módulos</button></strong></li>
-                    <li><span>Empresa</span><strong>{draft.companyName}</strong></li>
-                    <li><span>NIT</span><strong>{draft.taxId}</strong></li>
-                    <li><span>Workspace</span><strong>{draft.workspaceCode}</strong></li>
-                    <li><span>Administrador</span><strong>{draft.adminName} · {email}</strong></li>
-                </ul>
+                <div className="summary-table">
+                    <section>
+                        <h3>Tu oferta</h3>
+                        <dl>
+                            <div><dt>Solución</dt><dd>{selected.solutionName}</dd></div>
+                            <div><dt>Plan</dt><dd>{selected.name}</dd></div>
+                            {!quote && price && <div><dt>Periodicidad</dt><dd>{PERIOD_NAME[price.period]}</dd></div>}
+                            <div className="highlight"><dt>Precio</dt><dd>{quote ? 'Por cotización' : price ? `${formatMoney(price.amount, price.currency)} ${price.currency} · ${PERIOD[price.period]}` : 'No disponible'}</dd></div>
+                        </dl>
+                    </section>
+                    <section>
+                        <h3>Prestaciones y límites</h3>
+                        <dl>
+                            <div><dt>Módulos incluidos</dt><dd>{selected.modules.length} · <button type="button" className="plan-link" onClick={() => setViewing(true)}>Ver módulos</button></dd></div>
+                            {(selected.limits ?? []).map((limit) => <div key={limit.key}><dt>{limit.label}</dt><dd>{limitText(limit)}</dd></div>)}
+                        </dl>
+                    </section>
+                    <section>
+                        <h3>Tu cuenta</h3>
+                        <dl>
+                            <div><dt>Empresa</dt><dd>{draft.companyName}</dd></div>
+                            {draft.taxId && <div><dt>NIT o identificador fiscal</dt><dd>{draft.taxId}</dd></div>}
+                            <div><dt>Workspace</dt><dd>{draft.workspaceCode}</dd></div>
+                            <div><dt>Administrador</dt><dd>{draft.adminName} · {email}</dd></div>
+                        </dl>
+                    </section>
+                </div>
             ) : (
                 <div className="signup-note warning" role="alert">El plan elegido ya no está disponible. Vuelve atrás y elige otro.</div>
             )}
@@ -545,7 +566,7 @@ function StepPayment({ draft, payment }) {
 
 export default function Wizard(props) {
     const { step, steps } = props;
-    const { flash } = usePage().props;
+    const { flash, errors } = usePage().props;
     const { showToast } = useAccess();
 
     useEffect(() => {
@@ -556,6 +577,7 @@ export default function Wizard(props) {
         <>
             <Head title="Crear cuenta" />
             <Steps steps={steps} />
+            {errors?.signup && <div className="signup-note warning" role="alert">{errors.signup}</div>}
             {step === 'email' && <StepEmail email={props.email} mailUsable={props.mailUsable} codeMinutes={props.codeMinutes} offersAvailable={props.offersAvailable} />}
             {step === 'code' && <StepCode email={props.email} resendSeconds={props.resendSeconds} codeMinutes={props.codeMinutes} />}
             {step === 'company' && <StepCompany email={props.email} draft={props.draft} passwordMin={props.passwordMin} />}

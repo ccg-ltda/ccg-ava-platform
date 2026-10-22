@@ -12,6 +12,7 @@ use App\Orders\CommerceSchema;
 use App\Orders\InventoryService;
 use App\Orders\ProductCategories;
 use App\Services\ListPagination;
+use App\Services\LocationScope;
 use App\Services\PrivateImage;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -38,7 +39,26 @@ class ProductController extends Controller
         private readonly CatalogInventory $catalog,
         private readonly InventoryService $inventory,
         private readonly ProductCategories $categories,
+        private readonly LocationScope $scope,
     ) {}
+
+    /** The locations (ids) a product is offered in; empty = offered in every location (historical, never assigned). @return list<int> */
+    private function offeredIn(Product $product): array
+    {
+        return $product->locations()->pluck('locations.id')->map(fn ($id) => (int) $id)->all();
+    }
+
+    /** A limited member may read only products offered in one of their locations. */
+    private function assertSees(Request $request, Product $product): void
+    {
+        abort_unless($this->scope->maySee($request->attributes->get('workspace'), $request->user(), $this->offeredIn($product)), 403, 'Este producto no está disponible en tus sedes.');
+    }
+
+    /** A limited member may change only a product that is offered somewhere and ONLY in their locations (changing it changes it everywhere it is offered). */
+    private function assertChanges(Request $request, Product $product): void
+    {
+        abort_unless($this->scope->mayChange($request->attributes->get('workspace'), $request->user(), $this->offeredIn($product)), 403, 'Este producto también se ofrece en sedes a las que no tienes acceso.');
+    }
 
     public function index(Request $request): Response
     {
@@ -72,7 +92,7 @@ class ProductController extends Controller
             'categories' => $inventory ? $this->categories->options($workspace)->map(fn ($category) => ['id' => $category->id, 'name' => $category->name])->values()->all() : $workspace->products()->whereNotNull('category')->distinct()->orderBy('category')->pluck('category')->all(),
             'locations' => $locations->map(fn ($location) => ['id' => $location->id, 'name' => $location->name])->values()->all(),
             'currency' => $workspace->settingsOrDefault()->currency,
-            'total' => $workspace->products()->count(),
+            'total' => $workspace->products()->when(($scoped = $this->scope->allowedIds($workspace, $request->user())) !== null, fn ($q) => $q->whereIn('id', DB::table('location_product')->whereIn('location_id', $scoped)->select('product_id')))->count(),
             'inventory' => [
                 'ready' => $inventory, 'canView' => $canInventory, 'canAdjust' => $inventory && $this->can($request, 'adjust-inventory'),
                 'summary' => $canInventory ? $this->catalog->summary($workspace, $place) : null,
@@ -95,9 +115,10 @@ class ProductController extends Controller
         $workspace = $request->attributes->get('workspace');
         $inventory = $this->schema->inventoryReady();
         $model = $workspace->products()->with($inventory ? ['locations:id', 'stocks'] : ['locations:id'])->findOrFail($product);
+        $this->assertSees($request, $model);
         $locations = $this->catalog->locations($workspace);
         $canInventory = $inventory && $this->can($request, 'view-inventory');
-        $place = ['value' => '', 'id' => null, 'general' => false];
+        $place = ['value' => '', 'id' => null, 'general' => false, 'scope' => $this->scope->allowedIds($workspace, $request->user())];
         $movements = null;
         $movementPlace = '';
 
@@ -154,6 +175,7 @@ class ProductController extends Controller
         }
 
         $model = $request->attributes->get('workspace')->products()->findOrFail($product);
+        $this->assertChanges($request, $model);
         $control = $this->inventoryControl($request, false);
         $model->update($request->product() + $control['attributes']);
         $this->syncLocations($model, $request->locationIds());
@@ -176,6 +198,7 @@ class ProductController extends Controller
     public function image(Request $request, int $product): HttpResponse|StreamedResponse
     {
         $model = $request->attributes->get('workspace')->products()->findOrFail($product);
+        $this->assertSees($request, $model);
 
         return PrivateImage::response($model->image_path, $request);
     }
@@ -187,6 +210,7 @@ class ProductController extends Controller
         }
 
         $model = $request->attributes->get('workspace')->products()->findOrFail($product);
+        $this->assertChanges($request, $model);
         $model->update(['is_active' => $active]);
 
         return back()->with('success', $active ? 'Producto activado correctamente' : 'Producto desactivado correctamente')
@@ -293,6 +317,8 @@ class ProductController extends Controller
             'id' => $product->id, 'sku' => $product->sku, 'name' => $product->name, 'description' => $product->description,
             'category' => $product->category, 'categoryId' => $inventory ? $product->category_id : null,
             'price' => (float) $product->price, 'isActive' => $product->is_active, 'locationIds' => $product->locations->pluck('id')->all(),
+            // A historical product offered in no location: it still sells as before, but it is flagged until someone assigns it on purpose.
+            'needsLocation' => $product->locations->isEmpty() && $locations->isNotEmpty(),
             'imageUrl' => $inventory && $product->image_path ? route('catalog.image', $product->id).'?v='.$product->updated_at?->timestamp : null,
             'tracksInventory' => $inventory && $product->tracks_inventory, 'openOrders' => $openOrders,
             'stock' => $canInventory ? $this->catalog->stockView($product, $locations, $place) : null,

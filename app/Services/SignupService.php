@@ -75,17 +75,13 @@ class SignupService
     }
 
     /**
-     * @param  array{admin_name: string, password: string, company_name: string, tax_id: string, phone: string, workspace_code: string}  $data
+     * @param  array{admin_name: string, password: string, company_name: string, tax_id: ?string, phone: string, workspace_code: string}  $data
      */
     public function saveCompany(SignupRequest $request, array $data): SignupRequest
     {
         $this->assertEditable($request);
-        $nit = Nit::normalize($data['tax_id']);
+        $nit = Nit::identifier($data['tax_id'] ?? null); // optional and of any country: null when left blank
         $code = Workspace::normalizeCode($data['workspace_code']);
-
-        if ($nit === null) {
-            throw ValidationException::withMessages(['tax_id' => 'Ingresa un NIT válido con su dígito de verificación, por ejemplo 900123456-7.']);
-        }
 
         if (! $this->workspaceCodeAvailable($code, $request)) {
             throw ValidationException::withMessages(['workspace_code' => 'Ese nombre de Workspace no está disponible. Prueba con otro.']);
@@ -93,8 +89,8 @@ class SignupService
 
         // One company, one registration: a NIT that already belongs to an Organization or to another open sign-up is not registered again from here.
         // The answer does not say which, nor whose it is.
-        $taken = Organization::where('tax_id', $nit)->exists()
-            || SignupRequest::where('tax_id', $nit)->where('id', '!=', $request->id)->whereIn('status', SignupRequest::OPEN)->where('expires_at', '>', now())->exists();
+        $taken = $nit !== null && (Organization::whereRaw('lower(tax_id) = ?', [mb_strtolower($nit)])->exists()
+            || SignupRequest::whereRaw('lower(tax_id) = ?', [mb_strtolower($nit)])->where('id', '!=', $request->id)->whereIn('status', SignupRequest::OPEN)->where('expires_at', '>', now())->exists());
 
         if ($taken) {
             throw ValidationException::withMessages(['tax_id' => 'No pudimos registrar estos datos. Si tu empresa ya tiene cuenta, inicia sesión; si no, contacta con soporte.']);
@@ -154,7 +150,7 @@ class SignupService
             'price_cents' => $period ? $plan->priceFor($period) : null,
             'currency' => $period ? $plan->currency : null,
             'billing_period' => $period,
-        ]);
+        ] + (Schema::hasColumn('signup_requests', 'limits_snapshot') ? ['limits_snapshot' => $this->limits->planLimits($plan)] : []));
         $this->reopen($request);
         $request->save();
 
@@ -224,6 +220,15 @@ class SignupService
             $request->save();
 
             throw ValidationException::withMessages(['plan' => 'El precio del plan cambió. Revisa el resumen antes de continuar.']);
+        }
+
+        // The limits shown in the summary are part of what is accepted: if the plan's limits changed in between, stop and show the new summary.
+        if (Schema::hasColumn('signup_requests', 'limits_snapshot') && is_array($request->limits_snapshot) && $request->limits_snapshot !== $this->limits->planLimits($plan)) {
+            $request->fill(['limits_snapshot' => $this->limits->planLimits($plan)]);
+            $this->reopen($request);
+            $request->save();
+
+            throw ValidationException::withMessages(['plan' => 'Los límites del plan cambiaron. Revisa el resumen antes de continuar.']);
         }
 
         $required = $this->requiredDocuments();

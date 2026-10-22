@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Middleware\EnsurePlatformAdministration;
 use App\Http\Requests\UpdateWorkspaceSettingsRequest;
+use App\Services\EmailTemplates;
 use App\Services\WorkspaceSettingsService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -24,6 +26,13 @@ class SettingsController extends Controller
             'catalog' => $this->settings->catalog(),
             // Reading the settings (view-settings) does not let anyone change them: the form is offered only with edit-settings.
             'canEdit' => in_array('edit-settings', $request->attributes->get('workspace_permissions', []), true),
+            // The global email template: offered (and its data sent) ONLY to the platform administration inside the administrative Workspace. The routes re-check it.
+            'emailTemplate' => EnsurePlatformAdministration::allows($request, 'view-email-template') ? app(EmailTemplates::class)->current() + [
+                'placeholders' => EmailTemplates::PLACEHOLDERS,
+                'canEdit' => EnsurePlatformAdministration::allows($request, 'edit-email-template'),
+                'brand' => (string) config('branding.name'),
+                'maxBytes' => EmailTemplates::MAX_BYTES,
+            ] : null,
         ]);
     }
 

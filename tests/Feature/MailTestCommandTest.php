@@ -133,7 +133,7 @@ class MailTestCommandTest extends TestCase
         Mail::fake();
         $this->gmail();
         $this->seed(ModuleCatalogSeeder::class);
-        $category = ModuleCategory::where('key', 'health')->firstOrFail();
+        $category = tap(ModuleCategory::where('key', 'health')->firstOrFail(), fn ($c) => $c->update(['is_public' => true]));
         Plan::create(['name' => 'Starter', 'module_category_id' => $category->id, 'price_monthly_cents' => 4990000, 'currency' => 'COP', 'is_public' => true])
             ->modules()->sync(Module::whereIn('key', ['dashboard'])->pluck('id'));
         Log::spy();

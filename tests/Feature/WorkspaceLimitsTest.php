@@ -180,8 +180,8 @@ class WorkspaceLimitsTest extends TestCase
         $page = $this->get("/workspaces/{$this->acme->id}/modules")->viewData('page')['props']['limits'];
         $this->assertTrue($page['ready']);
         $this->assertSame(['users', 7, 'workspace', 'Piloto con 7 sedes'], [$page['metrics'][0]['key'], $page['metrics'][0]['value'], $page['metrics'][0]['source'], $page['metrics'][0]['override']['reason']]);
-        $this->assertSame(['users', 'ai_executions'], array_column($page['metrics'], 'key'));
-        $this->assertSame(0, $page['metrics'][1]['usage']);
+        $this->assertSame(['users', 'locations', 'ai_executions'], array_column($page['metrics'], 'key'));
+        $this->assertSame(0, $page['metrics'][2]['usage']);
         $this->assertNotEmpty($page['period']['renews']);
     }
 
@@ -298,6 +298,7 @@ class WorkspaceLimitsTest extends TestCase
     {
         $this->platformAdmin();
         $health = ModuleCategory::where('key', 'health')->firstOrFail();
+        $health->update(['is_public' => true]);
 
         $this->put("/plans/{$this->plan->id}", [
             'name' => 'Salud base', 'module_category_id' => $health->id, 'is_public' => true, 'requires_quote' => false, 'currency' => 'COP',

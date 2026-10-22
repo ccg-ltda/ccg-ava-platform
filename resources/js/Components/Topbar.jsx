@@ -1,15 +1,17 @@
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
+import RoleLabel from '@/Components/RoleLabel';
 import { Link, router } from '@inertiajs/react';
 import { ChevronDown, LogOut, Menu as MenuIcon, User } from 'lucide-react';
 import { isOffered, topTabs } from '@/config/navigation';
 import useAccess from '@/Hooks/useAccess';
-import { roleTone } from '@/config/roles';
+import useBrand from '@/Hooks/useBrand';
 import Avatar from './Avatar';
 import Badge from './Badge';
 
 /** Navy top bar: brand, the single "General" tab, user menu and logout. Decoration stays behind the controls. */
 export default function Topbar({ user, role, onMenu }) {
     const access = useAccess();
+    const brand = useBrand();
 
     return (
         <header className="brand-surface topbar-surface sticky top-0 z-30 flex h-16 items-center gap-3 px-4 text-white shadow-card sm:px-6">
@@ -22,7 +24,7 @@ export default function Topbar({ user, role, onMenu }) {
                 <MenuIcon className="size-5" aria-hidden="true" />
             </button>
 
-            <p className="text-sm font-extrabold tracking-[0.2em] uppercase">CCG Avachat</p>
+            <p className="max-w-[9rem] truncate text-sm font-extrabold tracking-[0.12em] uppercase sm:max-w-[16rem] sm:tracking-[0.2em]" title={brand}>{brand}</p>
 
             <nav className="ml-2 hidden items-center gap-1 sm:flex" aria-label="Secciones">
                 {topTabs.filter((tab) => isOffered(tab, access)).map((tab) => (
@@ -56,9 +58,7 @@ export default function Topbar({ user, role, onMenu }) {
                     <div className="px-3 py-2">
                         <p className="truncate text-sm font-semibold">{user?.name}</p>
                         <p className="truncate text-xs text-ink-muted">{user?.email}</p>
-                        <Badge tone={roleTone(role)} className="mt-2">
-                            {role}
-                        </Badge>
+                        <RoleLabel role={role} className="mt-1" />
                     </div>
                     <MenuItem>
                         <Link

@@ -13,6 +13,7 @@ use App\Services\SignupCatalog;
 use App\Services\SignupService;
 use App\Services\SignupVerifier;
 use App\Support\MailAvailability;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -108,7 +109,7 @@ class SignupController extends Controller
     /** Back to the email step with another address (or to get another code). */
     public function restart(Request $request): RedirectResponse
     {
-        $request->session()->forget(['signup.verification_id', 'signup.public_id', 'signup.goto']);
+        $request->session()->forget(['signup.public_id', 'signup.goto']);
 
         return redirect()->route('signup.index');
     }
@@ -129,15 +130,17 @@ class SignupController extends Controller
         $data = $request->validate([
             'admin_name' => ['required', 'string', 'min:3', 'max:120'],
             'company_name' => ['required', 'string', 'min:2', 'max:160'],
-            'tax_id' => ['required', 'string', 'max:30'],
+            'tax_id' => ['nullable', 'string', 'max:20', 'regex:/^[\pL\pN][\pL\pN .\/-]*$/u'],
             'phone' => ['required', 'string', 'regex:/^\+?[0-9 ()-]{7,20}$/'],
             'workspace_code' => ['required', 'string', 'regex:/^[A-Z0-9_-]{3,50}$/'],
             'password' => [$draft->password ? 'nullable' : 'required', 'confirmed', Password::min((int) config('signup.password_min'))->letters()->numbers()],
         ], [
+            'tax_id.max' => 'El identificador fiscal admite hasta 20 caracteres.',
+            'tax_id.regex' => 'El identificador fiscal solo admite letras, números, espacios, puntos, guiones y barras.',
             'phone.regex' => 'Ingresa un teléfono válido (solo números, espacios, guiones o paréntesis).',
             'workspace_code.regex' => 'Usa de 3 a 50 letras, números, guiones o guion bajo.',
             'password.confirmed' => 'Las contraseñas no coinciden.',
-        ]);
+        ], ['admin_name' => 'nombre del administrador', 'company_name' => 'nombre de la empresa', 'tax_id' => 'identificador fiscal', 'phone' => 'teléfono', 'workspace_code' => 'nombre del Workspace', 'password' => 'contraseña']);
 
         $this->signup->saveCompany($draft, $data);
 
@@ -201,7 +204,7 @@ class SignupController extends Controller
             $this->signup->cancel($draft);
         }
 
-        $request->session()->forget(['signup.verification_id', 'signup.public_id', 'signup.goto']);
+        $request->session()->forget(['signup.public_id', 'signup.goto']);
 
         return redirect()->route('pre-login');
     }
@@ -236,7 +239,14 @@ class SignupController extends Controller
     private function requireDraft(Request $request): SignupRequest
     {
         $draft = $this->draft($request);
-        abort_unless($draft && $draft->status !== SignupRequest::COMPLETED, 409, 'Tu sesión de registro venció. Empieza de nuevo.');
+
+        if (! $draft || $draft->status === SignupRequest::COMPLETED) {
+            // A missing, expired or finished sign-up session is an expected situation, not an error page: forget the stale state and send the visitor to
+            // the wizard (which opens on the step the state allows) with a clear message.
+            $request->session()->forget(['signup.public_id', 'signup.goto']);
+
+            throw new HttpResponseException(redirect()->route('signup.index')->with('error', 'Tu sesión de registro venció o no se pudo continuar. Empieza de nuevo.'));
+        }
 
         return $draft;
     }
@@ -300,7 +310,20 @@ class SignupController extends Controller
             return null;
         }
 
-        return $this->catalog->plan($plan) + [
+        $shown = $this->catalog->plan($plan);
+
+        // Once the contract was confirmed the customer sees what they ACCEPTED (limits and modules as they were), not what the plan says today.
+        if (in_array($draft->status, [SignupRequest::AWAITING_PAYMENT, SignupRequest::QUOTE_REQUESTED], true)) {
+            if (is_array($draft->limits_snapshot ?? null)) {
+                $shown['limits'] = $this->catalog->limitsOf($draft->limits_snapshot);
+            }
+
+            if (is_array($draft->modules_snapshot)) {
+                $shown['modules'] = array_values(array_filter($shown['modules'], fn (array $module) => in_array($module['key'], $draft->modules_snapshot, true)));
+            }
+        }
+
+        return $shown + [
             'solutionName' => $draft->solution_key === SignupCatalog::CUSTOM ? 'Personalizado' : $plan->solution?->name,
             'snapshot' => $draft->price_cents !== null ? ['amount' => $draft->price_cents / 100, 'currency' => $draft->currency, 'period' => $draft->billing_period] : null,
         ];

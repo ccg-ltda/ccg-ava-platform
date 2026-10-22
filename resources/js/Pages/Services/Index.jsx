@@ -21,7 +21,7 @@ import AppLayout from '@/Layouts/AppLayout';
 
 const money = (value, currency) => (value === null || value === undefined ? '—' : new Intl.NumberFormat('es', { style: 'currency', currency }).format(value));
 
-function ServiceModal({ service, resources, onClose }) {
+function ServiceModal({ service, resources, locations = [], onClose }) {
     const editing = Boolean(service?.id);
     const form = useForm({
         name: service?.name ?? '',
@@ -31,8 +31,10 @@ function ServiceModal({ service, resources, onClose }) {
         buffer_minutes: service?.bufferMinutes ?? 0,
         price: service?.price ?? '',
         resource_ids: service?.resourceIds ?? [],
+        location_ids: service?.locationIds ?? [],
     });
     const { data, setData, errors } = form;
+    const toggleLocation = (id) => setData('location_ids', data.location_ids.includes(id) ? data.location_ids.filter((item) => item !== id) : [...data.location_ids, id]);
     const toggleResource = (id) => setData('resource_ids', data.resource_ids.includes(id) ? data.resource_ids.filter((item) => item !== id) : [...data.resource_ids, id]);
 
     const submit = (event) => {
@@ -67,8 +69,9 @@ function ServiceModal({ service, resources, onClose }) {
                             <InputError message={errors.duration_minutes} className="mt-1" />
                         </div>
                         <div>
-                            <InputLabel htmlFor="service_buffer" value="Tiempo entre citas (min)" />
+                            <InputLabel htmlFor="service_buffer" value="Descanso después de cada cita (min)" />
                             <TextInput id="service_buffer" type="number" min={0} max={240} step={5} className="mt-1" value={data.buffer_minutes} onChange={(e) => setData('buffer_minutes', e.target.value)} invalid={Boolean(errors.buffer_minutes)} />
+                            <p className="mt-1 text-xs text-ink-muted">Tiempo que queda bloqueado para el profesional y el recurso después de cada cita de este servicio (descanso, limpieza o traslado). Un cambio solo afecta a las citas nuevas.</p>
                             <InputError message={errors.buffer_minutes} className="mt-1" />
                         </div>
                         <div>
@@ -82,6 +85,23 @@ function ServiceModal({ service, resources, onClose }) {
                             <InputError message={errors.category} className="mt-1" />
                         </div>
                     </div>
+                    {locations.length > 0 && (
+                        <fieldset>
+                            <legend className="text-sm font-medium text-ink">Sedes donde se ofrece</legend>
+                            <p className="mt-0.5 text-xs text-ink-muted">
+                                {service?.canManage === false ? 'Este servicio se ofrece en sedes que no son tuyas: no puedes cambiarlo.' : 'Si no marcas ninguna, el servicio se ofrece en todas las sedes. Cada profesional sigue ofreciendo solo los servicios que tiene asignados.'}
+                            </p>
+                            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                                {locations.map((location) => (
+                                    <label key={location.id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-field px-3 py-2 text-sm text-ink has-checked:border-primary/50 has-checked:bg-primary-soft/40">
+                                        <input type="checkbox" className="size-4 accent-primary" checked={data.location_ids.includes(location.id)} onChange={() => toggleLocation(location.id)} />
+                                        {location.name}
+                                    </label>
+                                ))}
+                            </div>
+                            <InputError message={errors.location_ids ?? errors['location_ids.0']} className="mt-1" />
+                        </fieldset>
+                    )}
                     {resources.length > 0 && (
                         <fieldset>
                             <legend className="text-sm font-medium text-ink">Recursos que necesita (opcional)</legend>
@@ -112,7 +132,7 @@ function ServiceModal({ service, resources, onClose }) {
 }
 
 /** Servicios: what the Workspace offers to be booked (its own, or read-only from its external agenda). */
-export default function Index({ capabilities, services, external, externalError, resources, currency }) {
+export default function Index({ capabilities, services, external, externalError, resources, locations = [], currency }) {
     const confirm = useConfirm();
     const { permissions } = useAccess();
     const canCreate = permissions.includes('create-services') && !capabilities.external;
@@ -164,6 +184,7 @@ export default function Index({ capabilities, services, external, externalError,
                                 <Th>Servicio</Th>
                                 <Th>Duración</Th>
                                 <Th>Precio</Th>
+                                {!capabilities.external && locations.length > 0 && <Th>Sedes</Th>}
                                 {!capabilities.external && <Th>Profesionales</Th>}
                                 {!capabilities.external && <Th>Estado</Th>}
                                 {canAct && <Th className="text-center">Acciones</Th>}
@@ -184,6 +205,11 @@ export default function Index({ capabilities, services, external, externalError,
                                         </span>
                                     </Td>
                                     <Td className="whitespace-nowrap text-ink-muted">{money(service.price, currency)}</Td>
+                                    {!capabilities.external && locations.length > 0 && (
+                                        <Td className="text-ink-muted">
+                                            {service.offeredEverywhere ? <Badge tone="neutral">Todas las sedes</Badge> : locations.filter((location) => service.locationIds.includes(location.id)).map((location) => location.name).join(', ') || '—'}
+                                        </Td>
+                                    )}
                                     {!capabilities.external && <Td className="text-ink-muted">{service.professionalsCount}</Td>}
                                     {!capabilities.external && (
                                         <Td className="whitespace-nowrap">
@@ -193,7 +219,7 @@ export default function Index({ capabilities, services, external, externalError,
                                     {canAct && (
                                         <Td>
                                             <div className="flex items-center justify-center gap-1">
-                                                {canEdit && <IconButton icon={Pencil} label="Editar" context={service.name} onClick={() => setEditing(service)} />}
+                                                {canEdit && service.canManage !== false && <IconButton icon={Pencil} label="Editar" context={service.name} onClick={() => setEditing(service)} />}
                                                 {canToggle && <IconButton icon={Power} label={service.isActive ? 'Desactivar' : 'Activar'} context={service.name} tone={service.isActive ? 'danger' : 'primary'} onClick={() => toggle(service)} />}
                                             </div>
                                         </Td>
@@ -205,7 +231,7 @@ export default function Index({ capabilities, services, external, externalError,
                 )}
             </Card>
 
-            {editing && <ServiceModal service={editing} resources={resources} onClose={() => setEditing(null)} />}
+            {editing && <ServiceModal service={editing} resources={resources} locations={locations} onClose={() => setEditing(null)} />}
         </>
     );
 }

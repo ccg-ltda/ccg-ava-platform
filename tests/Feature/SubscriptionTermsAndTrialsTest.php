@@ -51,11 +51,12 @@ class SubscriptionTermsAndTrialsTest extends TestCase
         $this->seedRoleCatalog();
         $this->seed(ModuleCatalogSeeder::class);
         $health = ModuleCategory::where('key', 'health')->firstOrFail();
+        $health->update(['is_public' => true]);
         $this->plan = Plan::create(['name' => 'Salud base', 'module_category_id' => $health->id, 'currency' => 'COP', 'is_public' => true, 'price_monthly_cents' => 4990000, 'price_yearly_cents' => 49900000]);
         $this->plan->modules()->sync(Module::whereIn('key', ['dashboard', 'assistants', 'conversations'])->pluck('id'));
         PlanLimit::create(['plan_id' => $this->plan->id, 'metric' => 'users', 'value' => 5]);
         PlanLimit::create(['plan_id' => $this->plan->id, 'metric' => 'ai_executions', 'value' => 1000]);
-        $this->other = Plan::create(['name' => 'Otro plan']);
+        $this->other = Plan::create(['name' => 'Otro plan', 'module_category_id' => $health->id]);
         $this->other->modules()->sync(Module::whereIn('key', ['dashboard'])->pluck('id'));
     }
 

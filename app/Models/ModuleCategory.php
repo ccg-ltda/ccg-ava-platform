@@ -6,16 +6,17 @@ use App\Models\Concerns\Audited;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Schema;
 
 /** An organizational group of modules (Salud, Delivery...). It limits nothing: modules of any category combine in a plan. */
-#[Fillable(['key', 'name', 'description', 'sort_order', 'is_active'])]
+#[Fillable(['key', 'name', 'description', 'sort_order', 'is_active', 'is_public'])]
 class ModuleCategory extends Model
 {
     use Audited;
 
     protected function casts(): array
     {
-        return ['is_active' => 'boolean', 'sort_order' => 'integer'];
+        return ['is_active' => 'boolean', 'is_public' => 'boolean', 'sort_order' => 'integer'];
     }
 
     /**
@@ -26,6 +27,21 @@ class ModuleCategory extends Model
     public function isSolution(): bool
     {
         return (bool) config("modules.categories.{$this->key}.solution", true);
+    }
+
+    /** Whether the database has the public-visibility column (migration `split_solution_visibility_from_activation`). */
+    public static function visibilityReady(): bool
+    {
+        return Schema::hasColumn('module_categories', 'is_public');
+    }
+
+    /**
+     * Whether the solution may be OFFERED in the public sign-up. It needs to be active AND public. On a database without the column the earlier behavior
+     * stays (active = offered), so a deployment ahead of its migration does not lose its public offer.
+     */
+    public function isPubliclyOffered(): bool
+    {
+        return $this->is_active && (! self::visibilityReady() || (bool) $this->is_public);
     }
 
     public function modules(): HasMany
@@ -45,6 +61,6 @@ class ModuleCategory extends Model
 
     public function auditFields(): array
     {
-        return ['key' => 'Identificador', 'name' => 'Nombre', 'description' => 'Descripción', 'is_active' => 'Activa'];
+        return ['key' => 'Identificador', 'name' => 'Nombre', 'description' => 'Descripción', 'is_active' => 'Activa', 'is_public' => 'Pública'];
     }
 }

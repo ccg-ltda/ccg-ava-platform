@@ -27,7 +27,13 @@ class SubscriptionsExpireTrialsCommand extends Command
             return self::SUCCESS;
         }
 
+        // Scheduled trials whose day arrived start first (access never waits for this: ModuleAccess starts a due one on the first request), then the ended expire.
+        $started = $subscriptions->startDueTrials();
         $moved = $subscriptions->expireTrials();
+
+        if ($started > 0) {
+            $this->components->info("{$started} prueba(s) programadas comenzaron.");
+        }
 
         if ($moved === 0) {
             $this->components->info('No hay pruebas vencidas por cerrar.');

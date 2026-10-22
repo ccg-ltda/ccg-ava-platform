@@ -18,6 +18,12 @@ class Subscription extends Model
     /** A free trial granted by hand to this one Workspace (trial_* columns). It grants access like `active`; its end is a decision, not an automatic cut. */
     public const TRIALING = 'trialing';
 
+    /** A trial granted to start LATER (`trial_starts_at` in the future). It grants nothing and takes nothing away until it starts (see ModuleAccess::subscription). */
+    public const SCHEDULED = 'scheduled';
+
+    /** A scheduled trial that was cancelled (or whose plan became unusable) BEFORE it started. It never governed the Workspace, so it grants and withdraws nothing. */
+    public const VOIDED = 'schedule_cancelled';
+
     public const ACTIVE = 'active';
 
     public const GRACE = 'grace';
@@ -55,6 +61,18 @@ class Subscription extends Model
     public function withdrawsAccess(): bool
     {
         return in_array($this->status, self::WITHDRAWN, true) || ($this->status === self::PENDING && $this->activated_at !== null) || ($this->status === self::TRIALING && $this->trialExpired());
+    }
+
+    /** A trial whose start date has not arrived: no access from it yet. */
+    public function trialScheduled(): bool
+    {
+        return $this->status === self::SCHEDULED && $this->trial_starts_at !== null;
+    }
+
+    /** Whether a scheduled trial has reached its start (it is then started on the next lookup or by the scheduler, whichever comes first). */
+    public function trialDue(): bool
+    {
+        return $this->trialScheduled() && $this->trial_starts_at->lessThanOrEqualTo(now());
     }
 
     /** Whether the database has the columns of the frozen conditions and the trials (migration `freeze_contract_terms_and_trials_on_subscriptions`). */

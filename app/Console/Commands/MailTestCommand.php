@@ -42,8 +42,8 @@ class MailTestCommand extends Command
 
         try {
             Mail::raw(
-                "Mensaje de prueba de Ava Platform.\n\nSi lo lees, la configuración de correo saliente funciona. No contiene datos de clientes ni códigos.\nEnviado: ".now()->toDateTimeString().' ('.config('app.timezone').')',
-                fn (Message $message) => $message->to($recipient)->subject('Prueba de correo de Ava Platform'),
+                'Mensaje de prueba de '.config('branding.name').".\n\nSi lo lees, la configuración de correo saliente funciona. No contiene datos de clientes ni códigos.\nEnviado: ".now()->toDateTimeString().' ('.config('app.timezone').')',
+                fn (Message $message) => $message->to($recipient)->subject('Prueba de correo de '.config('branding.name')),
             );
         } catch (Throwable $e) {
             $this->components->error('No se pudo entregar el mensaje al servidor SMTP: '.$this->diagnose($e));

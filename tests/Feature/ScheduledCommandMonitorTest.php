@@ -61,13 +61,13 @@ class ScheduledCommandMonitorTest extends TestCase
 
     public function test_every_watched_command_keeps_its_last_output_and_reports_its_result(): void
     {
-        foreach (['executions:recover' => 'executions-recover', 'appointments:notify' => 'appointments-notify', 'agent:tools:reconcile' => 'agent-tools-reconcile', 'signup:reconcile' => 'signup-reconcile', 'subscriptions:expire-trials' => 'trials-expire'] as $command => $name) {
+        foreach (['executions:recover' => 'executions-recover', 'appointments:notify' => 'appointments-notify', 'catalog:send-reminders' => 'catalog-reminders', 'agent:tools:reconcile' => 'agent-tools-reconcile', 'signup:reconcile' => 'signup-reconcile', 'subscriptions:expire-trials' => 'trials-expire'] as $command => $name) {
             $event = $this->event($command);
 
             $this->assertNotNull($event, "{$command} is scheduled");
             $this->assertStringEndsWith("scheduler-last-{$name}.log", (string) $event->output, 'its output is no longer sent to /dev/null');
         }
-        $this->assertSame(['executions-recover', 'appointments-notify', 'agent-tools-reconcile', 'signup-reconcile', 'trials-expire'], array_keys(ScheduledCommandMonitor::WATCHED));
+        $this->assertSame(['executions-recover', 'appointments-notify', 'catalog-reminders', 'agent-tools-reconcile', 'signup-reconcile', 'trials-expire'], array_keys(ScheduledCommandMonitor::WATCHED));
     }
 
     public function test_a_success_is_timestamped_and_a_failure_is_counted_and_keeps_the_real_cause(): void

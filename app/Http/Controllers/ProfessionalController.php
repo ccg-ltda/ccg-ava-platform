@@ -11,6 +11,7 @@ use App\Http\Requests\SaveProfessionalRequest;
 use App\Models\Professional;
 use App\Models\ScheduleException;
 use App\Models\ScheduleRule;
+use App\Services\LocationScope;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -144,7 +145,18 @@ class ProfessionalController extends Controller
         $ready = $this->locations->schemaReady();
         $places = $ready ? $professional->workspace->locations()->pluck('name', 'id') : collect();
         $before = $this->summary($professional->scheduleRules()->get()->map(fn ($rule) => ['weekday' => $rule->weekday, 'starts_at' => $rule->starts_at, 'ends_at' => $rule->ends_at, 'location' => $places[$rule->location_id] ?? null])->all());
-        $professional->scheduleRules()->delete();
+        // A member limited to selected locations rewrites ONLY the hours of their own locations: the hours of other locations (and the ones that apply
+        // everywhere) stay as they are, and they can not write hours for a location that is not theirs.
+        $scope = app(LocationScope::class);
+        $allowed = $ready ? $scope->allowedIds($professional->workspace, auth()->user()) : null;
+
+        if ($allowed !== null) {
+            abort_if(collect($request->schedule())->contains(fn (array $row) => ! in_array($row['location_id'] ?? null, $allowed, true)), 403, 'Solo puedes definir horarios de tus sedes.');
+            $professional->scheduleRules()->whereIn('location_id', $allowed)->delete();
+        } else {
+            $professional->scheduleRules()->delete();
+        }
+
         // Before the locations migration there is no `location_id` column to write.
         collect($request->schedule())->each(fn (array $row) => $professional->scheduleRules()->create(($ready ? $row : array_diff_key($row, ['location_id' => 0])) + ['workspace_id' => $professional->workspace_id]));
         $after = $this->summary(array_map(fn (array $row) => $row + ['location' => $places[$row['location_id']] ?? null], $request->schedule()));

@@ -44,7 +44,7 @@ class PlanPeriodPricingTest extends TestCase
         $this->seedRoleCatalog();
         $this->seed(ModuleCatalogSeeder::class);
         $this->plan = Plan::create([
-            'name' => 'Starter', 'module_category_id' => ModuleCategory::where('key', 'health')->firstOrFail()->id, 'currency' => 'COP', 'is_public' => true,
+            'name' => 'Starter', 'module_category_id' => tap(ModuleCategory::where('key', 'health')->firstOrFail(), fn ($c) => $c->update(['is_public' => true]))->id, 'currency' => 'COP', 'is_public' => true,
             'price_monthly_cents' => 4990000, 'price_yearly_cents' => 49900000,
         ]);
         $this->plan->modules()->sync(Module::whereIn('key', ['dashboard', 'reports'])->pluck('id'));
@@ -237,7 +237,7 @@ class PlanPeriodPricingTest extends TestCase
     {
         $this->platformAdmin();
         $workspace = Workspace::create(['organization_id' => Organization::create(['name' => 'Clínica'])->id, 'code' => 'CLINICA', 'name' => 'Clínica', 'plan_id' => $this->plan->id]);
-        $other = Plan::create(['name' => 'Otro plan']);
+        $other = Plan::create(['name' => 'Otro plan', 'module_category_id' => $this->plan->module_category_id]);
 
         $props = $this->get("/workspaces/{$workspace->id}/modules")->assertOk()->viewData('page')['props'];
         $this->assertSame('Starter', $props['data']['plan']['name']);

@@ -85,8 +85,8 @@ class ModuleAccess
             return $this->implemented();
         }
 
+        $subscription = $this->subscription($workspace); // one lookup serves both the access check and the frozen conditions (first: a scheduled trial may start here)
         $plan = $workspace->plan_id ? $workspace->plan : $this->defaultPlan();
-        $subscription = $this->subscription($workspace); // one lookup serves both the access check and the frozen conditions
 
         if (! $plan || ! $plan->is_active || ($subscription !== null && $subscription->withdrawsAccess())) {
             return [];
@@ -120,8 +120,35 @@ class ModuleAccess
         return array_values(array_filter($keys, fn (string $key) => ! $usableOnly || $this->isImplemented($key)));
     }
 
-    /** The subscription of a client Workspace, if it has one. */
+    /**
+     * The subscription that GOVERNS a client Workspace now, if it has one. A trial scheduled for later is not one: until its start date it neither grants nor
+     * withdraws anything (the Workspace keeps what it has). The server decides on every request: a scheduled trial that reached its start is started here
+     * (idempotent, locked) so access never depends on the scheduler having run.
+     */
     public function subscription(Workspace $workspace): ?Subscription
+    {
+        $subscription = $this->subscriptionRow($workspace);
+
+        if ($subscription?->status === Subscription::VOIDED) {
+            return null; // a trial cancelled before it started never governed the Workspace
+        }
+
+        if ($subscription?->status !== Subscription::SCHEDULED) {
+            return $subscription;
+        }
+
+        if (! $subscription->trialDue()) {
+            return null;
+        }
+
+        $started = app(SubscriptionService::class)->startScheduledTrial($subscription);
+        $workspace->refresh(); // the start assigned the plan of the trial
+
+        return $started->status === Subscription::TRIALING ? $started : null; // one that could not start (voided) governs nothing
+    }
+
+    /** The subscription row as it is, whatever its state (for the administration to show a scheduled trial). */
+    public function subscriptionRow(Workspace $workspace): ?Subscription
     {
         return Subscription::where('workspace_id', $workspace->id)->first();
     }

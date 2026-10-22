@@ -1,4 +1,5 @@
 import { Eye, Lock, Pencil, Plus } from 'lucide-react';
+import RoleLabel from '@/Components/RoleLabel';
 import { useState } from 'react';
 import Badge from '@/Components/Badge';
 import Card from '@/Components/Card';
@@ -6,7 +7,6 @@ import IconButton from '@/Components/IconButton';
 import Pagination from '@/Components/Pagination';
 import PrimaryButton from '@/Components/PrimaryButton';
 import { TableWrap, Td, Th } from '@/Components/Table';
-import { roleTone } from '@/config/roles';
 import usePagedList from '@/Hooks/usePagedList';
 import { summarizeRole } from '@/lib/permissions';
 import RoleEditor from './RoleEditor';
@@ -73,7 +73,7 @@ export default function RolesPanel({ roles, permissionCatalog, perPageOptions, c
                         <tr key={role.id} className="transition-colors duration-150 hover:bg-canvas/70">
                             <Td className="whitespace-nowrap">
                                 <span className="flex items-center gap-2">
-                                    <Badge tone={roleTone(role.name)}>{role.name}</Badge>
+                                    <RoleLabel role={role.name} />
                                     {role.protected && <Lock className="size-3.5 text-ink-muted" aria-label="Rol del sistema" />}
                                 </span>
                             </Td>

@@ -9,8 +9,13 @@ use App\Booking\Locations;
 use App\Http\Controllers\Concerns\HandlesBooking;
 use App\Http\Requests\SaveLocationRequest;
 use App\Models\Location;
+use App\Models\Workspace;
+use App\Services\LocationScope;
+use App\Services\WorkspaceLimits;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -29,6 +34,7 @@ class LocationController extends Controller
     {
         $workspace = $request->attributes->get('workspace');
         $capabilities = $this->bookings->capabilities($workspace);
+        $allowed = app(LocationScope::class)->allowedIds($workspace, $request->user()); // null = every location
 
         // The code can be deployed before the migration: the page opens and says what is missing instead of failing on a missing table.
         $ready = $this->locations->schemaReady();
@@ -36,7 +42,7 @@ class LocationController extends Controller
         return Inertia::render('Locations/Index', [
             'capabilities' => $capabilities,
             'schemaPending' => ! $ready,
-            'locations' => ! $ready ? [] : $workspace->locations()->with('services:id')->withCount(['appointments as upcoming_count' => fn ($query) => $query->upcoming()])->orderByDesc('is_active')->orderBy('name')->get()->map(fn (Location $location) => [
+            'locations' => ! $ready ? [] : $workspace->locations()->when($allowed !== null, fn ($query) => $query->whereIn('id', $allowed))->with('services:id')->withCount(['appointments as upcoming_count' => fn ($query) => $query->upcoming()])->orderByDesc('is_active')->orderBy('name')->get()->map(fn (Location $location) => [
                 'id' => $location->id,
                 'name' => $location->name,
                 'address' => $location->address,
@@ -55,11 +61,20 @@ class LocationController extends Controller
     {
         $workspace = $request->attributes->get('workspace');
 
+        // A member limited to selected locations can not create one: it would be outside their scope the moment it exists.
+        abort_if(app(LocationScope::class)->restricted($workspace, $request->user()), 403, 'Solo quien tiene acceso a todas las sedes puede crear una sede.');
+
         return $this->attempt(function () use ($request, $workspace) {
             $this->assertOwnAgenda($workspace);
             $this->assertSchema();
-            $location = $workspace->locations()->create($request->location());
-            $this->syncServices($location, $request->serviceIds());
+            $this->refusedAsLimit($workspace, fn () => DB::transaction(function () use ($request, $workspace) {
+                // The limit is checked and the row written under the Workspace's row lock: two simultaneous creations can not both take the last slot.
+                $limits = app(WorkspaceLimits::class);
+                $limits->lockWorkspace($workspace);
+                $limits->assertCanAddLocation($workspace);
+                $location = $workspace->locations()->create($request->location());
+                $this->syncServices($location, $request->serviceIds());
+            }));
         }, 'Sede creada correctamente');
     }
 
@@ -71,6 +86,7 @@ class LocationController extends Controller
 
         $workspace = $request->attributes->get('workspace');
         $model = $workspace->locations()->findOrFail($location);
+        app(LocationScope::class)->assertAllows($workspace, $request->user(), $model->id);
 
         return $this->attempt(function () use ($request, $workspace, $model) {
             $this->assertOwnAgenda($workspace);
@@ -98,15 +114,36 @@ class LocationController extends Controller
 
         $workspace = $request->attributes->get('workspace');
         $model = $workspace->locations()->findOrFail($location);
+        app(LocationScope::class)->assertAllows($workspace, $request->user(), $model->id);
 
         return $this->attempt(function () use ($workspace, $model, $active) {
             $this->assertOwnAgenda($workspace);
-            $model->update(['is_active' => $active]);
+            $this->refusedAsLimit($workspace, fn () => DB::transaction(function () use ($workspace, $model, $active) {
+                if ($active && ! $model->is_active) {
+                    $limits = app(WorkspaceLimits::class);
+                    $limits->lockWorkspace($workspace);
+                    $limits->assertCanAddLocation($workspace);
+                }
+
+                $model->update(['is_active' => $active]);
+            }));
 
             return ! $active && ($pending = $model->appointments()->upcoming()->count()) > 0
                 ? "«{$model->name}» ya no se ofrece, pero tiene {$pending} cita(s) próximas. Siguen vigentes, pero no se pueden reprogramar: cancélalas y créalas en otra sede."
                 : null;
         }, $active ? 'Sede activada correctamente' : 'Sede desactivada correctamente');
+    }
+
+    /** Runs a write that may hit the location limit; a refusal is audited after the transaction rolled back, then handed on as the validation error it is. */
+    private function refusedAsLimit(Workspace $workspace, \Closure $write): void
+    {
+        try {
+            $write();
+        } catch (ValidationException $exception) {
+            app(WorkspaceLimits::class)->recordLocationRefused($workspace);
+
+            throw $exception;
+        }
     }
 
     private function assertSchema(): void

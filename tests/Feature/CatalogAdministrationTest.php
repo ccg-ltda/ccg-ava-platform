@@ -138,7 +138,7 @@ class CatalogAdministrationTest extends TestCase
         $this->assertSame($facial->id, $product->fresh()->category_id, 'nothing is deleted or reassigned');
 
         $this->get('/catalog')->assertInertia(fn (AssertableInertia $page) => $page->has('categories', 0)->where('categoryAdmin.data.0.isActive', false)->where('categoryAdmin.data.0.products', 1));
-        $this->post('/catalog', ['name' => 'Nuevo', 'price' => '1000', 'category_id' => $facial->id])->assertSessionHasErrors('category_id');
+        $this->post('/catalog', ['location_ids' => [$this->centro->id], 'name' => 'Nuevo', 'price' => '1000', 'category_id' => $facial->id])->assertSessionHasErrors('category_id');
 
         $this->post("/catalog/categories/{$facial->id}/activate")->assertSessionHas('success');
         $this->assertTrue($facial->fresh()->is_active);
@@ -161,12 +161,12 @@ class CatalogAdministrationTest extends TestCase
 
         $this->get('/catalog')->assertInertia(fn (AssertableInertia $page) => $page->has('categories', 1)->where('categories.0.name', 'Mía'));
 
-        $this->post('/catalog', ['name' => 'Libre', 'price' => '1000', 'category' => 'Texto libre'])->assertSessionHasErrors('category_id');
+        $this->post('/catalog', ['location_ids' => [$this->centro->id], 'name' => 'Libre', 'price' => '1000', 'category' => 'Texto libre'])->assertSessionHasErrors('category_id');
         $this->assertDatabaseMissing('products', ['workspace_id' => $this->workspace->id, 'name' => 'Libre']);
         $this->assertSame(1, ProductCategory::where('workspace_id', $this->workspace->id)->where('is_active', true)->count());
 
-        $this->post('/catalog', ['name' => 'Ajeno', 'price' => '1000', 'category_id' => $foreign->id])->assertSessionHasErrors('category_id');
-        $this->post('/catalog', ['name' => 'Bueno', 'price' => '1000', 'category_id' => $mine->id])->assertSessionHasNoErrors();
+        $this->post('/catalog', ['location_ids' => [$this->centro->id], 'name' => 'Ajeno', 'price' => '1000', 'category_id' => $foreign->id])->assertSessionHasErrors('category_id');
+        $this->post('/catalog', ['location_ids' => [$this->centro->id], 'name' => 'Bueno', 'price' => '1000', 'category_id' => $mine->id])->assertSessionHasNoErrors();
     }
 
     public function test_the_old_inline_creation_route_is_gone_and_categories_follow_the_catalog_permissions(): void
@@ -282,16 +282,16 @@ class CatalogAdministrationTest extends TestCase
 
     public function test_the_price_reaches_the_server_as_a_plain_number_and_is_stored_as_is(): void
     {
-        $this->post('/catalog', ['name' => 'Caro', 'price' => '1500000', 'cost' => '800000.5'])->assertSessionHasNoErrors();
+        $this->post('/catalog', ['location_ids' => [$this->centro->id], 'name' => 'Caro', 'price' => '1500000', 'cost' => '800000.5'])->assertSessionHasNoErrors();
         $product = $this->workspace->products()->where('name', 'Caro')->firstOrFail();
 
         $this->assertEquals(1500000, $product->price);
         $this->assertEquals(800000.5, $product->cost);
 
         // Separators are never part of the stored value: the form sends the plain number and the server refuses anything else.
-        $this->post('/catalog', ['name' => 'Con puntos', 'price' => '1.500.000'])->assertSessionHasErrors('price');
-        $this->post('/catalog', ['name' => 'Negativo', 'price' => '-5'])->assertSessionHasErrors('price');
-        $this->post('/catalog', ['name' => 'Tres decimales', 'price' => '10.123'])->assertSessionHasErrors('price');
+        $this->post('/catalog', ['location_ids' => [$this->centro->id], 'name' => 'Con puntos', 'price' => '1.500.000'])->assertSessionHasErrors('price');
+        $this->post('/catalog', ['location_ids' => [$this->centro->id], 'name' => 'Negativo', 'price' => '-5'])->assertSessionHasErrors('price');
+        $this->post('/catalog', ['location_ids' => [$this->centro->id], 'name' => 'Tres decimales', 'price' => '10.123'])->assertSessionHasErrors('price');
     }
 
     public function test_editing_a_price_never_touches_the_stock(): void
@@ -299,7 +299,7 @@ class CatalogAdministrationTest extends TestCase
         $product = $this->product(['tracks_inventory' => true]);
         app(InventoryService::class)->receive($product, $this->centro->id, 4, $this->admin);
 
-        $this->post("/catalog/{$product->id}", ['_method' => 'put', 'name' => $product->name, 'price' => '9000', 'tracks_inventory' => true])->assertSessionHasNoErrors();
+        $this->post("/catalog/{$product->id}", ['location_ids' => [$this->centro->id], '_method' => 'put', 'name' => $product->name, 'price' => '9000', 'tracks_inventory' => true])->assertSessionHasNoErrors();
 
         $this->assertEquals(9000, $product->fresh()->price);
         $this->assertSame(4, InventoryStock::where('product_id', $product->id)->value('quantity'));
