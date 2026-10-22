@@ -84,6 +84,19 @@ return [
     ],
 
     /*
+     * The short name of a module as the SIDEBAR shows it (resources/js/config/navigation.js). It is how dependencies are named in the plan builder
+     * ("Agenda necesita Servicios y Profesionales"), so they read like the menu the Workspace sees. Display only: the key stays the identity and the full
+     * `name` of the catalog stays on the module's own card. A module with no page of its own (calendar_providers) has none and shows its name. A test keeps
+     * this equal to navigation.js.
+     */
+    'labels' => [
+        'dashboard' => 'Dashboard', 'assistants' => 'Asistentes', 'conversations' => 'Conversaciones', 'reports' => 'Reportes', 'product_catalog' => 'Catálogo',
+        'orders' => 'Pedidos', 'service_catalog' => 'Servicios', 'locations' => 'Sedes', 'professionals' => 'Profesionales', 'bookings' => 'Agenda',
+        'customers' => 'Clientes', 'campaigns' => 'Campañas', 'users_roles' => 'Usuarios y Roles', 'audit' => 'Auditoría', 'settings' => 'Configuraciones',
+        'integrations' => 'Integraciones',
+    ],
+
+    /*
      * Short notes for whoever builds a plan, true to how the code behaves (nothing commercial is implied): what a Workspace loses if the module is
      * left out. A plan may still leave it out; the note only helps to decide.
      */
@@ -94,6 +107,7 @@ return [
         'integrations' => 'Sin él, el Workspace no podrá conectar WhatsApp, n8n ni ningún servicio externo.',
         'assistants' => 'Necesita Conversaciones para recibir y responder mensajes.',
         'conversations' => 'Es la bandeja donde se atienden los mensajes que llegan por los canales.',
+        'calendar_providers' => 'Módulo sin página propia: habilita conectar una agenda externa (Booker) desde Integraciones. Necesita Agenda e Integraciones.',
     ],
 
     'categories' => [
@@ -142,7 +156,7 @@ return [
         'profile.*', 'legal.accept', 'legal.accept.store', 'logout', 'verification.*', 'password.*', 'confirm-password',
         'workspaces.search', 'workspace.logo',
         'saved-filters.*',
-        'workspace.empty', 'workspaces.modules.*', 'plans.*', 'modules.*', 'module-categories.*', 'workspaces.plan.update', 'support-access.*',
+        'workspace.empty', 'workspaces.modules.*', 'workspaces.limits.*', 'workspaces.trial.*', 'workspaces.terms.*', 'plans.*', 'modules.*', 'module-categories.*', 'workspaces.plan.update', 'support-access.*',
     ],
 
     'implemented' => [

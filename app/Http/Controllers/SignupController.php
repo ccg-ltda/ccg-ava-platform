@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Legal\LegalDocuments;
+use App\Models\Plan;
 use App\Models\SignupRequest;
 use App\Models\SignupVerification;
 use App\Models\Subscription;
@@ -15,6 +16,7 @@ use App\Support\MailAvailability;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -40,7 +42,8 @@ class SignupController extends Controller
 
     public function index(Request $request): Response|RedirectResponse
     {
-        $draft = $this->draft($request);
+        // Migration not applied yet: the wizard opens on its first step and states that nothing can be contracted; no table of the sign-up is read.
+        $draft = $this->catalog->ready() ? $this->draft($request) : null;
 
         if ($draft?->status === SignupRequest::COMPLETED) {
             return redirect()->route('signup.welcome');
@@ -154,11 +157,11 @@ class SignupController extends Controller
     public function plan(Request $request): RedirectResponse
     {
         $draft = $this->requireDraft($request);
-        $data = $request->validate(['plan_id' => ['required', 'integer']]);
+        $data = $request->validate(['plan_id' => ['required', 'integer'], 'period' => ['nullable', 'string', Rule::in(array_keys(Plan::PERIODS))]]);
         $key = $draft->solution_key;
 
         abort_unless($key !== null, 409);
-        $this->signup->choosePlan($draft, $key, (int) $data['plan_id']);
+        $this->signup->choosePlan($draft, $key, (int) $data['plan_id'], $data['period'] ?? null);
 
         return $this->next($request, 'summary');
     }
@@ -247,7 +250,7 @@ class SignupController extends Controller
 
     private function pendingEmail(Request $request): ?string
     {
-        $id = $request->session()->get('signup.verification_id');
+        $id = $this->catalog->ready() ? $request->session()->get('signup.verification_id') : null;
 
         return $id ? SignupVerification::whereKey($id)->value('email') : null;
     }

@@ -6,6 +6,7 @@ use App\Models\Module;
 use App\Models\ModuleCategory;
 use App\Models\Plan;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * What the public sign-up offers, read from the real commercial configuration (Planes): a plan is offered only while it is active and marked public; a
@@ -19,13 +20,30 @@ class SignupCatalog
 
     public function __construct(private readonly ModuleAccess $access) {}
 
+    private ?bool $ready = null;
+
+    /**
+     * Whether the database has what the sign-up reads (the migration `create_public_signup_tables` was applied). Without it nothing is offered and nothing
+     * is queried, so a deployment ahead of its migration shows "no offers" instead of a SQL error.
+     */
+    public function ready(): bool
+    {
+        return $this->ready ??= Schema::hasTable('signup_requests') && Schema::hasTable('signup_verifications') && Schema::hasColumn('plans', 'is_public') && Schema::hasColumn('plans', 'price_monthly_cents');
+    }
+
     /** @return Collection<int, Plan> every plan the public sign-up may show */
     private function offered(): Collection
     {
+        if (! $this->ready()) {
+            return new Collection;
+        }
+
         return Plan::query()->where('is_active', true)->where('is_public', true)
             ->with(['modules' => fn ($q) => $q->where('modules.is_active', true)->orderBy('modules.name'), 'solution'])
-            ->orderBy('price_cents')->orderBy('name')->get()
+            ->get()
             ->filter(fn (Plan $plan) => $plan->isOffered())
+            // Cheapest first, comparing every plan by its monthly cost (a yearly total over 12 when there is no monthly price); a quote has no price and goes last.
+            ->sortBy(fn (Plan $plan) => [$plan->priceFor('monthly') ?? ($plan->priceFor('yearly') !== null ? intdiv($plan->priceFor('yearly'), 12) : PHP_INT_MAX), mb_strtolower($plan->name)])
             ->values();
     }
 
@@ -91,14 +109,8 @@ class SignupCatalog
             'description' => $plan->description,
             'requiresQuote' => $plan->requires_quote,
             'purchasable' => $plan->isPurchasable(),
-            // null = no usable price configured: the page says so and no charge can start.
-            'price' => $plan->hasUsablePrice() ? [
-                'amount' => $plan->price_cents / 100,
-                'amountCents' => $plan->price_cents,
-                'currency' => $plan->currency,
-                'period' => $plan->billing_period,
-                'periodLabel' => Plan::PERIODS[$plan->billing_period],
-            ] : null,
+            // One entry per period that has a usable price (monthly first); empty = nothing can be charged and the page says so.
+            'prices' => array_map(fn (string $period) => $this->price($plan, $period), $plan->availablePeriods()),
             'modules' => $plan->modules->map(fn (Module $module) => [
                 'key' => $module->key,
                 'name' => $module->name,
@@ -107,6 +119,14 @@ class SignupCatalog
             ])->values()->all(),
             'limits' => [],
         ];
+    }
+
+    /** @return array{amount: float, amountCents: int, currency: string, period: string, periodLabel: string} the price of one period of a plan that sells it */
+    public function price(Plan $plan, string $period): array
+    {
+        $cents = (int) $plan->priceFor($period);
+
+        return ['amount' => $cents / 100, 'amountCents' => $cents, 'currency' => (string) $plan->currency, 'period' => $period, 'periodLabel' => Plan::PERIODS[$period]];
     }
 
     /** @return list<array{key: string, name: string}> the solutions as options for the Planes form (every active module category) */

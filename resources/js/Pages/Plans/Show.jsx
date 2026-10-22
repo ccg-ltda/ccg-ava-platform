@@ -19,6 +19,7 @@ import usePagedList from '@/Hooks/usePagedList';
 import AppLayout from '@/Layouts/AppLayout';
 import ModuleChecklist from './Partials/ModuleChecklist';
 import OfferBadge from './Partials/OfferBadge';
+import PriceSummary from './Partials/PriceSummary';
 import PlanFormModal from './Partials/PlanFormModal';
 
 const sameIds = (a, b) => a.length === b.length && a.every((id) => b.includes(id));
@@ -171,6 +172,38 @@ function WorkspacesCard({ plan, workspaces, perPageOptions, canAssign }) {
     );
 }
 
+/** The commercial offer at a glance: how it is sold, under which solution and at which price per period, with the reasons when it is not shown to the public. */
+function OfferCard({ plan }) {
+    const offer = plan.offer;
+
+    return (
+        <Card className="p-4 sm:p-6">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <h2 className="text-base font-bold text-ink">Oferta comercial</h2>
+                    <p className="mt-0.5 text-sm text-ink-muted">Lo que el registro público ofrece de este plan.</p>
+                </div>
+                <OfferBadge offer={offer} />
+            </div>
+            <dl className="mt-4 grid gap-4 sm:grid-cols-3">
+                <div>
+                    <dt className="text-xs text-ink-muted">Solución</dt>
+                    <dd className="text-sm font-semibold text-ink">{offer.solutionName ?? 'Sin solución'}</dd>
+                </div>
+                <div>
+                    <dt className="text-xs text-ink-muted">Moneda</dt>
+                    <dd className="text-sm font-semibold text-ink">{offer.currency ?? 'Sin moneda'}</dd>
+                </div>
+                <div>
+                    <dt className="text-xs text-ink-muted">Precios</dt>
+                    <dd><PriceSummary offer={offer} className="!mt-0.5" /></dd>
+                </div>
+            </dl>
+            {offer.state === 'incomplete' && <Alert tone="warning" className="mt-4">No se muestra al público: {offer.issues.join(' ')}</Alert>}
+        </Card>
+    );
+}
+
 /** One plan: its data, its modules and the Workspaces that use it. */
 export default function Show({ can, plan, catalog, commercial, workspaces, perPageOptions }) {
     const confirm = useConfirm();
@@ -179,11 +212,12 @@ export default function Show({ can, plan, catalog, commercial, workspaces, perPa
         name: plan.name,
         description: plan.description ?? '',
         module_category_id: plan.offer?.solutionId ?? null,
-        price: plan.offer?.price ?? '',
+        price_monthly: plan.offer?.priceMonthly ?? '',
+        price_yearly: plan.offer?.priceYearly ?? '',
         currency: plan.offer?.currency ?? null,
-        billing_period: plan.offer?.period ?? null,
         is_public: Boolean(plan.offer?.isPublic),
         requires_quote: Boolean(plan.offer?.requiresQuote),
+        limits: { users: plan.limits?.users ?? '', ai_executions: plan.limits?.ai_executions ?? '' },
     });
     const [editing, setEditing] = useState(false);
 
@@ -236,10 +270,11 @@ export default function Show({ can, plan, catalog, commercial, workspaces, perPa
                 )}
             </PageHeader>
 
+            <OfferCard plan={plan} />
             <ModulesCard key={plan.moduleIds.join(',')} plan={plan} catalog={catalog} canEdit={can.editPlan} />
             <WorkspacesCard plan={plan} workspaces={workspaces} perPageOptions={perPageOptions} canAssign={can.assignPlan} />
 
-            <PlanFormModal show={editing} title="Editar plan" form={edit} commercial={commercial} submitLabel="Guardar cambios" onClose={() => setEditing(false)} onSubmit={submitEdit} />
+            <PlanFormModal show={editing} title="Editar plan" form={edit} commercial={commercial} status={plan.isActive} submitLabel="Guardar cambios" onClose={() => setEditing(false)} onSubmit={submitEdit} />
         </>
     );
 }

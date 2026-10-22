@@ -53,11 +53,8 @@ function ModuleCard({ module, checked, blocked, id, onToggle }) {
                 <span className="block text-sm font-semibold text-ink">{module.name}</span>
                 {module.description && <span className="mt-0.5 line-clamp-3 block text-xs text-ink-muted">{module.description}</span>}
                 <span className="mt-2 flex flex-wrap gap-1.5">
-                    <ImplementationBadge implemented={module.implemented} />
+                    <ImplementationBadge implemented={module.implemented} quiet />
                     {!module.isActive && <Badge tone="neutral">Desactivado</Badge>}
-                    <Badge tone="neutral" className="normal-case tracking-normal">
-                        {module.category.name}
-                    </Badge>
                     {module.alsoFor.length > 0 && (
                         <Badge tone="violet" className="normal-case tracking-normal">
                             También en {module.alsoFor.map((solution) => solution.name).join(', ')}
@@ -121,8 +118,8 @@ export default function ModuleChecklist({ catalog, selected, onChange, error, di
                 const count = modules.filter((module) => selected.includes(module.id)).length;
 
                 return (
-                    <section key={section.key} aria-label={section.name} className="space-y-3">
-                        <div className="flex flex-wrap items-end justify-between gap-2 border-b border-line pb-1.5">
+                    <section key={section.key} aria-label={section.name} className="space-y-4 rounded-xl border border-line bg-canvas/50 p-4">
+                        <div className="flex flex-wrap items-end justify-between gap-2 border-b border-line pb-2">
                             <div className="min-w-0">
                                 <h3 className="text-sm font-bold text-ink">
                                     {section.name} <span className="ml-1 text-xs font-medium text-ink-muted">{count}/{modules.length}</span>

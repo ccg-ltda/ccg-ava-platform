@@ -30,6 +30,7 @@ class WebWidget
         private readonly ModuleAccess $modules,
         private readonly ChatbotExecutions $executions,
         private readonly SupportChannel $support,
+        private readonly WorkspaceLimits $limits,
     ) {}
 
     public function resolve(string $publicKey): ?ChatbotChannel
@@ -116,6 +117,14 @@ class WebWidget
             $this->executions->schedule($conversation->load('chatbot.workspace.organization'), $recorded['message']);
 
             return ['status' => 200, 'reply' => null, 'handling' => $conversation->handling, 'pending' => true];
+        }
+
+        // The older path (the Workspace's own n8n webhook) does not go through `ChatbotExecutions::schedule`, so its use is NOT counted. A Workspace that has an
+        // AI execution limit can therefore not be held to it here: instead of calling the automation without any control, the message (already stored) goes to a person.
+        if ($this->limits->effective($chatbot->workspace, 'ai_executions')['value'] !== null) {
+            $this->control->handOverAfterFailure($conversation, $conversation->handling_version, 'ai_limit_unmeasured');
+
+            return ['status' => 200, 'reply' => null, 'handling' => $conversation->fresh()->handling];
         }
 
         $answer = $this->askAutomation($channel, $sessionId, $message);

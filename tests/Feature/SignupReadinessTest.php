@@ -19,6 +19,7 @@ use App\Services\SignupCatalog;
 use App\Services\SignupService;
 use App\Support\Nit;
 use Database\Seeders\ModuleCatalogSeeder;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Mail\MailManager;
 use Illuminate\Support\Facades\Artisan;
@@ -55,7 +56,7 @@ class SignupReadinessTest extends TestCase
     private function plan(string $name, array $modules = ['dashboard', 'reports'], array $attributes = []): Plan
     {
         $plan = Plan::create($attributes + [
-            'name' => $name, 'module_category_id' => $this->health->id, 'price_cents' => 4990000, 'currency' => 'COP', 'billing_period' => 'monthly', 'is_public' => true,
+            'name' => $name, 'module_category_id' => $this->health->id, 'price_monthly_cents' => 4990000, 'currency' => 'COP', 'is_public' => true,
         ]);
         $plan->modules()->sync(Module::whereIn('key', $modules)->pluck('id'));
 
@@ -142,9 +143,9 @@ class SignupReadinessTest extends TestCase
     public function test_a_plan_is_offered_only_while_it_is_public_active_and_complete_and_the_admin_sees_why_not(): void
     {
         $ok = $this->plan('Completo');
-        $quote = $this->plan('A medida', ['dashboard'], ['module_category_id' => null, 'price_cents' => null, 'currency' => null, 'billing_period' => null, 'requires_quote' => true]);
+        $quote = $this->plan('A medida', ['dashboard'], ['module_category_id' => null, 'price_monthly_cents' => null, 'currency' => null, 'requires_quote' => true]);
         $private = $this->plan('Privado', ['dashboard'], ['is_public' => false]);
-        $noPrice = $this->plan('Sin precio', ['dashboard'], ['price_cents' => null]);
+        $noPrice = $this->plan('Sin precio', ['dashboard'], ['price_monthly_cents' => null]);
         $noCurrency = $this->plan('Sin moneda', ['dashboard'], ['currency' => null]);
         $noSolution = $this->plan('Sin solución', ['dashboard'], ['module_category_id' => null]);
         $inactive = $this->plan('Apagado', ['dashboard']);
@@ -173,7 +174,7 @@ class SignupReadinessTest extends TestCase
         $this->platformAdmin();
         $offers = collect($this->get('/plans')->viewData('page')['props']['plans'])->mapWithKeys(fn ($plan) => [$plan['name'] => $plan['offer']]);
         $this->assertSame('incomplete', $offers['Sin precio']['state']);
-        $this->assertContains('Falta el precio, la moneda o la periodicidad.', $offers['Sin precio']['issues']);
+        $this->assertContains('Falta la moneda o al menos un precio (mensual o anual).', $offers['Sin precio']['issues']);
         $this->assertContains('Falta la solución.', $offers['Sin solución']['issues']);
         $this->assertSame('quote', $offers['A medida']['state']);
         $this->assertSame('private', $offers['Privado']['state']);
@@ -208,7 +209,7 @@ class SignupReadinessTest extends TestCase
     {
         $plan = Plan::create(['name' => 'Salud base']);
         $plan->modules()->sync(Module::whereIn('key', ['dashboard', 'reports'])->pluck('id'));
-        $offer = ['name' => 'Salud base', 'module_category_id' => $this->health->id, 'price' => '49900', 'currency' => 'COP', 'billing_period' => 'monthly', 'is_public' => true, 'requires_quote' => false];
+        $offer = ['name' => 'Salud base', 'module_category_id' => $this->health->id, 'price_monthly' => '49900', 'currency' => 'COP', 'is_public' => true, 'requires_quote' => false];
 
         // A client's administrator, even with every client permission, and a role without plan permissions are refused.
         $client = Workspace::create(['organization_id' => Organization::create(['name' => 'Cliente'])->id, 'code' => 'CLIENTE_X', 'name' => 'Cliente']);
@@ -226,20 +227,19 @@ class SignupReadinessTest extends TestCase
         $this->put("/plans/{$plan->id}", $offer)->assertSessionHasNoErrors();
         $this->assertSame('online', $plan->fresh()->offerState()['state']);
         $this->assertTrue(app(SignupCatalog::class)->hasOffers());
-        $this->assertSame(49900, app(SignupCatalog::class)->plans((string) $this->health->id)[0]['price']['amount']);
+        $this->assertSame(49900, app(SignupCatalog::class)->plans((string) $this->health->id)[0]['prices'][0]['amount']);
 
         // The server refuses an incomplete publication, whatever the interface sent.
-        $this->put("/plans/{$plan->id}", array_merge($offer, ['price' => '']))->assertSessionHasErrors('price');
-        $this->put("/plans/{$plan->id}", ['name' => 'Salud base', 'is_public' => true, 'currency' => 'COP', 'billing_period' => 'monthly', 'price' => '10', 'module_category_id' => null])->assertSessionHasErrors('module_category_id');
+        $this->put("/plans/{$plan->id}", array_merge($offer, ['price_monthly' => '']))->assertSessionHasErrors('price_monthly');
+        $this->put("/plans/{$plan->id}", ['name' => 'Salud base', 'is_public' => true, 'currency' => 'COP', 'price_monthly' => '10', 'module_category_id' => null])->assertSessionHasErrors('module_category_id');
         $this->put("/plans/{$plan->id}", array_merge($offer, ['currency' => 'XXX']))->assertSessionHasErrors('currency');
-        $this->put("/plans/{$plan->id}", array_merge($offer, ['billing_period' => 'weekly']))->assertSessionHasErrors('billing_period');
-        $this->put("/plans/{$plan->id}", array_merge($offer, ['price' => '-5']))->assertSessionHasErrors('price');
-        $this->assertSame(4990000, $plan->fresh()->price_cents, 'a refused save changes nothing');
+        $this->put("/plans/{$plan->id}", array_merge($offer, ['price_monthly' => '-5']))->assertSessionHasErrors('price_monthly');
+        $this->assertSame(4990000, $plan->fresh()->price_monthly_cents, 'a refused save changes nothing');
 
         // Unpublishing takes it out of the offer.
         $this->put("/plans/{$plan->id}", ['name' => 'Salud base', 'is_public' => false])->assertSessionHasNoErrors();
         $this->assertFalse(app(SignupCatalog::class)->hasOffers());
-        $this->assertSame(4990000, $plan->fresh()->price_cents, 'the configured price is kept for when it is published again');
+        $this->assertSame(4990000, $plan->fresh()->price_monthly_cents, 'the configured price is kept for when it is published again');
     }
 
     public function test_only_commercial_solutions_can_be_chosen_not_the_groups_of_shared_capabilities(): void
@@ -259,7 +259,7 @@ class SignupReadinessTest extends TestCase
         $this->assertFalse($options->contains($shared->name) || $options->contains($communication->name));
 
         $plan = Plan::create(['name' => 'Mal clasificado']);
-        $offer = ['name' => 'Mal clasificado', 'price' => '100', 'currency' => 'COP', 'billing_period' => 'monthly', 'is_public' => true];
+        $offer = ['name' => 'Mal clasificado', 'price_monthly' => '100', 'currency' => 'COP', 'is_public' => true];
         $this->put("/plans/{$plan->id}", array_merge($offer, ['module_category_id' => $shared->id]))->assertSessionHasErrors('module_category_id');
         $this->put("/plans/{$plan->id}", array_merge($offer, ['module_category_id' => $custom->id]))->assertSessionHasNoErrors();
 
@@ -287,7 +287,7 @@ class SignupReadinessTest extends TestCase
         $this->assertSame(SignupRequest::DRAFT, SignupRequest::firstOrFail()->status);
         $this->assertNull(SignupRequest::firstOrFail()->accepted_at);
 
-        $plan->update(['is_public' => true, 'price_cents' => 9990000]); // republished at another price
+        $plan->update(['is_public' => true, 'price_monthly_cents' => 9990000]); // republished at another price
         $this->post('/registro/contratar', ['accepted' => $this->accepted()])->assertSessionHasErrors('plan');
         $this->assertSame(SignupRequest::DRAFT, SignupRequest::firstOrFail()->status, 'nothing is accepted at a price the customer did not see');
         $this->get('/registro')->assertInertia(fn ($page) => $page->where('selected.snapshot.amount', 99900));
@@ -300,7 +300,7 @@ class SignupReadinessTest extends TestCase
         $this->assertSame(['dashboard', 'reports'], $request->modules_snapshot);
 
         // The administration changes the price and the modules AFTER acceptance.
-        $plan->update(['price_cents' => 9990000]);
+        $plan->update(['price_monthly_cents' => 9990000]);
         $plan->modules()->attach(Module::where('key', 'customers')->value('id'));
         $this->mock(OperationalAlert::class)->shouldReceive('raise')->once()->with('signup_plan_changed_after_acceptance', \Mockery::type('array'));
 
@@ -435,5 +435,162 @@ class SignupReadinessTest extends TestCase
         $this->assertSame(SignupRequest::QUOTE_REQUESTED, $request->fresh()->status);
         $this->assertNull($request->fresh()->price_cents);
         $this->assertSame([0, 0, 0, 0], [Organization::count(), Workspace::count(), Subscription::count(), User::where('email', self::EMAIL)->count()]);
+    }
+
+    // --- a recorded payment is never lost, edited away or overwritten ------------------------------------------------
+
+    private function captureAlerts(): \ArrayObject
+    {
+        $captured = new \ArrayObject;
+        $this->mock(OperationalAlert::class)->shouldReceive('raise')->andReturnUsing(function (string $event, array $context = []) use ($captured) {
+            $captured[] = [$event, $context];
+        });
+
+        return $captured;
+    }
+
+    public function test_a_contract_with_a_recorded_payment_can_not_be_edited_or_cancelled_from_the_browser(): void
+    {
+        $plan = $this->plan('Starter');
+        $request = $this->contract($plan);
+        $plan->update(['is_active' => false]);
+
+        try {
+            $this->pay($request);
+        } catch (ValidationException) {
+        }
+
+        // Before: any of these reopened it as a draft (or cancelled it) and the paid contract vanished from the reconciliation.
+        $this->post('/registro/empresa', [
+            'admin_name' => 'Otra Persona', 'company_name' => 'Otra Empresa', 'tax_id' => $this->nit(), 'phone' => '+57 300 111 2233',
+            'workspace_code' => 'otra-empresa', 'password' => 'ClaveSegura123', 'password_confirmation' => 'ClaveSegura123',
+        ])->assertSessionHasErrors('signup');
+        $this->post('/registro/contratar', ['accepted' => $this->accepted()])->assertSessionHasErrors('signup');
+        $this->post('/registro/cancelar');
+
+        $fresh = $request->fresh();
+        $this->assertSame([SignupRequest::AWAITING_PAYMENT, 'Clínica Central'], [$fresh->status, $fresh->company_name]);
+        $this->assertNotNull($fresh->paid_at);
+        $this->assertCount(1, $this->service()->stuck());
+    }
+
+    public function test_a_second_different_transaction_never_replaces_the_recorded_payment_and_is_reported(): void
+    {
+        $alerts = $this->captureAlerts();
+        $plan = $this->plan('Starter');
+        $request = $this->contract($plan);
+        $plan->update(['is_active' => false]);
+
+        try {
+            $this->pay($request, 'TX-1');
+        } catch (ValidationException) {
+        }
+        $plan->update(['is_active' => true]);
+
+        // Paid again with another transaction while the first one was not provisioned yet: the first stays, the contract completes once.
+        $this->pay($request, 'TX-2');
+        $this->assertSame(['TX-1', SignupRequest::COMPLETED], [$request->fresh()->payment_reference, $request->fresh()->status]);
+
+        // And once completed, yet another transaction creates nothing and is reported.
+        $this->pay($request, 'TX-3');
+        $this->assertSame(1, Workspace::count());
+        $this->assertSame('TX-1', $request->fresh()->payment_reference);
+        $duplicates = collect($alerts)->where(0, 'signup_duplicate_payment');
+        $this->assertSame(['TX-2', 'TX-3'], $duplicates->map(fn ($a) => $a[1]['transaction'])->values()->all());
+        $this->assertSame([['signup', 'transaction'], ['signup', 'transaction']], $duplicates->map(fn ($a) => array_keys($a[1]))->values()->all());
+
+        // The same transaction repeated is not a duplicate.
+        $this->pay($request, 'TX-1');
+        $this->assertCount(2, collect($alerts)->where(0, 'signup_duplicate_payment'));
+    }
+
+    public function test_a_payment_for_a_cancelled_contract_is_refused_and_leaves_the_transaction_id_for_a_person(): void
+    {
+        $alerts = $this->captureAlerts();
+        $request = $this->contract($this->plan('Starter'));
+        $this->post('/registro/cancelar');
+        $this->assertSame(SignupRequest::CANCELLED, $request->fresh()->status);
+
+        try {
+            $this->pay($request, 'TX-LATE');
+            $this->fail('a cancelled contract is not provisioned by a late payment');
+        } catch (ValidationException) {
+        }
+
+        $this->assertSame(0, Workspace::count());
+        $this->assertSame([['signup_payment_unexpected_state', ['signup' => $request->id, 'status' => 'cancelled', 'transaction' => 'TX-LATE']]], collect($alerts)->values()->all());
+    }
+
+    public function test_a_price_change_after_the_acceptance_takes_the_contract_back_to_a_draft_instead_of_keeping_a_stale_acceptance(): void
+    {
+        $plan = $this->plan('Starter');
+        $request = $this->contract($plan);
+        $plan->update(['price_monthly_cents' => 9990000]);
+
+        // The customer comes back and confirms again: stopped, and the old acceptance and checkout no longer stand.
+        $this->post('/registro/contratar', ['accepted' => $this->accepted()])->assertSessionHasErrors('plan');
+
+        $fresh = $request->fresh();
+        $this->assertSame([SignupRequest::DRAFT, 9990000], [$fresh->status, $fresh->price_cents]);
+        $this->assertNull($fresh->accepted_at);
+        $this->assertCount(0, $this->service()->stuck());
+    }
+
+    public function test_asking_again_for_a_quote_alerts_the_team_once(): void
+    {
+        $alerts = $this->captureAlerts();
+        $this->toSummary($this->plan('Cotizado', ['dashboard'], ['requires_quote' => true]));
+
+        foreach (range(1, 5) as $ignored) {
+            $this->post('/registro/cotizacion')->assertSessionHasNoErrors();
+        }
+
+        $this->assertCount(1, collect($alerts)->where(0, 'signup_quote_requested'));
+    }
+
+    // --- abuse limits and reconciliation scheduling -----------------------------------------------------------------
+
+    public function test_checking_codes_is_limited_per_ip_even_when_the_visitor_drops_the_session(): void
+    {
+        $this->plan('Starter');
+
+        foreach (range(1, 10) as $ignored) {
+            $this->flushSession(); // a new session id each time: it must not open a new bucket
+            $this->post('/registro/codigo', ['code' => '123456'])->assertRedirect();
+        }
+
+        $this->flushSession();
+        $this->post('/registro/codigo', ['code' => '123456'])->assertStatus(429);
+    }
+
+    public function test_the_reconciliation_is_scheduled_read_only_and_alerts_once_while_a_paid_contract_is_stuck(): void
+    {
+        $event = collect(app(Schedule::class)->events())->first(fn ($e) => str_contains((string) $e->command, 'signup:reconcile'));
+
+        $this->assertNotNull($event, 'the reconciliation is on the scheduler');
+        $this->assertStringNotContainsString('--retry', (string) $event->command, 'the scheduled run never retries by itself');
+        $this->assertTrue($event->withoutOverlapping);
+        $this->assertTrue($event->onOneServer);
+
+        $alerts = $this->captureAlerts();
+        $plan = $this->plan('Starter');
+        $request = $this->contract($plan);
+        $plan->update(['is_active' => false]);
+
+        try {
+            $this->pay($request);
+        } catch (ValidationException) {
+        }
+
+        foreach ([1, 2] as $ignored) {
+            $this->assertSame(1, Artisan::call('signup:reconcile'));
+        }
+        $this->assertSame(0, Workspace::count());
+        $this->assertSame([['signup_paid_unprovisioned', ['count' => 1, 'oldest' => $request->id]]], collect($alerts)->where(0, 'signup_paid_unprovisioned')->values()->all());
+
+        // The retry that works leaves a trace of what it did.
+        $plan->update(['is_active' => true]);
+        $this->assertSame(0, Artisan::call('signup:reconcile', ['--retry' => true, '--limit' => 1]));
+        $this->assertSame([['signup_reconciled', ['signup' => $request->id]]], collect($alerts)->where(0, 'signup_reconciled')->values()->all());
     }
 }

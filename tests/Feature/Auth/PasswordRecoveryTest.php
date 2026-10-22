@@ -89,7 +89,7 @@ class PasswordRecoveryTest extends TestCase
     public function test_a_real_transport_with_a_real_sender_counts_as_configured(): void
     {
         $this->app->detectEnvironment(fn () => 'production');
-        config(['mail.default' => 'smtp', 'mail.mailers.smtp.transport' => 'smtp', 'mail.from.address' => 'no-reply@ccg.test']);
+        config(['mail.default' => 'smtp', 'mail.mailers.smtp.transport' => 'smtp', 'mail.mailers.smtp.host' => 'smtp.ccg.test', 'mail.from.address' => 'no-reply@ccg.test']);
         $this->assertTrue(MailAvailability::usable());
 
         config(['mail.from.address' => 'hello@example.com']); // the framework placeholder is not a sender

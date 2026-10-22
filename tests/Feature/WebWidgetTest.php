@@ -6,10 +6,12 @@ use App\Integrations\SafeHttpTarget;
 use App\Models\Chatbot;
 use App\Models\ChatbotChannel;
 use App\Models\Integration;
+use App\Models\Message;
 use App\Models\Organization;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceSetting;
+use App\Services\WorkspaceLimits;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
@@ -68,6 +70,26 @@ class WebWidgetTest extends TestCase
         $this->put("/chatbots/{$bot->id}/channels/web", ['is_active' => true])->assertSessionHas('success');
 
         return ChatbotChannel::where('chatbot_id', $bot->id)->where('channel', 'web')->firstOrFail()->public_key;
+    }
+
+    public function test_the_older_webhook_path_is_not_used_by_a_workspace_with_an_ai_limit_because_it_cannot_be_measured(): void
+    {
+        $workspace = $this->workspace('WS_LIMIT');
+        [, $key] = $this->liveWidget($workspace);
+        Http::fake([self::HOOK => Http::response(['reply' => '¡Hola! ¿En qué te ayudo?'])]);
+
+        // No limit: the older path answers as before.
+        $this->postJson("/api/widget/{$key}/messages", ['session_id' => 'visitor-session-1', 'message' => 'Hola'])->assertOk()->assertJsonPath('reply', '¡Hola! ¿En qué te ayudo?');
+        Http::assertSentCount(1);
+
+        // With a limit this Workspace must use the measured path: the automation is NOT called and the stored message goes to a person.
+        app(WorkspaceLimits::class)->setOverride($workspace, 'ai_executions', 10, 'Plan con tope de IA', null);
+        $response = $this->postJson("/api/widget/{$key}/messages", ['session_id' => 'visitor-session-2', 'message' => 'Hola otra vez'])->assertOk();
+
+        $this->assertNull($response->json('reply'));
+        Http::assertSentCount(1);
+        $this->assertSame('pending', $response->json('handling'));
+        $this->assertSame(1, Message::where('direction', 'in')->where('body', 'Hola otra vez')->count());
     }
 
     // --- activating the channel ------------------------------------------------------------------------------

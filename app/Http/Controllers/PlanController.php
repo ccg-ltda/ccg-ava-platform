@@ -10,6 +10,7 @@ use App\Models\Plan;
 use App\Models\Workspace;
 use App\Services\ListPagination;
 use App\Services\ModuleCatalog;
+use App\Services\WorkspaceLimits;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -23,7 +24,7 @@ use Inertia\Response;
  */
 class PlanController extends Controller
 {
-    public function __construct(private readonly ModuleCatalog $catalog) {}
+    public function __construct(private readonly ModuleCatalog $catalog, private readonly WorkspaceLimits $limits) {}
 
     public function index(Request $request): Response
     {
@@ -86,6 +87,10 @@ class PlanController extends Controller
     {
         $plan = $this->catalog->createPlan($request->safe()->only(['name', 'description']), $request->moduleIds(), $request->commercial());
 
+        if (($limits = $request->limits()) !== null) {
+            $this->limits->setPlanLimits($plan, $limits);
+        }
+
         return redirect()->route('plans.show', $plan)->with('success', 'Plan creado correctamente');
     }
 
@@ -94,6 +99,10 @@ class PlanController extends Controller
     {
         DB::transaction(function () use ($request, $plan) {
             $this->catalog->updatePlan($plan, $request->safe()->only(['name', 'description']), $request->commercial());
+
+            if (($limits = $request->limits()) !== null) {
+                $this->limits->setPlanLimits($plan, $limits);
+            }
 
             if ($request->has('module_ids')) {
                 $this->catalog->syncModules($plan, $request->moduleIds());
@@ -133,13 +142,17 @@ class PlanController extends Controller
             'description' => $plan->description,
             'isActive' => $plan->is_active,
             'isDefault' => $plan->isDefault(),
+            // Standard limits the plan sells (metric => value or null); `workspacesCount` Workspaces inherit them unless they carry a particular limit.
+            'limits' => $this->limits->planLimits($plan),
             'moduleIds' => $plan->modules()->pluck('modules.id')->all(),
             'modulesCount' => $plan->modules_count,
             'workspacesCount' => $workspacesCount,
             // The commercial offer, exactly as saved (price in major units): what the public sign-up reads.
             'offer' => [
-                'solutionId' => $plan->module_category_id, 'price' => $plan->price_cents !== null ? $plan->price_cents / 100 : null, 'currency' => $plan->currency,
-                'period' => $plan->billing_period, 'isPublic' => $plan->is_public, 'requiresQuote' => $plan->requires_quote,
+                'solutionId' => $plan->module_category_id, 'currency' => $plan->currency,
+                'priceMonthly' => $plan->price_monthly_cents !== null ? $plan->price_monthly_cents / 100 : null,
+                'priceYearly' => $plan->price_yearly_cents !== null ? $plan->price_yearly_cents / 100 : null,
+                'periods' => $plan->availablePeriods(), 'solutionName' => $plan->solution?->name, 'isPublic' => $plan->is_public, 'requiresQuote' => $plan->requires_quote,
                 // private | online | quote | incomplete (+ why): the same rule the public sign-up applies.
                 'state' => $plan->offerState()['state'], 'issues' => $plan->offerState()['issues'],
             ],
@@ -152,10 +165,13 @@ class PlanController extends Controller
     private function commercialOptions(): array
     {
         return [
+            // false = the database lacks the commercial columns / the limits tables: the editor says so and does not send what could not be saved.
+            'ready' => Plan::commercialReady(),
+            'limitsReady' => $this->limits->available(),
+            'metrics' => collect(WorkspaceLimits::METRICS)->map(fn (array $meta, string $key) => ['key' => $key] + $meta)->values()->all(),
             // Only categories that are commercial solutions: the groups of shared capabilities are not offered as a solution.
             'solutions' => ModuleCategory::where('is_active', true)->orderBy('sort_order')->get()->filter(fn (ModuleCategory $c) => $c->isSolution())->map(fn ($c) => ['value' => $c->id, 'label' => $c->name])->values()->all(),
             'currencies' => collect(config('workspace.currencies'))->map(fn (string $name, string $code) => ['value' => $code, 'label' => "{$code} · {$name}"])->values()->all(),
-            'periods' => collect(Plan::PERIODS)->map(fn (string $label, string $key) => ['value' => $key, 'label' => $label])->values()->all(),
         ];
     }
 

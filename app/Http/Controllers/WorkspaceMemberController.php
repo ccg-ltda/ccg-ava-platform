@@ -6,6 +6,7 @@ use App\Audit\AuditLogger;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\WorkspaceAdministration;
+use App\Services\WorkspaceLimits;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -50,6 +51,7 @@ class WorkspaceMemberController extends Controller
         }
 
         $this->administration->assertMayReceive($workspace, $user, $field);
+        app(WorkspaceLimits::class)->assertCanAddMembers($workspace, 1, $field);
 
         $workspace->users()->attach($user->id, ['role' => $data['role']]);
         $this->audit->record('created', 'membership', $user->id, $user->name, [

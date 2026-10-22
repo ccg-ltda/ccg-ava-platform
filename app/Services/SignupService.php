@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Legal\LegalDocuments;
 use App\Models\Organization;
+use App\Models\Plan;
 use App\Models\SignupRequest;
 use App\Models\Subscription;
 use App\Models\User;
@@ -13,6 +14,7 @@ use App\Payments\PaymentGateway;
 use App\Support\Nit;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -36,6 +38,7 @@ class SignupService
         private readonly PaymentGateway $gateway,
         private readonly LegalDocuments $legal,
         private readonly OperationalAlert $alerts,
+        private readonly WorkspaceLimits $limits,
     ) {}
 
     /** The open, unexpired request with this public id, or null. A draft that expired is closed. */
@@ -133,7 +136,7 @@ class SignupService
         return $request;
     }
 
-    public function choosePlan(SignupRequest $request, string $solutionKey, int $planId): SignupRequest
+    public function choosePlan(SignupRequest $request, string $solutionKey, int $planId, ?string $period = null): SignupRequest
     {
         $this->assertEditable($request);
         $plan = $this->catalog->offeredPlan($solutionKey, $planId);
@@ -142,19 +145,40 @@ class SignupService
             throw ValidationException::withMessages(['plan' => 'Ese plan no está disponible.']);
         }
 
-        // The price is read from the plan HERE, on the server; nothing the browser sends is a price. Without a usable price nothing is stored to charge.
+        // The price is read from the plan HERE, on the server, for the period the customer chose; nothing the browser sends is a price. Only a plan sold
+        // online carries a price to charge (a quote has none, whatever is stored on the plan), and only a period that has its own price can be chosen.
+        $period = $plan->isPurchasable() ? $this->periodFor($plan, $period) : null;
         $request->fill([
             'solution_key' => $solutionKey,
             'plan_id' => $plan->id,
-            // Only a plan sold online carries a price to charge: a quote has none, whatever is stored on the plan.
-            'price_cents' => $plan->isPurchasable() ? $plan->price_cents : null,
-            'currency' => $plan->isPurchasable() ? $plan->currency : null,
-            'billing_period' => $plan->isPurchasable() ? $plan->billing_period : null,
+            'price_cents' => $period ? $plan->priceFor($period) : null,
+            'currency' => $period ? $plan->currency : null,
+            'billing_period' => $period,
         ]);
         $this->reopen($request);
         $request->save();
 
         return $request;
+    }
+
+    /** The chosen period when the plan sells it; the only one when the plan sells just one; an error when it is ambiguous or not sold. */
+    private function periodFor(Plan $plan, ?string $period): string
+    {
+        $available = $plan->availablePeriods();
+
+        if ($period === null || $period === '') {
+            if (count($available) === 1) {
+                return $available[0];
+            }
+
+            throw ValidationException::withMessages(['period' => 'Elige si quieres pagar mensual o anualmente.']);
+        }
+
+        if (! in_array($period, $available, true)) {
+            throw ValidationException::withMessages(['period' => 'Esa periodicidad no está disponible para este plan.']);
+        }
+
+        return $period;
     }
 
     // --- step: summary -> payment or quote ----------------------------------------------------------------------
@@ -190,8 +214,14 @@ class SignupService
         }
 
         // The price the customer saw is the one that is charged: if the plan changed in between, stop and show the new summary.
-        if ($request->price_cents !== $plan->price_cents || $request->currency !== $plan->currency || $request->billing_period !== $plan->billing_period) {
-            $request->fill(['price_cents' => $plan->price_cents, 'currency' => $plan->currency, 'billing_period' => $plan->billing_period])->save();
+        // The period chosen stays the one chosen; if the plan no longer sells it, the price is cleared and a new choice is asked for.
+        $current = $plan->priceFor($request->billing_period);
+
+        if ($current === null || $request->price_cents !== $current || $request->currency !== $plan->currency) {
+            $request->fill(['price_cents' => $current, 'currency' => $current === null ? null : $plan->currency, 'billing_period' => $current === null ? null : $request->billing_period]);
+            // The acceptance and the checkout were for the old price: back to a draft, so a payment can not be taken against a summary nobody accepted.
+            $this->reopen($request);
+            $request->save();
 
             throw ValidationException::withMessages(['plan' => 'El precio del plan cambió. Revisa el resumen antes de continuar.']);
         }
@@ -206,7 +236,7 @@ class SignupService
             'status' => SignupRequest::AWAITING_PAYMENT, 'accepted_documents' => $required, 'accepted_at' => now(),
             'modules_snapshot' => $plan->modules()->where('modules.is_active', true)->orderBy('modules.key')->pluck('modules.key')->all(),
             'expires_at' => now()->addDays(7), // an unpaid contract waits for its payment longer than a draft
-        ])->save();
+        ] + (Schema::hasColumn('signup_requests', 'limits_snapshot') ? ['limits_snapshot' => $this->limits->planLimits($plan)] : []))->save();
 
         $available = $this->gateway->isConfigured();
 
@@ -227,15 +257,21 @@ class SignupService
             throw ValidationException::withMessages(['plan' => 'Completa los datos de tu empresa antes de solicitar la cotización.']);
         }
 
+        // Asking again for a quote already requested only renews it: the team is alerted once, not on every repeated request.
+        $first = $request->status !== SignupRequest::QUOTE_REQUESTED;
         $request->fill(['status' => SignupRequest::QUOTE_REQUESTED, 'expires_at' => now()->addDays(30)])->save();
-        $this->alerts->raise('signup_quote_requested', ['signup' => $request->id, 'plan' => $plan->id]);
+
+        if ($first) {
+            $this->alerts->raise('signup_quote_requested', ['signup' => $request->id, 'plan' => $plan->id]);
+        }
 
         return $request;
     }
 
     public function cancel(SignupRequest $request): void
     {
-        if (in_array($request->status, [SignupRequest::DRAFT, SignupRequest::AWAITING_PAYMENT, SignupRequest::QUOTE_REQUESTED], true)) {
+        // A recorded payment is never cancelled from the browser: it stays in the reconciliation list until it is provisioned or a person decides.
+        if ($request->paid_at === null && in_array($request->status, [SignupRequest::DRAFT, SignupRequest::AWAITING_PAYMENT, SignupRequest::QUOTE_REQUESTED], true)) {
             $request->update(['status' => SignupRequest::CANCELLED]);
         }
     }
@@ -257,17 +293,28 @@ class SignupService
         }
 
         if ($request->status === SignupRequest::COMPLETED) {
+            $this->flagDuplicatePayment($request, $payment);
+
             return $request; // a repeated notification: everything already exists
         }
 
         if ($request->status !== SignupRequest::AWAITING_PAYMENT || ! $request->plan_id || $request->price_cents === null) {
-            $this->alerts->raise('signup_payment_unexpected_state', ['signup' => $request->id, 'status' => $request->status]);
+            // A verified payment against a cancelled or expired request is real money Ava did not record: the transaction id lets a person find it at the provider.
+            $this->alerts->raise('signup_payment_unexpected_state', ['signup' => $request->id, 'status' => $request->status, 'transaction' => $payment->transactionId]);
 
             throw ValidationException::withMessages(['reference' => 'La contratación no está esperando un pago.']);
         }
 
+        // A second, different transaction for a contract that already has its payment recorded is a possible double charge: the first payment is kept
+        // (never overwritten) and a person is told, because refunding is a decision (no refund policy exists).
+        if ($request->paid_at !== null && $request->payment_reference !== $payment->transactionId) {
+            $this->flagDuplicatePayment($request, $payment);
+
+            return $this->provisionReporting($request);
+        }
+
         if ($payment->amountCents !== $request->price_cents || strtoupper($payment->currency) !== strtoupper((string) $request->currency) || trim($payment->transactionId) === '') {
-            $this->alerts->raise('signup_payment_mismatch', ['signup' => $request->id]);
+            $this->alerts->raise('signup_payment_mismatch', ['signup' => $request->id, 'transaction' => $payment->transactionId]);
 
             throw ValidationException::withMessages(['amount' => 'El importe o la moneda del pago no coinciden con la contratación.']);
         }
@@ -278,6 +325,13 @@ class SignupService
         }
 
         return $this->provisionReporting($request);
+    }
+
+    private function flagDuplicatePayment(SignupRequest $request, PaymentConfirmation $payment): void
+    {
+        if ($request->payment_reference !== null && $request->payment_reference !== $payment->transactionId) {
+            $this->alerts->raise('signup_duplicate_payment', ['signup' => $request->id, 'transaction' => $payment->transactionId]);
+        }
     }
 
     /**
@@ -350,7 +404,14 @@ class SignupService
 
             // The Workspace is created closed by the registration and reopened by the first confirmed payment (SubscriptionService); the plan and its modules
             // are applied by the activation and read from the plan afterwards. Repeating any of this changes nothing.
-            $subscription = Subscription::where('workspace_id', $workspace->id)->first() ?? $this->subscriptions->registerNewCustomer($workspace, $plan);
+            // What the customer accepted (price, period, modules and limits of that day) is frozen on the subscription: editing the plan later never changes it.
+            $terms = $this->subscriptions->buildTerms(
+                $plan, 'signup',
+                $locked->price_cents !== null ? ['amount_cents' => $locked->price_cents, 'currency' => (string) $locked->currency, 'period' => (string) $locked->billing_period] : null,
+                is_array($locked->modules_snapshot) ? $locked->modules_snapshot : null,
+                $locked->limits_snapshot ?? [], // none recorded = none claimed: nothing is attributed from today's plan
+            );
+            $subscription = Subscription::where('workspace_id', $workspace->id)->first() ?? $this->subscriptions->registerNewCustomer($workspace, $plan, $terms);
             $this->subscriptions->confirmPayment($subscription, (string) $locked->payment_reference);
 
             if ($this->legal->available() && $locked->accepted_documents) {
@@ -385,6 +446,11 @@ class SignupService
 
     private function assertEditable(SignupRequest $request): void
     {
+        // Once a payment is recorded the contract is frozen: editing it would reopen it as a draft and drop it from the reconciliation.
+        if ($request->paid_at !== null) {
+            throw ValidationException::withMessages(['signup' => 'Tu pago ya fue registrado y estamos activando tu cuenta. Esta contratación no se puede modificar.']);
+        }
+
         if (! in_array($request->status, [SignupRequest::DRAFT, SignupRequest::AWAITING_PAYMENT, SignupRequest::QUOTE_REQUESTED], true) || $request->expires_at->isPast() && $request->status === SignupRequest::DRAFT) {
             throw ValidationException::withMessages(['signup' => 'Esta contratación ya no se puede modificar. Empieza de nuevo.']);
         }

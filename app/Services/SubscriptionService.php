@@ -6,6 +6,7 @@ use App\Audit\AuditLogger;
 use App\Models\Plan;
 use App\Models\Subscription;
 use App\Models\Workspace;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -26,6 +27,7 @@ class SubscriptionService
     /** from => allowed next statuses, other than activation (which has its own rules). */
     private const TRANSITIONS = [
         Subscription::PENDING => [Subscription::CANCELLED],
+        Subscription::TRIALING => [Subscription::CANCELLED, Subscription::EXPIRED],
         Subscription::ACTIVE => [Subscription::GRACE, Subscription::SUSPENDED, Subscription::CANCELLED, Subscription::EXPIRED],
         Subscription::GRACE => [Subscription::SUSPENDED, Subscription::CANCELLED, Subscription::EXPIRED],
         Subscription::SUSPENDED => [Subscription::CANCELLED, Subscription::EXPIRED],
@@ -33,17 +35,19 @@ class SubscriptionService
         Subscription::EXPIRED => [Subscription::CANCELLED],
     ];
 
-    public function __construct(private readonly ModuleCatalog $catalog, private readonly AuditLogger $audit) {}
+    public function __construct(private readonly ModuleCatalog $catalog, private readonly AuditLogger $audit, private readonly WorkspaceLimits $limits) {}
 
     /**
      * Registers a NEW customer: its Workspace is switched off until the first confirmed payment, so a contract that is not paid gives no access at all
      * (not even the default plan). The first activation switches it on again, and only because it was switched off here: a Workspace that an
      * administrator deactivated for any other reason is never reactivated by a payment. For an existing, working Workspace use `register`.
      */
-    public function registerNewCustomer(Workspace $workspace, Plan $plan): Subscription
+    public function registerNewCustomer(Workspace $workspace, Plan $plan, ?array $terms = null): Subscription
     {
-        return DB::transaction(function () use ($workspace, $plan) {
+        return DB::transaction(function () use ($workspace, $plan, $terms) {
             $subscription = $this->register($workspace, $plan);
+            // The conditions accepted are frozen from the start: what the customer accepted (`$terms`, from the sign-up) or, without a contract, the plan's today.
+            $this->freezeTerms($subscription, $terms ?? $this->buildTerms($plan, 'manual'), $terms['source'] ?? 'manual');
             $workspace = Workspace::findOrFail($workspace->id); // the stored state, not a model that may not carry the column yet
 
             if ($subscription->activated_at === null && $workspace->is_active) {
@@ -156,7 +160,8 @@ class SubscriptionService
             $switchOn = $subscription->activates_workspace && $subscription->activated_at === null && ! $workspace->is_active;
 
             if ($previous !== Subscription::ACTIVE) {
-                $subscription->update(['status' => Subscription::ACTIVE, 'activated_at' => $subscription->activated_at ?? now(), 'grace_ends_at' => null, 'activates_workspace' => false]);
+                // A payment confirmed after the access ended (an expired trial, a lapsed subscription) reopens it: the end date of that period no longer applies.
+                $subscription->update(['status' => Subscription::ACTIVE, 'activated_at' => $subscription->activated_at ?? now(), 'grace_ends_at' => null, 'ends_at' => null, 'activates_workspace' => false]);
 
                 if ($switchOn) {
                     $workspace->update(['is_active' => true]);
@@ -167,6 +172,214 @@ class SubscriptionService
 
             return $subscription;
         });
+    }
+
+    // --- frozen conditions ---------------------------------------------------------------------------------------------
+
+    /**
+     * The conditions of a contract as they are on this day: plan, solution, price (only when one was really agreed, e.g. in the public sign-up),
+     * modules and limits. `$modules` and `$limits` default to the plan's CURRENT ones; the sign-up passes what the customer accepted instead.
+     *
+     * @param  array{amount_cents: int, currency: string, period: string}|null  $price
+     * @param  list<string>|null  $modules
+     * @param  array<string, ?int>|null  $limits
+     * @return array<string, mixed>
+     */
+    public function buildTerms(Plan $plan, string $source, ?array $price = null, ?array $modules = null, ?array $limits = null): array
+    {
+        $solution = Plan::commercialReady() ? $plan->solution : null;
+
+        return [
+            'version' => 1,
+            'source' => $source,
+            'plan' => ['id' => $plan->id, 'name' => $plan->name],
+            'solution' => $solution ? ['id' => $solution->id, 'name' => $solution->name] : null,
+            'price' => $price,
+            'modules' => $modules ?? $plan->modules()->where('modules.is_active', true)->orderBy('modules.key')->pluck('modules.key')->all(),
+            'limits' => $limits ?? $this->limits->planLimits($plan),
+        ];
+    }
+
+    /** Stores the conditions on the subscription (replacing earlier ones) and audits it. A no-op while the database lacks the columns. */
+    public function freezeTerms(Subscription $subscription, array $terms, string $source): void
+    {
+        if (! Subscription::termsReady()) {
+            return;
+        }
+
+        $before = $subscription->hasFrozenTerms() ? ($subscription->terms['plan']['name'] ?? '—') : 'Históricas (incompletas)';
+        $subscription->update(['terms' => $terms, 'terms_source' => $source, 'terms_captured_at' => now()]);
+        $workspace = Workspace::findOrFail($subscription->workspace_id);
+        $this->audit->recordForActor('updated', 'subscription', $subscription->id, $workspace->auditLabel(), [
+            AuditLogger::change('Condiciones contratadas', $before, "Congeladas ({$terms['plan']['name']})"),
+        ], $workspace, 'Suscripción (automático)');
+    }
+
+    /**
+     * An administrator freezes, EXPLICITLY, the conditions the plan has today for a subscription whose own were never recorded (a historical one). It is
+     * a decision of a person (audited), never done silently, and it carries no price: none can be recovered for a historical contract.
+     */
+    public function freezeCurrentTerms(Subscription $subscription): Subscription
+    {
+        if (! Subscription::termsReady()) {
+            throw ValidationException::withMessages(['terms' => 'Las condiciones congeladas todavía no están disponibles: falta aplicar la migración pendiente.']);
+        }
+
+        if ($subscription->hasFrozenTerms()) {
+            throw ValidationException::withMessages(['terms' => 'Esta suscripción ya tiene sus condiciones congeladas.']);
+        }
+
+        $this->freezeTerms($subscription, $this->buildTerms(Plan::findOrFail($subscription->plan_id), 'frozen_current'), 'frozen_current');
+
+        return $subscription->fresh();
+    }
+
+    /**
+     * The plan of a Workspace that already has a subscription was changed by an administrator: the subscription follows it and its conditions are
+     * frozen again from the NEW plan (a new agreement; the earlier price is not carried over because it belonged to the earlier plan).
+     */
+    public function planChanged(Workspace $workspace, Plan $plan): void
+    {
+        $subscription = Subscription::where('workspace_id', $workspace->id)->first();
+
+        if (! $subscription || $subscription->plan_id === $plan->id) {
+            return;
+        }
+
+        $subscription->update(['plan_id' => $plan->id]);
+        $this->freezeTerms($subscription, $this->buildTerms($plan, $subscription->status === Subscription::TRIALING ? 'trial' : 'manual'), $subscription->status === Subscription::TRIALING ? 'trial' : 'manual');
+    }
+
+    // --- free trial, granted by hand to ONE Workspace ------------------------------------------------------------------
+
+    /** Technical guard (not a commercial rule): a trial longer than this is almost surely a typo in the end date. */
+    private const TRIAL_MAX_DAYS = 400;
+
+    /**
+     * Grants a free trial to one Workspace: its plan is assigned (and must be assignable), the subscription becomes `trialing` from now until `$endsAt`,
+     * and the conditions are frozen from that plan with NO price. Refused for the administrative Workspace, for one that already has a live or paying
+     * subscription, and for a duplicate. Nothing global changes and no other Workspace is touched.
+     */
+    public function grantTrial(Workspace $workspace, Plan $plan, CarbonInterface $endsAt, string $reason, ?int $userId): Subscription
+    {
+        $this->assertTrialsAvailable();
+
+        if ($workspace->isAdministrative()) {
+            throw ValidationException::withMessages(['workspace_id' => 'El Workspace administrativo no tiene suscripción ni pruebas.']);
+        }
+
+        $this->assertTrialEnd($endsAt, now());
+
+        return DB::transaction(function () use ($workspace, $plan, $endsAt, $reason, $userId) {
+            $existing = Subscription::where('workspace_id', $workspace->id)->lockForUpdate()->first();
+
+            if ($existing && in_array($existing->status, [Subscription::TRIALING, Subscription::ACTIVE, Subscription::GRACE, Subscription::SUSPENDED], true)) {
+                throw ValidationException::withMessages(['trial' => $existing->status === Subscription::TRIALING ? 'Este Workspace ya tiene una prueba en curso.' : 'Este Workspace ya tiene una suscripción vigente: no se le concede una prueba.']);
+            }
+
+            if ($existing && ($existing->activates_workspace || $existing->payment_status === Subscription::PAYMENT_CONFIRMED)) {
+                throw ValidationException::withMessages(['trial' => 'Este Workspace tiene una contratación en curso: no se le concede una prueba.']);
+            }
+
+            $this->catalog->assignPlan($workspace, $plan); // refuses an inactive or incomplete plan
+
+            $subscription = $existing ?? new Subscription(['workspace_id' => $workspace->id]);
+            $subscription->fill([
+                'plan_id' => $plan->id, 'status' => Subscription::TRIALING, 'payment_status' => Subscription::PAYMENT_PENDING, 'payment_reference' => null,
+                'trial_starts_at' => now(), 'trial_ends_at' => $endsAt, 'trial_reason' => $reason, 'trial_granted_by' => $userId, 'ends_at' => null, 'grace_ends_at' => null,
+            ]);
+            $subscription->save();
+            $this->freezeTerms($subscription, $this->buildTerms($plan, 'trial'), 'trial');
+            $this->record($subscription, $existing?->status, Subscription::TRIALING, [
+                AuditLogger::change('Prueba gratuita hasta', null, $endsAt->toDateString()),
+                AuditLogger::change('Motivo', null, $reason),
+            ]);
+
+            return $subscription;
+        });
+    }
+
+    /** Changes the end date of a trial in course (longer or shorter, but still in the future), with a reason. Audited. */
+    public function updateTrial(Subscription $subscription, CarbonInterface $endsAt, string $reason): Subscription
+    {
+        $this->assertTrialsAvailable();
+
+        if ($subscription->status !== Subscription::TRIALING) {
+            throw ValidationException::withMessages(['trial' => 'Este Workspace no tiene una prueba en curso.']);
+        }
+
+        $this->assertTrialEnd($endsAt, $subscription->trial_starts_at ?? now());
+        $before = $subscription->trial_ends_at?->toDateString();
+        $subscription->update(['trial_ends_at' => $endsAt]);
+        $this->record($subscription, Subscription::TRIALING, Subscription::TRIALING, [
+            AuditLogger::change('Prueba gratuita hasta', $before, $endsAt->toDateString()),
+            AuditLogger::change('Motivo', null, $reason),
+        ]);
+
+        return $subscription;
+    }
+
+    /** Ends a trial on purpose (an administrator's decision): the subscription is cancelled, which withdraws access; the Workspace keeps all its data. */
+    public function cancelTrial(Subscription $subscription, string $reason): Subscription
+    {
+        $this->assertTrialsAvailable();
+
+        if ($subscription->status !== Subscription::TRIALING) {
+            throw ValidationException::withMessages(['trial' => 'Este Workspace no tiene una prueba en curso.']);
+        }
+
+        $this->transition($subscription, Subscription::CANCELLED);
+        $this->record($subscription, Subscription::CANCELLED, Subscription::CANCELLED, [AuditLogger::change('Prueba cancelada', null, $reason)]);
+
+        return $subscription;
+    }
+
+    /**
+     * Moves the trials whose end date passed to `expired` (access restricted: no paid modules and no new AI executions; the Workspace, its users, clients,
+     * conversations and files are untouched, and a confirmed payment reopens it). Idempotent: a row already expired is not touched again, so a repeated
+     * run changes and audits nothing. Never grants, renews or extends anything. Returns how many it moved.
+     */
+    public function expireTrials(): int
+    {
+        if (! Subscription::termsReady()) {
+            return 0;
+        }
+
+        $moved = 0;
+
+        Subscription::where('status', Subscription::TRIALING)->where('trial_ends_at', '<', now())->orderBy('trial_ends_at')->pluck('id')->each(function (int $id) use (&$moved) {
+            DB::transaction(function () use ($id, &$moved) {
+                $locked = Subscription::whereKey($id)->lockForUpdate()->first();
+
+                if (! $locked || $locked->status !== Subscription::TRIALING || ! $locked->trial_ends_at?->isPast()) {
+                    return; // another run (or a person) got there first
+                }
+
+                $this->transition($locked, Subscription::EXPIRED);
+                $locked->update(['ends_at' => $locked->trial_ends_at]);
+                $moved++;
+            });
+        });
+
+        return $moved;
+    }
+
+    private function assertTrialsAvailable(): void
+    {
+        if (! Subscription::termsReady()) {
+            throw ValidationException::withMessages(['trial' => 'Las pruebas gratuitas todavía no están disponibles: falta aplicar la migración pendiente.']);
+        }
+    }
+
+    private function assertTrialEnd(CarbonInterface $endsAt, CarbonInterface $from): void
+    {
+        if ($endsAt->lessThanOrEqualTo(now())) {
+            throw ValidationException::withMessages(['ends_at' => 'La fecha de fin debe ser posterior a ahora.']);
+        }
+
+        if ($endsAt->greaterThan($from->copy()->addDays(self::TRIAL_MAX_DAYS))) {
+            throw ValidationException::withMessages(['ends_at' => 'La prueba no puede durar más de '.self::TRIAL_MAX_DAYS.' días: revisa la fecha.']);
+        }
     }
 
     /** Moves an existing subscription to grace, suspended, cancelled or expired. Data is never touched; only what the status allows changes. */

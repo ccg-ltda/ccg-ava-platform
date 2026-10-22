@@ -8,19 +8,29 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Schema;
 
 /** A commercial plan: the modules a Workspace may use. Plans are created by CCG and never deleted, only deactivated. */
-#[Fillable(['key', 'name', 'description', 'module_category_id', 'price_cents', 'currency', 'billing_period', 'is_public', 'requires_quote', 'is_active'])]
+#[Fillable(['key', 'name', 'description', 'module_category_id', 'price_monthly_cents', 'price_yearly_cents', 'currency', 'is_public', 'requires_quote', 'is_active'])]
 class Plan extends Model
 {
     use Audited;
 
     protected function casts(): array
     {
-        return ['is_active' => 'boolean', 'is_public' => 'boolean', 'requires_quote' => 'boolean', 'price_cents' => 'integer'];
+        return ['is_active' => 'boolean', 'is_public' => 'boolean', 'requires_quote' => 'boolean', 'price_monthly_cents' => 'integer', 'price_yearly_cents' => 'integer'];
     }
 
     public const PERIODS = ['monthly' => 'Mensual', 'yearly' => 'Anual'];
+
+    /**
+     * Whether the database has the commercial columns (migrations `create_public_signup_tables` and `split_plan_prices_by_period`). Code can be deployed
+     * before they are applied; until then the commercial offer can not be saved, and the editor and the server say so instead of failing in SQL.
+     */
+    public static function commercialReady(): bool
+    {
+        return Schema::hasColumn('plans', 'module_category_id') && Schema::hasColumn('plans', 'is_public') && Schema::hasColumn('plans', 'price_monthly_cents');
+    }
 
     /** The solution (module category) the plan is offered under, if any. */
     public function solution(): BelongsTo
@@ -28,10 +38,28 @@ class Plan extends Model
         return $this->belongsTo(ModuleCategory::class, 'module_category_id');
     }
 
-    /** Whether the plan has a complete, usable price: an amount, a currency and a period. Nothing is assumed when one is missing. */
+    /** The price in minor units for a period, or null when that period is not sold: it needs an amount above zero AND the currency. Nothing is assumed. */
+    public function priceFor(?string $period): ?int
+    {
+        $cents = match ($period) {
+            'monthly' => $this->price_monthly_cents,
+            'yearly' => $this->price_yearly_cents,
+            default => null,
+        };
+
+        return $cents !== null && $cents > 0 && filled($this->currency) ? $cents : null;
+    }
+
+    /** @return list<string> the periods that have a usable price, monthly first */
+    public function availablePeriods(): array
+    {
+        return array_values(array_filter(array_keys(self::PERIODS), fn (string $period) => $this->priceFor($period) !== null));
+    }
+
+    /** Whether at least one period has a usable price and the currency. */
     public function hasUsablePrice(): bool
     {
-        return $this->price_cents !== null && $this->price_cents > 0 && filled($this->currency) && array_key_exists((string) $this->billing_period, self::PERIODS);
+        return $this->availablePeriods() !== [];
     }
 
     /**
@@ -69,7 +97,7 @@ class Plan extends Model
         }
 
         if (! $this->requires_quote && ! $this->hasUsablePrice()) {
-            $issues[] = 'Falta el precio, la moneda o la periodicidad.';
+            $issues[] = 'Falta la moneda o al menos un precio (mensual o anual).';
         }
 
         return ['state' => $issues !== [] ? 'incomplete' : ($this->requires_quote ? 'quote' : 'online'), 'issues' => $issues];

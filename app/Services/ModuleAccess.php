@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Module;
 use App\Models\Plan;
 use App\Models\Subscription;
 use App\Models\Workspace;
@@ -85,15 +86,38 @@ class ModuleAccess
         }
 
         $plan = $workspace->plan_id ? $workspace->plan : $this->defaultPlan();
+        $subscription = $this->subscription($workspace); // one lookup serves both the access check and the frozen conditions
 
-        if (! $plan || ! $plan->is_active || ! $this->subscriptionAllows($workspace)) {
+        if (! $plan || ! $plan->is_active || ($subscription !== null && $subscription->withdrawsAccess())) {
             return [];
         }
 
-        $keys = $plan->modules()->where('modules.is_active', true)->pluck('modules.key')
-            ->filter(fn (string $key) => $this->isImplemented($key))->values()->all();
+        return $this->operative($this->withOverrides($workspace, $this->baseKeys($workspace, $plan, true, $subscription)));
+    }
 
-        return $this->operative($this->withOverrides($workspace, $keys));
+    /**
+     * The modules the Workspace's CONTRACT gives, before its exceptions: the conditions frozen on its subscription when it has them (editing the plan later
+     * never adds or takes away what was agreed), otherwise the plan's own modules (a historical subscription, or a legacy Workspace without one). With
+     * `$usableOnly` only active and implemented modules; without it, every module the contract names (what the administration shows as "del plan").
+     *
+     * @return list<string>
+     */
+    public function baseKeys(Workspace $workspace, ?Plan $plan, bool $usableOnly = true, ?Subscription $subscription = null): array
+    {
+        // `terms` is simply absent (null) on a database without the column: no schema probe is needed here.
+        $terms = ($subscription ?? $this->subscription($workspace))?->terms;
+
+        if (is_array($terms) && isset($terms['modules']) && is_array($terms['modules'])) {
+            $keys = $usableOnly
+                ? Module::where('is_active', true)->whereIn('key', $terms['modules'])->pluck('key')->all()
+                : array_values($terms['modules']);
+        } elseif ($plan) {
+            $keys = $plan->modules()->when($usableOnly, fn ($q) => $q->where('modules.is_active', true))->pluck('modules.key')->all();
+        } else {
+            $keys = [];
+        }
+
+        return array_values(array_filter($keys, fn (string $key) => ! $usableOnly || $this->isImplemented($key)));
     }
 
     /** The subscription of a client Workspace, if it has one. */

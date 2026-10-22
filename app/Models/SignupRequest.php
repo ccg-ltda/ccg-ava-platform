@@ -29,7 +29,7 @@ class SignupRequest extends Model
     protected $fillable = [
         'public_id', 'email', 'email_verified_at', 'admin_name', 'password', 'company_name', 'tax_id', 'phone', 'workspace_code', 'workspace_name',
         'solution_key', 'plan_id', 'price_cents', 'currency', 'billing_period', 'status', 'accepted_documents', 'modules_snapshot', 'accepted_at',
-        'payment_reference', 'paid_at', 'organization_id', 'workspace_id', 'user_id', 'expires_at', 'ip_address',
+        'payment_reference', 'paid_at', 'organization_id', 'workspace_id', 'user_id', 'expires_at', 'ip_address', 'limits_snapshot',
     ];
 
     protected $hidden = ['password'];
@@ -38,7 +38,7 @@ class SignupRequest extends Model
     {
         return [
             'email_verified_at' => 'datetime', 'accepted_at' => 'datetime', 'paid_at' => 'datetime', 'expires_at' => 'datetime',
-            'accepted_documents' => 'array', 'modules_snapshot' => 'array', 'price_cents' => 'integer', 'password' => 'hashed',
+            'accepted_documents' => 'array', 'modules_snapshot' => 'array', 'limits_snapshot' => 'array', 'price_cents' => 'integer', 'password' => 'hashed',
         ];
     }
 

@@ -21,3 +21,10 @@ ScheduledCommandMonitor::watch(Schedule::command('appointments:notify')->everyMi
 
 // Settles the traces of assistant tool calls that never recorded an outcome (see AgentToolTrace::reconcile; a no-op until its table exists).
 ScheduledCommandMonitor::watch(Schedule::command('agent:tools:reconcile')->everyFiveMinutes()->withoutOverlapping()->onOneServer(), 'agent-tools-reconcile');
+
+// Moves free trials whose end date passed to `expired` (idempotent; the server already withdraws the access on every request; no data is touched).
+ScheduledCommandMonitor::watch(Schedule::command('subscriptions:expire-trials')->everyTenMinutes()->withoutOverlapping()->onOneServer(), 'trials-expire');
+
+// Looks for public sign-ups that were PAID but not provisioned (read only: it never retries, charges or creates anything). It exits with failure while there is
+// one, which the monitor counts and `integrations:diagnose` blocks on; repeating the provisioning (`signup:reconcile --retry`) stays a deliberate act of a person.
+ScheduledCommandMonitor::watch(Schedule::command('signup:reconcile')->everyFifteenMinutes()->withoutOverlapping()->onOneServer(), 'signup-reconcile');

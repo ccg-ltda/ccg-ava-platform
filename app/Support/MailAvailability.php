@@ -26,6 +26,19 @@ class MailAvailability
             return collect($mailer['mailers'] ?? [])->contains(fn ($name) => ! in_array($name, self::NON_DELIVERING, true));
         }
 
+        // An smtp transport needs a server that is not this machine, and Gmail/Google Workspace also needs the account and its password.
+        if (($mailer['transport'] ?? null) === 'smtp') {
+            $host = strtolower((string) ($mailer['host'] ?? ''));
+
+            if ($host === '' || in_array($host, ['127.0.0.1', 'localhost', '::1'], true)) {
+                return false;
+            }
+
+            if (str_ends_with($host, 'gmail.com') && (blank($mailer['username'] ?? null) || blank($mailer['password'] ?? null))) {
+                return false;
+            }
+        }
+
         $from = strtolower((string) config('mail.from.address'));
 
         return $from !== '' && ! str_ends_with($from, '@example.com') && ! str_ends_with($from, '@example.org');

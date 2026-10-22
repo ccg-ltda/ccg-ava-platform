@@ -8,6 +8,7 @@ use App\Services\ListPagination;
 use App\Services\RoleCatalog;
 use App\Services\UserIdentityGuard;
 use App\Services\WorkspaceAdministration;
+use App\Services\WorkspaceLimits;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -214,6 +215,9 @@ class UserController extends Controller
             'role' => ['required', 'string', Rule::in($this->workspaces->assignableRoles($request->user(), $target)->pluck('name')->all())],
         ]);
 
+        // The plan (or CCG, for this Workspace) may cap the members: refused before the account is created.
+        app(WorkspaceLimits::class)->assertCanAddMembers($target);
+
         $user = User::create([
             'name' => $data['name'],
             'email' => $data['email'],
@@ -292,6 +296,10 @@ class UserController extends Controller
 
         if ($moving && $target->users()->whereKey($user->id)->exists()) {
             throw ValidationException::withMessages(['workspace_id' => 'Este usuario ya pertenece a ese Workspace.']);
+        }
+
+        if ($moving) {
+            app(WorkspaceLimits::class)->assertCanAddMembers($target, 1, 'workspace_id');
         }
 
         DB::transaction(function () use ($user, $data, $changingPassword, $current, $currentRole, $target, $moving) {

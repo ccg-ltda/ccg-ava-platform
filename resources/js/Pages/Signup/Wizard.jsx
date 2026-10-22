@@ -350,33 +350,63 @@ function ModulesModal({ plan, onClose }) {
     );
 }
 
-function PriceLine({ price }) {
-    if (!price) return <p className="choice-text">Precio no disponible</p>;
+const PERIOD_NAME = { monthly: 'Mensual', yearly: 'Anual' };
+
+/** The price of every period the plan sells. With more than one, the customer picks (nothing is chosen for them); with one, it is shown as is. */
+function PriceOptions({ prices, period, onPick, active }) {
+    if (!prices.length) return <p className="choice-text">Precio no disponible</p>;
+
+    if (prices.length === 1) {
+        const [price] = prices;
+
+        return (
+            <p className="plan-price">
+                <strong>{formatMoney(price.amount, price.currency)}</strong>
+                <span>{price.currency} · {PERIOD[price.period]}</span>
+            </p>
+        );
+    }
 
     return (
-        <p className="plan-price">
-            <strong>{formatMoney(price.amount, price.currency)}</strong>
-            <span>{price.currency} · {PERIOD[price.period]}</span>
-        </p>
+        <div className="period-options" role="radiogroup" aria-label="Periodicidad de pago">
+            {prices.map((price) => (
+                <button key={price.period} type="button" role="radio" className="period-option" aria-checked={active && period === price.period}
+                    onClick={(e) => { e.stopPropagation(); onPick(price.period); }}>
+                    <span>{PERIOD_NAME[price.period]}</span>
+                    <strong>{formatMoney(price.amount, price.currency)} <span>{price.currency} · {PERIOD[price.period]}</span></strong>
+                </button>
+            ))}
+        </div>
     );
 }
 
 function StepPlan({ plans }) {
     const [choice, setChoice] = useState(null);
+    const [period, setPeriod] = useState(null);
     const [viewing, setViewing] = useState(null);
-    const form = useForm({ plan_id: '' });
+    const form = useForm({ plan_id: '', period: '' });
     const usable = (plan) => plan.purchasable || plan.requiresQuote;
+    const chosen = plans.find((plan) => plan.id === choice);
+    // A plan with two prices needs the customer's pick; a plan with one price, or sold by quote, does not.
+    const ready = chosen && (chosen.requiresQuote || chosen.prices.length === 1 || period !== null);
+
+    const pick = (plan, chosenPeriod = null) => {
+        if (!usable(plan)) return;
+        if (choice !== plan.id) setPeriod(plan.prices.length === 1 ? plan.prices[0].period : null);
+        setChoice(plan.id);
+        if (chosenPeriod) setPeriod(chosenPeriod);
+    };
 
     const submit = (e) => {
         e.preventDefault();
-        form.transform(() => ({ plan_id: choice }));
+        form.transform(() => ({ plan_id: choice, period: chosen?.requiresQuote ? '' : (period ?? chosen?.prices[0]?.period ?? '') }));
         form.post(route('signup.plan'));
     };
 
     return (
         <form onSubmit={submit}>
             <h2 className="signup-title">Elige tu plan</h2>
-            <p className="signup-lead">Compara los planes de esta solución. Los precios y los módulos son los vigentes; puedes ver el detalle de cada plan antes de elegir.</p>
+            <p className="signup-lead">Compara los planes de esta solución. Los precios y los módulos son los vigentes; elige además si prefieres pagar mensual o anualmente cuando el plan ofrece ambas opciones.</p>
 
             {plans.length === 0 ? (
                 <div className="signup-note warning" role="status">Esta solución no tiene planes disponibles ahora. Vuelve atrás y elige otra.</div>
@@ -384,10 +414,12 @@ function StepPlan({ plans }) {
                 <div className="choice-grid" role="radiogroup" aria-label="Planes">
                     {plans.map((plan) => (
                         <div key={plan.id} className="choice-card" role="radio" tabIndex={usable(plan) ? 0 : -1} aria-checked={choice === plan.id} aria-disabled={!usable(plan)}
-                            onClick={() => usable(plan) && setChoice(plan.id)}
-                            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && usable(plan) && (e.preventDefault(), setChoice(plan.id))}>
+                            onClick={() => pick(plan)}
+                            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget && usable(plan) && (e.preventDefault(), pick(plan))}>
                             <span className="choice-name">{plan.name}</span>
-                            {plan.requiresQuote ? <p className="choice-text"><strong>Por cotización.</strong> Un asesor de CCG prepara una propuesta para tu empresa; no hay cobro inmediato.</p> : <PriceLine price={plan.price} />}
+                            {plan.requiresQuote
+                                ? <p className="choice-text"><strong>Por cotización.</strong> Un asesor de CCG prepara una propuesta para tu empresa; no hay cobro inmediato.</p>
+                                : <PriceOptions prices={plan.prices} period={period} active={choice === plan.id} onPick={(chosenPeriod) => pick(plan, chosenPeriod)} />}
                             {plan.description && <span className="choice-text">{plan.description}</span>}
                             {!usable(plan) && <span className="choice-text">Este plan todavía no está disponible para contratar en línea.</span>}
                             <span className="choice-tags"><span className="choice-tag">{plan.modules.length} {plan.modules.length === 1 ? 'módulo' : 'módulos'}</span></span>
@@ -396,10 +428,11 @@ function StepPlan({ plans }) {
                     ))}
                 </div>
             )}
-            {form.errors.plan && <p className="signup-hint bad" role="alert">{form.errors.plan}</p>}
+            {chosen && !chosen.requiresQuote && chosen.prices.length > 1 && period === null && <p className="signup-hint" role="status">Elige mensual o anual para continuar.</p>}
+            {(form.errors.plan || form.errors.period) && <p className="signup-hint bad" role="alert">{form.errors.plan ?? form.errors.period}</p>}
 
             <Actions left={<button type="button" className="btn-ghost" onClick={() => go('signup.back', { to: 'solution' })}>Atrás</button>}>
-                <button type="submit" className="login-btn" disabled={!choice || form.processing}>Continuar</button>
+                <button type="submit" className="login-btn" disabled={!ready || form.processing}>Continuar</button>
             </Actions>
             {viewing && <ModulesModal plan={viewing} onClose={() => setViewing(null)} />}
         </form>
@@ -434,6 +467,7 @@ function StepSummary({ email, draft, selected, documents }) {
                 <ul className="summary-list">
                     <li><span>Solución</span><strong>{selected.solutionName}</strong></li>
                     <li><span>Plan</span><strong>{selected.name}</strong></li>
+                    {!quote && price && <li><span>Periodicidad</span><strong>{PERIOD_NAME[price.period]}</strong></li>}
                     <li><span>Precio</span><strong>{quote ? 'Por cotización' : price ? `${formatMoney(price.amount, price.currency)} ${price.currency} · ${PERIOD[price.period]}` : 'No disponible'}</strong></li>
                     <li><span>Módulos incluidos</span><strong>{selected.modules.length} · <button type="button" className="plan-link" onClick={() => setViewing(true)}>Ver módulos</button></strong></li>
                     <li><span>Empresa</span><strong>{draft.companyName}</strong></li>

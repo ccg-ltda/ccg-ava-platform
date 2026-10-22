@@ -13,6 +13,8 @@ use App\Models\Chatbot;
 use App\Models\ChatbotExecution;
 use App\Models\Conversation;
 use App\Models\Message;
+use App\Models\Workspace;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -54,6 +56,7 @@ class ChatbotExecutions
         private readonly ModuleAccess $modules,
         private readonly ExecutionAccess $access,
         private readonly OperationalAlert $alerts,
+        private readonly WorkspaceLimits $limits,
     ) {}
 
     /** Whether the chatbot is switched on, in an active Workspace and Organization whose plan still includes the assistant and the inbox. */
@@ -89,23 +92,44 @@ class ChatbotExecutions
             return null;
         }
 
+        // A message that already has its execution is a duplicate event: it neither counts again nor is judged against the limit again.
+        if (ChatbotExecution::where('message_id', $inbound->id)->exists()) {
+            return null;
+        }
+
         $now = now();
+        $reached = null;
+        // The limit is checked and the execution recorded under the Workspace's row lock, so two simultaneous messages can not both take the last slot.
         // Ignores only a duplicate `message_id`: the database decides who is first, however many events arrive at once.
-        $created = ChatbotExecution::insertOrIgnore([[
-            'correlation_id' => (string) Str::uuid(),
-            'workspace_id' => $chatbot->workspace_id,
-            'chatbot_id' => $chatbot->id,
-            'conversation_id' => $conversation->id,
-            'message_id' => $inbound->id,
-            'workflow_key' => $workflow->key,
-            'n8n_workflow_id' => $workflow->n8nId,
-            'workflow_version' => $workflow->version,
-            'handling_version' => $conversation->handling_version,
-            'status' => ChatbotExecution::PENDING,
-            'attempts' => 0,
-            'created_at' => $now,
-            'updated_at' => $now,
-        ]]);
+        $created = DB::transaction(function () use ($chatbot, $conversation, $inbound, $workflow, $now, &$reached) {
+            Workspace::whereKey($chatbot->workspace_id)->lockForUpdate()->first();
+
+            if (($reached = $this->limits->aiLimitReached($chatbot->workspace)) !== null) {
+                return 0;
+            }
+
+            return ChatbotExecution::insertOrIgnore([[
+                'correlation_id' => (string) Str::uuid(),
+                'workspace_id' => $chatbot->workspace_id,
+                'chatbot_id' => $chatbot->id,
+                'conversation_id' => $conversation->id,
+                'message_id' => $inbound->id,
+                'workflow_key' => $workflow->key,
+                'n8n_workflow_id' => $workflow->n8nId,
+                'workflow_version' => $workflow->version,
+                'handling_version' => $conversation->handling_version,
+                'status' => ChatbotExecution::PENDING,
+                'attempts' => 0,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]]);
+        });
+
+        if ($reached !== null) {
+            $this->blockedByLimit($conversation, $chatbot->workspace, $reached);
+
+            return null;
+        }
 
         if ($created !== 1) {
             return null;
@@ -115,6 +139,29 @@ class ChatbotExecutions
         RunChatbotExecution::dispatch($execution->id);
 
         return $execution;
+    }
+
+    /**
+     * The Workspace used all its AI executions of the month: no new execution starts. The message is already stored; the conversation moves to a person
+     * (only if the AI still had it, like any other hand-over), so nobody is left unanswered in silence. One operational alert per Workspace per hour and one
+     * audit event per Workspace per day say why, with identifiers and the limit only. History and the panel keep working; no module is withdrawn.
+     */
+    private function blockedByLimit(Conversation $conversation, Workspace $workspace, int $limit): void
+    {
+        try {
+            $this->control->handOverAfterFailure($conversation, $conversation->handling_version, 'ai_limit');
+
+            if (Cache::add("ava:ai-limit:alert:{$workspace->id}", 1, 3600)) {
+                $this->alerts->raise('ai_limit_reached', ['workspace' => $workspace->id, 'limit' => $limit, 'renews' => $this->limits->period()['renews']->toDateString()]);
+            }
+
+            if (Cache::add('ava:ai-limit:audit:'.$workspace->id.':'.now()->toDateString(), 1, 86400)) {
+                $this->audit->system('created', 'ai_execution', null, $workspace->name, [AuditLogger::change('Ejecución de IA', null, "Bloqueada: límite mensual de {$limit} alcanzado")], $workspace, 'Asistente (automático)', AuditLogger::FAILED);
+            }
+        } catch (\Throwable $e) {
+            // Never lets the report of the block break the arrival of the message.
+            Log::error('ai_limit_report_failed', ['exception' => $e::class, 'workspace_id' => $workspace->id]);
+        }
     }
 
     /** Runs one execution (or resumes the delivery of a reply that was stored but never handed over). */

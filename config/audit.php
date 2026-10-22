@@ -14,6 +14,8 @@ return [
         'organization' => ['label' => 'Organizaciones', 'noun' => 'la organización'],
         'plan' => ['label' => 'Planes', 'noun' => 'el plan'],
         'workspace_modules' => ['label' => 'Módulos del Workspace', 'noun' => 'los módulos de'],
+        'workspace_limits' => ['label' => 'Límites del Workspace', 'noun' => 'los límites de'],
+        'ai_execution' => ['label' => 'Ejecuciones de IA', 'noun' => 'una ejecución de IA de'],
         'subscription' => ['label' => 'Suscripciones', 'noun' => 'la suscripción de'],
         'module' => ['label' => 'Catálogo de módulos', 'noun' => 'el módulo'],
         'module_category' => ['label' => 'Categorías de módulos', 'noun' => 'la categoría de módulos'],

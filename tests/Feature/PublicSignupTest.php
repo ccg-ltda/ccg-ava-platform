@@ -68,8 +68,8 @@ class PublicSignupTest extends TestCase
     private function plan(string $name, array $modules, ?int $cents, ?string $period, bool $public = true): Plan
     {
         $plan = Plan::create([
-            'name' => $name, 'description' => "Plan {$name}", 'module_category_id' => $this->health->id, 'price_cents' => $cents,
-            'currency' => $cents ? 'COP' : null, 'billing_period' => $period, 'is_public' => $public,
+            'name' => $name, 'description' => "Plan {$name}", 'module_category_id' => $this->health->id, 'price_monthly_cents' => $period === 'monthly' ? $cents : null, 'price_yearly_cents' => $period === 'yearly' ? $cents : null,
+            'currency' => $cents ? 'COP' : null, 'is_public' => $public,
         ]);
         $plan->modules()->sync($this->ids($modules));
 
@@ -335,16 +335,16 @@ class PublicSignupTest extends TestCase
         $props = $this->get('/registro')->viewData('page')['props'];
         $this->assertSame(['Starter', 'Pro'], array_column($props['plans'], 'name'));
         $this->assertSame(['dashboard', 'reports'], array_column($props['plans'][0]['modules'], 'key'));
-        $this->assertSame(49900, $props['plans'][0]['price']['amount']);
-        $this->assertSame('COP', $props['plans'][0]['price']['currency']);
-        $this->assertSame('monthly', $props['plans'][0]['price']['period']);
+        $this->assertSame(49900, $props['plans'][0]['prices'][0]['amount']);
+        $this->assertSame('COP', $props['plans'][0]['prices'][0]['currency']);
+        $this->assertSame('monthly', $props['plans'][0]['prices'][0]['period']);
 
         // Changing the configuration changes what is offered, with no code involved.
-        $this->starter->update(['price_cents' => 5500000]);
+        $this->starter->update(['price_monthly_cents' => 5500000]);
         $this->starter->modules()->attach($this->ids(['customers']));
         $this->post('/registro/atras', ['to' => 'plan']);
         $props = $this->get('/registro')->viewData('page')['props'];
-        $this->assertSame(55000, $props['plans'][0]['price']['amount']);
+        $this->assertSame(55000, $props['plans'][0]['prices'][0]['amount']);
         $this->assertContains('customers', array_column($props['plans'][0]['modules'], 'key'));
         $this->pro->update(['is_public' => false]);
         $this->post('/registro/atras', ['to' => 'plan']);
@@ -376,7 +376,7 @@ class PublicSignupTest extends TestCase
     public function test_the_browser_cannot_choose_a_price_a_module_or_a_plan_that_is_not_offered(): void
     {
         $other = ModuleCategory::where('key', 'ecommerce')->firstOrFail();
-        $foreign = Plan::create(['name' => 'Tienda', 'module_category_id' => $other->id, 'price_cents' => 100, 'currency' => 'COP', 'billing_period' => 'monthly', 'is_public' => true]);
+        $foreign = Plan::create(['name' => 'Tienda', 'module_category_id' => $other->id, 'price_monthly_cents' => 100, 'currency' => 'COP', 'is_public' => true]);
         $this->verified();
         $this->post('/registro/empresa', $this->company());
         $this->post('/registro/solucion', ['solution' => (string) $this->health->id]);
@@ -393,7 +393,7 @@ class PublicSignupTest extends TestCase
     public function test_a_price_change_between_the_summary_and_the_confirmation_stops_the_contract(): void
     {
         $this->toSummary();
-        $this->starter->update(['price_cents' => 9990000]);
+        $this->starter->update(['price_monthly_cents' => 9990000]);
 
         $this->post('/registro/contratar', ['accepted' => $this->accepted()])->assertSessionHasErrors('plan');
         $this->assertSame(9990000, SignupRequest::firstOrFail()->price_cents, 'the new summary shows the new price');
@@ -590,22 +590,23 @@ class PublicSignupTest extends TestCase
         $this->actingAs($user)->withSession(['workspace_id' => $dev->id]);
 
         // A public plan sold online needs a solution, price, currency and period; nothing is filled in.
-        $this->post('/plans', ['name' => 'Nuevo', 'is_public' => true])->assertSessionHasErrors(['module_category_id', 'price']);
-        $this->post('/plans', ['name' => 'Sin moneda', 'price' => 100, 'is_public' => false])->assertSessionHasErrors('price');
+        $this->post('/plans', ['name' => 'Nuevo', 'is_public' => true])->assertSessionHasErrors(['module_category_id', 'price_monthly']);
+        $this->post('/plans', ['name' => 'Sin moneda', 'price_monthly' => 100, 'is_public' => false])->assertSessionHasErrors('currency');
 
-        $this->post('/plans', ['name' => 'Nuevo', 'module_category_id' => $this->health->id, 'price' => '120000.50', 'currency' => 'COP', 'billing_period' => 'yearly', 'is_public' => true, 'module_ids' => []])->assertSessionHasNoErrors();
+        $this->post('/plans', ['name' => 'Nuevo', 'module_category_id' => $this->health->id, 'price_yearly' => '120000.50', 'currency' => 'COP', 'is_public' => true, 'module_ids' => []])->assertSessionHasNoErrors();
         $plan = Plan::where('name', 'Nuevo')->firstOrFail();
-        $this->assertSame(12000050, $plan->price_cents);
+        $this->assertSame(12000050, $plan->price_yearly_cents);
+        $this->assertNull($plan->price_monthly_cents, 'a period without a price is not sold');
         $this->assertTrue($plan->is_public);
         $this->assertSame(0, $plan->modules()->count(), 'zero modules is valid');
 
         // Saving from a form that does not know the offer never erases it.
         $this->put("/plans/{$plan->id}", ['name' => 'Nuevo 2'])->assertSessionHasNoErrors();
-        $this->assertSame(12000050, $plan->fresh()->price_cents);
+        $this->assertSame(12000050, $plan->fresh()->price_yearly_cents);
         $this->assertSame('Nuevo 2', $plan->fresh()->name);
 
         // A quote plan needs no price.
         $this->post('/plans', ['name' => 'A medida', 'is_public' => true, 'requires_quote' => true])->assertSessionHasNoErrors();
-        $this->get('/plans')->assertInertia(fn ($page) => $page->has('commercial.solutions')->has('commercial.currencies')->has('commercial.periods'));
+        $this->get('/plans')->assertInertia(fn ($page) => $page->has('commercial.solutions')->has('commercial.currencies'));
     }
 }

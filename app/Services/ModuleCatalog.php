@@ -6,6 +6,8 @@ use App\Audit\AuditLogger;
 use App\Models\Module;
 use App\Models\ModuleCategory;
 use App\Models\Plan;
+use App\Models\Subscription;
+use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceModuleOverride;
 use Illuminate\Database\Eloquent\Builder;
@@ -202,7 +204,7 @@ class ModuleCatalog
     {
         $names = Module::whereIn('key', $keys)->pluck('name', 'key');
 
-        return collect($keys)->map(fn (string $key) => ['key' => $key, 'name' => (string) ($names[$key] ?? $key), 'missing' => $this->access->missingFor($key, $keys)])
+        return collect($keys)->map(fn (string $key) => ['key' => $key, 'name' => $this->labelOf($key, (string) ($names[$key] ?? $key)), 'missing' => $this->access->missingFor($key, $keys)])
             ->filter(fn (array $unmet) => $unmet['missing'] !== [])->values()->all();
     }
 
@@ -211,7 +213,13 @@ class ModuleCatalog
     {
         $names = Module::whereIn('key', $keys)->pluck('name', 'key');
 
-        return collect($keys)->map(fn (string $key) => '«'.($names[$key] ?? $key).'»')->implode(', ');
+        return collect($keys)->map(fn (string $key) => '«'.$this->labelOf($key, (string) ($names[$key] ?? $key)).'»')->implode(', ');
+    }
+
+    /** The name a module goes by when another one is described (config `labels`: the sidebar's), or its catalog name when it has no page. */
+    public function labelOf(string $key, string $fallback): string
+    {
+        return (string) config("modules.labels.{$key}", $fallback);
     }
 
     // --- exceptions of one Workspace over its plan -----------------------------------------------------------------
@@ -220,19 +228,41 @@ class ModuleCatalog
      * Every module of the catalog as ONE Workspace sees it: whether its plan includes it, the exception it carries (grant / revoke) and whether it is
      * effectively available now. Reading never changes anything.
      *
-     * @return array{plan: ?array{id: int, name: string}, subscription: ?array{status: string, paymentStatus: string}, blocked: ?string, modules: list<array<string, mixed>>}
+     * @return array{plan: ?array{id: int, name: string, solution: ?string, explicit: bool}, subscription: ?array<string, ?string>, isActive: bool, effectiveCount: int, blocked: ?string, modules: list<array<string, mixed>>}
      */
     public function workspaceModules(Workspace $workspace): array
     {
         $plan = $workspace->plan_id ? $workspace->plan : $this->access->defaultPlan();
-        $inPlan = $plan ? $plan->modules()->pluck('modules.key')->all() : [];
+        $inPlan = $this->access->baseKeys($workspace, $plan, false); // what its contract names: the frozen conditions, or the plan for a historical one
         $overrides = WorkspaceModuleOverride::where('workspace_id', $workspace->id)->pluck('mode', 'module_id');
         $effective = $this->access->keys($workspace);
         $subscription = $this->access->subscription($workspace);
 
         return [
-            'plan' => $plan ? ['id' => $plan->id, 'name' => $plan->name] : null,
-            'subscription' => $subscription ? ['status' => $subscription->status, 'paymentStatus' => $subscription->payment_status] : null,
+            'plan' => $plan ? [
+                'id' => $plan->id, 'name' => $plan->name, 'solution' => Plan::commercialReady() ? $plan->solution?->name : null, 'explicit' => $workspace->plan_id !== null,
+                // What the plan offers TODAY (only for new contracts); the contract of this Workspace is `subscription.terms`.
+                'offer' => Plan::commercialReady() && ($plan->price_monthly_cents || $plan->price_yearly_cents) ? [
+                    'currency' => $plan->currency, 'priceMonthly' => $plan->price_monthly_cents !== null ? $plan->price_monthly_cents / 100 : null, 'priceYearly' => $plan->price_yearly_cents !== null ? $plan->price_yearly_cents / 100 : null,
+                ] : null,
+            ] : null,
+            // Dates exist only when the subscription has them: nothing is shown for a trial or an expiry the model does not hold.
+            'subscription' => $subscription ? [
+                'status' => $subscription->status, 'paymentStatus' => $subscription->payment_status,
+                'activatedAt' => $subscription->activated_at?->toIso8601String(), 'graceEndsAt' => $subscription->grace_ends_at?->toIso8601String(), 'endsAt' => $subscription->ends_at?->toIso8601String(),
+                // The conditions frozen when it contracted (null = historical and incomplete) and the trial, only when the database has those columns.
+                'termsReady' => Subscription::termsReady(),
+                'terms' => Subscription::termsReady() ? $subscription->terms : null,
+                'termsSource' => Subscription::termsReady() ? $subscription->terms_source : null,
+                'termsCapturedAt' => Subscription::termsReady() ? $subscription->terms_captured_at?->toIso8601String() : null,
+                'trial' => Subscription::termsReady() && $subscription->trial_ends_at ? [
+                    'startsAt' => $subscription->trial_starts_at?->toIso8601String(), 'endsAt' => $subscription->trial_ends_at->toIso8601String(), 'reason' => $subscription->trial_reason,
+                    'by' => $subscription->trial_granted_by ? User::whereKey($subscription->trial_granted_by)->value('name') : null,
+                    'active' => $subscription->status === Subscription::TRIALING, 'expired' => $subscription->trialExpired(),
+                ] : null,
+            ] : null,
+            'isActive' => $workspace->is_active,
+            'effectiveCount' => count($effective),
             'blocked' => match (true) {
                 ! $plan || ! $plan->is_active => 'plan',
                 ! $this->access->subscriptionAllows($workspace) => 'subscription',
@@ -248,7 +278,7 @@ class ModuleCatalog
                 'inPlan' => in_array($module->key, $inPlan, true),
                 'override' => $overrides[$module->id] ?? null,
                 'effective' => in_array($module->key, $effective, true),
-                'requires' => collect($this->access->dependencies()[$module->key] ?? [])->values()->all(),
+                'requires' => collect($this->access->dependencies()[$module->key] ?? [])->map(fn (string $key) => $this->labelOf($key, $key))->values()->all(),
             ])->all(),
         ];
     }
@@ -268,7 +298,7 @@ class ModuleCatalog
         }
 
         $plan = $workspace->plan_id ? $workspace->plan : $this->access->defaultPlan();
-        $planIds = $plan ? $plan->modules()->pluck('modules.id')->all() : [];
+        $planIds = Module::whereIn('key', $this->access->baseKeys($workspace, $plan, false))->pluck('id')->all();
         $current = WorkspaceModuleOverride::where('workspace_id', $workspace->id)->get()->keyBy('module_id');
 
         $inactive = Module::whereIn('id', $granted)->where('is_active', false)->whereNotIn('id', $current->where('mode', WorkspaceModuleOverride::GRANT)->keys())->pluck('name');
@@ -390,6 +420,7 @@ class ModuleCatalog
                     'id' => $module->id,
                     'key' => $module->key,
                     'name' => $module->name,
+                    'label' => $this->labelOf($module->key, $module->name),
                     'description' => $module->description,
                     'categoryId' => $module->module_category_id,
                     'group' => $this->groupMeta($this->access->groupOf($module->key, $category->key)),
@@ -405,7 +436,7 @@ class ModuleCatalog
                     'route' => config("modules.implemented.{$module->key}.route"),
                     'plansCount' => $module->plans_count,
                     'requires' => collect($this->access->dependencies()[$module->key] ?? [])
-                        ->map(fn (string $key) => ['key' => $key, 'name' => $names[$key] ?? $key])->values()->all(),
+                        ->map(fn (string $key) => ['key' => $key, 'name' => $this->labelOf($key, (string) ($names[$key] ?? $key))])->values()->all(),
                 ])->all(),
             ])->all();
     }

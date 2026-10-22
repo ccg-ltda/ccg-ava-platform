@@ -30,8 +30,13 @@ class WorkspaceEmptyController extends Controller
             }
         }
 
+        $subscription = $modules->subscription($workspace);
+        $trialEnded = $subscription?->trialExpired() ? $subscription->trial_ends_at : null;
+
         return Inertia::render('Workspace/NoModules', [
-            'reason' => ! $modules->subscriptionAllows($workspace) ? 'subscription' : ($available === [] ? 'empty' : 'permissions'),
+            'reason' => $trialEnded ? 'trial_expired' : (! $modules->subscriptionAllows($workspace) ? 'subscription' : ($available === [] ? 'empty' : 'permissions')),
+            // Only the date: it tells the person what happened; nothing about the plan, price or other Workspaces.
+            'trialEndedAt' => $trialEnded?->toIso8601String(),
         ]);
     }
 }

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * The contract of a client Workspace with a plan. The plan decides WHICH modules; the subscription decides WHETHER the Workspace may use them now.
@@ -13,6 +14,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Subscription extends Model
 {
     public const PENDING = 'pending';
+
+    /** A free trial granted by hand to this one Workspace (trial_* columns). It grants access like `active`; its end is a decision, not an automatic cut. */
+    public const TRIALING = 'trialing';
 
     public const ACTIVE = 'active';
 
@@ -33,11 +37,14 @@ class Subscription extends Model
 
     public const PAYMENT_FAILED = 'failed';
 
-    protected $fillable = ['workspace_id', 'plan_id', 'status', 'payment_status', 'payment_reference', 'activates_workspace', 'activated_at', 'grace_ends_at', 'ends_at'];
+    protected $fillable = ['workspace_id', 'plan_id', 'status', 'payment_status', 'payment_reference', 'activates_workspace', 'activated_at', 'grace_ends_at', 'ends_at', 'terms', 'terms_source', 'terms_captured_at', 'trial_starts_at', 'trial_ends_at', 'trial_reason', 'trial_granted_by'];
 
     protected function casts(): array
     {
-        return ['activates_workspace' => 'boolean', 'activated_at' => 'datetime', 'grace_ends_at' => 'datetime', 'ends_at' => 'datetime'];
+        return [
+            'activates_workspace' => 'boolean', 'activated_at' => 'datetime', 'grace_ends_at' => 'datetime', 'ends_at' => 'datetime',
+            'terms' => 'array', 'terms_captured_at' => 'datetime', 'trial_starts_at' => 'datetime', 'trial_ends_at' => 'datetime',
+        ];
     }
 
     /**
@@ -47,7 +54,28 @@ class Subscription extends Model
      */
     public function withdrawsAccess(): bool
     {
-        return in_array($this->status, self::WITHDRAWN, true) || ($this->status === self::PENDING && $this->activated_at !== null);
+        return in_array($this->status, self::WITHDRAWN, true) || ($this->status === self::PENDING && $this->activated_at !== null) || ($this->status === self::TRIALING && $this->trialExpired());
+    }
+
+    /** Whether the database has the columns of the frozen conditions and the trials (migration `freeze_contract_terms_and_trials_on_subscriptions`). */
+    public static function termsReady(): bool
+    {
+        return Schema::hasColumn('subscriptions', 'terms') && Schema::hasColumn('subscriptions', 'trial_ends_at');
+    }
+
+    /** The conditions accepted at contracting are on file. Null terms = historical and incomplete: nothing is invented for them. */
+    public function hasFrozenTerms(): bool
+    {
+        return is_array($this->terms) && $this->terms !== [];
+    }
+
+    /**
+     * A trial whose end date passed, whether the scheduled command already moved it to `expired` or not. The access is withdrawn by `withdrawsAccess` the moment
+     * the date passes (the server decides on every request, not the command's schedule); the command only makes the new state explicit and audited.
+     */
+    public function trialExpired(): bool
+    {
+        return in_array($this->status, [self::TRIALING, self::EXPIRED], true) && $this->trial_ends_at !== null && $this->trial_ends_at->isPast();
     }
 
     public function workspace(): BelongsTo

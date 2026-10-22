@@ -37,11 +37,14 @@ use App\Http\Controllers\SupportAccessController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WorkspaceController;
 use App\Http\Controllers\WorkspaceEmptyController;
+use App\Http\Controllers\WorkspaceLimitController;
 use App\Http\Controllers\WorkspaceLogoController;
 use App\Http\Controllers\WorkspaceMemberController;
 use App\Http\Controllers\WorkspaceModuleController;
 use App\Http\Controllers\WorkspacePlanController;
 use App\Http\Controllers\WorkspaceSearchController;
+use App\Http\Controllers\WorkspaceSubscriptionController;
+use App\Http\Middleware\EnsureSignupSchema;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/pre-login');
@@ -51,7 +54,7 @@ Route::get('/legal', [LegalController::class, 'index'])->name('legal.index');
 Route::get('/legal/{slug}', [LegalController::class, 'show'])->where('slug', '[a-z-]+')->name('legal.show');
 
 // Public sign-up of new customers (guests only): the wizard decides every step on the server and creates nothing definitive before a verified payment.
-Route::middleware('guest')->prefix('registro')->name('signup.')->group(function () {
+Route::middleware(['guest', EnsureSignupSchema::class])->prefix('registro')->name('signup.')->group(function () {
     Route::get('/', [SignupController::class, 'index'])->name('index');
     Route::post('/correo', [SignupController::class, 'sendCode'])->middleware('throttle:signup-code')->name('code.send');
     Route::post('/codigo', [SignupController::class, 'verifyCode'])->middleware('throttle:signup-verify')->name('code.verify');
@@ -323,6 +326,11 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         Route::post('/plans/{plan}/deactivate', [PlanController::class, 'deactivate'])->whereNumber('plan')->middleware('workspace.platform:activate-plans')->name('plans.deactivate');
         Route::get('/workspaces/{workspace}/modules', [WorkspaceModuleController::class, 'show'])->whereNumber('workspace')->name('workspaces.modules.show');
         Route::put('/workspaces/{workspace}/modules', [WorkspaceModuleController::class, 'update'])->whereNumber('workspace')->middleware('workspace.platform:assign-plans')->name('workspaces.modules.update');
+        Route::post('/workspaces/{workspace}/trial', [WorkspaceSubscriptionController::class, 'grantTrial'])->whereNumber('workspace')->middleware('workspace.platform:assign-plans')->name('workspaces.trial.store');
+        Route::put('/workspaces/{workspace}/trial', [WorkspaceSubscriptionController::class, 'updateTrial'])->whereNumber('workspace')->middleware('workspace.platform:assign-plans')->name('workspaces.trial.update');
+        Route::post('/workspaces/{workspace}/trial/cancel', [WorkspaceSubscriptionController::class, 'cancelTrial'])->whereNumber('workspace')->middleware('workspace.platform:assign-plans')->name('workspaces.trial.cancel');
+        Route::post('/workspaces/{workspace}/terms/freeze', [WorkspaceSubscriptionController::class, 'freezeTerms'])->whereNumber('workspace')->middleware('workspace.platform:assign-plans')->name('workspaces.terms.freeze');
+        Route::put('/workspaces/{workspace}/limits', [WorkspaceLimitController::class, 'update'])->whereNumber('workspace')->middleware('workspace.platform:assign-plans')->name('workspaces.limits.update');
         Route::put('/workspaces/{workspace}/plan', [WorkspacePlanController::class, 'update'])->whereNumber('workspace')->middleware('workspace.platform:assign-plans')->name('workspaces.plan.update');
     });
 

@@ -92,7 +92,12 @@ class AppServiceProvider extends ServiceProvider
             Limit::perHour(20)->by('ip-hour:'.$request->ip()),
             Limit::perHour(5)->by('email:'.sha1(mb_strtolower(is_string($email = $request->input('email')) ? $email : ''))),
         ]);
-        RateLimiter::for('signup-verify', fn (Request $request) => Limit::perMinute(10)->by('ip:'.$request->ip().'|'.$request->session()->getId()));
+        // Checking a code is limited by IP alone: the session id is chosen by the visitor (dropping the cookie would open a fresh bucket). The attempts per
+        // code are also capped in SignupVerifier, so this only bounds how many codes one address can try at all.
+        RateLimiter::for('signup-verify', fn (Request $request) => [
+            Limit::perMinute(10)->by('ip:'.$request->ip()),
+            Limit::perHour(60)->by('ip-hour:'.$request->ip()),
+        ]);
         RateLimiter::for('signup-step', fn (Request $request) => Limit::perMinute(60)->by('ip:'.$request->ip()));
         RateLimiter::for('signup-availability', fn (Request $request) => Limit::perMinute(30)->by('ip:'.$request->ip()));
 

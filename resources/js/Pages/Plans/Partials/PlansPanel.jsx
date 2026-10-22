@@ -8,9 +8,9 @@ import EmptyState from '@/Components/EmptyState';
 import IconButton from '@/Components/IconButton';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SearchInput from '@/Components/SearchInput';
-import { TableWrap, Td, Th } from '@/Components/Table';
 import { useToast } from '@/Components/Toast';
 import OfferBadge from './OfferBadge';
+import PriceSummary from './PriceSummary';
 import PlanFormModal from './PlanFormModal';
 
 /**
@@ -25,7 +25,7 @@ export default function PlansPanel({ plans, catalog, filters, can, commercial })
     const [loading, setLoading] = useState(false);
     const first = useRef(true);
 
-    const blankOffer = { module_category_id: null, price: '', currency: null, billing_period: null, is_public: false, requires_quote: false };
+    const blankOffer = { module_category_id: null, price_monthly: '', price_yearly: '', currency: null, is_public: false, requires_quote: false, limits: { users: '', ai_executions: '' } };
     const create = useForm({ name: '', description: '', module_ids: [], ...blankOffer });
     const edit = useForm({ name: '', description: '', module_ids: [], ...blankOffer });
     const [creating, setCreating] = useState(false);
@@ -66,11 +66,12 @@ export default function PlansPanel({ plans, catalog, filters, can, commercial })
             description: plan.description ?? '',
             module_ids: plan.moduleIds ?? [],
             module_category_id: plan.offer?.solutionId ?? null,
-            price: plan.offer?.price ?? '',
+            price_monthly: plan.offer?.priceMonthly ?? '',
+            price_yearly: plan.offer?.priceYearly ?? '',
             currency: plan.offer?.currency ?? null,
-            billing_period: plan.offer?.period ?? null,
             is_public: Boolean(plan.offer?.isPublic),
             requires_quote: Boolean(plan.offer?.requiresQuote),
+            limits: { users: plan.limits?.users ?? '', ai_executions: plan.limits?.ai_executions ?? '' },
         });
     };
 
@@ -121,57 +122,60 @@ export default function PlansPanel({ plans, catalog, filters, can, commercial })
                     </EmptyState>
                 </div>
             ) : (
-                <TableWrap busy={loading}>
-                    <thead>
-                        <tr>
-                            <Th>Plan</Th>
-                            <Th>Estado</Th>
-                            <Th>Módulos</Th>
-                            <Th>Workspaces</Th>
-                            <Th className="text-center">Acciones</Th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-line">
-                        {plans.map((plan) => (
-                            <tr key={plan.id} className="transition-colors duration-150 hover:bg-canvas/70">
-                                <Td>
-                                    <Link href={route('plans.show', plan.id)} className="font-semibold text-ink hover:text-primary focus-visible:outline-2 focus-visible:outline-primary">
+                <div className={`grid gap-4 p-4 sm:p-6 md:grid-cols-2 2xl:grid-cols-3 ${loading ? 'opacity-60' : ''}`} aria-busy={loading}>
+                    {plans.map((plan) => (
+                        <article key={plan.id} className={`flex flex-col rounded-xl border bg-card p-4 transition-shadow hover:shadow-md ${plan.isActive ? 'border-line' : 'border-line opacity-80'}`} aria-label={`Plan ${plan.name}`}>
+                            <header className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                    <Link href={route('plans.show', plan.id)} className="block truncate text-base font-bold text-ink hover:text-primary focus-visible:outline-2 focus-visible:outline-primary">
                                         {plan.name}
                                     </Link>
-                                    {plan.isDefault && <Badge tone="blue" className="ml-2">Por defecto</Badge>}
-                                    {plan.unmet.length > 0 && <Badge tone="amber" className="ml-2">Dependencias incompletas</Badge>}
-                                    <OfferBadge offer={plan.offer} className="ml-2" />
-                                    {plan.offer?.state === 'incomplete' && <p className="mt-0.5 max-w-md text-xs text-accent-amber">Registro público: {plan.offer.issues.join(' ')}</p>}
-                                    {plan.description && <p className="mt-0.5 max-w-md truncate text-xs text-ink-muted">{plan.description}</p>}
-                                </Td>
-                                <Td className="whitespace-nowrap">
-                                    <Badge tone={plan.isActive ? 'green' : 'neutral'}>{plan.isActive ? 'Activo' : 'Inactivo'}</Badge>
-                                </Td>
-                                <Td className="text-ink-muted">{plan.modulesCount}</Td>
-                                <Td className="text-ink-muted">{plan.workspacesCount}</Td>
-                                <Td>
-                                    <div className="flex items-center justify-center gap-1">
-                                        <IconButton icon={Eye} label="Ver detalle" context={plan.name} onClick={() => router.visit(route('plans.show', plan.id))} />
-                                        {can.editPlan && <IconButton icon={Pencil} label="Editar" context={plan.name} onClick={() => openEdit(plan)} />}
-                                        {can.activatePlan && (
-                                            <IconButton
-                                                icon={Power}
-                                                label={plan.isActive ? 'Desactivar' : 'Activar'}
-                                                context={plan.name}
-                                                tone={plan.isActive ? 'danger' : 'primary'}
-                                                onClick={() => toggleStatus(plan)}
-                                            />
-                                        )}
-                                    </div>
-                                </Td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </TableWrap>
+                                    <p className="mt-0.5 truncate text-xs text-ink-muted">{plan.offer?.solutionName ?? 'Sin solución'}</p>
+                                </div>
+                                <Badge tone={plan.isActive ? 'green' : 'neutral'}>{plan.isActive ? 'Activo' : 'Inactivo'}</Badge>
+                            </header>
+
+                            <div className="mt-3 flex flex-wrap gap-1.5">
+                                <OfferBadge offer={plan.offer} />
+                                {plan.isDefault && <Badge tone="blue">Por defecto</Badge>}
+                                {plan.unmet.length > 0 && <Badge tone="amber">Dependencias incompletas</Badge>}
+                            </div>
+
+                            <PriceSummary offer={plan.offer} />
+
+                            {plan.offer?.state === 'incomplete' && <p className="mt-2 text-xs text-accent-amber">Registro público: {plan.offer.issues.join(' ')}</p>}
+                            {plan.description && <p className="mt-2 line-clamp-2 text-xs text-ink-muted">{plan.description}</p>}
+
+                            <dl className="mt-auto grid grid-cols-2 gap-3 border-t border-line pt-3 text-xs">
+                                <div>
+                                    <dt className="text-ink-muted">Módulos</dt>
+                                    <dd className="text-sm font-semibold text-ink">{plan.modulesCount}</dd>
+                                </div>
+                                <div>
+                                    <dt className="text-ink-muted">Workspaces</dt>
+                                    <dd className="text-sm font-semibold text-ink">{plan.workspacesCount}</dd>
+                                </div>
+                            </dl>
+                            <div className="mt-3 flex items-center justify-end gap-1">
+                                <IconButton icon={Eye} label="Ver detalle" context={plan.name} onClick={() => router.visit(route('plans.show', plan.id))} />
+                                {can.editPlan && <IconButton icon={Pencil} label="Editar" context={plan.name} onClick={() => openEdit(plan)} />}
+                                {can.activatePlan && (
+                                    <IconButton
+                                        icon={Power}
+                                        label={plan.isActive ? 'Desactivar' : 'Activar'}
+                                        context={plan.name}
+                                        tone={plan.isActive ? 'danger' : 'primary'}
+                                        onClick={() => toggleStatus(plan)}
+                                    />
+                                )}
+                            </div>
+                        </article>
+                    ))}
+                </div>
             )}
 
             <PlanFormModal show={creating} title="Nuevo plan" form={create} catalog={catalog} commercial={commercial} submitLabel="Crear plan" onClose={() => setCreating(false)} onSubmit={submitCreate} />
-            <PlanFormModal show={Boolean(editing)} title="Editar plan" form={edit} catalog={catalog} commercial={commercial} submitLabel="Guardar cambios" onClose={() => setEditing(null)} onSubmit={submitEdit} />
+            <PlanFormModal show={Boolean(editing)} title="Editar plan" form={edit} catalog={catalog} commercial={commercial} status={editing?.isActive} submitLabel="Guardar cambios" onClose={() => setEditing(null)} onSubmit={submitEdit} />
         </Card>
     );
 }
