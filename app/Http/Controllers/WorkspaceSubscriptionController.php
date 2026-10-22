@@ -64,6 +64,26 @@ class WorkspaceSubscriptionController extends Controller
         return back()->with('success', 'Condiciones congeladas correctamente');
     }
 
+    /** Records the price agreed outside the public sign-up (D-CON1) on the frozen conditions, with its origin and reason. */
+    public function recordAgreement(Request $request, Workspace $workspace): RedirectResponse
+    {
+        $data = $request->validate([
+            'amount' => ['required', 'numeric', 'gt:0', 'max:100000000000'],
+            'currency' => ['required', 'string', 'regex:/^[A-Z]{3}$/'],
+            'period' => ['required', Rule::in(['monthly', 'yearly'])],
+            'origin' => ['required', Rule::in(array_keys(SubscriptionService::AGREEMENT_ORIGINS))],
+            'reason' => ['required', 'string', 'min:5', 'max:500'],
+        ], ['reason.required' => 'Escribe el motivo del acuerdo (al menos 5 caracteres).', 'amount.gt' => 'El importe acordado debe ser mayor que cero.', 'currency.regex' => 'La moneda debe ser un código de tres letras, como COP.']);
+
+        $this->subscriptions->recordAgreement(
+            $this->subscription($workspace),
+            ['amount_cents' => (int) round(((float) $data['amount']) * 100), 'currency' => $data['currency'], 'period' => $data['period']],
+            $data['origin'], $data['reason'], $request->user()->id,
+        );
+
+        return back()->with('success', 'Acuerdo comercial registrado correctamente');
+    }
+
     private function subscription(Workspace $workspace): Subscription
     {
         if ($workspace->isAdministrative()) {

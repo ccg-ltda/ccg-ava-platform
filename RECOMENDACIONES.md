@@ -1756,7 +1756,7 @@ Servidor de pruebas efímero (`artisan serve` en otro puerto, con `MAIL_MAILER=l
 - **`Desarrollo_DEV`:** 17 de 17 módulos, límites `administrative`, ningún bloqueo de IA y sin suscripción.
 - Consola del navegador: solo el 405 de un `GET /logout` provocado a propósito y el 403 esperado. Sin horizontal scroll a 390 px.
 - **No verificado en PostgreSQL:** el pago real y la reactivación por pago (no hay proveedor; se probó con el punto de integración en SQLite), el bloqueo de IA contra n8n/Meta (probado con pruebas automáticas, sin conexión real), el congelado de condiciones por un registro pagado (idem) y la restauración de la base completa sobre la viva.
-- **Modo oscuro: sin implementar en el panel** (con `ccg-theme=dark` la clase se aplica pero el panel sigue claro; comprobado otra vez aquí). Solo lo tienen las pantallas de acceso y el registro: **pendiente**, no validado.
+- **Modo oscuro (corregido en §36.4):** esta línea decía «sin implementar»; era un error. El panel sí tiene modo oscuro, pero lo decide la apariencia del Workspace (`settings.appearance`), no `ccg-theme` del navegador.
 
 ### 35.5 Datos de prueba que quedaron en `ccg_ava` (solo se añadió, nada se borró)
 Organización y Workspace `[TEST] Verificación` (`TEST_VERIF`, id 78, con una suscripción vencida), el plan «[TEST] Plan verificación» (id 7, **no público**; no se puede desactivar mientras el Workspace lo use), el usuario `test-verificacion@example.test` (**desactivado**, rol `plataforma` en `Desarrollo_DEV` y `admin` en `TEST_VERIF`), una solicitud de registro cancelada (`test-registro@example.test`) y su verificación consumida, más filas de auditoría. Convienen retirarse en una limpieza supervisada; el código del correo de prueba quedó en `storage/logs/laravel.log` (local).
@@ -1767,3 +1767,30 @@ Organización y Workspace `[TEST] Verificación` (`TEST_VERIF`, id 78, con una s
 3. **Media:** unificar el flujo antiguo del widget con las ejecuciones medidas; decidir «sesión»; validar las migraciones sobre una copia en PostgreSQL desechable aparte (hoy se validó sobre la base real tras respaldo).
 4. **Media:** precio acordado fuera del registro (D-CON1); inicio futuro de una prueba (D-PRU1).
 5. **Baja:** rotación de `laravel.log` (más de 100 MB), limpieza de los datos de prueba (35.5).
+
+
+## 36. Cierre: acuerdos comerciales (D-CON1), histórico, «sesión» y modo oscuro (2026-10-22)
+
+### 36.1 Estado heredado (verificado al empezar)
+`git status` limpio; HEAD `51ceca3` (local, adelantado 1 respecto a `origin/main`); `migrate:status` con las cinco migraciones `2026_10_24` a `28` en lote 26 («Ran») sobre `ccg_ava` (PostgreSQL 16 local, 127.0.0.1:5433). Pruebas gratuitas, vencimiento idempotente, límite de IA en `ChatbotExecutions::schedule` y protección del widget antiguo ya estaban hechos (§34, §35); no se repitieron.
+
+### 36.2 D-CON1 implementado: precio acordado fuera del registro
+Reutiliza las condiciones congeladas (`subscriptions.terms`), sin tabla ni sistema paralelo. `SubscriptionService::recordAgreement`, ruta `POST /workspaces/{id}/terms/agreement` (permiso `assign-plans`, solo `Desarrollo_DEV`) y formulario «Registrar un precio acordado» en la tarjeta de condiciones.
+- Registra importe (> 0), moneda (3 letras), periodo (mensual/anual), origen (`contract`, `proposal`, `communication`, `other`), motivo (≥ 5 caracteres), autor y fecha; todo validado en el servidor.
+- Reemplaza **solo** `terms.price`; módulos y límites no cambian. Cada acuerdo se agrega a `terms.agreements` junto al precio que reemplaza (historial) y se audita (precio antes/después, origen, motivo, autor). `terms_source` pasa a `agreement`.
+- Una suscripción histórica (sin términos) **se rechaza** hasta que un administrador la congele a propósito: nunca se congela en silencio ni se inventa un precio. Se rechaza también en suscripciones canceladas/vencidas y en el Workspace administrativo.
+- Pruebas (`SubscriptionTermsAndTrialsTest`, +4): acuerdo con historial y auditoría, validación y rechazo de históricas, permisos y aislamiento entre Workspaces, y que ni el comando de vencimiento ni editar el plan congelan en masa las históricas (acceso intacto).
+- Verificado en navegador real contra PostgreSQL (`ccg_ava`) con un Workspace `E2E_WS` temporal: el formulario registró «$ 1.250.000 COP al mes · Contrato firmado» y lo mostró en el historial; sin desborde horizontal a 390 px. El navegador destapó un defecto real (`Select` mal usado, la página no renderizaba) que se corrigió antes de cerrar.
+
+### 36.3 «Sesión»
+Revisado el código, el editor de planes y la interfaz: «sesión» no existe como límite comercial ni como opción (solo `users` y `ai_executions` en `WorkspaceLimits::METRICS`). No se implementó. **Decisión pendiente (D-SES):** si «sesión» será una métrica, qué es (¿conversación?, ¿ventana de 24 h?, ¿inicio de sesión de usuario?) y cómo se cuenta. Mientras tanto la unidad aprobada es la ejecución por mensaje atendido.
+
+### 36.4 Modo oscuro
+El panel autenticado **sí** tiene modo oscuro: `useWorkspaceTheme` pone `data-app-theme="dark"` según la apariencia del Workspace (clara/oscura/sistema) y los tokens viven en `resources/css/app.css`. §34.6 y §35.4 decían lo contrario porque se probaba con `ccg-theme` (que solo afecta al acceso y al registro). Verificado: la pantalla «Suscripción y límites» (condiciones, formulario de acuerdo, prueba gratuita) con los tokens oscuros activados en el navegador forzando el atributo (no se cambió la apariencia guardada de ningún Workspace): contraste, formularios, listbox y tarjetas legibles. **No verificado:** el resto de pantallas afectadas en oscuro (`/plans`, `/registro` interior, pantalla de vencimiento).
+
+### 36.5 Decisiones y dependencias que siguen abiertas
+- **Pasarela de pagos y webhook autenticado** (dependencia externa): sin ella no hay reactivación real tras vencer una prueba; el punto único es `SubscriptionService::confirmPayment`. Decide el responsable del producto: proveedor, moneda, reembolsos y prueba→pago.
+- **D-PRU1:** inicio futuro de una prueba. No aprobado; se conserva «empieza ahora» y no bloquea concesión ni vencimiento manual.
+- **Widget antiguo (webhook propio):** con límite de IA efectivo no se usa (el mensaje pasa a una persona); **sin** límite definido sigue sin medirse. No se declara cobertura total. Falta unificarlo con `schedule`.
+- **Ejecuciones ya encoladas** antes de llegar al límite siguen su curso (pueden superar el tope).
+- **PostgreSQL desechable:** no se creó `ccg_ava_test` (sin autorización). La suite completa corre en SQLite en memoria; los flujos prioritarios se comprobaron a mano contra `ccg_ava`, no con PHPUnit sobre PostgreSQL.

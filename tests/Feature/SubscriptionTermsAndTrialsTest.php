@@ -420,4 +420,97 @@ class SubscriptionTermsAndTrialsTest extends TestCase
         $signed = $this->signUp('monthly', 'ana@empresa.co', 'sin-columnas', '900555666');
         $this->assertSame(Subscription::ACTIVE, Subscription::where('workspace_id', $signed->id)->value('status'));
     }
+
+    // --- D-CON1: a price agreed outside the public sign-up ---------------------------------------------------------------
+
+    private function historical(string $code = 'HISTORICO'): Workspace
+    {
+        $workspace = $this->client($code);
+        $workspace->update(['plan_id' => $this->plan->id]);
+        Subscription::create(['workspace_id' => $workspace->id, 'plan_id' => $this->plan->id, 'status' => Subscription::ACTIVE, 'payment_status' => 'confirmed', 'payment_reference' => 'TX-OLD-'.$code, 'activated_at' => now()->subYear()]);
+
+        return $workspace;
+    }
+
+    private function agreement(array $over = []): array
+    {
+        return array_merge(['amount' => '1500000.50', 'currency' => 'COP', 'period' => 'yearly', 'origin' => 'contract', 'reason' => 'Contrato firmado con el cliente'], $over);
+    }
+
+    public function test_an_agreed_price_is_recorded_over_frozen_terms_with_history_and_audit(): void
+    {
+        $workspace = $this->historical();
+        $admin = $this->platformAdmin();
+        $this->post("/workspaces/{$workspace->id}/terms/freeze")->assertSessionHasNoErrors();
+        $modules = $this->modules($workspace);
+
+        $this->post("/workspaces/{$workspace->id}/terms/agreement", $this->agreement())->assertSessionHasNoErrors();
+        $this->post("/workspaces/{$workspace->id}/terms/agreement", $this->agreement(['amount' => '99000', 'period' => 'monthly', 'origin' => 'proposal', 'reason' => 'Descuento aprobado']))->assertSessionHasNoErrors();
+
+        $subscription = Subscription::where('workspace_id', $workspace->id)->firstOrFail();
+        $this->assertSame('agreement', $subscription->terms_source);
+        $this->assertSame([9900000, 'COP', 'monthly'], [$subscription->terms['price']['amount_cents'], $subscription->terms['price']['currency'], $subscription->terms['price']['period']]);
+        $this->assertCount(2, $subscription->terms['agreements']);
+        $this->assertSame(150000050, $subscription->terms['agreements'][0]['price']['amount_cents']);
+        $this->assertSame(150000050, $subscription->terms['agreements'][1]['replaces']['amount_cents'], 'the earlier agreement stays in the history');
+        $this->assertSame([$admin->id, 'proposal', 'Descuento aprobado'], [$subscription->terms['agreements'][1]['agreed_by'], $subscription->terms['agreements'][1]['origin'], $subscription->terms['agreements'][1]['reason']]);
+        $this->assertSame($modules, $this->modules($workspace), 'an agreed price never touches the modules');
+        $this->assertTrue(AuditLog::where('workspace_id', $workspace->id)->where('resource_type', 'subscription')->where('user_id', $admin->id)->get()->contains(fn ($log) => str_contains(json_encode($log->changes), 'Precio acordado')));
+    }
+
+    public function test_an_agreement_is_validated_on_the_server_and_never_freezes_a_historical_subscription_silently(): void
+    {
+        $workspace = $this->historical();
+        $this->platformAdmin();
+
+        // Historical: refused until an administrator freezes the conditions on purpose; nothing is invented or changed.
+        $this->post("/workspaces/{$workspace->id}/terms/agreement", $this->agreement())->assertSessionHasErrors('agreement');
+        $this->assertNull(Subscription::where('workspace_id', $workspace->id)->firstOrFail()->terms);
+
+        $this->post("/workspaces/{$workspace->id}/terms/freeze");
+        $before = Subscription::where('workspace_id', $workspace->id)->firstOrFail()->terms;
+
+        foreach ([['amount' => '0'], ['amount' => '-5'], ['amount' => 'abc'], ['currency' => 'pesos'], ['period' => 'weekly'], ['origin' => 'rumor'], ['reason' => 'no']] as $bad) {
+            $this->post("/workspaces/{$workspace->id}/terms/agreement", $this->agreement($bad))->assertSessionHasErrors();
+        }
+
+        $this->assertSame($before, Subscription::where('workspace_id', $workspace->id)->firstOrFail()->terms);
+    }
+
+    public function test_only_the_platform_administration_can_record_an_agreement_and_never_in_another_workspace(): void
+    {
+        $workspace = $this->historical();
+        $other = $this->historical('OTRO');
+        $this->platformAdmin();
+        $this->post("/workspaces/{$workspace->id}/terms/freeze");
+        $this->post("/workspaces/{$other->id}/terms/freeze");
+        $this->post("/workspaces/{$workspace->id}/terms/agreement", $this->agreement())->assertSessionHasNoErrors();
+
+        $this->assertNull(Subscription::where('workspace_id', $other->id)->firstOrFail()->terms['price'], 'another Workspace is untouched');
+
+        $client = User::factory()->create();
+        Role::findOrCreate('admin', 'web');
+        $other->users()->attach($client->id, ['role' => 'admin']);
+        $this->actingAs($client)->withSession(['workspace_id' => $other->id]);
+        $this->post("/workspaces/{$workspace->id}/terms/agreement", $this->agreement())->assertForbidden();
+        $this->post("/workspaces/{$other->id}/terms/agreement", $this->agreement())->assertForbidden();
+    }
+
+    public function test_historical_subscriptions_keep_access_and_are_never_frozen_in_bulk(): void
+    {
+        $a = $this->historical('HIST_A');
+        $b = $this->historical('HIST_B');
+        $before = $this->modules($a);
+        $this->assertNotEmpty($before);
+
+        Artisan::call('subscriptions:expire-trials');
+        $this->plan->update(['price_monthly_cents' => 1]);
+
+        foreach ([$a, $b] as $workspace) {
+            $subscription = Subscription::where('workspace_id', $workspace->id)->firstOrFail();
+            $this->assertSame([null, null, Subscription::ACTIVE], [$subscription->terms, $subscription->terms_source, $subscription->status]);
+        }
+
+        $this->assertSame($before, $this->modules($a), 'a historical subscription keeps using its current plan');
+    }
 }

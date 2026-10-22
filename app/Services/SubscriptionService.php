@@ -234,6 +234,59 @@ class SubscriptionService
         return $subscription->fresh();
     }
 
+    /** Where an agreed price comes from (D-CON1). The reason (free text) always accompanies it. */
+    public const AGREEMENT_ORIGINS = ['contract' => 'Contrato firmado', 'proposal' => 'Propuesta aceptada', 'communication' => 'Correo o comunicación del cliente', 'other' => 'Otro'];
+
+    /**
+     * An administrator records, EXPLICITLY, the price agreed with a customer outside the public sign-up. It reuses the frozen conditions of the subscription (no
+     * parallel system): only `price` is replaced, modules and limits stay as they were, and the new agreement is appended to `terms.agreements` next to the
+     * one it replaces, so the history is never lost. A subscription whose conditions were never recorded (historical) must be frozen first, on purpose; no price
+     * is ever invented for it. Audited with the author, origin and reason.
+     *
+     * @param  array{amount_cents: int, currency: string, period: string}  $price
+     */
+    public function recordAgreement(Subscription $subscription, array $price, string $origin, string $reason, ?int $userId): Subscription
+    {
+        if (! Subscription::termsReady()) {
+            throw ValidationException::withMessages(['agreement' => 'Las condiciones congeladas todavía no están disponibles: falta aplicar la migración pendiente.']);
+        }
+
+        if (! isset(self::AGREEMENT_ORIGINS[$origin]) || ! in_array($price['period'], ['monthly', 'yearly'], true) || $price['amount_cents'] < 1 || ! preg_match('/^[A-Z]{3}$/', $price['currency'])) {
+            throw ValidationException::withMessages(['agreement' => 'El acuerdo comercial no es válido.']);
+        }
+
+        $workspace = Workspace::findOrFail($subscription->workspace_id);
+
+        if ($workspace->isAdministrative() || in_array($subscription->status, [Subscription::CANCELLED, Subscription::EXPIRED], true)) {
+            throw ValidationException::withMessages(['agreement' => 'No se puede registrar un acuerdo en este Workspace o en una suscripción terminada.']);
+        }
+
+        return DB::transaction(function () use ($subscription, $price, $origin, $reason, $userId) {
+            $locked = Subscription::whereKey($subscription->id)->lockForUpdate()->firstOrFail();
+
+            if (! $locked->hasFrozenTerms()) {
+                throw ValidationException::withMessages(['agreement' => 'Esta suscripción es histórica: congela primero sus condiciones actuales (decisión explícita) y después registra el acuerdo.']);
+            }
+
+            $terms = $locked->terms;
+            $previous = $terms['price'] ?? null;
+            $agreement = ['price' => $price, 'replaces' => $previous, 'origin' => $origin, 'reason' => $reason, 'agreed_by' => $userId, 'agreed_at' => now()->toIso8601String()];
+            $terms['price'] = $price;
+            $terms['agreements'] = [...($terms['agreements'] ?? []), $agreement];
+            $locked->update(['terms' => $terms, 'terms_source' => 'agreement', 'terms_captured_at' => now()]);
+
+            $describe = fn (?array $p) => $p ? sprintf('%s %s %s', number_format($p['amount_cents'] / 100, 2, '.', ''), $p['currency'], $p['period'] === 'yearly' ? 'al año' : 'al mes') : 'Sin precio acordado';
+            $workspace = Workspace::findOrFail($locked->workspace_id);
+            $this->audit->recordForActor('updated', 'subscription', $locked->id, $workspace->auditLabel(), [
+                AuditLogger::change('Precio acordado', $describe($previous), $describe($price)),
+                AuditLogger::change('Origen del acuerdo', null, self::AGREEMENT_ORIGINS[$origin]),
+                AuditLogger::change('Motivo del acuerdo', null, $reason),
+            ], $workspace, 'Suscripción (automático)');
+
+            return $locked;
+        });
+    }
+
     /**
      * The plan of a Workspace that already has a subscription was changed by an administrator: the subscription follows it and its conditions are
      * frozen again from the NEW plan (a new agreement; the earlier price is not carried over because it belonged to the earlier plan).

@@ -330,6 +330,7 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         Route::put('/workspaces/{workspace}/trial', [WorkspaceSubscriptionController::class, 'updateTrial'])->whereNumber('workspace')->middleware('workspace.platform:assign-plans')->name('workspaces.trial.update');
         Route::post('/workspaces/{workspace}/trial/cancel', [WorkspaceSubscriptionController::class, 'cancelTrial'])->whereNumber('workspace')->middleware('workspace.platform:assign-plans')->name('workspaces.trial.cancel');
         Route::post('/workspaces/{workspace}/terms/freeze', [WorkspaceSubscriptionController::class, 'freezeTerms'])->whereNumber('workspace')->middleware('workspace.platform:assign-plans')->name('workspaces.terms.freeze');
+        Route::post('/workspaces/{workspace}/terms/agreement', [WorkspaceSubscriptionController::class, 'recordAgreement'])->whereNumber('workspace')->middleware('workspace.platform:assign-plans')->name('workspaces.terms.agreement');
         Route::put('/workspaces/{workspace}/limits', [WorkspaceLimitController::class, 'update'])->whereNumber('workspace')->middleware('workspace.platform:assign-plans')->name('workspaces.limits.update');
         Route::put('/workspaces/{workspace}/plan', [WorkspacePlanController::class, 'update'])->whereNumber('workspace')->middleware('workspace.platform:assign-plans')->name('workspaces.plan.update');
     });

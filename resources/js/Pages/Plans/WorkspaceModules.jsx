@@ -223,9 +223,63 @@ function LimitsCard({ workspace, limits, canEdit }) {
     );
 }
 
-const TERMS_SOURCE = { signup: 'Contratado en el registro', manual: 'Asignado por un administrador', trial: 'Prueba gratuita', frozen_current: 'Congeladas por un administrador' };
+const TERMS_SOURCE = { signup: 'Contratado en el registro', manual: 'Asignado por un administrador', trial: 'Prueba gratuita', frozen_current: 'Congeladas por un administrador', agreement: 'Acuerdo comercial registrado' };
+const AGREEMENT_ORIGIN = { contract: 'Contrato firmado', proposal: 'Propuesta aceptada', communication: 'Correo o comunicación del cliente', other: 'Otro' };
 const PERIOD_TEXT = { monthly: 'al mes', yearly: 'al año' };
 const money = (cents, currency) => (cents === null || cents === undefined ? null : formatMoney(cents / 100, currency));
+
+/** D-CON1: the price agreed outside the public sign-up, recorded on purpose over the frozen conditions (history kept, audited). */
+function AgreementForm({ workspace, terms }) {
+    const form = useForm({ amount: '', currency: terms.price?.currency ?? 'COP', period: terms.price?.period ?? 'monthly', origin: 'contract', reason: '' });
+    const agreements = terms.agreements ?? [];
+
+    const submit = (e) => {
+        e.preventDefault();
+        form.post(route('workspaces.terms.agreement', workspace.id), { preserveScroll: true, onSuccess: () => form.reset('amount', 'reason') });
+    };
+
+    return (
+        <div className="mt-4 rounded-xl border border-line bg-canvas/50 p-4">
+            <h3 className="text-sm font-bold text-ink">Registrar un precio acordado</h3>
+            <p className="mt-0.5 text-xs text-ink-muted">Para un acuerdo hecho fuera del registro público. Reemplaza solo el precio; los módulos y límites no cambian y el acuerdo anterior queda en el historial.</p>
+            <form onSubmit={submit} className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div>
+                    <InputLabel htmlFor="agr-amount" value="Importe" />
+                    <TextInput id="agr-amount" type="number" min="0" step="0.01" className="mt-1 block w-full" value={form.data.amount} onChange={(e) => form.setData('amount', e.target.value)} required />
+                    <InputError message={form.errors.amount} className="mt-1" />
+                </div>
+                <div>
+                    <InputLabel htmlFor="agr-currency" value="Moneda" />
+                    <TextInput id="agr-currency" maxLength={3} className="mt-1 block w-full uppercase" value={form.data.currency} onChange={(e) => form.setData('currency', e.target.value.toUpperCase())} required />
+                    <InputError message={form.errors.currency} className="mt-1" />
+                </div>
+                <div>
+                    <InputLabel htmlFor="agr-period" value="Periodo de facturación" />
+                    <Select id="agr-period" className="mt-1" value={form.data.period} onChange={(value) => form.setData('period', value)} options={[{ value: 'monthly', label: 'Mensual' }, { value: 'yearly', label: 'Anual' }]} />
+                </div>
+                <div>
+                    <InputLabel htmlFor="agr-origin" value="Origen del acuerdo" />
+                    <Select id="agr-origin" className="mt-1" value={form.data.origin} onChange={(value) => form.setData('origin', value)} options={Object.entries(AGREEMENT_ORIGIN).map(([value, label]) => ({ value, label }))} />
+                </div>
+                <div className="sm:col-span-2 lg:col-span-4">
+                    <InputLabel htmlFor="agr-reason" value="Motivo (obligatorio)" />
+                    <TextInput id="agr-reason" className="mt-1 block w-full" value={form.data.reason} onChange={(e) => form.setData('reason', e.target.value)} required />
+                    <InputError message={form.errors.reason ?? form.errors.agreement} className="mt-1" />
+                </div>
+                <div className="sm:col-span-2 lg:col-span-4"><PrimaryButton disabled={form.processing}>Registrar acuerdo</PrimaryButton></div>
+            </form>
+            {agreements.length > 0 && (
+                <ul className="mt-4 space-y-2 text-xs text-ink-muted">
+                    {[...agreements].reverse().map((a, i) => (
+                        <li key={i} className="rounded-lg border border-line px-3 py-2">
+                            <span className="font-semibold text-ink">{money(a.price.amount_cents, a.price.currency)} {a.price.currency} {PERIOD_TEXT[a.price.period] ?? ''}</span> · {AGREEMENT_ORIGIN[a.origin] ?? a.origin} · {dateOf(a.agreed_at)} — {a.reason}
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
+    );
+}
 
 /** What each condition was when the customer contracted (frozen), next to what the plan offers today: editing the plan never changes the first. */
 function ContractCard({ workspace, data, canEdit }) {
@@ -306,6 +360,7 @@ function ContractCard({ workspace, data, canEdit }) {
                     </div>
                 </div>
             )}
+            {terms && canEdit && !['cancelled', 'expired'].includes(subscription.status) && <AgreementForm workspace={workspace} terms={terms} />}
         </Card>
     );
 }
@@ -313,7 +368,7 @@ function ContractCard({ workspace, data, canEdit }) {
 const LIMIT_LABEL = { users: 'Usuarios', ai_executions: 'Ejecuciones de IA al mes' };
 const TRIAL_BLOCKING = ['trialing', 'active', 'grace', 'suspended'];
 
-/** A free trial is granted BY HAND to this one Workspace. Its end is surfaced but never enforced automatically (that policy is not approved yet). */
+/** A free trial is granted BY HAND to this one Workspace. When it ends the server restricts access (nothing is deleted) until a confirmed payment reopens it. */
 function TrialCard({ workspace, data, canEdit, plans }) {
     const confirm = useConfirm();
     const subscription = data.subscription;
