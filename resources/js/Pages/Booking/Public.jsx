@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Alert from '@/Components/Alert';
 import Card from '@/Components/Card';
 import CopyBlock from '@/Components/CopyBlock';
+import DateField from '@/Components/DateField';
 import InputLabel from '@/Components/InputLabel';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
@@ -80,8 +81,7 @@ function SlotFinder({ keyName, config, serviceId, locationId, professionalId: fi
                     <Select id="pub_pro" className="mt-1" value={professionalId} onChange={(value) => { setProfessionalId(value); onPick(null); }} options={[{ value: '', label: 'Cualquiera disponible' }, ...professionals.map((p) => ({ value: p.id, label: p.name }))]} />
                 </div>
                 <div>
-                    <InputLabel htmlFor="pub_from" value="Desde el día" />
-                    <TextInput id="pub_from" type="date" className="mt-1" min={today()} value={from} onChange={(e) => { setFrom(e.target.value || today()); onPick(null); }} />
+                    <DateField id="pub_from" label="Desde el día" clearable={false} min={today()} value={from} onChange={(value) => { setFrom(value || today()); onPick(null); }} />
                 </div>
             </div>
             {state.loading && <p className="text-sm text-ink-muted" role="status">Buscando horarios…</p>}

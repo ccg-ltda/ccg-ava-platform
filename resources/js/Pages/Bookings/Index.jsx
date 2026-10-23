@@ -71,12 +71,12 @@ function CustomersPanel({ customers, filters, perPageOptions }) {
 }
 
 /** Agenda y reservas: the calendar of appointments, who booked and the booking rules of the Workspace. */
-export default function Index({ capabilities, filters, appointments, options, customers, settings, perPageOptions, today, listLimit }) {
+export default function Index({ capabilities, filters, appointments, dayCounts, options, customers, settings, perPageOptions, today, listLimit }) {
     const { permissions } = useAccess();
     // Creating, editing (confirm, reschedule, mark) and cancelling an appointment are independent; the rules and the public page are a fourth.
     const can = { create: permissions.includes('create-bookings'), edit: permissions.includes('edit-bookings'), cancel: permissions.includes('cancel-bookings') };
     const sections = [
-        { id: 'agenda', label: 'Agenda', icon: CalendarDays, count: appointments.length },
+        { id: 'agenda', label: 'Agenda', icon: CalendarDays, count: dayCounts ? Object.values(dayCounts).reduce((sum, value) => sum + value, 0) : appointments.length },
         { id: 'clientes', label: 'Clientes', icon: Users, count: customers.meta.total },
         // Confirmations and reminders of the appointments: their own tab next to the Agenda. They read and write the SAME settings as before (one source).
         { id: 'recordatorios', label: 'Recordatorios y confirmaciones', icon: BellRing },
@@ -91,7 +91,7 @@ export default function Index({ capabilities, filters, appointments, options, cu
             <PageHeader title="Agenda y reservas" description="Calendario de citas, quién reserva, recordatorios y confirmaciones, y las reglas de reserva de tu negocio." />
 
             <Tabs tabs={sections} selectedIndex={tab} onChange={selectTab}>
-                <AgendaPanel appointments={appointments} filters={filters} options={options} capabilities={capabilities} today={today} can={can} listLimit={listLimit} />
+                <AgendaPanel appointments={appointments} dayCounts={dayCounts} filters={filters} options={options} capabilities={capabilities} today={today} can={can} listLimit={listLimit} />
                 <CustomersPanel customers={customers} filters={filters} perPageOptions={perPageOptions} />
                 <NotificationSettings notifications={settings.notifications} canManage={permissions.includes('manage-booking-settings')} />
                 <SettingsPanel settings={settings} capabilities={capabilities} canManage={permissions.includes('manage-booking-settings')} />

@@ -6,6 +6,7 @@ import ExternalAgendaNotice from '@/Components/Booking/ExternalAgendaNotice';
 import Card from '@/Components/Card';
 import { useConfirm } from '@/Components/ConfirmDialog';
 import EmptyState from '@/Components/EmptyState';
+import EntityPicker from '@/Components/EntityPicker';
 import IconButton from '@/Components/IconButton';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
@@ -34,8 +35,8 @@ function ServiceModal({ service, resources, locations = [], onClose }) {
         location_ids: service?.locationIds ?? [],
     });
     const { data, setData, errors } = form;
-    const toggleLocation = (id) => setData('location_ids', data.location_ids.includes(id) ? data.location_ids.filter((item) => item !== id) : [...data.location_ids, id]);
-    const toggleResource = (id) => setData('resource_ids', data.resource_ids.includes(id) ? data.resource_ids.filter((item) => item !== id) : [...data.resource_ids, id]);
+    const locationOptions = locations.map((location) => ({ value: location.id, label: location.name }));
+    const resourceOptions = resources.map((resource) => ({ value: resource.id, label: resource.name }));
 
     const submit = (event) => {
         event.preventDefault();
@@ -46,7 +47,7 @@ function ServiceModal({ service, resources, locations = [], onClose }) {
     };
 
     return (
-        <Modal show onClose={onClose} maxWidth="lg" scrollable>
+        <Modal show onClose={onClose} maxWidth="3xl" scrollable>
             <form onSubmit={submit} noValidate className="flex min-h-0 flex-1 flex-col">
                 <header className="border-b border-line px-5 py-4 sm:px-8">
                     <h2 className="text-lg font-bold text-ink">{editing ? 'Editar servicio' : 'Nuevo servicio'}</h2>
@@ -85,37 +86,25 @@ function ServiceModal({ service, resources, locations = [], onClose }) {
                             <InputError message={errors.category} className="mt-1" />
                         </div>
                     </div>
-                    {locations.length > 0 && (
-                        <fieldset>
-                            <legend className="text-sm font-medium text-ink">Sedes donde se ofrece</legend>
-                            <p className="mt-0.5 text-xs text-ink-muted">
-                                {service?.canManage === false ? 'Este servicio se ofrece en sedes que no son tuyas: no puedes cambiarlo.' : 'Si no marcas ninguna, el servicio se ofrece en todas las sedes. Cada profesional sigue ofreciendo solo los servicios que tiene asignados.'}
-                            </p>
-                            <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                                {locations.map((location) => (
-                                    <label key={location.id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-field px-3 py-2 text-sm text-ink has-checked:border-primary/50 has-checked:bg-primary-soft/40">
-                                        <input type="checkbox" className="size-4 accent-primary" checked={data.location_ids.includes(location.id)} onChange={() => toggleLocation(location.id)} />
-                                        {location.name}
-                                    </label>
-                                ))}
-                            </div>
-                            <InputError message={errors.location_ids ?? errors['location_ids.0']} className="mt-1" />
-                        </fieldset>
-                    )}
-                    {resources.length > 0 && (
-                        <fieldset>
-                            <legend className="text-sm font-medium text-ink">Recursos que necesita (opcional)</legend>
-                            <p className="mt-0.5 text-xs text-ink-muted">Si eliges alguno, la cita solo se ofrece cuando uno de ellos está libre.</p>
-                            <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                                {resources.map((resource) => (
-                                    <label key={resource.id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-field px-3 py-2 text-sm text-ink has-checked:border-primary/50 has-checked:bg-primary-soft/40">
-                                        <input type="checkbox" className="size-4 accent-primary" checked={data.resource_ids.includes(resource.id)} onChange={() => toggleResource(resource.id)} />
-                                        {resource.name}
-                                    </label>
-                                ))}
-                            </div>
-                            <InputError message={errors.resource_ids} className="mt-1" />
-                        </fieldset>
+                    {(locations.length > 0 || resources.length > 0) && (
+                        <div className="grid gap-4 md:grid-cols-2">
+                            {locations.length > 0 && (
+                                <div>
+                                    <InputLabel htmlFor="service_locations" value="Sedes donde se ofrece" />
+                                    <p className="mt-0.5 mb-2 text-xs text-ink-muted">
+                                        {service?.canManage === false ? 'Este servicio se ofrece en sedes que no son tuyas: no puedes cambiarlo.' : 'Si no eliges ninguna, el servicio se ofrece en todas las sedes. Cada profesional sigue ofreciendo solo los servicios que tiene asignados.'}
+                                    </p>
+                                    <EntityPicker id="service_locations" options={locationOptions} value={data.location_ids} onChange={(ids) => setData('location_ids', ids)} placeholder="Buscar sede" noneLabel="Todas las sedes" disabled={service?.canManage === false} error={errors.location_ids ?? errors['location_ids.0']} />
+                                </div>
+                            )}
+                            {resources.length > 0 && (
+                                <div>
+                                    <InputLabel htmlFor="service_resources" value="Recursos que necesita (opcional)" />
+                                    <p className="mt-0.5 mb-2 text-xs text-ink-muted">Si eliges alguno, la cita solo se ofrece cuando uno de ellos está libre.</p>
+                                    <EntityPicker id="service_resources" options={resourceOptions} value={data.resource_ids} onChange={(ids) => setData('resource_ids', ids)} placeholder="Buscar recurso" noneLabel="Ningún recurso" error={errors.resource_ids} />
+                                </div>
+                            )}
+                        </div>
                     )}
                 </div>
                 <div className="flex justify-end gap-3 border-t border-line bg-card px-5 py-4 sm:px-8">

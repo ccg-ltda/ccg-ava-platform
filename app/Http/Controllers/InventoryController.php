@@ -102,6 +102,10 @@ class InventoryController extends Controller
             abort(422, 'Elige la sede: este Workspace lleva el inventario por sede.');
         }
 
+        // The stock of a product only exists where the product is offered: a location it is not assigned to can not receive, adjust or set a minimum for it.
+        $offered = $model->locations()->pluck('locations.id')->map(fn ($id) => (int) $id)->all();
+        abort_if($locationId !== null && $offered !== [] && ! in_array($locationId, $offered, true), 422, 'Este producto no se ofrece en esa sede: asígnalo a la sede desde Editar producto antes de registrar existencias.');
+
         if (! $model->tracks_inventory) {
             abort(422, 'Este producto no tiene control de inventario: actívalo antes de registrar existencias.');
         }

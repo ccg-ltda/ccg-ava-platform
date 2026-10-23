@@ -19,5 +19,6 @@ return [
     // How far ahead it can be scheduled and how long its text may be.
     'max_days_ahead' => 366,
     'subject_max' => 160,
+    'max_recipients' => 20,
     'body_max' => 5000,
 ];

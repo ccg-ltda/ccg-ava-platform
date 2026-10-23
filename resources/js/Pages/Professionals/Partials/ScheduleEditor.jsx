@@ -1,6 +1,7 @@
 import { Plus, Trash2 } from 'lucide-react';
 import IconButton from '@/Components/IconButton';
 import InputError from '@/Components/InputError';
+import TimeField from '@/Components/TimeField';
 
 const MAX_BLOCKS = 3;
 
@@ -34,9 +35,9 @@ export default function ScheduleEditor({ days, locations = [], value, onChange, 
                                 {blocks.length === 0 && <span className="text-sm text-ink-muted">Libre</span>}
                                 {blocks.map((block, index) => (
                                     <span key={index} className="flex w-full flex-wrap items-center gap-1.5 rounded-lg bg-canvas px-2 py-1 sm:inline-flex sm:w-auto sm:max-w-full sm:flex-wrap">
-                                        <input type="time" aria-label={`${label}: inicio del tramo ${index + 1}`} className="field min-w-[7.5rem] flex-1 !px-2 !py-1 !text-[13px] sm:!w-[9.5rem] sm:flex-none sm:!px-3 sm:!text-sm" value={block.startsAt} onChange={(e) => edit(weekday, index, 'startsAt', e.target.value)} />
+                                        <TimeField compact aria-label={`${label}: inicio del tramo ${index + 1}`} className="min-w-[7.5rem] flex-1 sm:w-[9.5rem] sm:flex-none" value={block.startsAt} onChange={(time) => edit(weekday, index, 'startsAt', time)} />
                                         <span className="text-ink-muted" aria-hidden="true">–</span>
-                                        <input type="time" aria-label={`${label}: fin del tramo ${index + 1}`} className="field min-w-[7.5rem] flex-1 !px-2 !py-1 !text-[13px] sm:!w-[9.5rem] sm:flex-none sm:!px-3 sm:!text-sm" value={block.endsAt} onChange={(e) => edit(weekday, index, 'endsAt', e.target.value)} />
+                                        <TimeField compact aria-label={`${label}: fin del tramo ${index + 1}`} className="min-w-[7.5rem] flex-1 sm:w-[9.5rem] sm:flex-none" value={block.endsAt} onChange={(time) => edit(weekday, index, 'endsAt', time)} />
                                         {locations.length > 0 && (
                                             <select aria-label={`${label}: sede del tramo ${index + 1}`} className="field min-w-[7.5rem] flex-1 !px-2 !py-1 !text-[13px] sm:!w-[9.5rem] sm:flex-none sm:!px-3 sm:!text-sm" value={block.locationId ?? ''} onChange={(e) => edit(weekday, index, 'locationId', e.target.value ? Number(e.target.value) : null)}>
                                                 <option value="">Todas las sedes</option>

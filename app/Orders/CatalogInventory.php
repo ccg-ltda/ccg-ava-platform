@@ -69,6 +69,7 @@ class CatalogInventory
 
         return Product::where('workspace_id', $workspace->id)
             ->when($place['scope'] !== null, fn ($q) => $q->whereExists($this->offeredInScope($place['scope'])))
+            ->when($place['id'] !== null, fn ($q) => $q->where($this->offeredAt($place['id'])))
             ->when($filters['search'] !== '', function ($q) use ($filters) {
                 $like = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($filters['search'])).'%';
                 $q->where(fn ($w) => $w->whereRaw("lower(name) like ? escape '!'", [$like])->orWhereRaw("lower(coalesce(sku, '')) like ? escape '!'", [$like]));
@@ -89,6 +90,16 @@ class CatalogInventory
     private function offeredInScope(array $scope): callable
     {
         return fn ($q) => $q->select(DB::raw(1))->from('location_product')->whereColumn('location_product.product_id', 'products.id')->whereIn('location_product.location_id', $scope);
+    }
+
+    /**
+     * Consulting ONE location lists the products that are offered there: the ones assigned to it, plus the historical ones assigned to no location at all
+     * (they are offered everywhere until someone assigns them). A product assigned only to other locations is not part of that location.
+     */
+    private function offeredAt(int $locationId): callable
+    {
+        return fn ($q) => $q->whereExists(fn ($sub) => $sub->select(DB::raw(1))->from('location_product')->whereColumn('location_product.product_id', 'products.id')->where('location_product.location_id', $locationId))
+            ->orWhereNotExists(fn ($sub) => $sub->select(DB::raw(1))->from('location_product')->whereColumn('location_product.product_id', 'products.id'));
     }
 
     /** Whether the product has a stock row in the consulted place that satisfies `$extra` (a correlated EXISTS subquery). */
@@ -137,7 +148,8 @@ class CatalogInventory
         }
 
         $base = fn () => Product::where('workspace_id', $workspace->id)->where('is_active', true)->where('tracks_inventory', true)
-            ->when($place['scope'] !== null, fn ($q) => $q->whereExists($this->offeredInScope($place['scope'])));
+            ->when($place['scope'] !== null, fn ($q) => $q->whereExists($this->offeredInScope($place['scope'])))
+            ->when($place['id'] !== null, fn ($q) => $q->where($this->offeredAt($place['id'])));
         $units = DB::table('inventory_stocks')->where('workspace_id', $workspace->id)
             ->when($place['general'], fn ($q) => $q->whereNull('location_id'))->when($place['id'] !== null, fn ($q) => $q->where('location_id', $place['id']))
             ->when($place['id'] === null && ! $place['general'] && $place['scope'] !== null, fn ($q) => $q->whereIn('location_id', $place['scope']))
@@ -165,7 +177,10 @@ class CatalogInventory
             return ['tracked' => (bool) ($this->schema->inventoryReady() && $product->tracks_inventory), 'stocks' => [], 'selected' => null, 'total' => null, 'level' => null];
         }
 
-        $rows = $product->stocks->map(fn (InventoryStock $stock) => [
+        // The stock of a product is shown only where the product is offered. A stock row left in a location the product was taken out of is kept in the database
+        // (its movements are history) but is not listed, summed or adjustable; a historical product assigned to no location keeps showing every row it has.
+        $offered = $product->relationLoaded('locations') ? $product->locations->pluck('id')->all() : [];
+        $rows = $product->stocks->filter(fn (InventoryStock $stock) => $offered === [] || in_array($stock->location_id, $offered, true))->map(fn (InventoryStock $stock) => [
             'locationId' => $stock->location_id,
             'location' => $stock->location_id ? ($locations->firstWhere('id', $stock->location_id)?->name ?? 'Sede inactiva') : 'Inventario general',
             'quantity' => $stock->quantity, 'min' => $stock->min_quantity, 'level' => $stock->level(),

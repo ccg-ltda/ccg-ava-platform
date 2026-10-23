@@ -7,6 +7,7 @@ import ExternalAgendaNotice from '@/Components/Booking/ExternalAgendaNotice';
 import Card from '@/Components/Card';
 import { useConfirm } from '@/Components/ConfirmDialog';
 import EmptyState from '@/Components/EmptyState';
+import EntityPicker from '@/Components/EntityPicker';
 import IconButton from '@/Components/IconButton';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
@@ -31,7 +32,7 @@ function LocationModal({ location, services, onClose }) {
         service_ids: location?.serviceIds ?? [],
     });
     const { data, setData, errors } = form;
-    const toggleService = (id) => setData('service_ids', data.service_ids.includes(id) ? data.service_ids.filter((item) => item !== id) : [...data.service_ids, id]);
+    const serviceOptions = services.map((service) => ({ value: service.id, label: service.isActive ? service.name : `${service.name} (inactivo)`, disabled: !service.isActive && !data.service_ids.includes(service.id) }));
 
     const submit = (event) => {
         event.preventDefault();
@@ -42,7 +43,7 @@ function LocationModal({ location, services, onClose }) {
     };
 
     return (
-        <Modal show onClose={onClose} maxWidth="lg" scrollable>
+        <Modal show onClose={onClose} maxWidth="2xl" scrollable>
             <form onSubmit={submit} noValidate className="flex min-h-0 flex-1 flex-col">
                 <header className="border-b border-line px-5 py-4 sm:px-8">
                     <h2 className="text-lg font-bold text-ink">{editing ? 'Editar sede' : 'Nueva sede'}</h2>
@@ -75,21 +76,11 @@ function LocationModal({ location, services, onClose }) {
                         <Textarea id="location_notes" rows={2} className="mt-1" value={data.notes} maxLength={500} onChange={(e) => setData('notes', e.target.value)} />
                         <InputError message={errors.notes} className="mt-1" />
                     </div>
-                    {services.length > 0 && (
-                        <fieldset>
-                            <legend className="text-sm font-medium text-ink">Servicios que ofrece (opcional)</legend>
-                            <p className="mt-0.5 text-xs text-ink-muted">Si no marcas ninguno, esta sede ofrece todos los servicios. Los horarios de cada profesional por sede se eligen en Profesionales.</p>
-                            <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                                {services.map((service) => (
-                                    <label key={service.id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-field px-3 py-2 text-sm text-ink has-checked:border-primary/50 has-checked:bg-primary-soft/40">
-                                        <input type="checkbox" className="size-4 accent-primary" checked={data.service_ids.includes(service.id)} onChange={() => toggleService(service.id)} />
-                                        {service.name}
-                                    </label>
-                                ))}
-                            </div>
-                            <InputError message={errors.service_ids ?? errors['service_ids.0']} className="mt-1" />
-                        </fieldset>
-                    )}
+                    <div>
+                        <InputLabel htmlFor="location_services" value="Servicios que ofrece" />
+                        <p className="mt-0.5 mb-2 text-xs text-ink-muted">Obligatorio: elige al menos uno. Los horarios de cada profesional por sede se eligen en Profesionales.</p>
+                        <EntityPicker id="location_services" options={serviceOptions} value={data.service_ids} onChange={(ids) => setData('service_ids', ids)} placeholder="Buscar servicio" noneLabel={services.length === 0 ? 'Primero crea un servicio en Servicios' : 'Ningún servicio elegido'} invalid={Boolean(errors.service_ids)} error={errors.service_ids ?? errors['service_ids.0']} />
+                    </div>
                 </div>
                 <div className="flex justify-end gap-3 border-t border-line bg-card px-5 py-4 sm:px-8">
                     <SecondaryButton type="button" onClick={onClose}>

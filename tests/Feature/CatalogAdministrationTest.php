@@ -341,7 +341,7 @@ class CatalogAdministrationTest extends TestCase
         $this->assertSame(0, InventoryMovement::where('product_id', $brownie->id)->count());
     }
 
-    public function test_the_operations_report_keeps_unconfigured_apart_from_out_of_stock(): void
+    public function test_the_catalog_summary_keeps_unconfigured_apart_from_out_of_stock(): void
     {
         $this->product(['name' => 'Brownie', 'tracks_inventory' => true]);
         $agotado = $this->product(['name' => 'Agotado', 'tracks_inventory' => true]);
@@ -350,8 +350,9 @@ class CatalogAdministrationTest extends TestCase
         $service->adjust($agotado, $this->centro->id, 0, $this->admin, 'Conteo');
         $this->contractModules($this->workspace, ['dashboard', 'reports', 'product_catalog', 'orders', 'locations']);
 
-        $kpis = $this->get('/reports?period=30d')->assertOk()->viewData('page')['props']['operations']['inventory']['data']['kpis'];
-
-        $this->assertSame([2, 1, 1], [$kpis['tracked'], $kpis['out'], $kpis['unconfigured']]);
+        // The report of the stock no longer lives in Reportes: the split between «sin configurar» and «agotado» is read in Catálogo.
+        $this->assertArrayNotHasKey('inventory', $this->get('/reports?period=30d')->assertOk()->viewData('page')['props']['operations']);
+        $summary = $this->get('/catalog')->viewData('page')['props']['inventory']['summary'];
+        $this->assertSame([2, 1, 1], [$summary['tracked'], $summary['out'], $summary['unconfigured']]);
     }
 }

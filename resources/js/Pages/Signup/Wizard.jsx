@@ -254,7 +254,7 @@ function StepCompany({ email, draft, passwordMin }) {
             <div className="signup-note">
                 <div>
                     <strong>¿Qué es el Workspace?</strong> Tu Workspace es el espacio privado donde tu empresa gestionará sus operaciones, usuarios y módulos. Los datos de tu empresa estarán separados de los de otras organizaciones, aunque utilicen la misma solución. Con ese nombre (se guarda en mayúsculas) tu equipo entrará a la plataforma.
-                    <span className="signup-example">Ejemplo ilustrativo, no es un Workspace existente: si tu empresa se llama «Clínica Central», puedes llamar a tu Workspace «{example}». Desde allí accederás a los módulos de Salud que incluya tu plan.</span>
+                    <span className="signup-example">Ejemplo ilustrativo, no es un Workspace existente: si tu empresa se llama «Clínica Central», puedes llamar a tu Workspace «{example}». Desde allí accederás a los módulos que incluya tu plan.</span>
                 </div>
             </div>
 

@@ -6,7 +6,6 @@ use App\Booking\Locations;
 use App\Http\Controllers\Concerns\ReadsSections;
 use App\Http\Requests\ReportFilterRequest;
 use App\Models\Workspace;
-use App\Orders\CommerceSchema;
 use App\Services\DashboardMetrics;
 use App\Services\LocationScope;
 use App\Services\ModuleAccess;
@@ -50,13 +49,13 @@ class ReportController extends Controller
         // Agenda, Pedidos and Clientes: only for the ACTIVE Workspace (never for "all" nor another one), only when its plan includes the module AND the role may read
         // that module (the figures include money and customers, so `view-dashboard` alone is not enough).
         $own = $target !== null && $target->is($active);
-        // The location filter of the operational figures (agenda, orders, inventory). A member limited to selected locations ALWAYS gets only theirs (without a
+        // The location filter of the operational figures (agenda and orders). A member limited to selected locations ALWAYS gets only theirs (without a
         // filter: all of theirs; with one: that one, and only if it is theirs); anybody else gets the whole Workspace unless they choose a location. A foreign,
         // unauthorized or unknown id is refused here, on the server, whatever the interface offered.
         $where = $this->locationFilter($request, $active, $own);
         $has = fn (string $module, string $permission) => $own && in_array($module, $modules, true) && in_array($permission, $permissions, true);
-        // Inventory belongs to the product catalog module and to `view-inventory`, and only exists once its migration is applied: without all three nothing of it is read.
-        $ops = ['bookings' => $has('bookings', 'view-bookings'), 'orders' => $has('orders', 'view-orders'), 'customers' => $has('customers', 'view-customers'), 'inventory' => $has('product_catalog', 'view-inventory') && app(CommerceSchema::class)->inventoryReady()];
+        // The stock is managed in Catálogo and has no report of its own here.
+        $ops = ['bookings' => $has('bookings', 'view-bookings'), 'orders' => $has('orders', 'view-orders'), 'customers' => $has('customers', 'view-customers')];
 
         return Inertia::render('Reports/Index', ($team ? $report->for($active, $role, $target, $global, in_array('view-users', $permissions, true)) : ['stats' => null, 'roleBreakdown' => null, 'recentUsers' => null])
             + array_merge($analytics, ['metrics' => $conversations ? $analytics['metrics'] : []])
@@ -67,7 +66,6 @@ class ReportController extends Controller
                     'bookings' => $ops['bookings'] ? $this->section('bookings', fn () => $operations->bookings($active, $period, $where['ids'])) : null,
                     'orders' => $ops['orders'] ? $this->section('orders', fn () => $operations->orders($active, $period, $where['ids'])) : null,
                     'customers' => $ops['customers'] ? $this->section('customers', fn () => $operations->customers($active, $period)) : null,
-                    'inventory' => $ops['inventory'] ? $this->section('inventory', fn () => $operations->inventory($active, $period, $where['ids'])) : null,
                 ],
                 'figures' => $conversations ? $this->section('figures', fn () => $metrics->comparison($target, $period)) : null,
                 'activity' => $conversations ? $this->section('activity', fn () => $metrics->series($target, $period, $settings)) : null,

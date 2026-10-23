@@ -1,7 +1,7 @@
 // Run with `npm run test:js`. The layout of the Agenda calendar: days, hours, side-by-side appointments and the range label.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { byDay, collapseLanes, eventBox, gridDays, HOUR_PX, hourRange, lastDayOf, layoutDay, rangeLabel, shiftDay, toneHue } from '../../resources/js/lib/calendarLayout.js';
+import { byDay, collapseLanes, eventBox, gridDays, halfHourMarks, HOUR_PX, hourRange, lastDayOf, layoutDay, mondayOf, periodStart, rangeLabel, shiftDay, shiftMonthStart, toneHue } from '../../resources/js/lib/calendarLayout.js';
 
 const event = (id, startMinute, durationMinutes, restMinutes = 0, extra = {}) => ({ id, startMinute, durationMinutes, restMinutes, ...extra });
 
@@ -46,7 +46,7 @@ test('a placed appointment gets its box from its time, and a short one stays rea
     assert.equal(box.height, 0.5 * HOUR_PX);
     assert.equal(box.left, '0%');
     assert.equal(box.width, '100%');
-    assert.ok(eventBox(layoutDay([event(2, 600, 5)])[0], 8).height >= (20 / 60) * HOUR_PX);
+    assert.ok(eventBox(layoutDay([event(2, 600, 5)])[0], 8).height >= (15 / 60) * HOUR_PX);
 });
 
 test('the color of a professional is stable and different from the next one', () => {
@@ -89,4 +89,31 @@ test('a crowded moment collapses into one «+N» and a normal one is untouched',
     const apart = collapseLanes(layoutDay([...Array.from({ length: 5 }, (_, index) => event(index + 1, 600, 60)), event(9, 900, 30)]), 3);
     assert.equal(apart.overflow.length, 1);                // only the crowded moment collapses
     assert.ok(apart.visible.some((item) => item.id === 9 && item.lanes === 1));
+});
+
+test('periods start on the day, the Monday of the week or the first of the month', () => {
+    assert.equal(periodStart('day', '2026-10-21'), '2026-10-21');
+    assert.equal(periodStart('week', '2026-10-21'), '2026-10-19'); // Wednesday -> Monday
+    assert.equal(periodStart('week', '2026-10-25'), '2026-10-19'); // Sunday belongs to the week that started on Monday
+    assert.equal(periodStart('week', '2026-10-19'), '2026-10-19');
+    assert.equal(periodStart('month', '2026-10-21'), '2026-10-01');
+    assert.equal(shiftMonthStart('2026-10-21', 1), '2026-11-01');
+    assert.equal(shiftMonthStart('2026-01-15', -1), '2025-12-01');
+    assert.equal(mondayOf('2026-03-01'), '2026-02-23');
+});
+
+test('the time scale has a mark every 30 minutes', () => {
+    const marks = halfHourMarks(9, 11);
+
+    assert.deepEqual(marks.map((mark) => mark.label), ['09:00', '09:30', '10:00', '10:30']);
+    assert.deepEqual(marks.map((mark) => mark.hour), [true, false, true, false]);
+    assert.equal(marks[1].minute, 9 * 60 + 30);
+});
+
+test('an appointment is as tall as it lasts', () => {
+    const [half] = layoutDay([event(1, 540, 30)]);
+    const [hour] = layoutDay([event(2, 540, 60)]);
+
+    assert.equal(eventBox(half, 9).height, 0.5 * HOUR_PX);
+    assert.equal(eventBox(hour, 9).height, HOUR_PX);
 });

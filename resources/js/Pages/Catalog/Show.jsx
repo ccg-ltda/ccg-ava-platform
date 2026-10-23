@@ -15,12 +15,12 @@ import { money } from '@/config/orders';
 import useFormatDateTime from '@/Hooks/useFormatDateTime';
 import usePagedList from '@/Hooks/usePagedList';
 import AppLayout from '@/Layouts/AppLayout';
-import { MOVEMENT_TONES, STATES, levelOf, signed, units } from '@/lib/inventory';
+import { MOVEMENT_TONES, STATES, levelOf, offeredLocations, signed, units } from '@/lib/inventory';
 import ProductModal from './Partials/ProductModal';
 import StockDialog from './Partials/StockDialog';
 import { ProductThumb } from './Partials/StockInfo';
 
-/** The places whose stock this product can have: every active location, or the general stock when the Workspace has none. */
+/** The places whose stock this product can have: the active locations it is offered in, or the general stock when the Workspace has none. */
 const placesOf = (product, locations) => {
     const rows = product.stock?.stocks ?? [];
     const place = (locationId, name) => {
@@ -29,7 +29,7 @@ const placesOf = (product, locations) => {
         return { locationId, name, has: Boolean(row), quantity: row?.quantity ?? 0, min: row?.min ?? 0, level: row?.level ?? null };
     };
 
-    return locations.length === 0 ? [place(null, 'Inventario general')] : locations.map((location) => place(location.id, location.name));
+    return locations.length === 0 ? [place(null, 'Inventario general')] : offeredLocations(product, locations).map((location) => place(location.id, location.name));
 };
 
 function Movements({ product, movements, movementPlace, perPageOptions }) {

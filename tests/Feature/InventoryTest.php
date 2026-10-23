@@ -308,10 +308,13 @@ class InventoryTest extends TestCase
 
     public function test_editing_the_product_never_changes_its_stock_and_a_new_product_records_its_first_stock_as_an_entry(): void
     {
-        $this->post('/catalog', ['location_ids' => [$this->centro->id], 'name' => 'Nuevo', 'price' => '5000', 'tracks_inventory' => true, 'stocks' => [['location_id' => $this->centro->id, 'quantity' => 8, 'min_quantity' => 2], ['location_id' => $this->norte->id, 'quantity' => 0]]])->assertSessionHasNoErrors();
+        $this->post('/catalog', ['location_ids' => [$this->centro->id], 'name' => 'Nuevo', 'price' => '5000', 'tracks_inventory' => true, 'stocks' => [['location_id' => $this->centro->id, 'quantity' => 8, 'min_quantity' => 2]]])->assertSessionHasNoErrors();
         $product = $this->workspace->products()->where('name', 'Nuevo')->firstOrFail();
 
-        $this->assertSame([8, 0], [$this->quantity($product, $this->centro), $this->quantity($product, $this->norte)]);
+        $this->assertSame([8, null], [$this->quantity($product, $this->centro), InventoryStock::where('product_id', $product->id)->where('location_id', $this->norte->id)->value('quantity')], 'no stock row exists in a location the product is not offered in');
+        // The first stock can only be set where the product is offered.
+        $this->post('/catalog', ['location_ids' => [$this->centro->id], 'name' => 'Otro', 'price' => '5000', 'tracks_inventory' => true, 'stocks' => [['location_id' => $this->norte->id, 'quantity' => 3]]])->assertSessionHasErrors('stocks');
+        $this->assertSame(0, $this->workspace->products()->where('name', 'Otro')->count());
         $this->assertSame(2, InventoryStock::where('product_id', $product->id)->where('location_id', $this->centro->id)->value('min_quantity'));
         $first = InventoryMovement::where('product_id', $product->id)->get();
         $this->assertCount(1, $first, 'only the stock with units has an entry');
@@ -622,50 +625,20 @@ class InventoryTest extends TestCase
 
     // --- 10. reports -------------------------------------------------------------------------------------------------------------------------
 
-    public function test_the_reports_count_stock_per_location_low_and_out_products_and_the_movements_of_the_period(): void
+    public function test_reports_have_no_inventory_section_of_their_own_even_with_the_catalog_module_and_view_inventory(): void
     {
-        [$cat] = app(ProductCategories::class)->ensure($this->workspace, 'Cuidado facial');
-        $ok = $this->tracked(20, 6, ['category_id' => $cat->id, 'category' => $cat->name]);
-        $low = $this->tracked(3, 0);
-        InventoryStock::where('product_id', $low->id)->update(['min_quantity' => 5]);
-        $out = $this->tracked(3, 2);
-        app(InventoryService::class)->adjust($out, $this->centro->id, 0, $this->admin, 'Conteo');
-        $inactive = $this->tracked(9, 0, ['is_active' => false]);
-        $order = $this->order($ok, 4);
-        $this->move($order, 'confirmed');
-        $this->contractModules($this->workspace, ['dashboard', 'reports', 'product_catalog', 'orders', 'locations']);
-
-        $props = $this->get('/reports?period=30d')->assertOk()->viewData('page')['props'];
-        $inventory = $props['operations']['inventory']['data'];
-
-        $this->assertTrue($props['sources']['inventory']);
-        $this->assertSame(['tracked' => 3, 'units' => 16 + 6 + 3 + 2, 'low' => 1, 'out' => 1, 'unconfigured' => 0, 'entries' => 20 + 6 + 3 + 3 + 2 + 9, 'sold' => 4], $inventory['kpis'], 'only active products with stock control count for the alerts and the units');
-        $this->assertSame(['Centro' => 19, 'Norte' => 8], collect($inventory['byLocation'])->pluck('value', 'label')->all(), 'each location is counted on its own');
-        $this->assertSame(['Cuidado facial' => 22, 'Sin categoría' => 5], collect($inventory['byCategory'])->pluck('value', 'label')->all(), 'by the normalized category');
-        $this->assertContains($low->name, array_column($inventory['attention'], 'name'));
-        $this->assertContains($out->name, array_column($inventory['attention'], 'name'));
-        $this->assertNotContains($inactive->name, array_column($inventory['attention'], 'name'));
-        $this->assertSame(4, collect($inventory['movements'])->firstWhere('key', 'sale')['value']);
-    }
-
-    public function test_the_inventory_report_needs_the_catalog_module_and_view_inventory_and_reads_no_inventory_table_without_them(): void
-    {
+        // The stock is managed in Catálogo. Reportes neither offers an «Inventario» section nor reads any inventory table, whatever the plan and the role.
         $this->tracked(5);
-        $this->contractModules($this->workspace, ['dashboard', 'reports', 'orders']); // no product_catalog
+        $this->contractModules($this->workspace, ['dashboard', 'reports', 'product_catalog', 'orders', 'locations']);
 
         DB::flushQueryLog();
         DB::enableQueryLog();
-        $props = $this->get('/reports')->assertOk()->viewData('page')['props'];
+        $props = $this->get('/reports?period=30d')->assertOk()->viewData('page')['props'];
         $tables = collect(DB::getQueryLog())->flatMap(fn (array $query) => preg_match_all('/(?:from|join)\s+"([a-z_]+)"/i', $query['query'], $matches) ? $matches[1] : [])->unique()->all();
         DB::disableQueryLog();
 
-        $this->assertFalse($props['sources']['inventory']);
-        $this->assertNull($props['operations']['inventory']);
-        $this->assertSame([], array_values(array_intersect($tables, ['inventory_stocks', 'inventory_movements', 'product_categories'])), 'no inventory table is requested without the module');
-
-        $this->contractModules($this->workspace, ['dashboard', 'reports', 'product_catalog']);
-        Role::findOrCreate('analista', 'web')->syncPermissions(['view-dashboard', 'view-catalog']);
-        $this->actAsMember($this->workspace, 'analista');
-        $this->assertFalse($this->get('/reports')->viewData('page')['props']['sources']['inventory'], 'the module is not enough: the role needs view-inventory');
+        $this->assertArrayNotHasKey('inventory', $props['sources']);
+        $this->assertArrayNotHasKey('inventory', $props['operations']);
+        $this->assertSame([], array_values(array_intersect($tables, ['inventory_stocks', 'inventory_movements', 'product_categories'])), 'no inventory table is requested by Reportes');
     }
 }

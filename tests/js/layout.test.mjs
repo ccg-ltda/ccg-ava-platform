@@ -26,7 +26,10 @@ test('a long brand cannot break the top bar or the sidebar header', () => {
 test('the sidebar collapses to icons on large screens and every label stays available to screen readers', () => {
     const sidebar = source('Components/Sidebar.jsx');
     assert.match(sidebar, /data-collapsed=/);
-    assert.match(sidebar, /aria-pressed=\{collapsed\}/);
+    assert.match(sidebar, /aria-expanded=\{!collapsed\}/);
+    assert.match(sidebar, /<Menu className/, 'the toggle is only the three-line icon, in the header');
+    assert.match(sidebar, /<Tooltip content=/, 'its name is a tooltip, not permanent text');
+    assert.doesNotMatch(sidebar, /Contraer menú<\/span>/, 'no permanent text beside the icon');
     assert.match(sidebar, /lg:data-\[collapsed=true\]:w-16/);
     assert.match(sidebar, /lg:w-64 shrink-0/, 'it never squeezes');
     const item = source('Components/NavItem.jsx');

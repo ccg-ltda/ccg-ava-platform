@@ -304,7 +304,7 @@ class LocationScopeProductsAndServicesTest extends TestCase
         $this->put("/locations/{$this->sur->id}", ['name' => 'Hackeada', 'address' => 'x', 'city' => 'y'])->assertForbidden();
         $this->post("/locations/{$this->sur->id}/deactivate")->assertForbidden();
         $this->post('/locations', ['name' => 'Nueva', 'address' => 'x', 'city' => 'y'])->assertForbidden();
-        $this->put("/locations/{$this->norte->id}", ['name' => 'Norte renombrada', 'address' => 'x', 'city' => 'y'])->assertSessionHasNoErrors();
+        $this->put("/locations/{$this->norte->id}", ['name' => 'Norte renombrada', 'address' => 'x', 'city' => 'y', 'service_ids' => [$this->service->id]])->assertSessionHasNoErrors();
         $this->assertSame('Sur', $this->sur->fresh()->name);
         $this->assertTrue($this->sur->fresh()->is_active);
         $this->assertSame(2, $this->ws->locations()->count());

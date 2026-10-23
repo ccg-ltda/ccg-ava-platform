@@ -71,7 +71,7 @@ export default function Index({ stats, roleBreakdown, recentUsers, sources, filt
         });
 
     // A new period starts with its own default grouping; a grouping change keeps the period.
-    // The location filter (agenda, orders and inventory) travels with every change of period or grouping; the server validates it again.
+    // The location filter (agenda and orders) travels with every change of period or grouping; the server validates it again.
     const locationParam = locations?.selected ?? undefined;
     const changePeriod = (period) => visit({ period, workspace: workspaceParam, location: locationParam });
     const changeGranularity = (granularity) => visit({ period: filters.period, granularity, workspace: workspaceParam, location: locationParam });
@@ -242,7 +242,6 @@ export default function Index({ stats, roleBreakdown, recentUsers, sources, filt
                 );
             case 'bookings':
             case 'orders':
-            case 'inventory':
             case 'customers':
                 return <OperationsPanel kind={section.id} section={operations[section.id]} range={range} loading={loading} onRetry={retry} />;
             default:
@@ -277,7 +276,7 @@ export default function Index({ stats, roleBreakdown, recentUsers, sources, filt
             </PageHeader>
 
             {(errors?.period || errors?.granularity || errors?.location) && <Alert tone="warning">{errors.period ?? errors.granularity ?? errors.location}</Alert>}
-            {placeLabel && <p className="text-xs text-ink-muted" role="note">La agenda, los pedidos y el inventario muestran solo la sede elegida. Clientes, conversaciones y equipo no dependen de una sede y no cambian con este filtro.</p>}
+            {placeLabel && <p className="text-xs text-ink-muted" role="note">La agenda y los pedidos muestran solo la sede elegida. Clientes, conversaciones y equipo no dependen de una sede y no cambian con este filtro.</p>}
 
             {sections.length === 0 ? (
                 <EmptyState icon={LineChart} title="Aún no hay reportes disponibles" description="Aquí aparecerán los reportes de los módulos que incluya tu plan." />

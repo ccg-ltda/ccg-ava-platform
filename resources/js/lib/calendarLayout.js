@@ -1,8 +1,8 @@
 // Layout of the Agenda calendar (day and week). Pure functions, so they are tested without a browser (`npm run test:js`).
 // Times are MINUTES SINCE LOCAL MIDNIGHT in the Workspace's time zone (the server sends them), never browser-local dates.
 
-export const HOUR_PX = 56;
-const MIN_EVENT_MINUTES = 20; // a very short appointment is still tall enough to read and click
+export const HOUR_PX = 96; // 48 px per half hour: a 30-minute appointment still has room for its four data
+const MIN_EVENT_MINUTES = 15; // only an appointment shorter than this is drawn taller than its length, so it can still be read and clicked
 
 /** `YYYY-MM-DD` plus a number of days, without time zones getting in the way. */
 export function shiftDay(date, days) {
@@ -10,6 +10,41 @@ export function shiftDay(date, days) {
     const next = new Date(Date.UTC(year, month - 1, day + days));
 
     return next.toISOString().slice(0, 10);
+}
+
+/** The Monday of the week that contains a `YYYY-MM-DD` (weeks start on Monday). */
+export function mondayOf(date) {
+    const [year, month, day] = date.split('-').map(Number);
+    const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+
+    return shiftDay(date, -((weekday + 6) % 7));
+}
+
+/** The first day of the month of a `YYYY-MM-DD`. */
+export function monthStartOf(date) {
+    return `${date.slice(0, 7)}-01`;
+}
+
+/** The first day of the month `delta` months away from the month of `date`. */
+export function shiftMonthStart(date, delta) {
+    const [year, month] = date.split('-').map(Number);
+    const next = new Date(Date.UTC(year, month - 1 + delta, 1));
+
+    return next.toISOString().slice(0, 10);
+}
+
+/** The `from` an agenda period starts at for a reference day: the day itself, its Monday-first week, or the first day of its month. */
+export function periodStart(period, date) {
+    return period === 'month' ? monthStartOf(date) : period === 'week' ? mondayOf(date) : date;
+}
+
+/** The marks of the time scale: one per half hour from `startHour` to `endHour` (`{ minute, label, hour }`, `hour` = on the hour). */
+export function halfHourMarks(startHour, endHour) {
+    return Array.from({ length: (endHour - startHour) * 2 }, (_, index) => {
+        const minute = startHour * 60 + index * 30;
+
+        return { minute, hour: index % 2 === 0, label: `${String(Math.floor(minute / 60)).padStart(2, '0')}:${index % 2 === 0 ? '00' : '30'}` };
+    });
 }
 
 /** The days a grid shows: `count` consecutive days from `from` (1 for the day view, 7 for the week). */

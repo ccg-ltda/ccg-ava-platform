@@ -473,6 +473,8 @@ class ModuleCatalog
         $names = Module::pluck('name', 'key');
         $categoryNames = ModuleCategory::pluck('name', 'key');
 
+        $plans = Plan::commercialReady() ? Plan::query()->whereNotNull('module_category_id')->selectRaw('module_category_id, count(*) as total')->groupBy('module_category_id')->pluck('total', 'module_category_id') : collect();
+
         return ModuleCategory::with(['modules' => fn ($q) => $q->withCount('plans')->orderBy('name')])
             ->orderBy('sort_order')->orderBy('name')->get()
             ->map(fn (ModuleCategory $category) => [
@@ -483,6 +485,7 @@ class ModuleCatalog
                 'isActive' => $category->is_active,
                 'isSolution' => $category->isSolution(),
                 'isPublic' => ModuleCategory::visibilityReady() ? (bool) $category->is_public : null,
+                'plansCount' => (int) ($plans[$category->id] ?? 0),
                 'modules' => $category->modules->map(fn (Module $module) => [
                     'id' => $module->id,
                     'key' => $module->key,

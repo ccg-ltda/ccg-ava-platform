@@ -23,6 +23,7 @@ use App\Services\ListPagination;
 use App\Services\LocationScope;
 use App\Services\ModuleAccess;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -59,27 +60,21 @@ class BookingController extends Controller
         $capabilities = $this->bookings->capabilities($workspace);
         $from = $this->day($request->query('from'), $timezone);
         $days = in_array((int) $request->query('days'), [1, 7, 31], true) ? (int) $request->query('days') : 7;
-        [$end, $span] = $this->window($request->query('to'), $from, $days, $timezone);
-        $professionalId = ctype_digit((string) $request->query('professional')) ? (int) $request->query('professional') : null;
-        $locationId = ctype_digit((string) $request->query('location')) ? (int) $request->query('location') : null;
-        $serviceId = ctype_digit((string) $request->query('service')) ? (int) $request->query('service') : null;
-        $status = in_array($request->query('status'), Appointment::STATUSES, true) ? $request->query('status') : null;
-        $origin = in_array($request->query('origin'), Appointment::CHANNELS, true) ? $request->query('origin') : null;
+        $custom = is_string($request->query('to')) && $request->query('to') !== '';
+        // «Mes» is a calendar month: the window is the month of `from`, from its first day, whatever its length.
+        $month = $days === 31 && ! $custom;
+        $from = $month ? $from->setTimezone($timezone)->startOfMonth()->utc() : $from;
+        [$end, $span] = $month ? [$from->setTimezone($timezone)->addMonth()->utc(), ['to' => null, 'days' => 31]] : $this->window($request->query('to'), $from, $days, $timezone);
+        $filters = $this->agendaFilters($request);
         $setting = BookingSetting::for($workspace);
+        // The month calendar shows only a count per day and the detail of a day is read on demand (`day`): the month's appointments are loaded only for the list view.
+        $view = in_array($request->query('view'), ['calendar', 'list'], true) ? $request->query('view') : null;
 
         return Inertia::render('Bookings/Index', [
             'capabilities' => $capabilities,
-            'filters' => ['from' => $from->setTimezone($timezone)->toDateString(), 'to' => $span['to'], 'days' => $span['days'], 'professional' => $professionalId, 'location' => $locationId, 'service' => $serviceId, 'status' => $status, 'origin' => $origin, 'search' => trim((string) $request->query('search', ''))],
-            'appointments' => $workspace->appointments()->with(['customer', 'workspace'])->when($this->notifier->ready(), fn ($query) => $query->with('notifications'))
-                ->when(($allowed = app(LocationScope::class)->allowedIds($workspace, $request->user())) !== null, fn ($query) => $query->whereIn('location_id', $allowed))
-                ->where('starts_at', '>=', $from)->where('starts_at', '<', $end)
-                ->when($professionalId, fn ($query) => $query->where('professional_id', $professionalId))
-                // The location filter narrows INSIDE what the member may see: a limited member's own locations always apply first, so a manipulated filter can only
-                // return less, never another location's appointments. The service filter is the appointment's own service.
-                ->when($locationId, fn ($query) => $query->where('location_id', $locationId))
-                ->when($serviceId, fn ($query) => $query->where('service_id', $serviceId))
-                ->when($status, fn ($query) => $query->where('status', $status))
-                ->when($origin, fn ($query) => $query->where('channel', $origin))
+            'filters' => ['from' => $from->setTimezone($timezone)->toDateString(), 'to' => $span['to'], 'days' => $span['days'], 'period' => $month ? 'month' : ($custom ? 'custom' : ($days === 1 ? 'day' : 'week')), 'view' => $view, 'professional' => $filters['professional'], 'location' => $filters['location'], 'service' => $filters['service'], 'status' => $filters['status'], 'origin' => $filters['origin'], 'search' => trim((string) $request->query('search', ''))],
+            'dayCounts' => $month ? $this->dayCounts($this->agendaQuery($workspace, $request, $filters, $from, $end), $timezone) : null,
+            'appointments' => $month && $view === 'calendar' ? [] : $this->agendaQuery($workspace, $request, $filters, $from, $end)->with(['customer', 'workspace'])->when($this->notifier->ready(), fn ($query) => $query->with('notifications'))
                 ->orderBy('starts_at')->limit(self::LIST_LIMIT)->get()->map(fn (Appointment $appointment) => $this->present->appointment($appointment))->all(),
             'options' => $this->options($workspace, $capabilities, $request),
             'customers' => $this->customers($request, $workspace),
@@ -88,6 +83,76 @@ class BookingController extends Controller
             'today' => CarbonImmutable::now($timezone)->toDateString(),
             'listLimit' => self::LIST_LIMIT,
         ]);
+    }
+
+    /**
+     * Detail of ONE day of the month calendar, read when the person opens its counter: the same filters and the same authorization as the page (the member's
+     * locations always apply first), sorted by start. Customers, professionals and the price recorded at booking only reach people who can read the agenda.
+     */
+    public function dayDetail(Request $request): JsonResponse
+    {
+        $workspace = $request->attributes->get('workspace');
+        $timezone = $workspace->settingsOrDefault()->timezone;
+        $date = (string) $request->query('date', '');
+
+        abort_unless(CarbonImmutable::canBeCreatedFromFormat($date, '!Y-m-d') && CarbonImmutable::createFromFormat('!Y-m-d', $date)->format('Y-m-d') === $date, 422, 'La fecha no es válida.');
+
+        $start = CarbonImmutable::createFromFormat('!Y-m-d', $date, $timezone)->utc();
+        $query = $this->agendaQuery($workspace, $request, $this->agendaFilters($request), $start, $start->setTimezone($timezone)->addDay()->utc());
+        $total = (clone $query)->count();
+        $appointments = $query->with(['customer', 'workspace'])->orderBy('starts_at')->orderBy('id')->limit(self::LIST_LIMIT)->get();
+
+        return response()->json([
+            'date' => $date,
+            'total' => $total,
+            'truncated' => $total > $appointments->count(),
+            'appointments' => $appointments->map(fn (Appointment $appointment) => $this->present->appointment($appointment))->all(),
+        ]);
+    }
+
+    /** @return array{professional: ?int, location: ?int, service: ?int, status: ?string, origin: ?string} the agenda filters, each one only if it is well formed */
+    private function agendaFilters(Request $request): array
+    {
+        $id = fn (string $key) => ctype_digit((string) $request->query($key)) ? (int) $request->query($key) : null;
+
+        return [
+            'professional' => $id('professional'),
+            'location' => $id('location'),
+            'service' => $id('service'),
+            'status' => in_array($request->query('status'), Appointment::STATUSES, true) ? $request->query('status') : null,
+            'origin' => in_array($request->query('origin'), Appointment::CHANNELS, true) ? $request->query('origin') : null,
+        ];
+    }
+
+    /**
+     * The appointments of the Workspace in a window, narrowed by the filters. The location filter narrows INSIDE what the member may see: a limited member's own
+     * locations always apply first, so a manipulated filter can only return less, never another location's appointments.
+     *
+     * @param  array{professional: ?int, location: ?int, service: ?int, status: ?string, origin: ?string}  $filters
+     */
+    private function agendaQuery(Workspace $workspace, Request $request, array $filters, CarbonImmutable $from, CarbonImmutable $end): HasMany
+    {
+        return $workspace->appointments()
+            ->when(($allowed = app(LocationScope::class)->allowedIds($workspace, $request->user())) !== null, fn ($query) => $query->whereIn('location_id', $allowed))
+            ->where('starts_at', '>=', $from)->where('starts_at', '<', $end)
+            ->when($filters['professional'], fn ($query, $id) => $query->where('professional_id', $id))
+            ->when($filters['location'], fn ($query, $id) => $query->where('location_id', $id))
+            ->when($filters['service'], fn ($query, $id) => $query->where('service_id', $id))
+            ->when($filters['status'], fn ($query, $status) => $query->where('status', $status))
+            ->when($filters['origin'], fn ($query, $origin) => $query->where('channel', $origin));
+    }
+
+    /**
+     * Appointments per local day of the window: ONE query that reads only the start of each, grouped in the Workspace's time zone (portable across databases).
+     *
+     * @return array<string, int>
+     */
+    private function dayCounts(HasMany $query, string $timezone): array
+    {
+        return $query->pluck('starts_at')
+            ->countBy(fn ($start) => CarbonImmutable::parse($start)->setTimezone($timezone)->toDateString())
+            ->sortKeys()
+            ->all();
     }
 
     /** Free starts for the new-appointment and reschedule dialogs (staff see the same offer the public sees). */

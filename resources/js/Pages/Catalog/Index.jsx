@@ -19,7 +19,7 @@ import useAccess from '@/Hooks/useAccess';
 import usePagedList from '@/Hooks/usePagedList';
 import useUrlTab from '@/Hooks/useUrlTab';
 import AppLayout from '@/Layouts/AppLayout';
-import { configuredPlaces } from '@/lib/inventory';
+import { configuredPlaces, offeredLocations } from '@/lib/inventory';
 import CategoriesPanel from './Partials/CategoriesPanel';
 import ProductModal from './Partials/ProductModal';
 import StockInfo, { ProductThumb } from './Partials/StockInfo';
@@ -182,7 +182,7 @@ export default function Index({ schemaPending, categoryAdmin, products, filters,
                                                 {product.needsLocation && <Badge tone="amber" className="ml-1">Sin sede asignada</Badge>}
                                             </span>
                                         </div>
-                                        {showStock && <StockInfo stock={product.stock} locations={locations} />}
+                                        {showStock && <StockInfo stock={product.stock} locations={offeredLocations(product, locations)} />}
                                         <div className="flex flex-wrap items-center justify-between gap-2">
                                             {canToggle ? (
                                                 <button type="button" onClick={() => toggle(product)} className="text-xs font-semibold text-ink-muted underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-primary">
@@ -228,7 +228,7 @@ export default function Index({ schemaPending, categoryAdmin, products, filters,
                                                 <Td className="whitespace-nowrap font-medium text-ink">{money(product.price, currency)}</Td>
                                                 {showStock && (
                                                     <Td>
-                                                        <StockInfo stock={product.stock} locations={locations} />
+                                                        <StockInfo stock={product.stock} locations={offeredLocations(product, locations)} />
                                                     </Td>
                                                 )}
                                                 <Td className="whitespace-nowrap">

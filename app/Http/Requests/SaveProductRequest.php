@@ -111,6 +111,11 @@ class SaveProductRequest extends FormRequest
                 $validator->errors()->add('category_id', 'Elige una categoría de la lista. Las categorías nuevas se crean en la pestaña «Categorías» del catálogo.');
             }
 
+            // The first stock of a new product can only be set in a location the product is offered in.
+            if ($usesLocations && $ids->isNotEmpty() && collect($this->input('stocks', []))->pluck('location_id')->filter(fn ($id) => filled($id))->map(fn ($id) => (int) $id)->diff($ids)->isNotEmpty()) {
+                $validator->errors()->add('stocks', 'Solo puedes registrar existencias en las sedes donde se ofrece el producto.');
+            }
+
             $locations = collect($this->input('stocks', []))->pluck('location_id');
 
             if ($locations->count() !== $locations->unique()->count()) {

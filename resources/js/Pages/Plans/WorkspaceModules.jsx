@@ -432,9 +432,7 @@ function TrialCard({ workspace, data, canEdit, plans }) {
                         <h3 className="text-sm font-bold text-ink">Cambiar la fecha de fin</h3>
                         <div className="grid gap-3 sm:grid-cols-2">
                             <div>
-                                <InputLabel htmlFor="trial_ext_date" value="Nueva fecha de fin" />
-                                <TextInput id="trial_ext_date" className="mt-1" type="date" min={tomorrow} value={extend.data.ends_at} onChange={(e) => extend.setData('ends_at', e.target.value)} invalid={Boolean(extend.errors.ends_at)} />
-                                <InputError message={extend.errors.ends_at ?? extend.errors.trial} className="mt-1" />
+                                <DateField id="trial_ext_date" label="Nueva fecha de fin" clearable={false} min={tomorrow} value={extend.data.ends_at} onChange={(value) => extend.setData('ends_at', value)} error={extend.errors.ends_at ?? extend.errors.trial} />
                             </div>
                             <div>
                                 <InputLabel htmlFor="trial_ext_reason" value="Motivo (obligatorio)" />

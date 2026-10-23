@@ -56,6 +56,6 @@ class ModuleCategoryController extends Controller
 
     private function back(string $message): RedirectResponse
     {
-        return redirect()->back(fallback: route('plans.index', ['tab' => 'modulos']))->with('success', $message);
+        return redirect()->back(fallback: route('plans.index', ['tab' => 'soluciones']))->with('success', $message);
     }
 }

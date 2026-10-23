@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Badge from '@/Components/Badge';
 import Card from '@/Components/Card';
 import { useConfirm } from '@/Components/ConfirmDialog';
+import DateField from '@/Components/DateField';
 import EmptyState from '@/Components/EmptyState';
 import IconButton from '@/Components/IconButton';
 import InputError from '@/Components/InputError';
@@ -13,6 +14,7 @@ import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import Select from '@/Components/Select';
 import { TableWrap, Td, Th } from '@/Components/Table';
+import TimeField from '@/Components/TimeField';
 import TextInput from '@/Components/TextInput';
 
 function SmallModal({ title, form, onClose, onSubmit, submitLabel, children }) {
@@ -202,24 +204,16 @@ export function ExceptionsPanel({ exceptions, professionals, canManage }) {
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                         <div>
-                            <InputLabel htmlFor="exc_from" value="Desde" />
-                            <TextInput id="exc_from" type="date" className="mt-1" value={data.date_from} onChange={(e) => setData('date_from', e.target.value)} invalid={Boolean(errors.date_from)} />
-                            <InputError message={errors.date_from} className="mt-1" />
+                            <DateField id="exc_from" label="Desde" clearable={false} value={data.date_from} onChange={(value) => setData('date_from', value)} error={errors.date_from} />
                         </div>
                         <div>
-                            <InputLabel htmlFor="exc_to" value="Hasta" />
-                            <TextInput id="exc_to" type="date" className="mt-1" value={data.date_to} onChange={(e) => setData('date_to', e.target.value)} invalid={Boolean(errors.date_to)} />
-                            <InputError message={errors.date_to} className="mt-1" />
+                            <DateField id="exc_to" label="Hasta" clearable={false} min={data.date_from || undefined} value={data.date_to} onChange={(value) => setData('date_to', value)} error={errors.date_to} />
                         </div>
                         <div>
-                            <InputLabel htmlFor="exc_start" value="Hora inicial (opcional)" />
-                            <TextInput id="exc_start" type="time" className="mt-1" value={data.starts_at} onChange={(e) => setData('starts_at', e.target.value)} invalid={Boolean(errors.starts_at)} />
-                            <InputError message={errors.starts_at} className="mt-1" />
+                            <TimeField id="exc_start" label="Hora inicial (opcional)" clearable value={data.starts_at} onChange={(value) => setData('starts_at', value)} error={errors.starts_at} />
                         </div>
                         <div>
-                            <InputLabel htmlFor="exc_end" value="Hora final (opcional)" />
-                            <TextInput id="exc_end" type="time" className="mt-1" value={data.ends_at} onChange={(e) => setData('ends_at', e.target.value)} invalid={Boolean(errors.ends_at)} />
-                            <InputError message={errors.ends_at} className="mt-1" />
+                            <TimeField id="exc_end" label="Hora final (opcional)" clearable value={data.ends_at} onChange={(value) => setData('ends_at', value)} error={errors.ends_at} />
                         </div>
                     </div>
                     <p className="text-xs text-ink-muted">Sin horas, se bloquea el día completo.</p>

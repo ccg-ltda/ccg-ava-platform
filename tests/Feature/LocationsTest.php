@@ -73,9 +73,9 @@ class LocationsTest extends TestCase
         $this->assertSame([$this->service->id], $location->services()->pluck('services.id')->all());
         $this->get('/locations')->assertOk()->assertInertia(fn ($page) => $page->component('Locations/Index')->has('locations', 1)->where('locations.0.name', 'Sede Norte')->where('locations.0.serviceIds', [$this->service->id]));
 
-        $this->put("/locations/{$location->id}", ['name' => 'Sede Norte 2', 'service_ids' => []])->assertSessionHasNoErrors();
+        $this->put("/locations/{$location->id}", ['name' => 'Sede Norte 2', 'service_ids' => [$this->service->id]])->assertSessionHasNoErrors();
         $this->assertSame('Sede Norte 2', $location->fresh()->name);
-        $this->assertSame(0, $location->services()->count(), 'no services = it offers every service');
+        $this->assertSame(1, $location->services()->count(), 'the services of a sede are the ones chosen (at least one)');
 
         $this->post("/locations/{$location->id}/deactivate")->assertSessionHasNoErrors();
         $this->assertFalse($location->fresh()->is_active);
@@ -96,16 +96,27 @@ class LocationsTest extends TestCase
         $this->location($this->workspace, 'Sede Norte');
         $foreign = $this->makeService($this->other, ['name' => 'Ajeno']);
 
-        $this->post('/locations', ['name' => ''])->assertSessionHasErrors('name');
-        $this->post('/locations', ['name' => 'Sede Norte'])->assertSessionHasErrors('name');
-        $this->post('/locations', ['name' => 'Sede Sur', 'phone' => '3001112233'])->assertSessionHasErrors('phone');
+        $services = ['service_ids' => [$this->service->id]];
+
+        $this->post('/locations', ['name' => ''] + $services)->assertSessionHasErrors('name');
+        $this->post('/locations', ['name' => 'Sede Norte'] + $services)->assertSessionHasErrors('name');
+        $this->post('/locations', ['name' => 'Sede Sur', 'phone' => '3001112233'] + $services)->assertSessionHasErrors('phone');
         $this->post('/locations', ['name' => 'Sede Sur', 'service_ids' => [$foreign->id]])->assertSessionHasErrors('service_ids.0');
-        $this->post('/locations', ['name' => str_repeat('a', 121)])->assertSessionHasErrors('name');
+        $this->post('/locations', ['name' => str_repeat('a', 121)] + $services)->assertSessionHasErrors('name');
         $this->assertSame(1, $this->workspace->locations()->count());
+
+        // «Servicios que ofrece» is required: none, an empty list or only inactive services are refused on the server, and nothing is created.
+        $this->post('/locations', ['name' => 'Sede Sur'])->assertSessionHasErrors('service_ids');
+        $this->post('/locations', ['name' => 'Sede Sur', 'service_ids' => []])->assertSessionHasErrors('service_ids');
+        $inactive = $this->makeService($this->workspace, ['name' => 'Retirado', 'is_active' => false]);
+        $this->post('/locations', ['name' => 'Sede Sur', 'service_ids' => [$inactive->id]])->assertSessionHasErrors('service_ids');
+        $this->assertSame(1, $this->workspace->locations()->count());
+        $existing = $this->workspace->locations()->firstOrFail();
+        $this->put("/locations/{$existing->id}", ['name' => 'Sede Norte', 'service_ids' => []])->assertSessionHasErrors('service_ids');
 
         // The same name in ANOTHER Workspace is fine: names are unique per Workspace.
         $this->location($this->other, 'Sede Sur');
-        $this->post('/locations', ['name' => 'Sede Sur'])->assertSessionHasNoErrors();
+        $this->post('/locations', ['name' => 'Sede Sur'] + $services)->assertSessionHasNoErrors();
     }
 
     public function test_only_staff_who_manage_services_can_change_locations_and_the_plan_must_include_the_module(): void

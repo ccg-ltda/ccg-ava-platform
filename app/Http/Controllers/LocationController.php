@@ -53,7 +53,7 @@ class LocationController extends Controller
                 'upcomingCount' => $location->upcoming_count,
                 'serviceIds' => $location->services->pluck('id')->all(),
             ])->all(),
-            'services' => $workspace->services()->where('is_active', true)->orderBy('name')->get(['id', 'name'])->all(),
+            'services' => $workspace->services()->orderByDesc('is_active')->orderBy('name')->get(['id', 'name', 'is_active'])->map(fn ($service) => ['id' => $service->id, 'name' => $service->name, 'isActive' => (bool) $service->is_active])->all(),
         ]);
     }
 

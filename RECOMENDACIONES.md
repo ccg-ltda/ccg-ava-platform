@@ -2190,3 +2190,58 @@ Resumen de lo hecho con la autorización explícita del propietario para aplicar
 
 ### 45.7 Siguiente paso
 Probar con la sesión real: entrar por `/pre-login` con el código de Workspace `DESARROLLO_DEV`, revisar Ajustes → Plantilla de correos (solo administración interna), Catálogo → Recordatorios, Usuarios → alcance por sede y Reportes por sede.
+
+
+## 46. Bloque integral: componentes compartidos, Catálogo por sede, Agenda, Recordatorios y Soluciones (2026-10-23)
+
+Sin commit ni push. Estado inicial: rama `main`, HEAD `1c375c5`, árbol limpio. No se ejecutó `migrate`, `migrate:fresh`, seeders ni nada contra `ccg_ava`; las pruebas usan SQLite en memoria.
+
+### 46.1 Componentes únicos (reutilizados, no copiados)
+- `DateField` (calendario propio con Popover, Hoy / Limpiar, cierra al elegir, límites `min`/`max`, sin «Guardar»), `TimeField` (hora y minutos, solo hora; el minuto confirma y cierra; un minuto guardado fuera del intervalo sigue seleccionable) y `EntityPicker` (búsqueda por nombre sin acentos, una o varias opciones, chips quitables, carga/vacío/error, deshabilitadas; un valor guardado que ya no se ofrece se sigue mostrando). Piezas puras en `lib/dates.js`, `lib/times.js`, `lib/pickers.js`.
+- Sustituyen a los `<input type="date|time|datetime-local">` (una prueba JS impide volver a usarlos en `Pages/`). La fecha inicial del calendario es el día actual, pero **el valor no se rellena solo** (un campo opcional vacío sigue vacío).
+- `IconButton` dibuja ahora su tooltip con el `Tooltip` compartido (portal): corrige de raíz que Editar/Cancelar quedaran recortados detrás de tarjetas con `overflow-hidden` (Recordatorios y cualquier otra lista). Táctil: un toque lo muestra unos segundos.
+
+### 46.2 Catálogo: producto y sedes
+- La relación persistida `location_product` es la fuente. `CatalogInventory::stockView` solo lista el stock de las sedes donde se ofrece el producto; la consulta por sede solo trae productos ofrecidos allí (más los históricos sin sede, que se ofrecen en todas hasta asignarlos). `InventoryController::target` rechaza (422) entradas, ajustes y mínimos en una sede no asociada; `SaveProductRequest` rechaza existencias iniciales fuera de las sedes elegidas.
+- **Quitar una sede a un producto no borra nada:** sus filas de stock y movimientos se conservan, pero dejan de mostrarse, sumarse y editarse; al volver a asociarla reaparecen tal cual. Decisión propia (no había regla previa): confirmarla.
+- Pruebas: `CatalogLocationAssociationTest` (10).
+
+### 46.3 Servicios, Sedes, Profesionales, Usuarios
+- Modales de Servicios (`3xl`, sedes y recursos en dos columnas) y Sedes (`2xl`) más anchos; selector con búsqueda en Servicios (sedes y recursos: ambos son relaciones existentes, no se inventó catálogo), Sedes (servicios), Profesionales (servicios) y Usuarios > Sedes de trabajo. Los horarios de profesionales y las excepciones usan `TimeField`/`DateField`.
+- **Sedes: «Servicios que ofrece» es obligatorio** en servidor (`service_ids` requerido, mínimo 1, solo servicios activos; uno ya asignado y desactivado después puede quedarse). Una sola fuente de verdad: la tabla `location_service` (la misma que usa Servicios > sedes). Cambio de semántica: antes «ninguno = todos». **Las sedes existentes sin servicios** siguen funcionando, pero exigirán elegir al editarlas.
+- `SaveLocationRequest::authorize()` decide 404 (sede ajena) y 403 (fuera de alcance, o alta de un usuario limitado) **antes** de validar.
+
+### 46.4 Reportes
+- Se eliminó la pestaña **Inventario** (frontend, `ReportController`, `OperationsMetrics::inventory`, `sources.inventory`). No era una referencia fantasma sino una pestaña legítima (módulo catálogo + `view-inventory`) mal ubicada; el stock sigue en Catálogo. Ninguna ruta ni permiso quedó huérfano.
+- **Bloqueo de Reportes: causa raíz NO reproducida.** No hay errores de Reportes en `laravel.log` ni consultas fallidas. Hallazgo probable, corregido: `useUrlTab` guardaba la pestaña como **índice**; al cambiar las secciones bajo la página montada (otro Workspace, plan, permiso) el índice quedaba fuera de rango y `Tabs` dejaba de pintar contenido hasta salir del módulo. Ahora se guarda por **id** (afecta a todos los módulos con pestañas). Falta confirmarlo con sesión real.
+
+### 46.5 Agenda
+- «Hoy» ya no fuerza la lista: antes enviaba `to=hoy`, que convertía el periodo en rango personalizado y ocultaba el calendario. Ahora conserva el tipo de periodo (día, semana lunes-domingo o mes) y los filtros. Calendario y Lista conviven; el calendario se dibuja aunque no haya citas.
+- Semana/día: escala cada 30 min, altura proporcional a la duración real (`HOUR_PX` 96; solo una cita de menos de 15 min se dibuja más alta para poder leerla), hora de inicio–fin, servicio, profesional y cliente (con poca altura se prioriza horario, servicio y profesional y el cliente va en la misma línea; siempre está en el `title` y en el detalle). Las horas de la escala son 24 h; las etiquetas de las citas usan el formato del Workspace.
+- **Mes:** `period=month` ajusta `from` al día 1; el servidor devuelve `dayCounts` (una consulta que lee solo `starts_at` y agrupa en la zona horaria del Workspace, portable a PostgreSQL/SQLite) y no carga las citas del mes en vista Calendario. El contador abre un panel (`GET /bookings/day`, mismo alcance, filtros y permisos que la página, orden por hora, tope 500 con aviso) con hora, cliente, profesional, servicio y **precio registrado**.
+- **Importe:** Ava no registra pagos. Se muestra `price_amount` (precio guardado al reservar) como «Precio registrado», nunca «cobrado».
+- Pruebas: `AgendaWeekMonthAndDayDetailTest` (10).
+
+### 46.6 Recordatorios
+- Destinatarios elegibles: miembros **activos** del mismo Workspace, con correo, cuyo rol tiene `view-catalog-reminders`. Se validan al guardar y se vuelven a comprobar al enviar; un id ajeno, desactivado o sin acceso es error de validación (nunca se descarta en silencio). El creador no se añade solo; un formulario sin `recipient_ids` (clientes antiguos) conserva «solo el creador».
+- Migración **aditiva** `2026_11_01_100000_create_catalog_reminder_recipients_table` (tabla nueva con `down()`). **Pendiente de aplicar en cada entorno, incluida `ccg_ava`, con tu autorización**; sin ella el código sigue como antes (solo creador). Los recordatorios anteriores no tienen filas y se envían a su creador.
+- El envío manda un correo por persona, marca `sent_at`/`sent_to` por destinatario y un reintento **nunca repite** el correo a quien ya lo recibió; si nadie puede recibirlo queda `skipped` (`no_valid_recipient`), si algunos no, `sent` con `partial_recipients`. Se conservan la reclamación atómica y la recuperación. Límite conocido: si SMTP acepta y se pierde la confirmación de **un** destinatario, el reintento puede repetírselo (sin idempotencia SMTP, como antes).
+- Pruebas: `CatalogReminderRecipientsTest` (10); las 41 anteriores siguen en verde. Ningún correo real enviado (Mail faked).
+
+### 46.7 Plantillas HTML y Soluciones
+- Plantillas: ya eran exclusivas de `Desarrollo_DEV` (middleware `workspace.platform`, `emailTemplate = null` para clientes, lista blanca, escape, vista previa segura, restauración y auditoría); verificado por la prueba existente `test_only_the_platform_administration...`. No se cambió nada. Hay una sola plantilla global y solo la usan los correos de plataforma (registro, recuperación, recordatorios).
+- Soluciones: nueva pestaña **Planes > Soluciones** (reutiliza las rutas `module-categories.*`; las categorías salieron de «Catálogo de módulos» para no duplicar la edición). Edita nombre visible y descripción; la `key` y todas las relaciones no cambian; auditado; solo administración de plataforma. El texto fijo «módulos de Salud» del asistente de registro se cambió por uno neutro. El resto ya leía `module_categories.name`. Una solución oculta o inactiva sigue sin ofrecerse tras renombrarla. Pruebas: `SolutionVisibleNameTest` (6). Nota: `updateCategory` pone la descripción a `null` si no se envía (el formulario siempre la envía).
+
+### 46.8 Sidebar
+- Botón de contraer: solo el icono de tres líneas en la esquina superior derecha de la cabecera (tooltip accesible, `aria-expanded`); colapsado, es el único elemento de la cabecera. Se quitó el botón con texto de abajo. Scrollbar de 5 px, sin canal reservado, pulgar translúcido por tema (tokens `--sidebar-thumb`). La preferencia sigue en `localStorage`.
+
+### 46.9 Verificación visual y límites
+- Hecha en un arnés temporal (ya borrado) con Chromium/Playwright: calendario, selector de hora, selector múltiple con búsqueda y chips, tooltip sobre tarjeta con `overflow-hidden`, cuadrícula semanal y vacía, mes con contadores y panel de día en claro/oscuro, escritorio y ancho de tableta (panel como hoja inferior). **No** se comprobó con sesión real: modales de Servicios/Sedes, el sidebar completo (el arnés no lo montó), Recordatorios, Planes > Soluciones, móvil estrecho ni Reportes. Con la semana completa (7 columnas) las citas simultáneas quedan estrechas: el detalle está en el `title` y al pulsar.
+- PostgreSQL no se usó en las pruebas.
+
+### 46.10 Cierre (2026-10-23)
+- **Migración aplicada en `ccg_ava`** (contenedor `postgres`): `2026_11_01_100000_create_catalog_reminder_recipients_table`. Antes: respaldo `docker/ops/backup.sh` (304 322 bytes, 70 tablas con datos, `.sha256`, guardado fuera del repo) y `restore-check.sh` OK en base desechable; `migrate --pretend` revisado. Después: `migrate:status` sin pendientes y esquema comprobado (tabla nueva, 3 FK en cascada, único `(catalog_reminder_id, user_id)`, índice `(workspace_id, user_id)`). `catalog_reminders` conserva su fila; no se tocó ningún otro dato.
+- **Regla confirmada por el responsable:** al quitar una sede de un producto se conserva su stock y movimientos; dejan de mostrarse y no se pueden modificar mientras la sede no esté asociada. Cubierta por `CatalogLocationAssociationTest`.
+- **Suite PHP:** el «fallo de memoria» venía del límite de 128 MB del `php` hijo de `artisan test` en este host (no de los cambios: el test señalado pasa solo y con los cambios en stash). Con `php -d memory_limit=-1 vendor/bin/phpunit`: 1906 tests, 1901 pasan, 5 omitidos, 19178 aserciones, 976 s (SQLite en memoria). Para correrla completa en este host usar ese comando.
+- JS 85/85, Pint, build y `git diff --check` limpios.
+- **Siguen abiertos:** causa del bloqueo de Reportes no reproducida (solo se corrigió `useUrlTab`); revisión visual con sesión real pendiente (modales de Servicios/Sedes, sidebar completo, Recordatorios, Planes > Soluciones, Reportes, móvil estrecho); el reintento puede repetir a UN destinatario si SMTP acepta y se pierde la confirmación; el envío real de correo nunca se ha probado.

@@ -133,11 +133,10 @@ class ReportsByLocationTest extends TestCase
         $this->assertSame(259000.0, $b['kpis']['recordedValue']);
         $o = $props['operations']['orders']['data'];
         $this->assertSame([4, 8700.0], [$o['kpis']['total'], $o['kpis']['sales']]);
-        $i = $props['operations']['inventory']['data'];
-        $this->assertSame(120, $i['kpis']['units']); // 10 + 3 + 7 + 100 (the general stock counts when nothing is filtered)
-        $this->assertSame(['Norte', 'Sur', 'Inventario general'], collect($i['byLocation'])->pluck('label')->sort()->values()->map(fn ($l) => $l)->sortBy(fn ($l) => ['Norte' => 0, 'Sur' => 1, 'Inventario general' => 2][$l])->values()->all());
         $this->assertEquals(['enabled' => true, 'limited' => false, 'selected' => null], collect($props['locations'])->only(['enabled', 'limited', 'selected'])->all());
         $this->assertSame(['Norte', 'Sur'], collect($props['locations']['options'])->pluck('name')->all());
+        $this->assertArrayNotHasKey('inventory', $props['operations'], 'the stock is managed in Catálogo: Reportes has no Inventario of its own');
+        $this->assertArrayNotHasKey('inventory', $props['sources']);
     }
 
     public function test_choosing_a_location_filters_every_figure_the_rankings_and_the_secondary_queries(): void
@@ -153,19 +152,9 @@ class ReportsByLocationTest extends TestCase
         $o = $props['operations']['orders']['data'];
         $this->assertSame([2, 3000.0, 1500.0], [$o['kpis']['total'], $o['kpis']['sales'], $o['kpis']['averageTicket']]);
 
-        $i = $props['operations']['inventory']['data'];
-        $this->assertSame([13, 1, 5, 20], [$i['kpis']['units'], $i['kpis']['low'], $i['kpis']['sold'], $i['kpis']['entries']]);
-        $this->assertSame(['Norte'], collect($i['byLocation'])->pluck('label')->all());
-        $this->assertSame(2, $i['kpis']['tracked']);
-        $this->assertSame(0, $i['kpis']['unconfigured'], 'the product offered only in Sur is not pending in Norte');
-        $this->assertSame(['Jabón'], collect($i['attention'])->pluck('name')->all());
-        $this->assertSame(5, collect($i['movements'])->firstWhere('key', 'sale')['value']);
-
         $props = $this->props('location='.$this->sur->id);
         $this->assertSame([1, 50000.0], [$this->bookings($props)['kpis']['total'], $this->bookings($props)['kpis']['recordedValue']]);
         $this->assertSame([1, 5000.0], [$props['operations']['orders']['data']['kpis']['total'], $props['operations']['orders']['data']['kpis']['sales']]);
-        $sur = $props['operations']['inventory']['data'];
-        $this->assertSame([7, 2, 1], [$sur['kpis']['units'], $sur['kpis']['sold'], $sur['kpis']['unconfigured']], 'Sur: its stock, its sales, and the product offered there without a stock row');
 
         // History without a location is attributed to no location: it only exists in the unfiltered report.
         $this->assertSame(9000, (int) Appointment::whereNull('location_id')->value('price_amount'));
@@ -189,7 +178,6 @@ class ReportsByLocationTest extends TestCase
         $none = $this->props();
         $this->assertSame([2, 200000.0], [$this->bookings($none)['kpis']['total'], $this->bookings($none)['kpis']['recordedValue']]);
         $this->assertSame(3000.0, $none['operations']['orders']['data']['kpis']['sales']);
-        $this->assertSame(13, $none['operations']['inventory']['data']['kpis']['units'], 'the general stock and Sur are not theirs');
         $this->assertEquals(['limited' => true, 'selected' => null], collect($none['locations'])->only(['limited', 'selected'])->all());
         $this->assertSame(['Norte'], collect($none['locations']['options'])->pluck('name')->all(), 'one location: the page shows no selector');
 
@@ -237,7 +225,6 @@ class ReportsByLocationTest extends TestCase
         $props = $this->props();
         $this->assertSame(0, $this->bookings($props)['kpis']['total']);
         $this->assertSame(0, $props['operations']['orders']['data']['kpis']['total']);
-        $this->assertSame(0, $props['operations']['inventory']['data']['kpis']['units']);
     }
 
     public function test_roles_and_modules_still_decide_what_the_filter_is_applied_to(): void
@@ -247,7 +234,7 @@ class ReportsByLocationTest extends TestCase
         $this->as($this->member($this->ws, 'analista'));
         $props = $this->props('location='.$this->norte->id);
         $this->assertNull($props['operations']['orders']);
-        $this->assertNull($props['operations']['inventory']);
+        $this->assertArrayNotHasKey('inventory', $props['operations']);
         $this->assertNotNull($props['operations']['bookings']);
 
         // A Workspace without the Sedes module has no filter and no selector (the parameter is ignored there).

@@ -243,6 +243,7 @@ Route::middleware(['auth', 'workspace'])->group(function () {
     Route::middleware(['workspace.module:bookings', 'workspace.permission:view-bookings'])->prefix('bookings')->name('bookings.')->group(function () {
         Route::get('/', [BookingController::class, 'index'])->name('index');
         Route::get('/availability', [BookingController::class, 'availability'])->middleware('throttle:120,1')->name('availability');
+        Route::get('/day', [BookingController::class, 'dayDetail'])->middleware('throttle:120,1')->name('day');
         Route::put('/settings', [BookingController::class, 'updateSettings'])->middleware('workspace.permission:manage-booking-settings')->name('settings.update');
         Route::put('/settings/notifications', [BookingController::class, 'updateNotifications'])->middleware('workspace.permission:manage-booking-settings')->name('settings.notifications');
         Route::post('/settings/public-key', [BookingController::class, 'rotateKey'])->middleware(['workspace.permission:manage-booking-settings', 'throttle:10,1'])->name('settings.rotate-key');

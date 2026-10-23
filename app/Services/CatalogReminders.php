@@ -10,12 +10,14 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Support\MailAvailability;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Spatie\Permission\Models\Role;
 use Throwable;
 
 /**
@@ -37,6 +39,59 @@ class CatalogReminders
     public function ready(): bool
     {
         return Schema::hasTable('catalog_reminders');
+    }
+
+    /** Whether the recipients table exists (the code can be deployed before the migration: reminders then keep going to their creator, as before). */
+    public function recipientsReady(): bool
+    {
+        return Schema::hasTable('catalog_reminder_recipients');
+    }
+
+    // --- who can receive ---------------------------------------------------------------------------------------------------------
+
+    /**
+     * The people who can be chosen as recipients of a reminder of this Workspace: ENABLED members of the Workspace, with an email address, whose role may read the
+     * reminders (`view-catalog-reminders`), so the notification only reaches people the Workspace already allows to see them. Nobody from another Workspace and
+     * no account without a membership can appear. This is the single rule: the form lists these people, the server validates against them when it saves and
+     * the worker checks it again when it sends.
+     *
+     * @return Collection<int, User> keyed by id, each with a `role` attribute
+     */
+    public function eligibleRecipients(Workspace $workspace): Collection
+    {
+        $allowed = Role::query()->where('guard_name', 'web')->whereHas('permissions', fn ($q) => $q->where('name', 'view-catalog-reminders'))->pluck('name')->all();
+
+        return $workspace->users()->where('users.is_active', true)->whereNotNull('users.email')->wherePivotIn('role', $allowed)->orderBy('users.name')->get(['users.id', 'users.name', 'users.email'])
+            ->each(fn (User $user) => $user->setAttribute('role', $user->pivot->role))->keyBy('id');
+    }
+
+    /** @return list<int> the ids chosen for a reminder; `null` when the form did not name anyone (the creator is then the only recipient) */
+    private function requestedRecipients(array $input): ?array
+    {
+        if (! array_key_exists('recipient_ids', $input)) {
+            return null;
+        }
+
+        return collect(is_array($input['recipient_ids']) ? $input['recipient_ids'] : [])->filter(fn ($id) => is_int($id) || (is_string($id) && ctype_digit($id)))->map(fn ($id) => (int) $id)->unique()->values()->all();
+    }
+
+    /** Writes the recipients of a reminder (ids already validated as eligible). The rows of people who stay keep what was already delivered to them. */
+    private function syncRecipients(CatalogReminder $reminder, array $ids): void
+    {
+        if ($this->recipientsReady()) {
+            $reminder->recipients()->sync(collect($ids)->mapWithKeys(fn (int $id) => [$id => ['workspace_id' => $reminder->workspace_id]])->all());
+        }
+    }
+
+    /**
+     * The people a reminder goes to, as the form and the sender see them: the chosen recipients, or the creator for a reminder with none (every reminder made
+     * before recipients existed). @return Collection<int, User>
+     */
+    public function recipientsOf(CatalogReminder $reminder): Collection
+    {
+        $chosen = $this->recipientsReady() ? $reminder->recipients()->get() : collect();
+
+        return $chosen->isNotEmpty() ? $chosen : collect($reminder->creator ? [$reminder->creator] : []);
     }
 
     // --- what the member does ----------------------------------------------------------------------------------------------------
@@ -83,17 +138,49 @@ class CatalogReminders
         return ['subject' => $subject, 'body' => $body, 'scheduled_at' => $at];
     }
 
+    /**
+     * The people the reminder goes to, validated: a list that names nobody is refused, and every person must be an eligible member of THIS Workspace (an id of
+     * another Workspace, a disabled account or a member whose role may not read the reminders is a validation error, never silently dropped). A form that does not
+     * name anyone at all (`recipient_ids` absent) keeps the previous behavior: the creator is the only recipient. The creator is never added behind their back.
+     *
+     * @param  array<string, mixed>  $input
+     * @return list<int>
+     */
+    private function validatedRecipients(Workspace $workspace, User $creator, array $input): array
+    {
+        $ids = $this->requestedRecipients($input) ?? [$creator->id];
+
+        if ($ids === []) {
+            throw ValidationException::withMessages(['recipient_ids' => 'Elige al menos una persona que reciba el recordatorio.']);
+        }
+
+        if (count($ids) > (int) config('catalog_reminders.max_recipients')) {
+            throw ValidationException::withMessages(['recipient_ids' => 'Un recordatorio puede tener hasta '.config('catalog_reminders.max_recipients').' destinatarios.']);
+        }
+
+        if ($this->recipientsReady() && ! empty(array_diff($ids, $this->eligibleRecipients($workspace)->keys()->all()))) {
+            throw ValidationException::withMessages(['recipient_ids' => 'Una de las personas elegidas no puede recibir este recordatorio: debe ser un miembro activo de este Workspace con acceso a los recordatorios.']);
+        }
+
+        return $ids;
+    }
+
     /** The reminder is the CREATOR's: `created_by` comes from the signed-in member, the Workspace from the session, never from the form. */
     public function create(Workspace $workspace, User $creator, array $input): CatalogReminder
     {
         $data = $this->validated($workspace, $input);
-        $reminder = new CatalogReminder($data);
-        $reminder->workspace_id = $workspace->id;
-        $reminder->created_by = $creator->id;
-        $reminder->status = CatalogReminder::SCHEDULED;
-        $reminder->save();
+        $recipients = $this->validatedRecipients($workspace, $creator, $input);
 
-        return $reminder;
+        return DB::transaction(function () use ($workspace, $creator, $data, $recipients) {
+            $reminder = new CatalogReminder($data);
+            $reminder->workspace_id = $workspace->id;
+            $reminder->created_by = $creator->id;
+            $reminder->status = CatalogReminder::SCHEDULED;
+            $reminder->save();
+            $this->syncRecipients($reminder, $recipients);
+
+            return $reminder;
+        });
     }
 
     /**
@@ -105,9 +192,17 @@ class CatalogReminders
     {
         $this->assertCreator($reminder, $actor, 'Solo quien lo creó puede editar este recordatorio.');
         $data = $this->validated($reminder->workspace, $input);
+        // An edit that does not name recipients keeps the ones it has (or the creator, for a reminder from before recipients existed).
+        $recipients = $this->requestedRecipients($input) === null ? $this->recipientsOf($reminder)->pluck('id')->map(fn ($id) => (int) $id)->all() : $this->validatedRecipients($reminder->workspace, $actor, $input);
 
-        $changed = CatalogReminder::whereKey($reminder->id)->where('workspace_id', $reminder->workspace_id)->whereIn('status', [CatalogReminder::SCHEDULED, CatalogReminder::FAILED])
-            ->update($data + ['status' => CatalogReminder::SCHEDULED, 'attempts' => 0, 'next_attempt_at' => null, 'reason' => null, 'updated_at' => now()]);
+        $changed = DB::transaction(function () use ($reminder, $data, $recipients) {
+            $changed = CatalogReminder::whereKey($reminder->id)->where('workspace_id', $reminder->workspace_id)->whereIn('status', [CatalogReminder::SCHEDULED, CatalogReminder::FAILED])
+                ->update($data + ['status' => CatalogReminder::SCHEDULED, 'attempts' => 0, 'next_attempt_at' => null, 'reason' => null, 'updated_at' => now()]);
+
+            $changed === 1 && $this->syncRecipients($reminder, $recipients);
+
+            return $changed;
+        });
 
         if ($changed !== 1) {
             throw ValidationException::withMessages(['status' => 'Este recordatorio ya no se puede editar: '.mb_strtolower(CatalogReminder::LABELS[$reminder->fresh()->status]).'.']);
@@ -219,34 +314,90 @@ class CatalogReminders
             return;
         }
 
-        try {
-            Mail::to($reminder->creator->email)->send(new CatalogReminderMail($reminder));
-        } catch (Throwable $e) {
-            // Only the class and a masked, short text are kept: an exception message may carry an address or a server's reply.
-            $reason = class_basename($e).': '.Str::limit((string) preg_replace('/[\w.+-]+@[\w.-]+/', '[correo]', $e->getMessage()), 140, '');
-            Log::error('catalog_reminder_failed', ['reminder' => $reminder->id, 'exception' => $e::class, 'attempt' => $reminder->attempts]);
-            $this->failure($reminder, $reason);
+        // The people it goes to are the ones saved with the reminder (re-checked NOW: the address, the membership and the access are read at the moment of sending),
+        // or its creator for a reminder from before recipients existed. Whoever already received it is skipped, so a retry never repeats it to them.
+        $saved = $this->recipientsReady() ? $reminder->recipients()->get() : collect();
+        $legacy = $saved->isEmpty();
+        $targets = $legacy ? collect($reminder->creator ? [$reminder->creator] : []) : $saved;
+        $eligible = $legacy ? null : $this->eligibleRecipients($reminder->workspace);
+        $delivered = [];
+        $skipped = [];
+
+        foreach ($targets as $user) {
+            if (! $legacy && $user->pivot->sent_at !== null) {
+                $delivered[] = $user->pivot->sent_to ?? $user->email;
+
+                continue;
+            }
+
+            $problem = $legacy ? $this->creatorProblem($reminder, $user) : ($eligible->has($user->id) ? null : $this->recipientProblem($reminder->workspace, $user));
+
+            if ($problem !== null) {
+                $skipped[] = $problem;
+                $legacy || $reminder->recipients()->updateExistingPivot($user->id, ['skip_reason' => $problem]);
+
+                continue;
+            }
+
+            try {
+                Mail::to($user->email)->send(new CatalogReminderMail($reminder, $user));
+            } catch (Throwable $e) {
+                // Only the class and a masked, short text are kept: an exception message may carry an address or a server's reply.
+                $reason = class_basename($e).': '.Str::limit((string) preg_replace('/[\w.+-]+@[\w.-]+/', '[correo]', $e->getMessage()), 140, '');
+                Log::error('catalog_reminder_failed', ['reminder' => $reminder->id, 'exception' => $e::class, 'attempt' => $reminder->attempts]);
+                $this->failure($reminder, $reason);
+
+                return;
+            }
+
+            $delivered[] = $user->email;
+            $legacy || $reminder->recipients()->updateExistingPivot($user->id, ['sent_at' => now(), 'sent_to' => $user->email, 'skip_reason' => null]);
+        }
+
+        if ($delivered === []) {
+            $this->settle($reminder, CatalogReminder::SKIPPED, $legacy ? ($skipped[0] ?? 'creator_inactive') : 'no_valid_recipient');
 
             return;
         }
 
-        CatalogReminder::whereKey($reminder->id)->where('status', CatalogReminder::SENDING)->update(['status' => CatalogReminder::SENT, 'sent_at' => now(), 'sent_to' => $reminder->creator->email, 'reason' => null, 'next_attempt_at' => null, 'updated_at' => now()]);
-        $this->audit->system('updated', 'catalog_reminder', $reminder->id, $reminder->subject, [AuditLogger::change('Estado', null, 'Enviado (intento '.$reminder->attempts.')')], $reminder->workspace, self::SOURCE);
+        CatalogReminder::whereKey($reminder->id)->where('status', CatalogReminder::SENDING)->update([
+            'status' => CatalogReminder::SENT, 'sent_at' => now(), 'sent_to' => count($delivered) === 1 ? $delivered[0] : count($delivered).' destinatarios',
+            'reason' => $skipped === [] ? null : 'partial_recipients', 'next_attempt_at' => null, 'updated_at' => now(),
+        ]);
+        $this->audit->system('updated', 'catalog_reminder', $reminder->id, $reminder->subject, [AuditLogger::change('Estado', null, 'Enviado a '.count($delivered).' persona(s) (intento '.$reminder->attempts.')'.($skipped === [] ? '' : ', '.count($skipped).' sin avisar'))], $reminder->workspace, self::SOURCE);
     }
 
-    /** The reason this reminder must not go out as written, or null. @return array{0: string, 1: string}|null [new status, fixed reason] */
+    /** The reason this reminder must not go out as written, whoever it goes to, or null. @return array{0: string, 1: string}|null [new status, fixed reason] */
     private function notDeliverable(CatalogReminder $reminder): ?array
     {
-        $creator = $reminder->creator;
         $workspace = $reminder->workspace;
 
         return match (true) {
-            $creator === null || ! $creator->is_active || blank($creator->email) => [CatalogReminder::SKIPPED, 'creator_inactive'],
-            ! $workspace || ! $workspace->users()->whereKey($creator->id)->exists() => [CatalogReminder::SKIPPED, 'creator_not_member'],
+            ! $workspace => [CatalogReminder::SKIPPED, 'creator_not_member'],
             ! $this->modules->allows($workspace, 'product_catalog') => [CatalogReminder::SKIPPED, 'module_unavailable'],
             $reminder->scheduled_at->lessThan(now()->subHours((int) config('catalog_reminders.grace_hours'))) => [CatalogReminder::SKIPPED, 'expired'],
             ! MailAvailability::usable() => [CatalogReminder::FAILED, 'mail_not_configured'],
             default => null,
+        };
+    }
+
+    /** Why the creator of a reminder without saved recipients can not be notified, or null (a fixed code). */
+    private function creatorProblem(CatalogReminder $reminder, ?User $creator): ?string
+    {
+        return match (true) {
+            $creator === null || ! $creator->is_active || blank($creator->email) => 'creator_inactive',
+            ! $reminder->workspace->users()->whereKey($creator->id)->exists() => 'creator_not_member',
+            default => null,
+        };
+    }
+
+    /** Why a chosen recipient is not eligible any more (a fixed code). */
+    private function recipientProblem(Workspace $workspace, User $user): string
+    {
+        return match (true) {
+            ! $user->is_active || blank($user->email) => 'recipient_inactive',
+            ! $workspace->users()->whereKey($user->id)->exists() => 'recipient_not_member',
+            default => 'recipient_no_access',
         };
     }
 

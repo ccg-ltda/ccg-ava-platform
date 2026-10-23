@@ -1,6 +1,7 @@
 import { router } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 import Alert from '@/Components/Alert';
+import EntityPicker from '@/Components/EntityPicker';
 import Modal from '@/Components/Modal';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
@@ -37,8 +38,6 @@ export default function LocationScopeModal({ user, onClose }) {
         };
     }, [user?.id]);
 
-    const toggle = (id) => setIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
-
     const save = () => {
         setSaving(true);
         router.put(route('users.locations.update', user.id), { scope, location_ids: scope === 'selected' ? ids : [] }, {
@@ -73,14 +72,16 @@ export default function LocationScopeModal({ user, onClose }) {
                         </label>
 
                         {scope === 'selected' && (
-                            <div className="ml-6 grid gap-2 sm:grid-cols-2">
-                                {state.locations.length === 0 && <p className="text-sm text-ink-muted">Este Workspace todavía no tiene sedes.</p>}
-                                {state.locations.map((location) => (
-                                    <label key={location.id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-field px-3 py-2 text-sm text-ink has-checked:border-primary/50 has-checked:bg-primary-soft/40">
-                                        <input type="checkbox" className="size-4 accent-primary" checked={ids.includes(location.id)} onChange={() => toggle(location.id)} />
-                                        <span>{location.name}{!location.isActive && <span className="ml-1 text-xs text-ink-muted">(inactiva)</span>}</span>
-                                    </label>
-                                ))}
+                            <div className="ml-6">
+                                <EntityPicker
+                                    id="scope_locations"
+                                    options={state.locations.map((location) => ({ value: location.id, label: location.isActive ? location.name : `${location.name} (inactiva)` }))}
+                                    value={ids}
+                                    onChange={setIds}
+                                    placeholder="Buscar sede"
+                                    emptyLabel="Ninguna sede coincide"
+                                    noneLabel={state.locations.length === 0 ? 'Este Workspace todavía no tiene sedes.' : 'Ninguna sede elegida'}
+                                />
                             </div>
                         )}
 

@@ -6,6 +6,8 @@ import Badge from '@/Components/Badge';
 import Card from '@/Components/Card';
 import CalendarGrid from './CalendarGrid';
 import CancelDialog from './CancelDialog';
+import DayPanel from './DayPanel';
+import MonthCalendar from './MonthCalendar';
 import EmptyState from '@/Components/EmptyState';
 import IconButton from '@/Components/IconButton';
 import Modal from '@/Components/Modal';
@@ -17,7 +19,8 @@ import SecondaryButton from '@/Components/SecondaryButton';
 import Select from '@/Components/Select';
 import TextInput from '@/Components/TextInput';
 import { addDays, dayLabel, money, statusTones, syncErrors, syncLabels } from '@/config/bookings';
-import { gridDays, lastDayOf, rangeLabel } from '@/lib/calendarLayout';
+import { gridDays, lastDayOf, periodStart, rangeLabel, shiftMonthStart } from '@/lib/calendarLayout';
+import { monthOf, monthTitle } from '@/lib/dates';
 import AppointmentDialog from './AppointmentDialog';
 
 /** "Recordatorio (1 día antes)", "Confirmación"... for a notification of the Agenda. */
@@ -29,17 +32,27 @@ const notificationLabel = (item) => {
 };
 
 const RANGES = [{ value: 1, label: 'Día' }, { value: 7, label: 'Semana' }, { value: 31, label: 'Mes' }];
+const PERIOD_OF_DAYS = { 1: 'day', 7: 'week', 31: 'month' };
 const ORIGINS = [{ value: '', label: 'Todos los orígenes' }, { value: 'admin', label: 'Agenda del negocio' }, { value: 'web', label: 'Página de reservas' }, { value: 'chat', label: 'Asistente' }];
 const STATUSES = [{ value: '', label: 'Todos los estados' }, { value: 'requested', label: 'Por confirmar' }, { value: 'confirmed', label: 'Confirmadas' }, { value: 'completed', label: 'Realizadas' }, { value: 'no_show', label: 'No asistió' }, { value: 'cancelled', label: 'Canceladas' }, { value: 'failed', label: 'Rechazadas' }];
 
 /** The agenda: appointments of the chosen days grouped by day, with the actions each one allows. */
 const VIEW_KEY = 'ava.agenda.view';
 
-/** Calendar or list, remembered per browser (a convenience only: the page works without it). On a phone the list is the default. */
-function useAgendaView(days) {
-    const [view, setView] = useState('calendar');
+/**
+ * Calendar or list. What the address says (`view`) wins; otherwise the choice remembered in this browser (a convenience only: the page works without it), and on
+ * a phone the list. A custom range (a typed «Hasta») has no calendar.
+ */
+function useAgendaView(period, requested) {
+    const [view, setView] = useState(requested ?? 'calendar');
 
     useEffect(() => {
+        if (requested) {
+            setView(requested);
+
+            return;
+        }
+
         let saved = null;
 
         try {
@@ -49,7 +62,7 @@ function useAgendaView(days) {
         }
 
         setView(saved === 'list' || saved === 'calendar' ? saved : window.matchMedia('(max-width: 639px)').matches ? 'list' : 'calendar');
-    }, []);
+    }, [requested]);
 
     const choose = (next) => {
         setView(next);
@@ -61,24 +74,31 @@ function useAgendaView(days) {
         }
     };
 
-    // The grid draws one day or one week; a longer range (month, custom) is the list.
-    return [days <= 7 ? view : 'list', choose];
+    return [period === 'custom' ? 'list' : view, choose];
 }
 
-export default function AgendaPanel({ appointments, filters, options, capabilities, today, can, listLimit = 500 }) {
+export default function AgendaPanel({ appointments, dayCounts, filters, options, capabilities, today, can, listLimit = 500 }) {
     const [dialog, setDialog] = useState(null); // {} = new, an appointment = reschedule
     const [cancelling, setCancelling] = useState(null);
     const [detail, setDetail] = useState(null); // an appointment opened from the calendar
     const [crowd, setCrowd] = useState(null); // the appointments hidden behind a «+N» of a crowded moment
-    const [view, chooseView] = useAgendaView(filters.to ? 99 : filters.days);
+    const [openDay, setOpenDay] = useState(null); // a day of the month calendar whose appointments are open in the side panel
+    const period = filters.period ?? (filters.to ? 'custom' : 'week');
+    const [view, chooseView] = useAgendaView(period, filters.view);
 
     const { errors = {} } = usePage().props;
     const clean = (params) => Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ''));
+    // The filters travel with every change; `period` is derived by the server and `view` is sent so the month calendar only asks for the counts it draws.
     const visit = (params) =>
-        router.get(route('bookings.index'), clean({ ...filters, ...params, tab: 'agenda', search: undefined }), { only: ['appointments', 'filters', 'errors', 'listLimit'], preserveState: true, preserveScroll: true, replace: true });
-    // A range is stepped by its own length; a custom «Hasta» moves along with «Desde».
-    const step = (direction) => visit({ from: addDays(filters.from, direction * filters.days), to: filters.to ? addDays(filters.to, direction * filters.days) : undefined });
-    const showingToday = filters.from === today && filters.to === today;
+        router.get(route('bookings.index'), clean({ ...filters, period: undefined, view, ...params, tab: 'agenda', search: undefined }), { only: ['appointments', 'dayCounts', 'filters', 'errors', 'listLimit'], preserveState: true, preserveScroll: true, replace: true, onSuccess: () => setOpenDay(null) });
+    // A day or a week moves by its length, a month by calendar months and a custom range by its own length (its «Hasta» moves along with «Desde»).
+    const step = (direction) => visit(period === 'month'
+        ? { from: shiftMonthStart(filters.from, direction), days: 31 }
+        : { from: addDays(filters.from, direction * filters.days), to: filters.to ? addDays(filters.to, direction * filters.days) : undefined });
+    // «Hoy» keeps the kind of period and the filters: it only moves the dates (the day, its week or its month); a custom range becomes just today.
+    const goToday = () => visit(period === 'custom' ? { from: today, to: today } : { from: periodStart(period, today), days: filters.days > 7 ? 31 : filters.days });
+    const changePeriod = (value) => visit({ days: value, to: undefined, from: periodStart(PERIOD_OF_DAYS[value], filters.from <= today && today <= lastDayOf(filters) ? today : filters.from) });
+    const showingToday = filters.from <= today && today <= lastDayOf(filters);
     const backwards = Boolean(filters.to) && filters.from > filters.to;
     const changeFrom = (value) => value && visit({ from: value });
     const changeTo = (value) => visit({ to: value || undefined });
@@ -99,8 +119,10 @@ export default function AgendaPanel({ appointments, filters, options, capabiliti
     )), [options.professionals, place, serviceFilter]);
     const serviceOptions = useMemo(() => (options.services ?? []).filter((service) => place === null || service.everywhere === undefined || service.everywhere || service.locationIds?.includes(place)), [options.services, place]);
     const last = lastDayOf(filters);
-    const gridCount = view === 'calendar' ? Math.min(Math.max(filters.to ? 99 : filters.days, 1), 7) : 0;
-    const days = view === 'calendar' ? gridDays(filters.from, gridCount) : [];
+    const gridCount = view === 'calendar' && (period === 'day' || period === 'week') ? filters.days : 0;
+    const days = gridCount > 0 ? gridDays(filters.from, gridCount) : [];
+    const monthCalendar = view === 'calendar' && period === 'month';
+    const onlyToday = filters.from === today && last === today;
     const filtered = Boolean(filters.professional || filters.location || filters.service || filters.status || filters.origin);
 
     const actions = (appointment) => (can.edit || can.cancel) && appointment.active && (
@@ -131,22 +153,22 @@ export default function AgendaPanel({ appointments, filters, options, capabiliti
                 <div className="flex flex-wrap items-end justify-between gap-3">
                     <div className="flex min-w-0 flex-wrap items-end gap-2">
                         <IconButton icon={ChevronLeft} label="Anterior" onClick={() => step(-1)} />
-                        <SecondaryButton type="button" aria-pressed={showingToday} onClick={() => visit({ from: today, to: today, days: 1 })} className={`gap-2 ${showingToday ? 'border-primary bg-primary-soft text-accent-blue' : ''}`}>
+                        <SecondaryButton type="button" aria-pressed={showingToday} onClick={goToday} className={`gap-2 ${showingToday ? 'border-primary bg-primary-soft text-accent-blue' : ''}`}>
                             <CalendarRange className="size-4" aria-hidden="true" />
                             Hoy
                         </SecondaryButton>
                         <IconButton icon={ChevronRight} label="Siguiente" onClick={() => step(1)} />
                         <div className="min-w-0 px-1" role="status" aria-live="polite">
                             <p className="text-xs text-ink-muted">Mostrando</p>
-                            <p className="truncate text-base font-bold text-ink capitalize">{rangeLabel(filters.from, last)}</p>
+                            <p className="truncate text-base font-bold text-ink capitalize">{period === 'month' ? monthTitle(monthOf(filters.from)) : rangeLabel(filters.from, last)}</p>
                         </div>
                     </div>
                     <div className="flex flex-wrap items-end gap-2">
                         <div className="w-32">
                             <InputLabel htmlFor="agenda_days" value="Ver" />
-                            <Select id="agenda_days" className="mt-1" value={filters.to ? '' : filters.days} onChange={(value) => visit({ days: value, to: undefined })} options={RANGES} placeholder="Personalizado" />
+                            <Select id="agenda_days" className="mt-1" value={filters.to ? '' : filters.days} onChange={changePeriod} options={RANGES} placeholder="Personalizado" />
                         </div>
-                        {gridCount > 0 || filters.days <= 7 && !filters.to ? (
+                        {period !== 'custom' ? (
                             <div className="inline-flex overflow-hidden rounded-lg border border-field" role="group" aria-label="Forma de ver las citas">
                                 <button type="button" aria-pressed={view === 'calendar'} onClick={() => chooseView('calendar')} className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold ${view === 'calendar' ? 'bg-primary-soft text-accent-blue' : 'text-ink-muted hover:bg-canvas'}`}>
                                     <CalendarDays className="size-4" aria-hidden="true" />
@@ -200,9 +222,9 @@ export default function AgendaPanel({ appointments, filters, options, capabiliti
                 </div>
 
 
-                {(filtered || showingToday) && (
+                {(filtered || onlyToday) && (
                     <div className="mt-3 flex flex-wrap items-center gap-2">
-                        {showingToday && <span className="inline-flex items-center rounded-full bg-primary-soft px-3 py-1 text-xs font-semibold text-accent-blue" role="status">Solo las citas de hoy</span>}
+                        {onlyToday && <span className="inline-flex items-center rounded-full bg-primary-soft px-3 py-1 text-xs font-semibold text-accent-blue" role="status">Solo las citas de hoy</span>}
                         {filtered && (
                             <button type="button" onClick={() => visit({ professional: undefined, location: undefined, service: undefined, status: undefined, origin: undefined })} className="inline-flex items-center gap-1 rounded-full border border-field px-3 py-1 text-xs font-semibold text-ink-muted hover:bg-canvas">
                                 <X className="size-3.5" aria-hidden="true" />
@@ -219,10 +241,18 @@ export default function AgendaPanel({ appointments, filters, options, capabiliti
                 </p>
             )}
 
-            {appointments.length === 0 ? (
-                <EmptyState icon={CalendarDays} title={filtered ? 'Ninguna cita coincide con los filtros' : 'Sin citas en este periodo'} description={filtered ? 'Quita algún filtro o cambia las fechas.' : 'Cambia las fechas o los filtros, o crea una cita nueva.'} />
+            {monthCalendar ? (
+                <div className={openDay ? 'grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]' : ''}>
+                    <MonthCalendar from={filters.from} counts={dayCounts ?? {}} today={today} selected={openDay} onOpen={setOpenDay} />
+                    {openDay && <DayPanel date={openDay} filters={filters} onClose={() => setOpenDay(null)} onSelect={setDetail} />}
+                </div>
             ) : view === 'calendar' ? (
-                <CalendarGrid appointments={appointments} days={days} today={today} onSelect={setDetail} onSelectMany={setCrowd} />
+                <>
+                    {appointments.length === 0 && <p className="text-sm text-ink-muted" role="status">{filtered ? 'Ninguna cita coincide con los filtros en este periodo.' : 'Sin citas en este periodo.'}</p>}
+                    <CalendarGrid appointments={appointments} days={days} today={today} onSelect={setDetail} onSelectMany={setCrowd} />
+                </>
+            ) : appointments.length === 0 ? (
+                <EmptyState icon={CalendarDays} title={filtered ? 'Ninguna cita coincide con los filtros' : 'Sin citas en este periodo'} description={filtered ? 'Quita algún filtro o cambia las fechas.' : 'Cambia las fechas o los filtros, o crea una cita nueva.'} />
             ) : (
                 <div className="space-y-4">
                     {Object.entries(listDays).map(([date, items]) => (
@@ -299,7 +329,7 @@ export default function AgendaPanel({ appointments, filters, options, capabiliti
                     <div className="p-6">
                         <div className="flex items-start justify-between gap-3">
                             <div>
-                                <p className="text-xs text-ink-muted capitalize">{dayLabel(detail.date)} · {detail.timeLabel}</p>
+                                <p className="text-xs text-ink-muted capitalize">{dayLabel(detail.date)} · {detail.endLabel ? `${detail.timeLabel}–${detail.endLabel}` : detail.timeLabel}</p>
                                 <h2 className="text-lg font-bold text-ink">{detail.service}</h2>
                             </div>
                             <Badge tone={statusTones[detail.status]}>{detail.statusLabel}</Badge>
@@ -309,7 +339,7 @@ export default function AgendaPanel({ appointments, filters, options, capabiliti
                             {detail.location && <div className="flex justify-between gap-4"><dt className="text-ink-muted">Sede</dt><dd className="text-right font-medium text-ink">{detail.location}</dd></div>}
                             <div className="flex justify-between gap-4"><dt className="text-ink-muted">Cliente</dt><dd className="text-right font-medium text-ink">{detail.customer?.name}{detail.customer?.phone && ` · ${detail.customer.phone}`}</dd></div>
                             {detail.restMinutes > 0 && <div className="flex justify-between gap-4"><dt className="text-ink-muted">Descanso después</dt><dd className="text-right font-medium text-ink">{detail.restMinutes} min</dd></div>}
-                            {detail.price !== null && detail.currency && <div className="flex justify-between gap-4"><dt className="text-ink-muted">Precio</dt><dd className="text-right font-medium text-ink">{money(detail.price, detail.currency)}</dd></div>}
+                            {detail.price !== null && detail.currency && <div className="flex justify-between gap-4"><dt className="text-ink-muted">Precio registrado</dt><dd className="text-right font-medium text-ink">{money(detail.price, detail.currency)}</dd></div>}
                             <div className="flex justify-between gap-4"><dt className="text-ink-muted">Origen</dt><dd className="text-right font-medium text-ink">{detail.originLabel}</dd></div>
                             {detail.notes && <div><dt className="text-ink-muted">Nota</dt><dd className="mt-0.5 text-ink">{detail.notes}</dd></div>}
                             {detail.notifications?.length > 0 && (

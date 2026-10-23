@@ -49,6 +49,12 @@ class ModuleCategory extends Model
         return $this->hasMany(Module::class);
     }
 
+    /** The plans sold under this solution (`plans.module_category_id`). */
+    public function plans(): HasMany
+    {
+        return $this->hasMany(Plan::class);
+    }
+
     public function auditResource(): string
     {
         return 'module_category';

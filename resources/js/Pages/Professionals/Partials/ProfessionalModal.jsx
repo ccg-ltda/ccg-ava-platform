@@ -1,4 +1,5 @@
 import { useForm } from '@inertiajs/react';
+import EntityPicker from '@/Components/EntityPicker';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import Modal from '@/Components/Modal';
@@ -18,7 +19,7 @@ export default function ProfessionalModal({ professional, services, days, locati
         schedule: professional?.schedule ?? [1, 2, 3, 4, 5].map((weekday) => ({ weekday, startsAt: '09:00', endsAt: '17:00', locationId: null })),
     });
     const { data, setData, errors } = form;
-    const toggle = (id) => setData('service_ids', data.service_ids.includes(id) ? data.service_ids.filter((item) => item !== id) : [...data.service_ids, id]);
+    const serviceOptions = services.map((service) => ({ value: service.id, label: service.name }));
 
     const submit = (event) => {
         event.preventDefault();
@@ -53,22 +54,14 @@ export default function ProfessionalModal({ professional, services, days, locati
                         </div>
                     </div>
 
-                    <fieldset>
-                        <legend className="text-sm font-medium text-ink">Servicios que presta</legend>
+                    <div>
+                        <InputLabel htmlFor="pro_services" value="Servicios que presta" />
                         {services.length === 0 ? (
                             <p className="mt-1 text-sm text-ink-muted">Primero crea servicios en la página Servicios.</p>
                         ) : (
-                            <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                                {services.map((service) => (
-                                    <label key={service.id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-field px-3 py-2 text-sm text-ink has-checked:border-primary/50 has-checked:bg-primary-soft/40">
-                                        <input type="checkbox" className="size-4 accent-primary" checked={data.service_ids.includes(service.id)} onChange={() => toggle(service.id)} />
-                                        {service.name}
-                                    </label>
-                                ))}
-                            </div>
+                            <EntityPicker id="pro_services" className="mt-1" options={serviceOptions} value={data.service_ids} onChange={(ids) => setData('service_ids', ids)} placeholder="Buscar servicio" noneLabel="Ningún servicio elegido" invalid={Boolean(errors.service_ids || errors['service_ids.0'])} error={errors['service_ids.0'] ?? errors.service_ids} />
                         )}
-                        <InputError message={errors['service_ids.0'] ?? errors.service_ids} className="mt-1" />
-                    </fieldset>
+                    </div>
 
                     <ScheduleEditor days={days} locations={locations} value={data.schedule} onChange={(schedule) => setData('schedule', schedule)} error={errors.schedule} />
                 </div>

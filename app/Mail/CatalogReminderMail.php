@@ -3,6 +3,7 @@
 namespace App\Mail;
 
 use App\Models\CatalogReminder;
+use App\Models\User;
 use App\Services\EmailTemplates;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -16,7 +17,7 @@ use Illuminate\Mail\Mailables\Headers;
  */
 class CatalogReminderMail extends Mailable
 {
-    public function __construct(public readonly CatalogReminder $reminder) {}
+    public function __construct(public readonly CatalogReminder $reminder, public readonly ?User $recipient = null) {}
 
     public function envelope(): Envelope
     {
@@ -27,14 +28,15 @@ class CatalogReminderMail extends Mailable
     {
         $host = parse_url((string) config('app.url'), PHP_URL_HOST) ?: 'ava.local';
 
-        return new Headers(messageId: "catalog-reminder-{$this->reminder->id}@{$host}", text: ['X-Ava-Reminder' => (string) $this->reminder->id]);
+        return new Headers(messageId: "catalog-reminder-{$this->reminder->id}-".($this->recipient?->id ?? 'creator')."@{$host}", text: ['X-Ava-Reminder' => (string) $this->reminder->id]);
     }
 
     public function content(): Content
     {
         $templates = app(EmailTemplates::class);
         $blocks = array_values(array_filter(preg_split('/\n{2,}/', str_replace("\r\n", "\n", trim($this->reminder->body))) ?: [], fn ($part) => trim($part) !== ''));
-        $footer = 'Recordatorio programado por ti en el Catálogo de '.(string) $this->reminder->workspace?->name.'.';
+        $mine = $this->recipient === null || (int) $this->recipient->id === (int) $this->reminder->created_by;
+        $footer = 'Recordatorio programado '.($mine ? 'por ti' : 'por '.($this->reminder->creator?->name ?? 'un miembro del equipo')).' en el Catálogo de '.(string) $this->reminder->workspace?->name.'.';
 
         return new Content(
             view: 'emails.html',

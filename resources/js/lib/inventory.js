@@ -63,6 +63,12 @@ export function configuredPlaces(stock) {
     return `${stock.stocks.every((row) => row.locationId === null) ? 'Inventario' : names.length === 1 ? 'Sede' : 'Sedes'}: ${names.join(', ')}`;
 }
 
+/**
+ * The locations a product is offered in, out of the active ones of the Workspace. A historical product assigned to no location keeps every one (it is offered
+ * everywhere until someone assigns it). The stock of a product is only listed and edited for these.
+ */
+export const offeredLocations = (product, locations) => (product?.locationIds?.length ? locations.filter((location) => product.locationIds.includes(location.id)) : locations);
+
 /** "3 unidades" / "1 unidad". */
 export const units = (quantity) => `${Number(quantity).toLocaleString('es')} ${Number(quantity) === 1 ? 'unidad' : 'unidades'}`;
 
@@ -76,4 +82,4 @@ export const MOVEMENT_TONES = { entry: 'green', adjustment: 'blue', sale: 'neutr
 export const emptyStocks = (locations) => (locations.length === 0 ? [{ location_id: '', name: 'Inventario general', quantity: '', min_quantity: '' }] : locations.map((location) => ({ location_id: location.id, name: location.name, quantity: '', min_quantity: '' })));
 
 /** The rows to send: only the ones with a quantity written (a blank quantity means "no stock row in that location"). */
-export const stocksPayload = (rows) => rows.filter((row) => row.quantity !== '' && row.quantity !== null).map((row) => ({ location_id: row.location_id === '' ? null : row.location_id, quantity: Number(row.quantity), min_quantity: row.min_quantity === '' ? 0 : Number(row.min_quantity) }));
+export const stocksPayload = (rows, offered = null) => rows.filter((row) => (offered === null || row.location_id === '' || offered.includes(row.location_id)) && row.quantity !== '' && row.quantity !== null).map((row) => ({ location_id: row.location_id === '' ? null : row.location_id, quantity: Number(row.quantity), min_quantity: row.min_quantity === '' ? 0 : Number(row.min_quantity) }));

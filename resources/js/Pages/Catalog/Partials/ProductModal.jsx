@@ -15,6 +15,7 @@ import Textarea from '@/Components/Textarea';
 import TextInput from '@/Components/TextInput';
 import Toggle from '@/Components/Toggle';
 import { emptyStocks, stocksPayload } from '@/lib/inventory';
+import EntityPicker from '@/Components/EntityPicker';
 
 /** The category is chosen from the active categories of the Workspace; they are created in the «Categorías» tab of the catalog, never typed here. */
 function CategoryField({ value, onChange, categories, error }) {
@@ -46,18 +47,20 @@ function CategoryField({ value, onChange, categories, error }) {
 }
 
 /** The first stock of a NEW product: one row per location (or the general one). Later quantities change with entries and adjustments, never from this form. */
-function StockRows({ rows, onChange, errors }) {
+function StockRows({ rows, offered, onChange, errors }) {
     const set = (index, key, value) => onChange(rows.map((row, position) => (position === index ? { ...row, [key]: value } : row)));
+    const shown = rows.map((row, index) => ({ row, index })).filter(({ row }) => row.location_id === '' || offered.includes(row.location_id));
 
     return (
         <div className="space-y-2" role="group" aria-label="Existencias iniciales por sede">
-            <p className="text-xs text-ink-muted">Deja en blanco las sedes donde el producto no se maneja: ahí no aparecerá como disponible.</p>
+            <p className="text-xs text-ink-muted">Solo aparecen las sedes donde se ofrece el producto. Deja en blanco las que no manejen existencias: ahí no aparecerá como disponible.</p>
             <div className="hidden grid-cols-[minmax(0,1fr)_7rem_7rem] gap-3 px-1 text-[11px] font-semibold tracking-wider text-ink-muted uppercase sm:grid">
                 <span>Sede</span>
                 <span>Existencia</span>
                 <span>Stock mínimo</span>
             </div>
-            {rows.map((row, index) => (
+            {shown.length === 0 && <p className="text-sm text-ink-muted">Elige primero las sedes donde se ofrece el producto.</p>}
+            {shown.map(({ row, index }) => (
                 <div key={row.location_id === '' ? 'general' : row.location_id} className="grid gap-2 rounded-lg border border-line p-3 sm:grid-cols-[minmax(0,1fr)_7rem_7rem] sm:items-center sm:gap-3">
                     <p className="text-sm font-semibold text-ink">{row.name}</p>
                     <div>
@@ -103,7 +106,7 @@ export default function ProductModal({ product, locations, categories, currency,
         location_ids: product?.locationIds ?? [],
     });
     const { data, setData, errors } = form;
-    const toggleLocation = (id) => setData('location_ids', data.location_ids.includes(id) ? data.location_ids.filter((item) => item !== id) : [...data.location_ids, id]);
+    const locationOptions = locations.map((location) => ({ value: location.id, label: location.name }));
 
     const changeActive = async (next) => {
         if (!next && editing && product.openOrders > 0) {
@@ -130,7 +133,7 @@ export default function ProductModal({ product, locations, categories, currency,
                 ...(ready && !canActivate ? { is_active: undefined } : {}),
                 ...(ready && !inventory.canAdjust ? { tracks_inventory: undefined } : {}),
                 ...(ready ? { image: file ?? undefined, remove_image: removed || undefined } : {}),
-                ...(!editing && ready && values.tracks_inventory ? { stocks: stocksPayload(stocks) } : {}),
+                ...(!editing && ready && values.tracks_inventory ? { stocks: stocksPayload(stocks, locations.length > 0 ? values.location_ids : null) } : {}),
                 ...(editing ? { _method: 'put' } : {}),
             };
 
@@ -229,7 +232,7 @@ export default function ProductModal({ product, locations, categories, currency,
                             {data.tracks_inventory && !editing && inventory.canAdjust && (
                                 <div className="border-t border-line pt-4">
                                     <p className="mb-2 text-sm font-semibold text-ink">Existencias iniciales</p>
-                                    <StockRows rows={stocks} onChange={setStocks} errors={errors} />
+                                    <StockRows rows={stocks} offered={data.location_ids} onChange={setStocks} errors={errors} />
                                 </div>
                             )}
                             {data.tracks_inventory && editing && (
@@ -239,19 +242,11 @@ export default function ProductModal({ product, locations, categories, currency,
                     )}
 
                     {locations.length > 0 && (
-                        <fieldset>
-                            <legend className="text-sm font-medium text-ink">Sedes que lo ofrecen (obligatorio)</legend>
-                            <p className="mt-0.5 text-xs text-ink-muted">Marca al menos una sede activa. Es el mismo producto en todas; las existencias se llevan por sede.{editing && product?.needsLocation ? ' Este producto es anterior y no tenía sede: asígnalo a la que corresponda.' : ''}</p>
-                            <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                                {locations.map((location) => (
-                                    <label key={location.id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-field px-3 py-2 text-sm text-ink has-checked:border-primary/50 has-checked:bg-primary-soft/40">
-                                        <input type="checkbox" className="size-4 accent-primary" checked={data.location_ids.includes(location.id)} onChange={() => toggleLocation(location.id)} />
-                                        {location.name}
-                                    </label>
-                                ))}
-                            </div>
-                            <InputError message={errors.location_ids ?? errors['location_ids.0']} className="mt-1" />
-                        </fieldset>
+                        <div>
+                            <InputLabel htmlFor="product_locations" value="Sedes que lo ofrecen (obligatorio)" />
+                            <p className="mt-0.5 mb-2 text-xs text-ink-muted">Elige al menos una sede activa. Es el mismo producto en todas; las existencias se llevan por sede y solo en las que elijas.{editing && product?.needsLocation ? ' Este producto es anterior y no tenía sede: asígnalo a la que corresponda.' : ''}{editing ? ' Si quitas una sede, sus existencias y su historial se conservan, pero dejan de mostrarse y de poder modificarse.' : ''}</p>
+                            <EntityPicker id="product_locations" options={locationOptions} value={data.location_ids} onChange={(ids) => setData('location_ids', ids)} placeholder="Buscar sede" noneLabel="Ninguna sede elegida" invalid={Boolean(errors.location_ids)} error={errors.location_ids ?? errors['location_ids.0']} />
+                        </div>
                     )}
                     {editing && <p className="text-xs text-ink-muted">Cambiar el precio solo afecta a los pedidos nuevos: los pedidos ya registrados conservan el precio con el que se hicieron.</p>}
                 </div>

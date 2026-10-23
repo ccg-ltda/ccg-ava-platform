@@ -6,6 +6,7 @@ import Badge from '@/Components/Badge';
 import Card from '@/Components/Card';
 import { useConfirm } from '@/Components/ConfirmDialog';
 import DangerButton from '@/Components/DangerButton';
+import DateField from '@/Components/DateField';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import PageHeader from '@/Components/PageHeader';
@@ -221,12 +222,10 @@ export default function Show({ campaign, summary, recipients, picker, delivery, 
                                 </div>
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
-                                        <InputLabel htmlFor="filter_from" value="Alta desde" />
-                                        <TextInput id="filter_from" type="date" className="mt-1" value={data.filters.created_from} onChange={(e) => setFilter('created_from', e.target.value)} />
+                                        <DateField id="filter_from" label="Alta desde" max={data.filters.created_to || undefined} value={data.filters.created_from} onChange={(value) => setFilter('created_from', value)} />
                                     </div>
                                     <div>
-                                        <InputLabel htmlFor="filter_to" value="Alta hasta" />
-                                        <TextInput id="filter_to" type="date" className="mt-1" value={data.filters.created_to} onChange={(e) => setFilter('created_to', e.target.value)} invalid={Boolean(errors['filters.created_to'])} />
+                                        <DateField id="filter_to" label="Alta hasta" min={data.filters.created_from || undefined} value={data.filters.created_to} onChange={(value) => setFilter('created_to', value)} error={errors['filters.created_to']} />
                                     </div>
                                     <InputError message={errors['filters.created_to']} className="col-span-2" />
                                 </div>

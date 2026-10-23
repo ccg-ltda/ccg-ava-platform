@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Booking\Locations;
 use App\Rules\InternationalPhone;
+use App\Services\LocationScope;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -11,8 +12,27 @@ use Illuminate\Validation\Rule;
 /** Create / update of a location (sede) of the ACTIVE Workspace. Authorization is the `workspace.permission:create-locations` / `edit-locations` route middleware. */
 class SaveLocationRequest extends FormRequest
 {
+    /**
+     * Who may touch the location is decided BEFORE the form is validated, so a foreign or out-of-scope location answers 404 / 403 and never a validation hint:
+     * the location must be of the active Workspace, a member limited to selected locations can only edit their own and can not create one.
+     */
     public function authorize(): bool
     {
+        $workspace = $this->attributes->get('workspace');
+
+        if (! $workspace || ! app(Locations::class)->schemaReady()) {
+            return true;
+        }
+
+        $scope = app(LocationScope::class);
+
+        if ($this->route('location')) {
+            $model = $workspace->locations()->findOrFail($this->route('location'));
+            $scope->assertAllows($workspace, $this->user(), $model->id);
+        } else {
+            abort_if($scope->restricted($workspace, $this->user()), 403, 'Solo quien tiene acceso a todas las sedes puede crear una sede.');
+        }
+
         return true;
     }
 
@@ -33,9 +53,33 @@ class SaveLocationRequest extends FormRequest
             'city' => ['nullable', 'string', 'max:120'],
             'phone' => ['nullable', 'string', 'max:32', new InternationalPhone($stored)],
             'notes' => ['nullable', 'string', 'max:500'],
-            'service_ids' => ['nullable', 'array'],
-            'service_ids.*' => ['integer', Rule::exists('services', 'id')->where('workspace_id', $workspace->id)],
+            'service_ids' => ['required', 'array', 'min:1'],
+            'service_ids.*' => ['integer', 'distinct', Rule::exists('services', 'id')->where('workspace_id', $workspace->id)],
         ];
+    }
+
+    /** A location can only start offering an ACTIVE service; one it already offers can stay even if it was deactivated later (editing never drops it silently). */
+    public function after(): array
+    {
+        return [function ($validator) {
+            $workspace = $this->attributes->get('workspace');
+
+            if ($validator->errors()->isNotEmpty() || ! $workspace || ! app(Locations::class)->schemaReady()) {
+                return;
+            }
+
+            $kept = $this->route('location') ? $workspace->locations()->whereKey($this->route('location'))->first()?->services()->pluck('services.id')->all() ?? [] : [];
+            $inactive = $workspace->services()->whereIn('id', $this->serviceIds())->where('is_active', false)->pluck('id')->diff($kept);
+
+            if ($inactive->isNotEmpty()) {
+                $validator->errors()->add('service_ids', 'Uno de los servicios elegidos no está activo.');
+            }
+        }];
+    }
+
+    public function messages(): array
+    {
+        return ['service_ids.required' => 'Elige al menos un servicio que ofrece la sede.', 'service_ids.min' => 'Elige al menos un servicio que ofrece la sede.'];
     }
 
     public function attributes(): array

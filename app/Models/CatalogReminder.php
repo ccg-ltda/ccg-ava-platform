@@ -6,9 +6,11 @@ use App\Models\Concerns\Audited;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 /**
- * A reminder written by a member of a Workspace and emailed, at the scheduled time, to THE CREATOR (never to an address a client sends). Created and read only
+ * A reminder written by a member of a Workspace and emailed, at the scheduled time, to the members it names (`recipients`, validated against the Workspace's own
+ * eligible members; a reminder with none goes to its creator, as every one did before recipients existed). Never to an address a client sends. Created and read only
  * through `$workspace->catalogReminders()`; never deleted: cancelling keeps it with its history.
  *
  * States: scheduled (waiting; also what a retryable failure goes back to) -> queued (handed to the queue) -> sending (a worker owns it) -> sent | failed (the
@@ -57,6 +59,12 @@ class CatalogReminder extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /** The members it goes to; the pivot records what was delivered to each (`sent_at`, `sent_to`) and why someone was not notified (`skip_reason`). */
+    public function recipients(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'catalog_reminder_recipients')->withPivot(['workspace_id', 'sent_at', 'sent_to', 'skip_reason'])->withTimestamps();
     }
 
     public function canceller(): BelongsTo

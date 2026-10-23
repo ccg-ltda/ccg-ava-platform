@@ -2,6 +2,7 @@ import { router } from '@inertiajs/react';
 import { UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Alert from '@/Components/Alert';
+import DateField from '@/Components/DateField';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import Modal from '@/Components/Modal';
@@ -142,8 +143,7 @@ export default function AppointmentDialog({ appointment, options, today, onClose
                             <SearchableSelect id="appt_pro" className="mt-1" value={professionalId} onChange={(value) => { setProfessionalId(value); setSlot(null); }} options={professionals} placeholder="Escribe para buscar o elige" />
                         </div>
                         <div>
-                            <InputLabel htmlFor="appt_from" value="Buscar desde" />
-                            <TextInput id="appt_from" type="date" className="mt-1" value={from} min={today} onChange={(e) => { setFrom(e.target.value || today); setSlot(null); }} />
+                            <DateField id="appt_from" label="Buscar desde" clearable={false} today={today} value={from} min={today} onChange={(value) => { setFrom(value || today); setSlot(null); }} />
                         </div>
                     </div>
 

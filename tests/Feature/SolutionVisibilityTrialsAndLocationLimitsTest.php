@@ -391,9 +391,12 @@ class SolutionVisibilityTrialsAndLocationLimitsTest extends TestCase
 
     private const LOCATION_MODULES = ['dashboard', 'locations'];
 
-    private function sede(string $name): array
+    /** The form of a location: a sede always offers at least one service, so the Workspace gets one when it has none. */
+    private function sede(string $name, Workspace $workspace): array
     {
-        return ['name' => $name, 'address' => 'Calle 1', 'city' => 'Bogotá'];
+        $service = $workspace->services()->first() ?? $workspace->services()->create(['name' => 'Servicio', 'duration_minutes' => 30, 'buffer_minutes' => 0]);
+
+        return ['name' => $name, 'address' => 'Calle 1', 'city' => 'Bogotá', 'service_ids' => [$service->id]];
     }
 
     public function test_the_location_limit_comes_from_the_plan_and_blocks_new_active_locations_only_at_the_maximum(): void
@@ -402,21 +405,21 @@ class SolutionVisibilityTrialsAndLocationLimitsTest extends TestCase
         PlanLimit::create(['plan_id' => $workspace->plan_id, 'metric' => 'locations', 'value' => 2]);
         $this->actAsMember($workspace, 'admin');
 
-        $this->post('/locations', $this->sede('Norte'))->assertSessionHasNoErrors();
-        $this->post('/locations', $this->sede('Sur'))->assertSessionHasNoErrors();
-        $this->post('/locations', $this->sede('Centro'))->assertSessionHasErrors('name');
+        $this->post('/locations', $this->sede('Norte', $workspace))->assertSessionHasNoErrors();
+        $this->post('/locations', $this->sede('Sur', $workspace))->assertSessionHasNoErrors();
+        $this->post('/locations', $this->sede('Centro', $workspace))->assertSessionHasErrors('name');
         $this->assertSame(2, Location::where('workspace_id', $workspace->id)->count());
         $this->assertTrue(AuditLog::where('workspace_id', $workspace->id)->where('resource_type', 'location')->where('outcome', 'failed')->exists());
 
         // Existing ones stay editable and the page still opens.
         $norte = Location::where('name', 'Norte')->firstOrFail();
-        $this->put("/locations/{$norte->id}", $this->sede('Norte renombrada'))->assertSessionHasNoErrors();
+        $this->put("/locations/{$norte->id}", $this->sede('Norte renombrada', $workspace))->assertSessionHasNoErrors();
         $this->get('/locations')->assertOk();
 
         // Deactivating frees a slot; reactivating past the maximum is refused.
         $sur = Location::where('name', 'Sur')->firstOrFail();
         $this->post("/locations/{$sur->id}/deactivate")->assertSessionHasNoErrors();
-        $this->post('/locations', $this->sede('Centro'))->assertSessionHasNoErrors();
+        $this->post('/locations', $this->sede('Centro', $workspace))->assertSessionHasNoErrors();
         $this->post("/locations/{$sur->id}/activate")->assertSessionHasErrors('name');
         $this->assertFalse($sur->fresh()->is_active);
         $this->assertSame(2, Location::where('workspace_id', $workspace->id)->where('is_active', true)->count());
@@ -428,7 +431,7 @@ class SolutionVisibilityTrialsAndLocationLimitsTest extends TestCase
         $this->actAsMember($workspace, 'admin');
 
         foreach (['A', 'B', 'C', 'D'] as $n) {
-            $this->post('/locations', $this->sede("Sede {$n}"))->assertSessionHasNoErrors();
+            $this->post('/locations', $this->sede("Sede {$n}", $workspace))->assertSessionHasNoErrors();
         }
 
         $effective = app(WorkspaceLimits::class)->effective($workspace->fresh(), 'locations');
@@ -446,13 +449,13 @@ class SolutionVisibilityTrialsAndLocationLimitsTest extends TestCase
         // Frozen: the contract says 1 while the plan now says 5.
         Subscription::create(['workspace_id' => $a->id, 'plan_id' => $a->plan_id, 'status' => Subscription::ACTIVE, 'payment_status' => 'confirmed', 'payment_reference' => 'TX-S', 'activated_at' => now(), 'terms' => ['version' => 1, 'source' => 'signup', 'plan' => ['id' => $a->plan_id, 'name' => 'x'], 'solution' => null, 'price' => null, 'modules' => ['dashboard', 'locations'], 'limits' => ['users' => null, 'locations' => 1, 'ai_executions' => null]], 'terms_source' => 'signup', 'terms_captured_at' => now()]);
         $this->actAsMember($a, 'admin');
-        $this->post('/locations', $this->sede('Una'))->assertSessionHasNoErrors();
-        $this->post('/locations', $this->sede('Dos'))->assertSessionHasErrors('name');
+        $this->post('/locations', $this->sede('Una', $a))->assertSessionHasNoErrors();
+        $this->post('/locations', $this->sede('Dos', $a))->assertSessionHasErrors('name');
         $this->assertSame([1, 'contract'], [$limits->effective($a->fresh(), 'locations')['value'], $limits->effective($a->fresh(), 'locations')['source']]);
 
         // An authorized exception for THIS Workspace.
         $limits->setOverride($a, 'locations', 3, 'Piloto con tres sedes', null);
-        $this->post('/locations', $this->sede('Dos'))->assertSessionHasNoErrors();
+        $this->post('/locations', $this->sede('Dos', $a))->assertSessionHasNoErrors();
 
         // Another Workspace's locations are not counted here, nor here the other's.
         $b->locations()->create(['name' => 'Ajena', 'address' => 'x', 'city' => 'y', 'is_active' => true]);
