@@ -50,7 +50,7 @@ seed: ## Run the seeders
 # The containers carry the dev environment (pgsql/redis). Tests must never touch it: RefreshDatabase would wipe
 # the dev database. Real environment variables beat phpunit.xml, so the testing values are forced here.
 TEST_ENV = -e APP_ENV=testing -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: -e CACHE_STORE=array \
-           -e SESSION_DRIVER=array -e QUEUE_CONNECTION=sync -e BROADCAST_CONNECTION=null
+           -e SESSION_DRIVER=array -e QUEUE_CONNECTION=sync -e BROADCAST_CONNECTION=null -e FILESYSTEM_DISK=local
 
 test: ## Run the test suite (isolated: sqlite in memory, never the dev database)
 	$(COMPOSE) exec $(TEST_ENV) app php artisan test

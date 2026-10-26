@@ -47,6 +47,7 @@ class HandleInertiaRequests extends Middleware
             ],
             // The visible brand (config/branding.php): ONE source for every title, header and email; the legal name and internal identifiers are not part of it.
             'brand' => fn () => (string) config('branding.name'),
+            'brandShort' => fn () => (string) config('branding.short'),
             // One-shot messages the UI shows as toasts.
             'flash' => fn () => [
                 'success' => $request->session()->get('success'),

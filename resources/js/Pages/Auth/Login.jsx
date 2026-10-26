@@ -31,19 +31,23 @@ export default function Login({ workspace, rememberedEmail, status }) {
     const [showPassword, setShowPassword] = useState(false);
 
     const emailTyped = data.email.trim() !== '';
-    const emailMessage = client.email || errors.email || '';
-    const passwordMessage = client.password || errors.password || '';
+    const emailFormatOk = isEmail(data.email.trim());
+    // The server answers every failed sign-in with ONE generic message (it never says whether the account exists, so the form can not either). When the e-mail
+    // is well formed the message belongs under the password, which is the field the person re-types; the e-mail only turns red when its FORMAT is wrong.
+    const serverMessage = errors.email || errors.password || '';
+    const emailMessage = client.email || (serverMessage && !emailFormatOk ? serverMessage : '');
+    const passwordMessage = client.password || (serverMessage && emailFormatOk ? serverMessage : '');
 
     const onEmail = (e) => {
         const value = e.target.value;
         setData('email', value);
-        clearErrors('email');
+        clearErrors('email', 'password');
         setClient((c) => ({ ...c, email: value.trim() !== '' && !isEmail(value.trim()) ? EMAIL_INVALID : '' }));
     };
 
     const onPassword = (e) => {
         setData('password', e.target.value);
-        clearErrors('password');
+        clearErrors('email', 'password');
         setClient((c) => ({ ...c, password: '' }));
     };
 

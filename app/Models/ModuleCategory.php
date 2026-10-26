@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\Audited;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Schema;
 
@@ -49,10 +50,10 @@ class ModuleCategory extends Model
         return $this->hasMany(Module::class);
     }
 
-    /** The plans sold under this solution (`plans.module_category_id`). */
-    public function plans(): HasMany
+    /** The plans sold under this solution (table `module_category_plan`). */
+    public function plans(): BelongsToMany
     {
-        return $this->hasMany(Plan::class);
+        return $this->belongsToMany(Plan::class, 'module_category_plan')->withTimestamps();
     }
 
     public function auditResource(): string

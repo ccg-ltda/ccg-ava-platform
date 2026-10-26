@@ -6,7 +6,7 @@
  */
 return [
     'intro' => [
-        'Este aviso explica qué datos personales trata la plataforma CCG Avachat (Ava Platform) sobre las personas que tienen una cuenta, para qué los usa y cómo puedes ejercer tus derechos. Responsable del tratamiento de los datos de las cuentas: {{legal_name}}, identificación {{tax_id}}, domicilio {{address}}.',
+        'Este aviso explica qué datos personales trata la plataforma Zonno Platform by CCG sobre las personas que tienen una cuenta, para qué los usa y cómo puedes ejercer tus derechos. Responsable del tratamiento de los datos de las cuentas: {{legal_name}}, identificación {{tax_id}}, domicilio {{address}}.',
         'Vigencia de esta versión: {{effective_date}}.',
     ],
     'sections' => [

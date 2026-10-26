@@ -6,7 +6,7 @@
  */
 return [
     'intro' => [
-        'Esta política describe cómo {{legal_name}} (identificación {{tax_id}}, domicilio {{address}}) trata los datos personales en la plataforma CCG Avachat (Ava Platform). Normativa aplicable: {{jurisdiction}}.',
+        'Esta política describe cómo {{legal_name}} (identificación {{tax_id}}, domicilio {{address}}) trata los datos personales en la plataforma Zonno Platform by CCG. Normativa aplicable: {{jurisdiction}}.',
         'Vigencia de esta versión: {{effective_date}}.',
     ],
     'sections' => [

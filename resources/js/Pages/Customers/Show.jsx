@@ -63,7 +63,7 @@ export default function Show({ customer, conversations, appointments, campaigns,
                     <dl className="mt-4 grid gap-4 sm:grid-cols-2">
                         <Fact label="Teléfono">{customer.phone}</Fact>
                         <Fact label="Correo">{customer.email}</Fact>
-                        <Fact label="Canal preferido">{options.channels[customer.preferredChannel]}</Fact>
+                        <Fact label="Canal preferido">{customer.preferredChannel ? options.preferences[customer.preferredChannel] : customer.legacyPreferredChannel ? `Sin preferencia (valor anterior: ${customer.legacyPreferredChannel})` : null}</Fact>
                         <Fact label="Alta">{formatDateTime(customer.createdAt)}</Fact>
                         <Fact label="Canales e identificadores">
                             {customer.identities.length > 0 && (

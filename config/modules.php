@@ -28,7 +28,7 @@ return [
 
     'default_plan_name' => 'Plataforma completa',
 
-    'default_plan_description' => 'Todos los módulos compartidos de Ava Platform. Plan inicial de compatibilidad para los Workspaces existentes.',
+    'default_plan_description' => 'Todos los módulos compartidos de Zonno Platform. Plan inicial de compatibilidad para los Workspaces existentes.',
 
     /*
      * Conceptual groups of Ava Platform. They organize the catalog, the plan builder and the menu; they are NOT separate code, tables or
@@ -112,7 +112,7 @@ return [
 
     'categories' => [
         // `solution => false`: a group of shared capabilities, not a commercial solution (it can not be chosen as the solution of a plan in the public sign-up). Default true.
-        'shared' => ['name' => 'Módulos compartidos', 'description' => 'Funciones comunes a todas las soluciones de Ava Platform.', 'solution' => false, 'sort' => 10],
+        'shared' => ['name' => 'Módulos compartidos', 'description' => 'Funciones comunes a todas las soluciones de Zonno Platform.', 'solution' => false, 'sort' => 10],
         'health' => ['name' => 'Salud', 'description' => 'Área para módulos de salud.', 'group' => 'solutions', 'sort' => 20],
         'delivery' => ['name' => 'Delivery', 'description' => 'Área para módulos de delivery.', 'group' => 'solutions', 'sort' => 30],
         'ecommerce' => ['name' => 'eCommerce', 'description' => 'Área para módulos de comercio electrónico.', 'group' => 'solutions', 'sort' => 40],

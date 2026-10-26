@@ -415,6 +415,7 @@ class SignupService
                 $locked->price_cents !== null ? ['amount_cents' => $locked->price_cents, 'currency' => (string) $locked->currency, 'period' => (string) $locked->billing_period] : null,
                 is_array($locked->modules_snapshot) ? $locked->modules_snapshot : null,
                 $locked->limits_snapshot ?? [], // none recorded = none claimed: nothing is attributed from today's plan
+                ctype_digit((string) $locked->solution_key) ? (int) $locked->solution_key : null,
             );
             $subscription = Subscription::where('workspace_id', $workspace->id)->first() ?? $this->subscriptions->registerNewCustomer($workspace, $plan, $terms);
             $this->subscriptions->confirmPayment($subscription, (string) $locked->payment_reference);

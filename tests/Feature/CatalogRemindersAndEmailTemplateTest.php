@@ -542,7 +542,7 @@ class CatalogRemindersAndEmailTemplateTest extends TestCase
         EmailTemplate::create(['key' => 'global', 'html' => $this->custom('MARCA-GLOBAL')]);
 
         $code = new SignupCodeMail('482913', 15);
-        $this->assertSame('Tu código de verificación de Ava Platform', $code->envelope()->subject);
+        $this->assertSame('Tu código de verificación de Zonno Platform by CCG', $code->envelope()->subject);
         $html = $code->render();
         $this->assertStringContainsString('MARCA-GLOBAL', $html);
         $this->assertStringContainsString('482913', $html);

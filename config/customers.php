@@ -26,6 +26,18 @@ return [
     /* Channels a customer can be identified on (keys of config/chatbots.php `channels`). */
     'identity_channels' => ['whatsapp', 'web', 'instagram', 'messenger'],
 
+    /*
+     * How the customer prefers to be contacted (NOT the channel a conversation came from: that is `identity_channels`). Optional; the key is what is stored.
+     * `legacy_preferences` are the values this field held before (a conversation channel): they are no longer offered and are shown as «Sin preferencia».
+     */
+    'contact_preferences' => [
+        'whatsapp' => 'WhatsApp',
+        'sms' => 'SMS',
+        'call' => 'Llamada telefónica',
+        'email' => 'Correo electrónico',
+    ],
+    'legacy_preferences' => ['web' => 'Web', 'instagram' => 'Instagram', 'messenger' => 'Messenger'],
+
     'max_tags' => 10,
 
     /*

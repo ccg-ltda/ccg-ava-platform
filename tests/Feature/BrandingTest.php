@@ -11,10 +11,12 @@ class BrandingTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_the_default_brand_is_the_one_the_platform_already_showed(): void
+    public function test_the_default_brand_is_zonno_platform_by_ccg_with_a_compact_form(): void
     {
-        $this->assertSame('Ava Platform', config('branding.name'));
-        $this->get('/pre-login')->assertOk()->assertInertia(fn ($page) => $page->where('brand', 'Ava Platform'));
+        $this->assertSame(['Zonno Platform by CCG', 'Zonno by CCG'], [config('branding.name'), config('branding.short')]);
+        $this->get('/pre-login')->assertOk()
+            ->assertInertia(fn ($page) => $page->where('brand', 'Zonno Platform by CCG')->where('brandShort', 'Zonno by CCG'))
+            ->assertSee('<title inertia>Zonno Platform by CCG</title>', false);
     }
 
     public function test_zonno_by_ccg_is_a_configuration_value_that_reaches_the_page_the_props_and_the_emails(): void

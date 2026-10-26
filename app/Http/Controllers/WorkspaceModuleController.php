@@ -38,8 +38,8 @@ class WorkspaceModuleController extends Controller
                 ->orderByDesc('id')->limit(15)->get(['description', 'user_name', 'actor', 'outcome', 'changes', 'created_at'])
                 ->map(fn (AuditLog $log) => ['text' => $log->description, 'who' => $log->actor === 'system' ? 'Automático' : $log->user_name, 'outcome' => $log->outcome, 'at' => $log->created_at->toIso8601String(), 'changes' => $log->changes])->all(),
             // The plans that can be assigned (active ones); only offered to who may assign. The route enforces the permission again.
-            'plans' => ! EnsurePlatformAdministration::allows($request, 'assign-plans') ? [] : Plan::with('solution:id,name')->where('is_active', true)->orderBy('name')->get()
-                ->map(fn (Plan $plan) => ['value' => $plan->id, 'label' => $plan->name.($plan->solution ? " · {$plan->solution->name}" : '')])->all(),
+            'plans' => ! EnsurePlatformAdministration::allows($request, 'assign-plans') ? [] : Plan::when(Plan::solutionsReady(), fn ($query) => $query->with('solutions:module_categories.id,module_categories.name'))->where('is_active', true)->orderBy('name')->get()
+                ->map(fn (Plan $plan) => ['value' => $plan->id, 'label' => $plan->name.($plan->solutionList()->isNotEmpty() ? ' · '.$plan->solutionList()->pluck('name')->implode(', ') : '')])->all(),
         ]);
     }
 

@@ -10,6 +10,7 @@ use App\Http\Controllers\ChatbotController;
 use App\Http\Controllers\ConversationActionController;
 use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\CustomerTagController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DemoConversationController;
 use App\Http\Controllers\EmailTemplateController;
@@ -40,6 +41,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserLocationScopeController;
 use App\Http\Controllers\WorkspaceController;
 use App\Http\Controllers\WorkspaceEmptyController;
+use App\Http\Controllers\WorkspaceInvitationController;
 use App\Http\Controllers\WorkspaceLimitController;
 use App\Http\Controllers\WorkspaceLogoController;
 use App\Http\Controllers\WorkspaceMemberController;
@@ -259,6 +261,14 @@ Route::middleware(['auth', 'workspace'])->group(function () {
     // anonymize each have their own permission.
     Route::middleware(['workspace.module:customers', 'workspace.permission:view-customers'])->prefix('customers')->name('customers.')->group(function () {
         Route::get('/', [CustomerController::class, 'index'])->name('index');
+        // Tags (tab «Etiquetas»): the Workspace catalog. Creating needs create or edit customers; renaming, switching off and deleting an unused one, edit customers.
+        Route::prefix('tags')->name('tags.')->group(function () {
+            Route::post('/', [CustomerTagController::class, 'store'])->middleware(['workspace.permission:create-customers,edit-customers', 'throttle:60,1'])->name('store');
+            Route::put('/{tag}', [CustomerTagController::class, 'update'])->whereNumber('tag')->middleware('workspace.permission:edit-customers')->name('update');
+            Route::post('/{tag}/activate', [CustomerTagController::class, 'activate'])->whereNumber('tag')->middleware('workspace.permission:edit-customers')->name('activate');
+            Route::post('/{tag}/deactivate', [CustomerTagController::class, 'deactivate'])->whereNumber('tag')->middleware('workspace.permission:edit-customers')->name('deactivate');
+            Route::delete('/{tag}', [CustomerTagController::class, 'destroy'])->whereNumber('tag')->middleware('workspace.permission:edit-customers')->name('destroy');
+        });
         Route::get('/{customer}', [CustomerController::class, 'show'])->whereNumber('customer')->middleware('workspace.permission:view-customer-details')->name('show');
         Route::post('/', [CustomerController::class, 'store'])->middleware(['workspace.permission:create-customers', 'throttle:60,1'])->name('store');
         Route::put('/{customer}', [CustomerController::class, 'update'])->whereNumber('customer')->middleware('workspace.permission:edit-customers')->name('update');
@@ -323,6 +333,12 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         Route::post('/organizations/{organization}/activate', [OrganizationController::class, 'activate'])->middleware('can:manage-workspaces')->name('organizations.activate');
         Route::post('/workspaces/{workspace}/members', [WorkspaceMemberController::class, 'store'])->middleware(['can:manage-workspaces', 'workspace.permission:assign-roles'])->name('workspaces.members.store');
         Route::get('/workspaces/{workspace}/eligible-users', [WorkspaceMemberController::class, 'eligible'])->middleware(['can:manage-workspaces', 'workspace.permission:assign-roles', 'throttle:60,1'])->name('workspaces.members.eligible');
+        // Invitations (a new person for a customer Workspace): only the platform administration inside Desarrollo_DEV, and it needs to create users AND hand out the role.
+        Route::middleware(['can:manage-workspaces', 'workspace.permission:create-users', 'workspace.permission:assign-roles'])->prefix('/workspaces/{workspace}/invitations')->whereNumber('workspace')->name('workspaces.invitations.')->group(function () {
+            Route::post('/', [WorkspaceInvitationController::class, 'store'])->middleware('throttle:30,1')->name('store');
+            Route::post('/{invitation}/resend', [WorkspaceInvitationController::class, 'resend'])->whereNumber('invitation')->middleware('throttle:30,1')->name('resend');
+            Route::delete('/{invitation}', [WorkspaceInvitationController::class, 'destroy'])->whereNumber('invitation')->name('destroy');
+        });
         Route::put('/workspaces/{workspace}/members/{user}', [WorkspaceMemberController::class, 'update'])->middleware('workspace.permission:assign-roles')->name('workspaces.members.update');
         Route::delete('/workspaces/{workspace}/members/{user}', [WorkspaceMemberController::class, 'destroy'])->middleware('workspace.permission:assign-roles')->name('workspaces.members.destroy');
     });

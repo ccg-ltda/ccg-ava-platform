@@ -18,7 +18,7 @@ use Illuminate\Validation\ValidationException;
  */
 class CustomerRegistry
 {
-    public function __construct(private readonly AuditLogger $audit) {}
+    public function __construct(private readonly AuditLogger $audit, private readonly CustomerTagCatalog $tags) {}
 
     /**
      * @param  array<string, mixed>  $data  columns of the customer
@@ -61,8 +61,7 @@ class CustomerRegistry
 
             $customer->identities()->delete();
             $customer->identities()->createMany(array_map(fn (array $identity) => $identity + ['workspace_id' => $workspace->id], $identities));
-            $customer->tags()->delete();
-            $customer->tags()->createMany(array_map(fn (string $tag) => ['workspace_id' => $workspace->id, 'tag' => $tag], $tags));
+            $this->syncTags($workspace, $customer, $tags);
 
             $after = $this->describe($customer->refresh());
 
@@ -78,6 +77,33 @@ class CustomerRegistry
 
             return $customer;
         });
+    }
+
+    /**
+     * Gives the customer exactly these tags, taken from the Workspace catalog (a new name is added to it, once, whatever its spelling). A tag the customer already
+     * has stays even if it was deactivated; a deactivated tag cannot be given to someone else. Without the catalog tables the tags are plain text, as before.
+     *
+     * @param  list<string>  $names
+     */
+    private function syncTags(Workspace $workspace, Customer $customer, array $names): void
+    {
+        $names = collect($names)->map(fn (string $name) => CustomerTagCatalog::clean($name))->filter()->unique(fn (string $name) => CustomerTagCatalog::normalize($name))->values()->all();
+
+        if (! $this->tags->ready()) {
+            $customer->tags()->delete();
+            $customer->tags()->createMany(array_map(fn (string $tag) => ['workspace_id' => $workspace->id, 'tag' => mb_strtolower($tag)], $names));
+
+            return;
+        }
+
+        [$definitions, $created] = $this->tags->resolve($workspace, $names, $customer->tags()->whereNotNull('tag_id')->pluck('tag_id')->all());
+
+        $customer->tags()->delete();
+        $customer->tags()->createMany($definitions->map(fn ($tag) => ['workspace_id' => $workspace->id, 'tag_id' => $tag->id, 'tag' => $tag->name])->all());
+
+        foreach ($created as $tag) {
+            $this->audit->record('created', 'customer_tag', $tag->id, $tag->name, [AuditLogger::change('Nombre', null, $tag->name)], $workspace);
+        }
     }
 
     public function setActive(Customer $customer, bool $active): void

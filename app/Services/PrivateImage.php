@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -18,6 +19,11 @@ class PrivateImage
 {
     public static function response(?string $path, Request $request): Response|StreamedResponse
     {
+        if ($path && ! Storage::exists($path)) {
+            // A stored reference whose file is gone: the path is logged (never its content) so the loss can be traced instead of guessed.
+            Log::warning('private_image_missing', ['path' => $path, 'disk' => config('filesystems.default')]);
+        }
+
         abort_unless($path && Storage::exists($path), 404);
 
         $headers = [

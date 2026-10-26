@@ -28,7 +28,7 @@ class SignupCatalog
      */
     public function ready(): bool
     {
-        return $this->ready ??= Schema::hasTable('signup_requests') && Schema::hasTable('signup_verifications') && Schema::hasColumn('plans', 'is_public') && Schema::hasColumn('plans', 'price_monthly_cents');
+        return $this->ready ??= Schema::hasTable('signup_requests') && Schema::hasTable('signup_verifications') && Schema::hasColumn('plans', 'is_public') && Schema::hasColumn('plans', 'price_monthly_cents') && Plan::solutionsReady();
     }
 
     /** @return Collection<int, Plan> every plan the public sign-up may show */
@@ -39,7 +39,7 @@ class SignupCatalog
         }
 
         return Plan::query()->where('is_active', true)->where('is_public', true)
-            ->with(['modules' => fn ($q) => $q->where('modules.is_active', true)->orderBy('modules.name'), 'solution'])
+            ->with(['modules' => fn ($q) => $q->where('modules.is_active', true)->orderBy('modules.name'), 'solutions'])
             ->get()
             ->filter(fn (Plan $plan) => $plan->isOffered())
             // Cheapest first, comparing every plan by its monthly cost (a yearly total over 12 when there is no monthly price); a quote has no price and goes last.
@@ -56,25 +56,39 @@ class SignupCatalog
     /** @return list<array<string, mixed>> */
     public function solutions(): array
     {
-        $solutions = $this->offered()->groupBy(fn (Plan $plan) => $plan->module_category_id ?? self::CUSTOM);
+        // A plan is listed once under EACH solution it is offered under (a solution that can not be offered shows none of its plans).
+        $solutions = $this->offered()->flatMap(fn (Plan $plan) => $plan->solutions->isEmpty() ? [[self::CUSTOM, $plan]] : $plan->offeredSolutions()->map(fn (ModuleCategory $solution) => [$solution->id, $plan])->all())
+            ->groupBy(fn (array $pair) => $pair[0]);
 
-        return $solutions->map(function (Collection $plans, string|int $key) {
-            /** @var Plan $first */
-            $first = $plans->first();
+        return $solutions->map(function (Collection $pairs, string|int $key) {
+            $plans = $pairs->map(fn (array $pair) => $pair[1])->unique('id');
             $custom = $key === self::CUSTOM;
+            $solution = $custom ? null : $plans->first()->solutions->firstWhere('id', (int) $key);
             $modules = $plans->flatMap(fn (Plan $plan) => $plan->modules->pluck('name'))->unique()->values();
 
             return [
-                'key' => $custom ? self::CUSTOM : (string) $first->module_category_id,
-                'name' => $custom ? 'Personalizado' : $first->solution->name,
-                'description' => $custom ? 'Una solución a la medida de tu empresa, con un asesor de CCG.' : $first->solution->description,
+                'key' => $custom ? self::CUSTOM : (string) $key,
+                'name' => $custom ? 'Personalizado' : $solution->name,
+                'description' => $custom ? 'Una solución a la medida de tu empresa, con un asesor de CCG.' : $solution->description,
                 'custom' => $custom,
                 'plansCount' => $plans->count(),
                 'modulesCount' => $modules->count(),
                 'modulesSummary' => $modules->take(4)->all(),
-                'sort' => $custom ? PHP_INT_MAX : (int) $first->solution->sort_order,
+                'sort' => $custom ? PHP_INT_MAX : (int) $solution->sort_order,
             ];
         })->sortBy('sort')->map(fn (array $solution) => array_diff_key($solution, ['sort' => 1]))->values()->all();
+    }
+
+    /** The name of an offered solution by its key, or null (a stale or tampered key). */
+    public function solutionName(string $key): ?string
+    {
+        return $this->solution($key)['name'] ?? null;
+    }
+
+    /** Whether the plan is shown under the solution (or is a custom plan, for «Personalizado»): ONE rule for listing, choosing and verifying a plan. */
+    private function inSolution(Plan $plan, string $solutionKey): bool
+    {
+        return $solutionKey === self::CUSTOM ? $plan->solutions->isEmpty() : $plan->offeredSolutions()->contains(fn (ModuleCategory $solution) => (string) $solution->id === $solutionKey);
     }
 
     /** The solution as the wizard knows it, or null when it is not offered (a stale or tampered key). */
@@ -87,15 +101,14 @@ class SignupCatalog
     public function plans(string $solutionKey): array
     {
         return $this->offered()
-            ->filter(fn (Plan $plan) => $solutionKey === self::CUSTOM ? $plan->module_category_id === null : (string) $plan->module_category_id === $solutionKey)
+            ->filter(fn (Plan $plan) => $this->inSolution($plan, $solutionKey))
             ->map(fn (Plan $plan) => $this->plan($plan))->values()->all();
     }
 
     /** The plan offered under this solution, or null: the server re-checks it on every step, it never trusts the browser. */
     public function offeredPlan(string $solutionKey, int $planId): ?Plan
     {
-        return $this->offered()->first(fn (Plan $plan) => $plan->id === $planId
-            && ($solutionKey === self::CUSTOM ? $plan->module_category_id === null : (string) $plan->module_category_id === $solutionKey));
+        return $this->offered()->first(fn (Plan $plan) => $plan->id === $planId && $this->inSolution($plan, $solutionKey));
     }
 
     /** @return array<string, mixed> */

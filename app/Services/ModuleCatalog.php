@@ -151,22 +151,64 @@ class ModuleCatalog
      * @param  array{name: string, description?: ?string}  $data
      * @param  list<int>  $moduleIds
      */
-    public function createPlan(array $data, array $moduleIds = [], array $commercial = []): Plan
+    public function createPlan(array $data, array $moduleIds = [], array $commercial = [], ?array $solutionIds = null): Plan
     {
-        return DB::transaction(function () use ($data, $moduleIds, $commercial) {
+        return DB::transaction(function () use ($data, $moduleIds, $commercial, $solutionIds) {
             $plan = Plan::create(['name' => $data['name'], 'description' => $data['description'] ?? null] + $commercial);
             $this->syncModules($plan, $moduleIds);
+
+            if ($solutionIds !== null) {
+                $this->syncSolutions($plan, $solutionIds);
+            }
 
             return $plan;
         });
     }
 
     /** @param  array{name: string, description?: ?string}  $data */
-    public function updatePlan(Plan $plan, array $data, array $commercial = []): Plan
+    public function updatePlan(Plan $plan, array $data, array $commercial = [], ?array $solutionIds = null): Plan
     {
         $plan->update(['name' => $data['name'], 'description' => $data['description'] ?? null] + $commercial);
 
+        if ($solutionIds !== null) {
+            $this->syncSolutions($plan, $solutionIds);
+        }
+
         return $plan;
+    }
+
+    /**
+     * Replaces the solutions a plan is offered under (empty = a custom plan). It only changes the COMMERCIAL offer: no subscription, Workspace, module or
+     * override is touched, so removing a solution from a plan never changes what a contracted Workspace can use (its terms are frozen and its modules come from
+     * its plan and subscription). Audited as one event with the names before and after. The first solution is also kept in `plans.module_category_id` (the
+     * primary solution) so the previous release can read the plan after a rollback.
+     *
+     * @param  list<int>  $solutionIds
+     */
+    public function syncSolutions(Plan $plan, array $solutionIds): void
+    {
+        $solutionIds = array_values(array_unique(array_map('intval', $solutionIds)));
+        $before = $plan->solutions()->pluck('module_categories.id')->map(fn ($id) => (int) $id)->all();
+
+        if ($before === [] && $solutionIds === []) {
+            return;
+        }
+
+        $invalid = ModuleCategory::whereIn('id', array_diff($solutionIds, $before))->get()->filter(fn (ModuleCategory $category) => ! $category->is_active || ! $category->isSolution());
+
+        if ($invalid->isNotEmpty()) {
+            throw ValidationException::withMessages(['solution_ids' => 'Solo se pueden añadir soluciones comerciales activas: '.$invalid->pluck('name')->implode(', ').'.']);
+        }
+
+        $plan->solutions()->sync($solutionIds);
+        $plan->unsetRelation('solutions');
+        $primary = $solutionIds === [] ? null : (in_array($plan->module_category_id, $solutionIds, true) ? $plan->module_category_id : $plan->solutions()->orderBy('module_category_plan.id')->value('module_categories.id'));
+        $plan->forceFill(['module_category_id' => $primary])->saveQuietly();
+
+        if (collect($before)->sort()->values()->all() !== collect($solutionIds)->sort()->values()->all()) {
+            $names = fn (array $ids) => ModuleCategory::whereIn('id', $ids)->orderBy('name')->pluck('name')->implode(', ') ?: null;
+            $this->audit->record('updated', 'plan', $plan->id, $plan->name, [AuditLogger::change('Soluciones', $names($before), $names($solutionIds))]);
+        }
     }
 
     /** A plan with Workspaces cannot be switched off (they would lose every module), and neither can the default plan. */
@@ -261,7 +303,7 @@ class ModuleCatalog
 
         return [
             'plan' => $plan ? [
-                'id' => $plan->id, 'name' => $plan->name, 'solution' => Plan::commercialReady() ? $plan->solution?->name : null, 'explicit' => $workspace->plan_id !== null,
+                'id' => $plan->id, 'name' => $plan->name, 'solution' => Plan::commercialReady() ? $plan->solutionList()->pluck('name')->implode(', ') ?: null : null, 'explicit' => $workspace->plan_id !== null,
                 // What the plan offers TODAY (only for new contracts); the contract of this Workspace is `subscription.terms`.
                 'offer' => Plan::commercialReady() && ($plan->price_monthly_cents || $plan->price_yearly_cents) ? [
                     'currency' => $plan->currency, 'priceMonthly' => $plan->price_monthly_cents !== null ? $plan->price_monthly_cents / 100 : null, 'priceYearly' => $plan->price_yearly_cents !== null ? $plan->price_yearly_cents / 100 : null,
@@ -370,20 +412,43 @@ class ModuleCatalog
      */
     public function solutionOf(Workspace $workspace): ?int
     {
-        $planSolution = $workspace->plan_id ? Plan::whereKey($workspace->plan_id)->value('module_category_id') : null;
+        if (! Plan::solutionsReady()) {
+            $legacy = $workspace->plan_id ? Plan::whereKey($workspace->plan_id)->value('module_category_id') : null;
 
-        if ($planSolution !== null) {
-            return (int) $planSolution;
+            return $legacy !== null ? (int) $legacy : null;
+        }
+
+        $plan = $workspace->plan_id ? Plan::with('solutions')->find($workspace->plan_id) : null;
+
+        if ($plan !== null && $plan->solutions->isNotEmpty()) {
+            return $this->contractedSolution($workspace, $plan);
         }
 
         if (! Subscription::termsReady()) {
             return null;
         }
 
-        $scheduled = Subscription::where('workspace_id', $workspace->id)->where('status', Subscription::SCHEDULED)->value('plan_id');
-        $reserved = $scheduled ? Plan::whereKey($scheduled)->value('module_category_id') : null;
+        $scheduled = Subscription::where('workspace_id', $workspace->id)->where('status', Subscription::SCHEDULED)->first();
+        $reserved = $scheduled ? Plan::with('solutions')->find($scheduled->plan_id) : null;
 
-        return $reserved !== null ? (int) $reserved : null;
+        return $reserved !== null && $reserved->solutions->isNotEmpty() ? $this->contractedSolution($workspace, $reserved, $scheduled) : null;
+    }
+
+    /**
+     * The solution of a plan with solutions for ONE Workspace: the one frozen in its contract (the customer chose it), or the only one the plan has. A plan
+     * offered under several solutions and a Workspace whose contract does not say which one it chose fix nothing (null): it is never guessed.
+     */
+    private function contractedSolution(Workspace $workspace, Plan $plan, ?Subscription $subscription = null): ?int
+    {
+        $ids = $plan->solutionIds();
+        $subscription ??= Subscription::termsReady() ? Subscription::where('workspace_id', $workspace->id)->latest('id')->first() : null;
+        $frozen = $subscription?->terms['solution']['id'] ?? null;
+
+        if ($frozen !== null && in_array((int) $frozen, $ids, true)) {
+            return (int) $frozen;
+        }
+
+        return count($ids) === 1 ? $ids[0] : null;
     }
 
     /**
@@ -394,7 +459,7 @@ class ModuleCatalog
     {
         $current = $this->solutionOf($workspace);
 
-        if ($current !== null && (int) $plan->module_category_id !== $current) {
+        if ($current !== null && ! in_array($current, $plan->solutionIds(), true)) {
             $name = ModuleCategory::whereKey($current)->value('name');
 
             throw ValidationException::withMessages(['plan_id' => "Este Workspace ya pertenece a la solución «{$name}»: solo puede recibir planes de esa solución."]);
@@ -405,7 +470,7 @@ class ModuleCatalog
     public function assertAssignable(Workspace $workspace, Plan $plan): void
     {
         if ($workspace->isAdministrative()) {
-            throw ValidationException::withMessages(['workspace_id' => 'El Workspace administrativo de Ava Platform no tiene plan: siempre dispone de todos los módulos.']);
+            throw ValidationException::withMessages(['workspace_id' => 'El Workspace administrativo de la plataforma no tiene plan: siempre dispone de todos los módulos.']);
         }
 
         if (! $plan->is_active) {
@@ -473,7 +538,7 @@ class ModuleCatalog
         $names = Module::pluck('name', 'key');
         $categoryNames = ModuleCategory::pluck('name', 'key');
 
-        $plans = Plan::commercialReady() ? Plan::query()->whereNotNull('module_category_id')->selectRaw('module_category_id, count(*) as total')->groupBy('module_category_id')->pluck('total', 'module_category_id') : collect();
+        $plans = Plan::commercialReady() && Plan::solutionsReady() ? DB::table('module_category_plan')->selectRaw('module_category_id, count(*) as total')->groupBy('module_category_id')->pluck('total', 'module_category_id') : collect();
 
         return ModuleCategory::with(['modules' => fn ($q) => $q->withCount('plans')->orderBy('name')])
             ->orderBy('sort_order')->orderBy('name')->get()

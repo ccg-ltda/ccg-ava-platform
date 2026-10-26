@@ -94,6 +94,32 @@ class ReportsOperationsTest extends TestCase
         $this->assertSame($this->admin->customers()->where('is_active', true)->where('marketing_consent', 'granted')->count(), $customers['kpis']['reachable']);
     }
 
+    public function test_the_orders_report_carries_every_field_the_orders_tab_draws_with_data_and_without_it(): void
+    {
+        // The Pedidos tab reads exactly these keys: a missing one would blank the screen, so the contract is pinned with data and with none.
+        $keys = ['kpis' => ['total', 'delivered', 'open', 'cancelled', 'sales', 'averageTicket', 'currency', 'mixedCurrencies'], 'lists' => ['byStatus', 'topProducts', 'byMethod']];
+
+        $this->actIn($this->admin);
+        $empty = $this->props('?period=30d&tab=orders')['operations']['orders'];
+        $this->assertNull($empty['error']);
+
+        app(DemoBusinessData::class)->generate($this->admin);
+        $full = $this->props('?period=30d&tab=orders')['operations']['orders'];
+
+        foreach ([$empty, $full] as $section) {
+            $this->assertNull($section['error']);
+            foreach ($keys['kpis'] as $key) {
+                $this->assertArrayHasKey($key, $section['data']['kpis'], "kpis.{$key}");
+            }
+            foreach ($keys['lists'] as $key) {
+                $this->assertIsArray($section['data'][$key], $key);
+            }
+        }
+
+        $this->assertSame(0, $empty['data']['kpis']['total']);
+        $this->assertGreaterThan(0, $full['data']['kpis']['total']);
+    }
+
     public function test_another_workspace_never_adds_to_the_figures(): void
     {
         app(DemoBusinessData::class)->generate($this->admin);

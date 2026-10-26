@@ -187,8 +187,8 @@ function OfferCard({ plan }) {
             </div>
             <dl className="mt-4 grid gap-4 sm:grid-cols-3">
                 <div>
-                    <dt className="text-xs text-ink-muted">Solución</dt>
-                    <dd className="text-sm font-semibold text-ink">{offer.solutionName ?? 'Sin solución'}</dd>
+                    <dt className="text-xs text-ink-muted">{offer.solutionNames?.length > 1 ? 'Soluciones' : 'Solución'}</dt>
+                    <dd className="text-sm font-semibold text-ink">{offer.solutionNames?.length ? offer.solutionNames.join(', ') : 'Sin solución'}</dd>
                 </div>
                 <div>
                     <dt className="text-xs text-ink-muted">Moneda</dt>
@@ -211,7 +211,7 @@ export default function Show({ can, plan, catalog, commercial, workspaces, perPa
     const edit = useForm({
         name: plan.name,
         description: plan.description ?? '',
-        module_category_id: plan.offer?.solutionId ?? null,
+        solution_ids: plan.offer?.solutionIds ?? [],
         price_monthly: plan.offer?.priceMonthly ?? '',
         price_yearly: plan.offer?.priceYearly ?? '',
         currency: plan.offer?.currency ?? null,

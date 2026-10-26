@@ -127,3 +127,15 @@ test('every list of entities is chosen with the one EntityPicker (no checkbox ca
         assert.doesNotMatch(text, /has-checked:border-primary\/50/, `${file} has no checkbox cards left`);
     }
 });
+
+test('every icon a page or component draws is imported (a missing import blanks the whole screen at render time)', () => {
+    for (const file of [...files('Pages'), ...files('Components')].filter((name) => name.endsWith('.jsx'))) {
+        const text = source(file);
+        const imported = new Set([...text.matchAll(/import\s*\{([^}]*)\}\s*from\s*'lucide-react'/g)].flatMap((match) => match[1].split(',').map((name) => name.trim().split(/\s+as\s+/).pop())));
+        const defined = new Set([...text.matchAll(/(?:const|function|import)\s+([A-Z][A-Za-z0-9]*)/g)].map((match) => match[1]));
+
+        for (const [, name] of text.matchAll(/\bicon=\{([A-Z][A-Za-z0-9]*)\}/g)) {
+            assert.ok(imported.has(name) || defined.has(name), `${file} draws <${name}> without importing it`);
+        }
+    }
+});

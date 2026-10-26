@@ -1,4 +1,5 @@
 import { Tab, TabGroup, TabList, TabPanel, TabPanels } from '@headlessui/react';
+import { Children } from 'react';
 
 /**
  * Accessible tabs of a module (keyboard arrows, aria roles) built on Headless UI.
@@ -7,7 +8,8 @@ import { Tab, TabGroup, TabList, TabPanel, TabPanels } from '@headlessui/react';
  * `tabs`: [{ id, label, icon?, count? }]; `children`: one panel per tab, in the same order.
  */
 export default function Tabs({ tabs, selectedIndex, onChange, children }) {
-    const panels = Array.isArray(children) ? children : [children];
+    // A panel of a tab the person cannot see arrives as `false`/`null` (`{allowed && <Panel />}`): it must not count as a panel, or it would outnumber the tabs.
+    const panels = Children.toArray(children);
 
     return (
         <TabGroup selectedIndex={selectedIndex} onChange={onChange}>

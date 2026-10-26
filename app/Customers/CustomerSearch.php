@@ -39,7 +39,7 @@ class CustomerSearch
             ->when(filled($filters['consent'] ?? null), fn (Builder $q) => $q->where('marketing_consent', $filters['consent']))
             ->when(($filters['status'] ?? null) === 'active', fn (Builder $q) => $q->where('is_active', true))
             ->when(($filters['status'] ?? null) === 'inactive', fn (Builder $q) => $q->where('is_active', false))
-            ->when(filled($filters['tag'] ?? null), fn (Builder $q) => $q->whereHas('tags', fn (Builder $t) => $t->where('tag', $filters['tag'])))
+            ->when(filled($filters['tag'] ?? null), fn (Builder $q) => $q->whereHas('tags', fn (Builder $t) => $t->where('tag', CustomerTagCatalog::normalize((string) $filters['tag']))))
             ->when(filled($filters['identity_channel'] ?? null), fn (Builder $q) => $q->whereHas('identities', fn (Builder $i) => $i->where('channel', $filters['identity_channel'])))
             ->when(filled($filters['created_from'] ?? null), fn (Builder $q) => $q->whereDate('created_at', '>=', $filters['created_from']))
             ->when(filled($filters['created_to'] ?? null), fn (Builder $q) => $q->whereDate('created_at', '<=', $filters['created_to']));

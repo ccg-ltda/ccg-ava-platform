@@ -54,6 +54,21 @@ class TestDatabaseGuardTest extends TestCase
         $this->addToAssertionCount(1);
     }
 
+    public function test_it_refuses_a_remote_default_disk_and_allows_a_local_one(): void
+    {
+        TestDatabaseGuard::assertSafeStorage('local');
+        TestDatabaseGuard::assertSafeStorage(null);
+
+        foreach (['s3', 'ftp', 'sftp'] as $driver) {
+            try {
+                TestDatabaseGuard::assertSafeStorage($driver);
+                $this->fail("[$driver] must be refused");
+            } catch (RuntimeException $e) {
+                $this->assertStringContainsString('remote default filesystem disk', $e->getMessage());
+            }
+        }
+    }
+
     public function test_it_refuses_the_shared_redis_for_cache_queue_or_session(): void
     {
         $this->expectException(RuntimeException::class);

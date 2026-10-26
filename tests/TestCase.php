@@ -8,6 +8,7 @@ use App\Models\Workspace;
 use App\Services\PlatformAccess;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
+use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\Support\TestDatabaseGuard;
@@ -30,6 +31,15 @@ abstract class TestCase extends BaseTestCase
             'session' => config('session.driver'),
             'broadcast' => config('broadcasting.default'),
         ]);
+        TestDatabaseGuard::assertSafeStorage(config('filesystems.disks.'.config('filesystems.default').'.driver'));
+    }
+
+    /** Every test starts with the default disk replaced by a temporary one: nothing a test stores or deletes reaches a real disk. */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Storage::fake();
     }
 
     /**

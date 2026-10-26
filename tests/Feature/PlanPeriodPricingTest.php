@@ -198,7 +198,7 @@ class PlanPeriodPricingTest extends TestCase
     public function test_the_administrator_saves_both_prices_validated_and_the_page_receives_them(): void
     {
         $this->platformAdmin();
-        $offer = ['name' => 'Starter', 'module_category_id' => $this->plan->module_category_id, 'currency' => 'COP', 'is_public' => true, 'requires_quote' => false];
+        $offer = ['name' => 'Starter', 'solution_ids' => [$this->plan->module_category_id], 'currency' => 'COP', 'is_public' => true, 'requires_quote' => false];
 
         $this->put("/plans/{$this->plan->id}", $offer + ['price_monthly' => '59900', 'price_yearly' => '599000.50'])->assertSessionHasNoErrors();
         $this->assertSame([5990000, 59900050], [$this->plan->fresh()->price_monthly_cents, $this->plan->fresh()->price_yearly_cents]);
@@ -218,7 +218,7 @@ class PlanPeriodPricingTest extends TestCase
         $offerProps = collect($this->get('/plans')->viewData('page')['props']['plans'])->firstWhere('name', 'Starter')['offer'];
         $this->assertEquals([null, 599000], [$offerProps['priceMonthly'], $offerProps['priceYearly']]);
         $this->assertSame(['yearly'], $offerProps['periods']);
-        $this->assertSame('Salud', $offerProps['solutionName']);
+        $this->assertSame(['Salud'], $offerProps['solutionNames']);
     }
 
     public function test_a_client_administrator_cannot_set_prices(): void

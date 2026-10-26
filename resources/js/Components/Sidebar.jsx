@@ -1,7 +1,7 @@
 import { Bot, Menu, X } from 'lucide-react';
 import { visibleNavigation } from '@/config/navigation';
 import useAccess from '@/Hooks/useAccess';
-import useBrand from '@/Hooks/useBrand';
+import { useBrandShort } from '@/Hooks/useBrand';
 import NavSection from './NavSection';
 import Tooltip from './Tooltip';
 
@@ -15,7 +15,7 @@ import Tooltip from './Tooltip';
  */
 export default function Sidebar({ workspace, open, onClose, collapsed = false, onToggleCollapsed }) {
     const sections = visibleNavigation(useAccess());
-    const brand = useBrand();
+    const brand = useBrandShort();
 
     return (
         <>

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Customers\CustomerRegistry;
 use App\Customers\CustomerSearch;
+use App\Customers\CustomerTagCatalog;
 use App\Http\Requests\SaveCustomerRequest;
 use App\Models\Appointment;
 use App\Models\CampaignRecipient;
@@ -26,7 +27,7 @@ class CustomerController extends Controller
 {
     private const FILTERS = ['search', 'source', 'consent', 'tag', 'status'];
 
-    public function __construct(private readonly CustomerRegistry $registry, private readonly CustomerSearch $search, private readonly ModuleAccess $modules) {}
+    public function __construct(private readonly CustomerRegistry $registry, private readonly CustomerSearch $search, private readonly ModuleAccess $modules, private readonly CustomerTagCatalog $tagCatalog) {}
 
     public function index(Request $request): Response
     {
@@ -39,6 +40,7 @@ class CustomerController extends Controller
             'filters' => $filters + ['perPage' => ListPagination::size($request, 'customers')],
             'perPageOptions' => ListPagination::OPTIONS,
             'options' => $this->options($workspace),
+            'tagAdmin' => $this->tagAdmin($request, $workspace),
             'total' => $workspace->customers()->count(),
         ]);
     }
@@ -106,7 +108,9 @@ class CustomerController extends Controller
             'email' => $customer->email,
             'source' => $customer->source,
             'consent' => $customer->marketing_consent,
-            'preferredChannel' => $customer->preferred_channel,
+            // A value from before this field meant "how to contact" (Web, Instagram, Messenger) is not a preference: it is reported apart, never shown as one.
+            'preferredChannel' => array_key_exists((string) $customer->preferred_channel, config('customers.contact_preferences')) ? $customer->preferred_channel : null,
+            'legacyPreferredChannel' => config('customers.legacy_preferences.'.$customer->preferred_channel),
             'isActive' => $customer->is_active,
             'anonymized' => $customer->isAnonymized(),
             'notes' => $customer->notes,
@@ -116,14 +120,36 @@ class CustomerController extends Controller
         ];
     }
 
+    /** The tab «Etiquetas»: every tag (active or not) with the customers that have it, the possible duplicates to review, and what this person may do. Null until the catalog exists. @return ?array<string, mixed> */
+    private function tagAdmin(Request $request, Workspace $workspace): ?array
+    {
+        if (! $this->tagCatalog->ready()) {
+            return null;
+        }
+
+        $search = trim((string) $request->query('tag_search', ''));
+        $can = fn (string $permission) => in_array($permission, $request->attributes->get('workspace_permissions', []), true);
+
+        return [
+            'search' => $search,
+            'data' => $this->tagCatalog->administration($workspace, $search)->map(fn ($tag) => ['id' => $tag->id, 'name' => $tag->name, 'isActive' => $tag->is_active, 'customers' => $tag->assignments_count])->values()->all(),
+            'possibleDuplicates' => $this->tagCatalog->possibleDuplicates($workspace),
+            'canCreate' => $can('create-customers') || $can('edit-customers'),
+            'canEdit' => $can('edit-customers'),
+        ];
+    }
+
     /** @return array<string, mixed> */
     private function options(Workspace $workspace): array
     {
         return [
             'sources' => config('customers.sources'),
             'consents' => config('customers.consents'),
+            'preferences' => config('customers.contact_preferences'),
             'channels' => collect(config('customers.identity_channels'))->mapWithKeys(fn (string $channel) => [$channel => config("chatbots.channels.{$channel}.label", ucfirst($channel))])->all(),
             'tags' => $this->search->tags($workspace),
+            // What the form offers: the active tags of the catalog (null = the catalog does not exist yet and the tags are free text).
+            'tagCatalog' => $this->tagCatalog->ready() ? $this->tagCatalog->options($workspace)->pluck('name')->values()->all() : null,
         ];
     }
 

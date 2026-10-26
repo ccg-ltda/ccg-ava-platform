@@ -224,7 +224,7 @@ class SignupController extends Controller
         return Inertia::render('Signup/Welcome', [
             'workspace' => ['name' => $workspace->name, 'code' => $workspace->code],
             'plan' => $this->catalog->plan($draft->plan()->with(['modules' => fn ($q) => $q->where('modules.is_active', true)->orderBy('modules.name')])->firstOrFail()),
-            'solution' => $draft->solution_key === SignupCatalog::CUSTOM ? 'Personalizado' : $draft->plan->solution?->name,
+            'solution' => $draft->solution_key === SignupCatalog::CUSTOM ? 'Personalizado' : ($this->catalog->solutionName($draft->solution_key) ?? $draft->plan->solutions->first()?->name),
             'email' => $draft->email,
         ]);
     }
@@ -324,7 +324,7 @@ class SignupController extends Controller
         }
 
         return $shown + [
-            'solutionName' => $draft->solution_key === SignupCatalog::CUSTOM ? 'Personalizado' : $plan->solution?->name,
+            'solutionName' => $draft->solution_key === SignupCatalog::CUSTOM ? 'Personalizado' : ($this->catalog->solutionName($draft->solution_key) ?? $plan->solutions->first()?->name),
             'snapshot' => $draft->price_cents !== null ? ['amount' => $draft->price_cents / 100, 'currency' => $draft->currency, 'period' => $draft->billing_period] : null,
         ];
     }

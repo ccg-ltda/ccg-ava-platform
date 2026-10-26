@@ -208,6 +208,11 @@ class Workspace extends Model
         return $this->getRelation('settings');
     }
 
+    public function invitations(): HasMany
+    {
+        return $this->hasMany(WorkspaceInvitation::class);
+    }
+
     public function users(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'workspace_user')->withPivot('role')->withTimestamps();

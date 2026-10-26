@@ -1,5 +1,7 @@
 import { useForm } from '@inertiajs/react';
 import { Plus, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import EntityPicker from '@/Components/EntityPicker';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import Modal from '@/Components/Modal';
@@ -8,6 +10,7 @@ import SecondaryButton from '@/Components/SecondaryButton';
 import Select from '@/Components/Select';
 import Textarea from '@/Components/Textarea';
 import TextInput from '@/Components/TextInput';
+import { MAX_TAG_LENGTH, cleanTag, normalizeTag, withTag } from '@/lib/tags';
 
 const optionsOf = (map) => Object.entries(map).map(([value, label]) => ({ value, label }));
 
@@ -43,10 +46,17 @@ export default function CustomerFormModal({ customer, options, onClose }) {
         marketing_consent: customer?.consent ?? 'unknown',
         consent_note: customer?.consentNote ?? '',
         preferred_channel: customer?.preferredChannel ?? '',
-        tags: (customer?.tags ?? []).join(', '),
+        tags: customer?.tags ?? [],
         identities: customer?.identities ?? [],
     });
     const { data, setData, errors } = form;
+    const [newTag, setNewTag] = useState('');
+    // The tags of the Workspace catalog plus the ones this customer already has (a deactivated tag stays visible and removable).
+    const tagOptions = [...new Set([...(options.tagCatalog ?? []), ...data.tags])].map((name) => ({ value: name, label: name }));
+    const addTag = () => {
+        setData('tags', withTag(data.tags, newTag));
+        setNewTag('');
+    };
 
     const setIdentity = (index, field, value) => setData('identities', data.identities.map((identity, i) => (i === index ? { ...identity, [field]: value } : identity)));
 
@@ -55,7 +65,6 @@ export default function CustomerFormModal({ customer, options, onClose }) {
         form.transform((values) => ({
             ...values,
             preferred_channel: values.preferred_channel || null,
-            tags: values.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
         }));
         const request = { preserveScroll: true, onSuccess: onClose };
 
@@ -128,14 +137,23 @@ export default function CustomerFormModal({ customer, options, onClose }) {
                                 id="customer_preferred"
                                 value={data.preferred_channel}
                                 onChange={(value) => setData('preferred_channel', value)}
-                                options={[{ value: '', label: 'Sin preferencia' }, ...optionsOf(options.channels)]}
+                                options={[{ value: '', label: 'Sin preferencia' }, ...optionsOf(options.preferences)]}
                             />
+                            {customer?.legacyPreferredChannel && <p className="mt-1 text-xs text-ink-muted">Valor anterior: {customer.legacyPreferredChannel}. Ya no es una preferencia de contacto; al guardar queda «Sin preferencia».</p>}
                         </Field>
                         <Field id="customer_consent" label="Consentimiento para mensajes comerciales" error={errors.marketing_consent}>
                             <Select id="customer_consent" value={data.marketing_consent} onChange={(value) => setData('marketing_consent', value)} options={optionsOf(options.consents)} />
                         </Field>
                         {field('consent_note', data.marketing_consent === 'granted' ? 'Cómo se obtuvo (obligatorio)' : 'Constancia (opcional)', { maxLength: 255 })}
-                        {field('tags', 'Etiquetas (separadas por comas)', { placeholder: 'vip, mayorista', wide: true })}
+                        <Field id="customer_tags" label="Etiquetas" error={errors.tags} className="sm:col-span-2" hint="Elige del catálogo del Workspace o crea una nueva: si ya existe con otra escritura (mayúsculas, espacios) se usa la existente.">
+                            <EntityPicker id="customer_tags" value={data.tags} onChange={(tags) => setData('tags', tags)} options={tagOptions} placeholder="Buscar etiqueta" noneLabel="Sin etiquetas" invalid={Boolean(errors.tags)} />
+                            <div className="mt-2 flex gap-2">
+                                <TextInput aria-label="Nueva etiqueta" value={newTag} maxLength={MAX_TAG_LENGTH} placeholder="Crear etiqueta nueva" onChange={(e) => setNewTag(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }} />
+                                <SecondaryButton type="button" onClick={addTag} disabled={cleanTag(newTag) === '' || data.tags.some((tag) => normalizeTag(tag) === normalizeTag(newTag))}>
+                                    Añadir
+                                </SecondaryButton>
+                            </div>
+                        </Field>
                         <Field id="customer_notes" label="Notas (opcional)" error={errors.notes} className="sm:col-span-2">
                             <Textarea id="customer_notes" rows={4} value={data.notes} maxLength={2000} onChange={(e) => setData('notes', e.target.value)} invalid={Boolean(errors.notes)} />
                         </Field>

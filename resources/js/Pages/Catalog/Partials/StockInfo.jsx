@@ -1,12 +1,22 @@
 import { ImageOff } from 'lucide-react';
+import { useState } from 'react';
 import Badge from '@/Components/Badge';
 import { levelOf, placeLines, STATES, stockSummary, units } from '@/lib/inventory';
 
 /** The picture of a product as a square thumbnail, or a calm empty state when it has none. */
 export function ProductThumb({ product, size = 'size-12', iconSize = 'size-5' }) {
+    // A product that points to a picture the server can no longer read says so (it is not the same as «no picture»): the person can upload it again.
+    const [broken, setBroken] = useState(false);
+
     return (
         <span className={`grid ${size} shrink-0 place-items-center overflow-hidden rounded-lg border border-line bg-canvas`}>
-            {product.imageUrl ? <img src={product.imageUrl} alt="" loading="lazy" className="size-full object-cover" /> : <ImageOff className={`${iconSize} text-ink-muted/60`} aria-label="Sin imagen" role="img" />}
+            {product.imageUrl && !broken ? (
+                <img src={product.imageUrl} alt="" loading="lazy" className="size-full object-cover" onError={() => setBroken(true)} />
+            ) : (
+                <ImageOff className={`${iconSize} ${broken ? 'text-danger' : 'text-ink-muted/60'}`} aria-label={broken ? 'La imagen guardada ya no está disponible: súbela de nuevo' : 'Sin imagen'} role="img">
+                    {broken && <title>La imagen guardada ya no está disponible: súbela de nuevo</title>}
+                </ImageOff>
+            )}
         </span>
     );
 }

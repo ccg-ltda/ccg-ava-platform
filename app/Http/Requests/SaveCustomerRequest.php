@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Customers\CustomerTagCatalog;
 use App\Models\Customer;
 use App\Rules\InternationalPhone;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -36,7 +37,7 @@ class SaveCustomerRequest extends FormRequest
             'notes' => ['nullable', 'string', 'max:2000'],
             'marketing_consent' => ['required', Rule::in(array_keys(config('customers.consents')))],
             'consent_note' => ['nullable', 'string', 'max:255'],
-            'preferred_channel' => ['nullable', Rule::in(config('customers.identity_channels'))],
+            'preferred_channel' => ['nullable', Rule::in(array_keys(config('customers.contact_preferences')))],
             'tags' => ['nullable', 'array', 'max:'.config('customers.max_tags')],
             'tags.*' => ['string', 'max:40'],
             'identities' => ['nullable', 'array', 'max:10'],
@@ -87,7 +88,7 @@ class SaveCustomerRequest extends FormRequest
     /** @return list<string> */
     public function tags(): array
     {
-        return collect($this->validated('tags') ?? [])->map(fn (string $tag) => mb_strtolower(trim($tag)))->filter()->unique()->values()->all();
+        return collect($this->validated('tags') ?? [])->map(fn (string $tag) => CustomerTagCatalog::clean($tag))->filter()->unique(fn (string $tag) => CustomerTagCatalog::normalize($tag))->values()->all();
     }
 
     /** @return list<array{channel: string, external_id: string}> */

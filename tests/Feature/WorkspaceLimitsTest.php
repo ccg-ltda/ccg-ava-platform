@@ -301,7 +301,7 @@ class WorkspaceLimitsTest extends TestCase
         $health->update(['is_public' => true]);
 
         $this->put("/plans/{$this->plan->id}", [
-            'name' => 'Salud base', 'module_category_id' => $health->id, 'is_public' => true, 'requires_quote' => false, 'currency' => 'COP',
+            'name' => 'Salud base', 'solution_ids' => [$health->id], 'is_public' => true, 'requires_quote' => false, 'currency' => 'COP',
             'price_monthly' => '59900', 'price_yearly' => '599000', 'limits' => ['users' => '5'],
         ])->assertSessionHasNoErrors();
 

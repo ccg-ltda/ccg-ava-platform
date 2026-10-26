@@ -5,9 +5,9 @@ namespace App\Models;
 use App\Models\Concerns\Audited;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
 
 /** A commercial plan: the modules a Workspace may use. Plans are created by CCG and never deleted, only deactivated. */
@@ -32,10 +32,56 @@ class Plan extends Model
         return Schema::hasColumn('plans', 'module_category_id') && Schema::hasColumn('plans', 'is_public') && Schema::hasColumn('plans', 'price_monthly_cents');
     }
 
-    /** The solution (module category) the plan is offered under, if any. */
-    public function solution(): BelongsTo
+    /**
+     * Keeps the PRIMARY solution column (`plans.module_category_id`, the first solution) among the plan's solutions when something sets it directly: the relation
+     * `solutions` is the source of truth, the column only lets the previous release read the plan after a rollback.
+     */
+    protected static function booted(): void
     {
-        return $this->belongsTo(ModuleCategory::class, 'module_category_id');
+        static::saved(function (Plan $plan) {
+            if ($plan->module_category_id !== null && ($plan->wasRecentlyCreated || $plan->wasChanged('module_category_id')) && self::solutionsReady()) {
+                $plan->solutions()->syncWithoutDetaching([$plan->module_category_id]);
+            }
+        });
+    }
+
+    /** The solutions (module categories) the plan is offered under; none = a custom plan. A plan appears once per solution (unique in the database). */
+    public function solutions(): BelongsToMany
+    {
+        return $this->belongsToMany(ModuleCategory::class, 'module_category_plan')->withTimestamps()->orderBy('module_categories.sort_order')->orderBy('module_categories.name');
+    }
+
+    /** Whether the database has the table of the plan solutions (migration `create_module_category_plan_table`). */
+    public static function solutionsReady(): bool
+    {
+        return Schema::hasTable('module_category_plan');
+    }
+
+    /**
+     * The solutions of the plan. Until the migration is applied the plan has the one in its primary column, exactly as before, so a deployment ahead of the
+     * migration neither fails nor loses its offer.
+     *
+     * @return Collection<int, ModuleCategory>
+     */
+    public function solutionList(): Collection
+    {
+        if (self::solutionsReady()) {
+            return $this->solutions;
+        }
+
+        return $this->module_category_id !== null ? ModuleCategory::whereKey($this->module_category_id)->get() : new Collection;
+    }
+
+    /** @return list<int> the ids of the plan's solutions */
+    public function solutionIds(): array
+    {
+        return $this->solutionList()->pluck('id')->map(fn ($id) => (int) $id)->all();
+    }
+
+    /** The solutions where the public sign-up may show the plan: active, public and a real commercial solution. @return Collection<int, ModuleCategory> */
+    public function offeredSolutions(): Collection
+    {
+        return $this->solutionList()->filter(fn (ModuleCategory $solution) => $solution->isPubliclyOffered() && $solution->isSolution())->values();
     }
 
     /** The price in minor units for a period, or null when that period is not sold: it needs an amount above zero AND the currency. Nothing is assumed. */
@@ -84,20 +130,17 @@ class Plan extends Model
             $issues[] = 'El plan está desactivado.';
         }
 
-        if (! $this->requires_quote && $this->module_category_id === null) {
+        $solutions = $this->solutionList();
+
+        if (! $this->requires_quote && $solutions->isEmpty()) {
             $issues[] = 'Falta la solución.';
         }
 
-        if ($this->module_category_id !== null && $this->solution?->is_active === false) {
-            $issues[] = 'La solución está desactivada.';
-        }
-
-        if ($this->module_category_id !== null && $this->solution?->is_active === true && ! $this->solution->isPubliclyOffered()) {
-            $issues[] = 'La solución no es pública: actívala como pública en Planes para ofrecer este plan.';
-        }
-
-        if ($this->module_category_id !== null && $this->solution !== null && ! $this->solution->isSolution()) {
-            $issues[] = 'La categoría elegida agrupa capacidades compartidas, no es una solución comercial.';
+        // A plan is shown under each of its solutions that can be offered; it is incomplete only when none of them can.
+        if ($solutions->isNotEmpty() && $this->offeredSolutions()->isEmpty()) {
+            $issues[] = $solutions->every(fn (ModuleCategory $solution) => ! $solution->is_active)
+                ? ($solutions->count() === 1 ? 'La solución está desactivada.' : 'Todas sus soluciones están desactivadas.')
+                : 'Ninguna de sus soluciones se puede ofrecer: deben estar activas, ser públicas y ser soluciones comerciales (no capacidades compartidas).';
         }
 
         if (! $this->requires_quote && ! $this->hasUsablePrice()) {

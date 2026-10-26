@@ -34,7 +34,7 @@ class PlanController extends Controller
 
         return Inertia::render('Plans/Index', [
             'can' => $can,
-            'plans' => ! $can['plans'] ? [] : Plan::query()->withCount('modules')->with('solution')
+            'plans' => ! $can['plans'] ? [] : Plan::query()->withCount('modules')->when(Plan::solutionsReady(), fn ($query) => $query->with('solutions'))
                 ->when($search !== '', function ($query) use ($search) {
                     $like = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($search)).'%';
                     $query->whereRaw("lower(name) like ? escape '!'", [$like]);
@@ -74,7 +74,7 @@ class PlanController extends Controller
     {
         return Inertia::render('Plans/Show', [
             'can' => $this->abilities($request),
-            'plan' => $this->summary($plan->loadMissing('solution')->loadCount('modules'), $this->catalog->workspacesOf($plan)->count())
+            'plan' => $this->summary($this->withSolutions($plan)->loadCount('modules'), $this->catalog->workspacesOf($plan)->count())
                 + ['moduleIds' => $plan->modules()->pluck('modules.id')->all()],
             'catalog' => $this->catalog->grouped(),
             'commercial' => $this->commercialOptions(),
@@ -85,7 +85,7 @@ class PlanController extends Controller
 
     public function store(SavePlanRequest $request): RedirectResponse
     {
-        $plan = $this->catalog->createPlan($request->safe()->only(['name', 'description']), $request->moduleIds(), $request->commercial());
+        $plan = $this->catalog->createPlan($request->safe()->only(['name', 'description']), $request->moduleIds(), $request->commercial(), Plan::commercialReady() && Plan::solutionsReady() ? $request->solutionIds() : null);
 
         if (($limits = $request->limits()) !== null) {
             $this->limits->setPlanLimits($plan, $limits);
@@ -98,7 +98,7 @@ class PlanController extends Controller
     public function update(SavePlanRequest $request, Plan $plan): RedirectResponse
     {
         DB::transaction(function () use ($request, $plan) {
-            $this->catalog->updatePlan($plan, $request->safe()->only(['name', 'description']), $request->commercial());
+            $this->catalog->updatePlan($plan, $request->safe()->only(['name', 'description']), $request->commercial(), Plan::commercialReady() && Plan::solutionsReady() ? $request->solutionIds() : null);
 
             if (($limits = $request->limits()) !== null) {
                 $this->limits->setPlanLimits($plan, $limits);
@@ -133,6 +133,12 @@ class PlanController extends Controller
         return back()->with('success', 'Plan desactivado correctamente');
     }
 
+    /** Loads the solutions of the plan when the table exists (a deployment ahead of its migration keeps the single primary one). */
+    private function withSolutions(Plan $plan): Plan
+    {
+        return Plan::solutionsReady() ? $plan->loadMissing('solutions') : $plan;
+    }
+
     /** @return array<string, mixed> */
     private function summary(Plan $plan, int $workspacesCount): array
     {
@@ -149,10 +155,10 @@ class PlanController extends Controller
             'workspacesCount' => $workspacesCount,
             // The commercial offer, exactly as saved (price in major units): what the public sign-up reads.
             'offer' => [
-                'solutionId' => $plan->module_category_id, 'currency' => $plan->currency,
+                'solutionIds' => $plan->solutionIds(), 'currency' => $plan->currency,
                 'priceMonthly' => $plan->price_monthly_cents !== null ? $plan->price_monthly_cents / 100 : null,
                 'priceYearly' => $plan->price_yearly_cents !== null ? $plan->price_yearly_cents / 100 : null,
-                'periods' => $plan->availablePeriods(), 'solutionName' => $plan->solution?->name, 'isPublic' => $plan->is_public, 'requiresQuote' => $plan->requires_quote,
+                'periods' => $plan->availablePeriods(), 'solutionNames' => $plan->solutionList()->pluck('name')->all(), 'isPublic' => $plan->is_public, 'requiresQuote' => $plan->requires_quote,
                 // private | online | quote | incomplete (+ why): the same rule the public sign-up applies.
                 'state' => $plan->offerState()['state'], 'issues' => $plan->offerState()['issues'],
             ],

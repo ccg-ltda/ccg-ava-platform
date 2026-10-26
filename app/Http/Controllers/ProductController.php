@@ -18,7 +18,9 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -254,6 +256,14 @@ class ProductController extends Controller
         }
 
         $stored = $request->picture() ? Storage::putFile("workspaces/{$product->workspace_id}/products/{$product->id}", $request->picture()) : null;
+
+        // The disk does not throw (`throw => false`): a failed write returns false, and saving that would erase the reference to the picture the product already has.
+        if ($request->picture() && ! $stored) {
+            Log::error('product_image_store_failed', ['workspace_id' => $product->workspace_id, 'product_id' => $product->id]);
+
+            throw ValidationException::withMessages(['image' => 'No se pudo guardar la imagen. La imagen anterior se conserva; inténtalo de nuevo.']);
+        }
+
         $previous = $product->image_path;
 
         try {
@@ -267,7 +277,10 @@ class ProductController extends Controller
         }
 
         if ($previous && $previous !== $stored && ! Product::where('image_path', $previous)->where('id', '!=', $product->id)->exists()) {
-            Storage::delete($previous);
+            // The file goes after the product points to the new one: if the delete fails the product is consistent and the leftover is logged for cleanup.
+            if (! Storage::delete($previous)) {
+                Log::warning('product_image_delete_failed', ['workspace_id' => $product->workspace_id, 'product_id' => $product->id]);
+            }
         }
 
         $this->audit->record('updated', 'product', $product->id, $product->name, [AuditLogger::change('Imagen', $previous ? 'Cargada' : null, $stored ? 'Cargada' : 'Quitada')], $product->workspace);

@@ -2,12 +2,12 @@ import { Boxes, FileText, Gauge, Tag, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Alert from '@/Components/Alert';
 import Badge from '@/Components/Badge';
+import EntityPicker from '@/Components/EntityPicker';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import Modal from '@/Components/Modal';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
-import Select from '@/Components/Select';
 import Tabs from '@/Components/Tabs';
 import Textarea from '@/Components/Textarea';
 import TextInput from '@/Components/TextInput';
@@ -18,7 +18,7 @@ import SectionCard from './SectionCard';
 
 /** Keys of the form (as the server names its errors) that belong to each tab, to flag the tab that holds an error. */
 const TAB_ERRORS = {
-    datos: ['name', 'description', 'module_category_id'],
+    datos: ['name', 'description', 'solution_ids'],
     oferta: ['offer', 'price_monthly', 'price_yearly', 'currency', 'is_public', 'requires_quote'],
     limites: ['limits', 'limits.users'],
     modulos: ['module_ids'],
@@ -45,7 +45,7 @@ export default function PlanFormModal({ show, title, form, catalog, commercial, 
         form.transform((data) => {
             const out = { ...data };
 
-            if (!ready) ['module_category_id', 'price_monthly', 'price_yearly', 'currency', 'is_public', 'requires_quote'].forEach((key) => delete out[key]);
+            if (!ready) ['solution_ids', 'price_monthly', 'price_yearly', 'currency', 'is_public', 'requires_quote'].forEach((key) => delete out[key]);
             if (!limitsReady) delete out.limits;
 
             return out;
@@ -83,9 +83,9 @@ export default function PlanFormModal({ show, title, form, catalog, commercial, 
                         </div>
                         {commercial && (
                             <div>
-                                <InputLabel htmlFor="plan_solution" value="Solución" />
-                                <Select id="plan_solution" className="mt-1" value={form.data.module_category_id ?? ''} disabled={!ready} onChange={(value) => form.setData('module_category_id', value === '' ? null : value)} options={[{ value: '', label: 'Sin solución (personalizado)' }, ...commercial.solutions]} />
-                                <InputError message={form.errors.module_category_id} className="mt-1" />
+                                <InputLabel htmlFor="plan_solution" value="Soluciones donde se ofrece" />
+                                <EntityPicker id="plan_solution" className="mt-1" value={form.data.solution_ids ?? []} disabled={!ready} onChange={(ids) => form.setData('solution_ids', ids)} options={commercial.solutions} placeholder="Buscar solución" noneLabel="Sin solución (personalizado)" error={form.errors.solution_ids ?? form.errors['solution_ids.0']} />
+                                <p className="mt-1 text-xs text-ink-muted">El mismo plan puede ofrecerse en varias soluciones. Quitar una solo cambia la oferta pública: los contratos existentes no cambian.</p>
                             </div>
                         )}
                         <div className="lg:col-span-2">

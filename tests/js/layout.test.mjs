@@ -10,7 +10,7 @@ const source = (path) => readFileSync(fileURLToPath(new URL(`../../resources/js/
 test('the visible brand comes from the shared configuration, never from text typed in a layout', () => {
     for (const file of ['Components/Topbar.jsx', 'Components/Sidebar.jsx', 'Layouts/AccessLayout.jsx', 'Layouts/SignupLayout.jsx', 'Layouts/GuestLayout.jsx']) {
         const code = source(file);
-        assert.match(code, /useBrand\(\)/, `${file} reads the brand`);
+        assert.match(code, /useBrand(Short)?\(\)/, `${file} reads the brand`);
         assert.doesNotMatch(code, />\s*(CCG Avachat|CCG Platform)\s*</, `${file} has no hard-coded brand`);
     }
     assert.match(source('Hooks/useBrand.js'), /props\.brand/);
@@ -61,4 +61,11 @@ test('the report filter by location is sent with every change of the period', ()
     const reports = source('Pages/Reports/Index.jsx');
     assert.match(reports, /location: locationParam/);
     assert.match(reports, /places\.length > 1/, 'a selector only when there is something to choose');
+});
+
+test('Tabs ignores the panel of a hidden tab, so a page with a conditional panel (Configuraciones for a client Workspace) never renders blank', () => {
+    const tabs = readFileSync(new URL('../../resources/js/Components/Tabs.jsx', import.meta.url), 'utf8');
+
+    assert.match(tabs, /Children\.toArray\(children\)/);
+    assert.doesNotMatch(tabs, /Array\.isArray\(children\)/);
 });

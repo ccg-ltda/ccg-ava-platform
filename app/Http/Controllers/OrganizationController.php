@@ -37,7 +37,7 @@ class OrganizationController extends Controller
         }
 
         if ($organization->workspaces()->get()->contains(fn ($workspace) => $workspace->isAdministrative())) {
-            throw ValidationException::withMessages(['status' => 'La organización del Workspace administrativo de Ava Platform no se puede desactivar.']);
+            throw ValidationException::withMessages(['status' => 'La organización del Workspace administrativo de la plataforma no se puede desactivar.']);
         }
 
         $organization->update(['is_active' => false]);

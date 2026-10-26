@@ -14,7 +14,7 @@ class EnsureWorkspacePermission
 {
     public function handle(Request $request, Closure $next, string ...$permissions): Response
     {
-        abort_unless(array_intersect($permissions, $request->attributes->get('workspace_permissions', [])) !== [], 403);
+        abort_unless(array_intersect($permissions, $request->attributes->get('workspace_permissions', [])) !== [], 403, 'Tu rol no tiene permiso para esta acción. Pídele a un administrador de tu Workspace que te lo asigne.');
 
         return $next($request);
     }

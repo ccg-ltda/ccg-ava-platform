@@ -12,6 +12,9 @@ return [
      */
     'admin_code' => env('WORKSPACE_ADMIN_CODE', 'DESARROLLO_DEV'),
 
+    /* Invitations to join a Workspace (platform administration): how long the e-mailed link works. */
+    'invitations' => ['expire_hours' => 72],
+
     'currencies' => [
         'COP' => 'Peso colombiano',
         'DOP' => 'Peso dominicano',

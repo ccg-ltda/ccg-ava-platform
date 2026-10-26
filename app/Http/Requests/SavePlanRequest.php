@@ -31,9 +31,11 @@ class SavePlanRequest extends FormRequest
             'name' => ['required', 'string', 'max:120', Rule::unique('plans', 'name')->ignore($this->route('plan'))],
             'description' => ['nullable', 'string', 'max:1000'],
             // Commercial offer (all optional; only the keys that are sent are changed). A plan is offered in the public sign-up only when it is public.
-            'module_category_id' => ['sometimes', 'nullable', 'integer', Rule::exists('module_categories', 'id')->where('is_active', true), function ($attribute, $value, $fail) {
-                if ($value !== null && ! ModuleCategory::whereKey($value)->first()?->isSolution()) {
-                    $fail('Elige una solución comercial: esa categoría agrupa capacidades compartidas.');
+            // The solutions the plan is offered under (none = a custom plan). Only the key that is sent is changed; a plan appears once per solution.
+            'solution_ids' => ['sometimes', 'array', 'max:50'],
+            'solution_ids.*' => ['integer', 'distinct', Rule::exists('module_categories', 'id')->where('is_active', true), function ($attribute, $value, $fail) {
+                if (! ModuleCategory::whereKey($value)->first()?->isSolution()) {
+                    $fail('Elige solo soluciones comerciales: esa categoría agrupa capacidades compartidas.');
                 }
             }],
             // Two prices of the same offer, in the same currency: monthly and yearly TOTAL. Numeric (never INF/NAN), not negative, at most 2 decimals; empty or 0 = that period is not sold.
@@ -71,8 +73,8 @@ class SavePlanRequest extends FormRequest
             }
 
             if ($this->boolean('is_public') && ! $this->boolean('requires_quote')) {
-                if (blank($this->input('module_category_id'))) {
-                    $validator->errors()->add('module_category_id', 'Para ofrecer el plan en el registro público elige su solución.');
+                if ($this->solutionIds() === [] || ($this->solutionIds() === null && ! $this->currentSolutionIds())) {
+                    $validator->errors()->add('solution_ids', 'Para ofrecer el plan en el registro público elige al menos una solución.');
                 }
 
                 if (! $priced || blank($this->input('currency'))) {
@@ -97,7 +99,7 @@ class SavePlanRequest extends FormRequest
         $data = $this->validated();
         $out = [];
 
-        foreach (['module_category_id', 'currency', 'is_public', 'requires_quote'] as $key) {
+        foreach (['currency', 'is_public', 'requires_quote'] as $key) {
             if (array_key_exists($key, $data)) {
                 $out[$key] = $data[$key] === '' ? null : $data[$key];
             }
@@ -115,8 +117,20 @@ class SavePlanRequest extends FormRequest
     /** Whether the form carries any commercial value (not just empty defaults). */
     private function offerTyped(): bool
     {
-        return $this->boolean('is_public') || $this->boolean('requires_quote') || filled($this->input('module_category_id')) || filled($this->input('currency'))
+        return $this->boolean('is_public') || $this->boolean('requires_quote') || $this->input('solution_ids', []) !== [] || filled($this->input('currency'))
             || $this->isPriced('price_monthly') || $this->isPriced('price_yearly');
+    }
+
+    /** @return list<int>|null the solutions that were sent (none = a custom plan), or null when the form sent none: then they are not changed */
+    public function solutionIds(): ?array
+    {
+        return $this->has('solution_ids') ? array_values(array_unique(array_map('intval', $this->input('solution_ids') ?? []))) : null;
+    }
+
+    /** @return list<int> the solutions the plan being edited has now */
+    private function currentSolutionIds(): array
+    {
+        return $this->route('plan') instanceof Plan ? $this->route('plan')->solutionIds() : [];
     }
 
     /** @return array<string, ?int>|null the standard limits that were sent (metric => value, null = none), or null when the form sent none */

@@ -42,6 +42,85 @@ function FormModal({ show, title, onClose, onSubmit, processing, submitLabel, ch
     );
 }
 
+const INVITATION_STATUS = { pending: ['Pendiente', 'amber'], accepted: ['Aceptada', 'green'], expired: ['Caducada', 'neutral'], revoked: ['Cancelada', 'red'] };
+
+/**
+ * Invites a NEW person to the Workspace (or, if the e-mail already has an account, adds that account without touching its password or other accesses). The person
+ * receives a one-time link, chooses their own password and joins with the role picked here; the list shows the state of each invitation. Only the platform
+ * administration sees this; the server checks it again.
+ */
+function InvitePeople({ workspace }) {
+    const confirm = useConfirm();
+    const invite = useForm({ email: '', name: '', role: '' });
+
+    const submit = (e) => {
+        e.preventDefault();
+        invite.post(route('workspaces.invitations.store', workspace.id), { preserveScroll: true, onSuccess: () => invite.reset() });
+    };
+
+    const resend = (invitation) => router.post(route('workspaces.invitations.resend', [workspace.id, invitation.id]), {}, { preserveScroll: true });
+
+    const cancel = async (invitation) => {
+        const confirmed = await confirm({ description: `El enlace enviado a ${invitation.email} dejará de funcionar.`, confirmLabel: 'Cancelar invitación' });
+
+        if (confirmed) router.delete(route('workspaces.invitations.destroy', [workspace.id, invitation.id]), { preserveScroll: true });
+    };
+
+    return (
+        <section className="mt-6 space-y-4 border-t border-line pt-6" aria-label="Invitaciones">
+            <form onSubmit={submit} className="grid gap-3 sm:grid-cols-[1fr_1fr_10rem_auto] sm:items-end">
+                <div>
+                    <InputLabel htmlFor="invite_email" value="Invitar por correo" />
+                    <TextInput id="invite_email" type="email" className={FIELD} value={invite.data.email} placeholder="persona@empresa.com" autoComplete="off" invalid={Boolean(invite.errors.email)} onChange={(e) => invite.setData('email', e.target.value)} />
+                </div>
+                <div>
+                    <InputLabel htmlFor="invite_name" value="Nombre (opcional)" />
+                    <TextInput id="invite_name" className={FIELD} value={invite.data.name} autoComplete="off" onChange={(e) => invite.setData('name', e.target.value)} />
+                </div>
+                <div>
+                    <InputLabel htmlFor="invite_role" value="Rol" />
+                    <Select id="invite_role" className={FIELD} value={invite.data.role} onChange={(role) => invite.setData('role', role)} options={workspace.assignableRoles.map((role) => ({ value: role, label: role }))} invalid={Boolean(invite.errors.role)} />
+                </div>
+                <PrimaryButton type="submit" disabled={invite.processing} className="justify-center">
+                    Invitar
+                </PrimaryButton>
+                <div className="sm:col-span-4">
+                    <InputError message={invite.errors.email || invite.errors.role} />
+                    <p className="mt-1 text-xs text-ink-muted">La persona elige su propia contraseña desde el enlace, que caduca y sirve una sola vez. No se crea ninguna cuenta hasta que acepte.</p>
+                </div>
+            </form>
+
+            {workspace.invitations.length > 0 && (
+                <ul className="divide-y divide-line rounded-lg border border-line" aria-label="Estado de las invitaciones">
+                    {workspace.invitations.map((invitation) => {
+                        const [label, tone] = INVITATION_STATUS[invitation.status] ?? [invitation.status, 'neutral'];
+
+                        return (
+                            <li key={invitation.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 text-sm">
+                                <div className="min-w-0">
+                                    <span className="font-medium text-ink">{invitation.email}</span> <span className="text-xs text-ink-muted">· {invitation.role}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Badge tone={tone}>{label}</Badge>
+                                    {(invitation.status === 'pending' || invitation.status === 'expired') && (
+                                        <>
+                                            <button type="button" onClick={() => resend(invitation)} className="rounded-lg px-2 py-1 text-sm font-semibold text-accent-blue hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-primary">
+                                                Reenviar
+                                            </button>
+                                            <button type="button" onClick={() => cancel(invitation)} className="rounded-lg px-2 py-1 text-sm font-semibold text-danger hover:bg-danger/10 focus-visible:outline-2 focus-visible:outline-primary">
+                                                Cancelar
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                            </li>
+                        );
+                    })}
+                </ul>
+            )}
+        </section>
+    );
+}
 /** Members of the selected Workspace: change role, remove the membership (never the account), add an existing account. */
 function MembersModal({ workspace, canAdd, listMeta, perPageOptions, onClose }) {
     const { errors } = usePage().props;
@@ -84,9 +163,9 @@ function MembersModal({ workspace, canAdd, listMeta, perPageOptions, onClose }) 
             <div className="p-6">
                 <h2 className="text-lg font-bold text-ink">Miembros de {workspace.name}</h2>
 
-                {(errors.member || errors.role) && (
+                {(errors.member || errors.role || errors.invitation) && (
                     <Alert tone="danger" className="mt-4">
-                        {errors.member ?? errors.role}
+                        {errors.member ?? errors.role ?? errors.invitation}
                     </Alert>
                 )}
 
@@ -175,6 +254,8 @@ function MembersModal({ workspace, canAdd, listMeta, perPageOptions, onClose }) 
                         </div>
                     </form>
                 )}
+
+                {workspace.canInvite && <InvitePeople workspace={workspace} />}
 
                 <div className="mt-6 flex justify-end">
                     <SecondaryButton type="button" onClick={onClose}>

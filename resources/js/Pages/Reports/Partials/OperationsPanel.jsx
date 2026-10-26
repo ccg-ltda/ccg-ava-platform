@@ -1,4 +1,4 @@
-import { CalendarCheck, CalendarClock, CalendarX, Contact, MailCheck, ShoppingCart, UserPlus, UserX, Wallet } from 'lucide-react';
+import { CalendarCheck, CalendarClock, CalendarX, Contact, MailCheck, PackageCheck, ShoppingCart, UserPlus, UserX, Wallet } from 'lucide-react';
 import Alert from '@/Components/Alert';
 import ChartCard from '@/Components/Charts/ChartCard';
 import ChartEmpty from '@/Components/Charts/ChartEmpty';

@@ -6,14 +6,14 @@
  */
 return [
     'intro' => [
-        'Estos términos regulan el uso de la plataforma CCG Avachat (Ava Platform) por las personas que reciben una cuenta para trabajar en el Workspace de una organización. Prestador del servicio: {{legal_name}}, identificación {{tax_id}}, domicilio {{address}}.',
+        'Estos términos regulan el uso de la plataforma Zonno Platform by CCG por las personas que reciben una cuenta para trabajar en el Workspace de una organización. Prestador del servicio: {{legal_name}}, identificación {{tax_id}}, domicilio {{address}}.',
         'Vigencia de esta versión: {{effective_date}}.',
     ],
     'sections' => [
         [
             'heading' => '1. Qué es el servicio',
             'paragraphs' => [
-                'Ava Platform es una herramienta para que una organización administre asistentes conversacionales, sus canales (por ejemplo WhatsApp o el chat de su sitio web), las conversaciones, las reservas, los clientes y otros módulos que su plan incluya. Cada organización trabaja en su propio Workspace, aislado del de las demás.',
+                'Zonno Platform es una herramienta para que una organización administre asistentes conversacionales, sus canales (por ejemplo WhatsApp o el chat de su sitio web), las conversaciones, las reservas, los clientes y otros módulos que su plan incluya. Cada organización trabaja en su propio Workspace, aislado del de las demás.',
                 'Qué módulos y funciones están disponibles depende del plan de cada Workspace y de los permisos de cada rol.',
             ],
         ],

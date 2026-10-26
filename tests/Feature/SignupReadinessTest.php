@@ -210,7 +210,7 @@ class SignupReadinessTest extends TestCase
     {
         $plan = Plan::create(['name' => 'Salud base']);
         $plan->modules()->sync(Module::whereIn('key', ['dashboard', 'reports'])->pluck('id'));
-        $offer = ['name' => 'Salud base', 'module_category_id' => $this->health->id, 'price_monthly' => '49900', 'currency' => 'COP', 'is_public' => true, 'requires_quote' => false];
+        $offer = ['name' => 'Salud base', 'solution_ids' => [$this->health->id], 'price_monthly' => '49900', 'currency' => 'COP', 'is_public' => true, 'requires_quote' => false];
 
         // A client's administrator, even with every client permission, and a role without plan permissions are refused.
         $client = Workspace::create(['organization_id' => Organization::create(['name' => 'Cliente'])->id, 'code' => 'CLIENTE_X', 'name' => 'Cliente']);
@@ -232,7 +232,7 @@ class SignupReadinessTest extends TestCase
 
         // The server refuses an incomplete publication, whatever the interface sent.
         $this->put("/plans/{$plan->id}", array_merge($offer, ['price_monthly' => '']))->assertSessionHasErrors('price_monthly');
-        $this->put("/plans/{$plan->id}", ['name' => 'Salud base', 'is_public' => true, 'currency' => 'COP', 'price_monthly' => '10', 'module_category_id' => null])->assertSessionHasErrors('module_category_id');
+        $this->put("/plans/{$plan->id}", ['name' => 'Salud base', 'is_public' => true, 'currency' => 'COP', 'price_monthly' => '10', 'solution_ids' => []])->assertSessionHasErrors('solution_ids');
         $this->put("/plans/{$plan->id}", array_merge($offer, ['currency' => 'XXX']))->assertSessionHasErrors('currency');
         $this->put("/plans/{$plan->id}", array_merge($offer, ['price_monthly' => '-5']))->assertSessionHasErrors('price_monthly');
         $this->assertSame(4990000, $plan->fresh()->price_monthly_cents, 'a refused save changes nothing');
@@ -261,19 +261,20 @@ class SignupReadinessTest extends TestCase
 
         $plan = Plan::create(['name' => 'Mal clasificado']);
         $offer = ['name' => 'Mal clasificado', 'price_monthly' => '100', 'currency' => 'COP', 'is_public' => true];
-        $this->put("/plans/{$plan->id}", array_merge($offer, ['module_category_id' => $shared->id]))->assertSessionHasErrors('module_category_id');
-        $this->put("/plans/{$plan->id}", array_merge($offer, ['module_category_id' => $custom->id]))->assertSessionHasNoErrors();
+        $this->put("/plans/{$plan->id}", array_merge($offer, ['solution_ids' => [$shared->id]]))->assertSessionHasErrors('solution_ids.0');
+        $this->put("/plans/{$plan->id}", array_merge($offer, ['solution_ids' => [$custom->id]]))->assertSessionHasNoErrors();
 
         // A plan that already points to a group of shared capabilities is never offered, and the administration says why.
-        $plan->forceFill(['module_category_id' => $shared->id])->save();
+        $plan->solutions()->sync([$shared->id]);
+        $plan->unsetRelation('solutions');
         $state = $plan->fresh()->offerState();
         $this->assertSame('incomplete', $state['state']);
-        $this->assertStringContainsString('no es una solución comercial', implode(' ', $state['issues']));
+        $this->assertStringContainsString('soluciones comerciales', implode(' ', $state['issues']));
         $this->assertFalse(app(SignupCatalog::class)->hasOffers());
 
         // A solution switched off cannot be chosen either.
         $custom->update(['is_active' => false]);
-        $this->put("/plans/{$plan->id}", array_merge($offer, ['module_category_id' => $custom->id]))->assertSessionHasErrors('module_category_id');
+        $this->put("/plans/{$plan->id}", array_merge($offer, ['solution_ids' => [$custom->id]]))->assertSessionHasErrors('solution_ids.0');
     }
 
     // --- the offer changes while someone is signing up ---------------------------------------------------------------

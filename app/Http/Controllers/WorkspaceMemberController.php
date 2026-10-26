@@ -6,7 +6,7 @@ use App\Audit\AuditLogger;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\WorkspaceAdministration;
-use App\Services\WorkspaceLimits;
+use App\Services\WorkspaceMemberships;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -25,6 +25,7 @@ class WorkspaceMemberController extends Controller
     public function __construct(
         private readonly WorkspaceAdministration $administration,
         private readonly AuditLogger $audit,
+        private readonly WorkspaceMemberships $memberships,
     ) {}
 
     /** Adds an existing account (superusers only, see the routes). */
@@ -42,22 +43,7 @@ class WorkspaceMemberController extends Controller
         $user = isset($data['user_id']) ? User::findOrFail($data['user_id']) : User::where('email', $data['email'])->firstOrFail();
         $field = isset($data['user_id']) ? 'user_id' : 'email';
 
-        if ($workspace->users()->whereKey($user->id)->exists()) {
-            throw ValidationException::withMessages([$field => 'Este usuario ya pertenece al Workspace.']);
-        }
-
-        if (! $user->is_active) {
-            throw ValidationException::withMessages([$field => 'Esta cuenta está desactivada: actívala antes de añadirla a un Workspace.']);
-        }
-
-        $this->administration->assertMayReceive($workspace, $user, $field);
-        app(WorkspaceLimits::class)->assertCanAddMembers($workspace, 1, $field);
-
-        $workspace->users()->attach($user->id, ['role' => $data['role']]);
-        $this->audit->record('created', 'membership', $user->id, $user->name, [
-            AuditLogger::change('Workspace', null, $workspace->name),
-            AuditLogger::change('Rol', null, $data['role']),
-        ], $workspace);
+        $this->memberships->add($workspace, $user, $data['role'], $field);
 
         return $this->back('Miembro añadido correctamente', $workspace);
     }

@@ -32,6 +32,8 @@ return [
         'appointment' => ['label' => 'Citas', 'noun' => 'la cita'],
         'booking_settings' => ['label' => 'Configuración de reservas', 'noun' => 'la configuración de reservas'],
         'customer' => ['label' => 'Clientes', 'noun' => 'el cliente'],
+        'invitation' => ['label' => 'Invitaciones a Workspaces', 'noun' => 'la invitación'],
+        'customer_tag' => ['label' => 'Etiquetas de clientes', 'noun' => 'la etiqueta de clientes'],
         'support_access' => ['label' => 'Acceso de soporte', 'noun' => 'el acceso de soporte a'],
         'message_template' => ['label' => 'Plantillas de mensaje', 'noun' => 'la plantilla'],
         'campaign' => ['label' => 'Campañas', 'noun' => 'la campaña'],

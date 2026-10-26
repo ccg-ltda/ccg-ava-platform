@@ -4,14 +4,14 @@ import { Link, router } from '@inertiajs/react';
 import { ChevronDown, LogOut, Menu as MenuIcon, User } from 'lucide-react';
 import { isOffered, topTabs } from '@/config/navigation';
 import useAccess from '@/Hooks/useAccess';
-import useBrand from '@/Hooks/useBrand';
+import { useBrandShort } from '@/Hooks/useBrand';
 import Avatar from './Avatar';
 import Badge from './Badge';
 
 /** Navy top bar: brand, the single "General" tab, user menu and logout. Decoration stays behind the controls. */
 export default function Topbar({ user, role, onMenu }) {
     const access = useAccess();
-    const brand = useBrand();
+    const brand = useBrandShort();
 
     return (
         <header className="brand-surface topbar-surface sticky top-0 z-30 flex h-16 items-center gap-3 px-4 text-white shadow-card sm:px-6">

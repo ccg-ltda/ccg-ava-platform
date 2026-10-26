@@ -185,11 +185,14 @@ class SubscriptionService
      * @param  array{amount_cents: int, currency: string, period: string}|null  $price
      * @param  list<string>|null  $modules
      * @param  array<string, ?int>|null  $limits
+     * @param  ?int  $solutionId  the solution the customer chose (the sign-up); null = the only solution of the plan, if it has just one
      * @return array<string, mixed>
      */
-    public function buildTerms(Plan $plan, string $source, ?array $price = null, ?array $modules = null, ?array $limits = null): array
+    public function buildTerms(Plan $plan, string $source, ?array $price = null, ?array $modules = null, ?array $limits = null, ?int $solutionId = null): array
     {
-        $solution = Plan::commercialReady() ? $plan->solution : null;
+        // The solution the customer chose when the plan is offered under several; otherwise the only one the plan has (never guessed among several).
+        $solutions = Plan::commercialReady() ? $plan->solutionList() : collect();
+        $solution = $solutionId !== null ? $solutions->firstWhere('id', $solutionId) : ($solutions->count() === 1 ? $solutions->first() : null);
 
         return [
             'version' => 1,

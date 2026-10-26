@@ -217,6 +217,10 @@ class WorkspaceAdministration
             'id' => $workspace->id,
             'name' => $workspace->name,
             'assignableRoles' => $assignable->pluck('name')->values(),
+            // Invitations are issued by the platform administration only (the routes require it again); the people it invited are listed to it, e-mail masked like the members.
+            'canInvite' => $actor->isPlatformSuperuser() && ! $workspace->isAdministrative() && WorkspaceInvitations::ready()
+                && in_array('create-users', $request->attributes->get('workspace_permissions', []), true) && in_array('assign-roles', $request->attributes->get('workspace_permissions', []), true),
+            'invitations' => $actor->isPlatformSuperuser() ? app(WorkspaceInvitations::class)->overview($workspace, $maskEmails) : [],
             'members' => [
                 'data' => $page->getCollection()->map(fn (User $member) => [
                     'id' => $member->id,

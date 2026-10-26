@@ -36,6 +36,23 @@ class TestDatabaseGuard
     }
 
     /**
+     * The default disk is the bucket of the development stack (S3/MinIO) inside the containers, and it wins over phpunit.xml. A test that writes or deletes
+     * on it (E2eFixtures::cleanup removes `workspaces/{id}`, and the SQLite ids 1, 2... are the ones of the real Workspaces) destroys the real files, so a remote
+     * default disk is refused: `make test` forces FILESYSTEM_DISK=local and TestCase fakes it.
+     */
+    public static function assertSafeStorage(?string $driver): void
+    {
+        if ($driver === null || ! in_array($driver, ['s3', 'ftp', 'sftp'], true)) {
+            return;
+        }
+
+        throw new RuntimeException(
+            'Refusing to run tests with a remote default filesystem disk ['.$driver.']: a test could delete real files of the development bucket. '.
+            'Run `make test` (it forces FILESYSTEM_DISK=local).',
+        );
+    }
+
+    /**
      * @param  array<string, ?string>  $drivers  purpose => configured driver/connection (cache, queue, session, broadcast)
      */
     public static function assertSafeServices(array $drivers): void
