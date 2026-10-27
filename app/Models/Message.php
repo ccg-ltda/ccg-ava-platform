@@ -22,7 +22,7 @@ class Message extends Model
     public const TYPES = ['text', 'audio', 'image', 'video', 'document', 'sticker', 'location', 'other'];
 
     /** Who wrote it: the contact, the automation or a human agent. */
-    public const SENDERS = ['contact', 'ai', 'agent'];
+    public const SENDERS = ['contact', 'ai', 'agent', 'system'];
 
     /** Delivery states the automation may report. */
     public const STATUSES = ['sent', 'delivered', 'read', 'failed'];
@@ -53,7 +53,7 @@ class Message extends Model
 
     protected function casts(): array
     {
-        return ['sent_at' => 'datetime', 'simulated' => 'boolean'];
+        return ['sent_at' => 'datetime', 'delivered_at' => 'datetime', 'read_at' => 'datetime', 'simulated' => 'boolean'];
     }
 
     public function senderUser(): BelongsTo

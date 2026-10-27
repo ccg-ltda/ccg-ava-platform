@@ -1,12 +1,14 @@
 import { Transition } from '@headlessui/react';
 import { usePage } from '@inertiajs/react';
-import { AlertTriangle, CheckCircle2, X, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, MessageSquareText, X, XCircle } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 const TONES = {
     success: { icon: CheckCircle2, stripe: 'border-l-accent-green', color: 'text-accent-green', role: 'status', ms: 4500 },
     warning: { icon: AlertTriangle, stripe: 'border-l-accent-amber', color: 'text-accent-amber', role: 'status', ms: 6000 },
     error: { icon: XCircle, stripe: 'border-l-danger', color: 'text-danger', role: 'alert', ms: 7000 },
+    // A notice with content of its own (a new conversation arrived): longer, because it carries an action.
+    info: { icon: MessageSquareText, stripe: 'border-l-primary', color: 'text-primary', role: 'status', ms: 12000 },
 };
 
 function ToastItem({ toast, onDone }) {
@@ -33,7 +35,7 @@ function ToastItem({ toast, onDone }) {
         >
             <div role={role} className={`pointer-events-auto flex items-start gap-3 rounded-lg border border-line border-l-4 bg-card p-3 text-sm text-ink shadow-card-hover ${stripe}`}>
                 <Icon className={`mt-0.5 size-4 shrink-0 ${color}`} aria-hidden="true" />
-                <p className="min-w-0 flex-1">{toast.message}</p>
+                {typeof toast.message === 'string' ? <p className="min-w-0 flex-1">{toast.message}</p> : <div className="min-w-0 flex-1">{toast.message}</div>}
                 <button
                     type="button"
                     onClick={() => setShow(false)}
@@ -62,7 +64,7 @@ export function ToastProvider({ children }) {
     const remove = useCallback((id) => setToasts((current) => current.filter((toast) => toast.id !== id)), []);
 
     const api = useMemo(
-        () => ({ success: (message) => push('success', message), warning: (message) => push('warning', message), error: (message) => push('error', message) }),
+        () => ({ success: (message) => push('success', message), warning: (message) => push('warning', message), error: (message) => push('error', message), notice: (content) => push('info', content) }),
         [push],
     );
 

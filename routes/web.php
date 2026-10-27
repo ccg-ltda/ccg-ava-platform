@@ -104,6 +104,7 @@ Route::middleware(['auth', 'workspace'])->group(function () {
     // checks the role again (the button is only a convenience).
     Route::get('/support/thread', [SupportDeskController::class, 'thread'])->middleware('throttle:60,1')->name('support.thread');
     Route::get('/support/attachments/{attachment}', [SupportDeskController::class, 'attachment'])->whereNumber('attachment')->middleware('throttle:120,1')->name('support.attachments');
+    Route::post('/support/close', [SupportDeskController::class, 'close'])->middleware('throttle:20,1')->name('support.close');
     Route::post('/support/messages', [SupportDeskController::class, 'send'])->middleware('throttle:20,1')->name('support.messages');
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');

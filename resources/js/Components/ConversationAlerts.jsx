@@ -1,11 +1,12 @@
 import { router, usePage } from '@inertiajs/react';
-import { Bell, BellOff, MessageSquareText, X } from 'lucide-react';
+import { Bell, BellOff } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useToast } from '@/Components/Toast';
 import { alreadyOpen, describeEvents, nextDelay } from '@/lib/conversationAlerts';
 import jsonRequest from '@/lib/jsonRequest';
+import { setPending } from '@/lib/pendingStore';
 
 const SOUND_KEY = 'zonno:alerts-sound';
-const SHOW_MS = 12000;
 
 const readSound = () => {
     try {
@@ -48,26 +49,58 @@ async function pop(context) {
     return true;
 }
 
+/** What the toast says: a title, the channel, the way in, and the sound switch. It never contains what a contact wrote. */
+function Notice({ alert, soundBlocked, onSound }) {
+    const [sound, setSound] = useState(readSound);
+
+    const toggle = () => {
+        const next = !sound;
+        setSound(next);
+        onSound(next);
+    };
+
+    return (
+        <div>
+            <p className="font-semibold">{alert.title}</p>
+            {alert.detail && <p className="text-xs text-ink-muted">{alert.detail}</p>}
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                <button
+                    type="button"
+                    onClick={() => router.visit(alert.conversationId ? route('conversations.index', { c: alert.conversationId }) : route('conversations.index'))}
+                    className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:opacity-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                >
+                    {alert.conversationId ? 'Abrir conversación' : 'Ir a Conversaciones'}
+                </button>
+                <button type="button" onClick={toggle} aria-pressed={sound} className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-xs text-ink-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-primary">
+                    {sound ? <Bell className="size-3.5" aria-hidden="true" /> : <BellOff className="size-3.5" aria-hidden="true" />}
+                    {sound ? 'Silenciar sonido' : 'Activar sonido'}
+                </button>
+            </div>
+            {sound && soundBlocked && <p className="mt-1.5 text-[11px] text-ink-muted">El navegador aún no permite el sonido: haz clic en cualquier parte de la página para activarlo.</p>}
+        </div>
+    );
+}
+
 /**
- * The notification of the team: when a conversation or a message arrives in the Workspace, a small card appears (bottom, never over a dialog) and a soft sound plays once.
+ * The notification of the team: when a conversation or a message arrives in the Workspace, a toast appears at the top (under the top bar, like the «guardado» notices; several in a row
+ * stack and each leaves by itself) and a soft sound plays once. It also keeps the number of conversations waiting for a person current (the sidebar badge).
  * The browser asks the server every few seconds «anything after message N?»: the first answer only sets where «now» is, so nothing from the past is announced, and each event is
- * announced once because the cursor only moves forward. The card says THAT something arrived (and from which channel), never what it says. `conversationAlerts` is null for who cannot
- * read conversations, and then nothing runs. Without a connection it stays quiet and tries again more slowly; the sound is a convenience (the card shows even if it is muted or blocked).
+ * announced once because the cursor only moves forward. The toast says THAT something arrived (and from which channel), never what it says. `conversationAlerts` is null for who cannot
+ * read conversations, and then nothing runs. Without a connection it stays quiet and tries again more slowly; the sound is a convenience (the toast shows even if it is muted or blocked).
+ * It is polling, not real time: the delay is at most one poll period.
  */
 export default function ConversationAlerts() {
     const page = usePage();
     const config = page.props.conversationAlerts;
-    const [alert, setAlert] = useState(null);
-    const [sound, setSound] = useState(readSound);
-    const [blocked, setBlocked] = useState(false);
+    const toast = useToast();
     const cursor = useRef(null);
     const failures = useRef(0);
     const audio = useRef(null);
-    const soundOn = useRef(sound);
-    const dismiss = useRef(null);
     const poll = config?.poll;
 
-    soundOn.current = sound;
+    useEffect(() => {
+        if (config) setPending(config.pending ?? 0);
+    }, [config?.pending]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Browsers only allow audio after the person has interacted with the page: the first click or key press prepares it.
     useEffect(() => {
@@ -78,7 +111,6 @@ export default function ConversationAlerts() {
 
             if (Context && !audio.current) audio.current = new Context();
             audio.current?.resume?.().catch(() => {});
-            setBlocked(false);
         };
 
         window.addEventListener('pointerdown', unlock, { once: true });
@@ -90,13 +122,25 @@ export default function ConversationAlerts() {
         };
     }, [poll]);
 
-    const show = useCallback(async (next) => {
-        setAlert({ ...next, key: Date.now() });
-        clearTimeout(dismiss.current);
-        dismiss.current = setTimeout(() => setAlert(null), SHOW_MS);
+    const show = useCallback(async (alert) => {
+        const wantsSound = readSound();
+        const blocked = wantsSound && !(await pop(audio.current));
+        toast.notice(
+            <Notice
+                alert={alert}
+                soundBlocked={blocked}
+                onSound={(on) => {
+                    try {
+                        window.localStorage.setItem(SOUND_KEY, on ? 'on' : 'off');
+                    } catch {
+                        // the choice just is not remembered
+                    }
 
-        if (soundOn.current) setBlocked(!(await pop(audio.current)));
-    }, []);
+                    if (on) pop(audio.current);
+                }}
+            />,
+        );
+    }, [toast]);
 
     useEffect(() => {
         if (!poll) return undefined;
@@ -111,6 +155,7 @@ export default function ConversationAlerts() {
                 const first = cursor.current === null;
                 cursor.current = body.cursor;
                 failures.current = 0;
+                setPending(body.pending ?? 0);
 
                 const next = first ? null : describeEvents(body.events);
 
@@ -127,54 +172,8 @@ export default function ConversationAlerts() {
         return () => {
             stopped = true;
             clearTimeout(timer);
-            clearTimeout(dismiss.current);
         };
     }, [poll, show]);
 
-    if (!poll || !alert) return null;
-
-    const toggleSound = () => {
-        const next = !sound;
-        setSound(next);
-
-        try {
-            window.localStorage.setItem(SOUND_KEY, next ? 'on' : 'off');
-        } catch {
-            // the choice just is not remembered
-        }
-
-        if (next) pop(audio.current);
-    };
-
-    const open = () => {
-        router.visit(alert.conversationId ? route('conversations.index', { c: alert.conversationId }) : route('conversations.index'));
-        setAlert(null);
-    };
-
-    return (
-        <div className="pointer-events-none fixed inset-x-4 bottom-24 z-[45] mx-auto flex max-w-sm justify-center sm:bottom-6" role="region" aria-label="Aviso de conversaciones">
-            <div key={alert.key} role="status" aria-live="polite" className="pointer-events-auto w-full rounded-xl border border-line border-l-4 border-l-primary bg-card p-3 text-sm text-ink shadow-card-hover motion-safe:animate-fade-in">
-                <div className="flex items-start gap-3">
-                    <MessageSquareText className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden="true" />
-                    <div className="min-w-0 flex-1">
-                        <p className="font-semibold">{alert.title}</p>
-                        {alert.detail && <p className="text-xs text-ink-muted">{alert.detail}</p>}
-                    </div>
-                    <button type="button" onClick={() => setAlert(null)} aria-label="Cerrar aviso" className="-m-1 grid size-7 shrink-0 place-items-center rounded text-ink-muted hover:bg-canvas hover:text-ink focus-visible:outline-2 focus-visible:outline-primary">
-                        <X className="size-4" aria-hidden="true" />
-                    </button>
-                </div>
-                <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                    <button type="button" onClick={open} className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:opacity-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
-                        {alert.conversationId ? 'Abrir conversación' : 'Ir a Conversaciones'}
-                    </button>
-                    <button type="button" onClick={toggleSound} className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-xs text-ink-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-primary" aria-pressed={sound}>
-                        {sound ? <Bell className="size-3.5" aria-hidden="true" /> : <BellOff className="size-3.5" aria-hidden="true" />}
-                        {sound ? 'Silenciar sonido' : 'Activar sonido'}
-                    </button>
-                </div>
-                {sound && blocked && <p className="mt-1.5 text-[11px] text-ink-muted">El navegador aún no permite el sonido: haz clic en cualquier parte de la página para activarlo.</p>}
-            </div>
-        </div>
-    );
+    return null;
 }

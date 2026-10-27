@@ -216,13 +216,95 @@ class ConversationAlertsTest extends TestCase
         $this->alerts($events->json('cursor'))->assertJsonPath('events', []);
     }
 
+    // --- the sidebar badge: conversations waiting for a person ---------------------------------------------------------
+
+    private function pending(): int
+    {
+        return $this->alerts()->assertOk()->json('pending');
+    }
+
+    private function handle(Conversation $conversation, string $handling, ?int $assigned = null): void
+    {
+        $conversation->forceFill(['handling' => $handling, 'assigned_user_id' => $assigned])->save();
+    }
+
+    public function test_the_badge_counts_conversations_waiting_for_a_person_not_events_and_not_what_the_assistant_answers(): void
+    {
+        $me = $this->as($this->a);
+        $this->assertSame(0, $this->pending());
+
+        $this->receive($this->tokenA, 'p-1')->assertCreated();
+        $conversation = Conversation::firstOrFail();
+        $this->assertSame(0, $this->pending(), 'the assistant has it: nobody must answer');
+
+        $this->handle($conversation, Conversation::PENDING);
+        $this->assertSame(1, $this->pending());
+
+        // More messages and retries of the same conversation do not raise it; another waiting conversation does.
+        $this->receive($this->tokenA, 'p-2')->assertCreated();
+        $this->receive($this->tokenA, 'p-2')->assertOk();
+        $this->assertSame(1, $this->pending());
+        $this->receive($this->tokenA, 'q-1', ['contact_id' => '573009998877'])->assertCreated();
+        $this->handle(Conversation::where('contact_id', '573009998877')->firstOrFail(), Conversation::PENDING);
+        $this->assertSame(2, $this->pending());
+
+        // A refresh, a page visit and a second read change nothing.
+        $this->get('/dashboard')->assertInertia(fn ($page) => $page->where('conversationAlerts.pending', 2));
+        $this->assertSame(2, $this->pending());
+        $this->assertNotNull($me);
+    }
+
+    public function test_the_badge_goes_down_when_someone_answers_takes_it_elsewhere_or_closes_it(): void
+    {
+        $me = $this->as($this->a);
+        $other = $this->member($this->a, 'admin');
+        $this->receive($this->tokenA, 'p-1')->assertCreated();
+        $conversation = Conversation::firstOrFail();
+        $this->handle($conversation, Conversation::PENDING);
+        $this->assertSame(1, $this->pending());
+
+        // Taken by ANOTHER agent: it is theirs to answer, not mine.
+        $this->handle($conversation, Conversation::HUMAN, $other->id);
+        $this->assertSame(0, $this->pending());
+
+        // Mine, and the contact's message is the last thing said: waiting for me.
+        $this->handle($conversation, Conversation::HUMAN, $me->id);
+        $this->assertSame(1, $this->pending());
+
+        // I answer (a message of the team is the last thing said): nothing waits any more, and my own message is not counted as news.
+        $conversation->messages()->create(['workspace_id' => $this->a->id, 'direction' => 'out', 'sender' => 'agent', 'type' => 'text', 'body' => 'Respuesta', 'sent_at' => now()->addSecond()]);
+        $this->assertSame(0, $this->pending());
+
+        // The contact writes again: waiting again. Then it is closed: gone.
+        $this->receive($this->tokenA, 'p-3')->assertCreated();
+        $this->assertSame(1, $this->pending());
+        $conversation->forceFill(['closed_at' => now(), 'handling' => Conversation::RESOLVED])->save();
+        $this->assertSame(0, $this->pending());
+    }
+
+    public function test_the_badge_never_counts_demo_conversations_or_another_workspace_and_is_absent_without_permission(): void
+    {
+        $this->as($this->a);
+        $this->receive($this->tokenA, 'p-1')->assertCreated();
+        $demo = Conversation::firstOrFail();
+        $demo->forceFill(['handling' => Conversation::PENDING, 'demo_key' => 'demo-1'])->save();
+        $this->receive($this->tokenB, 'b-1')->assertCreated();
+        Conversation::where('workspace_id', $this->b->id)->update(['handling' => Conversation::PENDING]);
+
+        $this->assertSame(0, $this->pending(), 'neither a demo nor the other Workspace waits for this team');
+
+        $this->as($this->a, 'cliente');
+        $this->get('/dashboard')->assertInertia(fn ($page) => $page->where('conversationAlerts', null));
+        $this->alerts()->assertStatus(403);
+    }
+
     public function test_the_interface_pieces_exist_and_the_alert_is_not_built_from_message_content(): void
     {
         $component = (string) file_get_contents(base_path('resources/js/Components/ConversationAlerts.jsx'));
 
         $this->assertStringContainsString('describeEvents', $component);
         $this->assertStringNotContainsString('.body', $component, 'the card never reads message text');
-        $this->assertStringContainsString('aria-live="polite"', $component);
+        $this->assertStringContainsString('toast.notice', $component);
         $this->assertStringContainsString('prefers-reduced-motion', (string) file_get_contents(base_path('resources/css/app.css')).'prefers-reduced-motion'); // motion-safe classes are used
         $this->assertStringContainsString('<ConversationAlerts />', (string) file_get_contents(base_path('resources/js/Layouts/AppLayout.jsx')));
         $this->assertNull(Chatbot::first()?->description);

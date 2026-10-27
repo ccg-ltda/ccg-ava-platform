@@ -1,6 +1,7 @@
 import { usePage } from '@inertiajs/react';
 import { File as FileIcon, LifeBuoy, Mail, Paperclip, Send, Video, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useConfirm } from '@/Components/ConfirmDialog';
 import { addFiles, formatSize } from '@/lib/attachments';
 import jsonRequest from '@/lib/jsonRequest';
 
@@ -16,6 +17,7 @@ const BANNER = {
     waiting: 'text-accent-amber',
     attending: 'text-accent-green',
     resolved: 'text-ink-muted',
+    closed: 'text-ink-muted',
 };
 
 /** A compact preview of a file about to be sent: the image itself, or an icon for a video or a PDF (the file is not read until it is sent). */
@@ -71,6 +73,7 @@ function Sent({ attachments, mine }) {
  */
 export default function SupportDesk() {
     const page = usePage();
+    const confirm = useConfirm();
     const { supportDesk, help } = page.props;
     const [open, setOpen] = useState(false);
     const [thread, setThread] = useState(null);
@@ -80,6 +83,9 @@ export default function SupportDesk() {
     const [files, setFiles] = useState([]);
     const [fileErrors, setFileErrors] = useState([]);
     const [queue, setQueue] = useState([]);
+    // The session this window shows (null = none yet). The server decides when it ended; the window only reflects it and then offers a NEW conversation.
+    const session = useRef(null);
+    const [finishing, setFinishing] = useState(false);
     const sending = useRef(false);
     const field = useRef(null);
     const list = useRef(null);
@@ -93,7 +99,11 @@ export default function SupportDesk() {
         if (!quiet) setLoading(true);
 
         try {
-            setThread(await jsonRequest(route('support.thread', undefined, false)));
+            // `seen` only when the panel is open AND the tab is visible: that is what makes the team's messages «read» (a background poll proves nothing).
+            const query = new URLSearchParams({ ...(session.current ? { session: session.current } : {}), ...(document.visibilityState === 'visible' ? { seen: '1' } : {}) });
+            const next = await jsonRequest(route('support.thread', undefined, false) + (query.size ? `?${query}` : ''));
+            session.current = next.state === 'none' ? null : (next.session ?? null);
+            setThread(next);
             setProblem(null);
         } catch (error) {
             if (!quiet) setProblem(error.status === 403 ? 'El soporte está disponible solo para los administradores del Workspace.' : error.message);
@@ -148,14 +158,18 @@ export default function SupportDesk() {
 
         try {
             const body = new FormData();
+            if (session.current) body.append('session', String(session.current));
             body.append('message', item.text);
             body.append('message_id', item.id);
             item.files.forEach((file) => body.append('files[]', file));
             const result = await jsonRequest(route('support.messages', undefined, false), { method: 'POST', body });
+            session.current = result.session ?? null;
             setThread(result);
             setQueue((items) => items.filter((entry) => entry.id !== item.id));
         } catch (error) {
             setQueue((items) => items.map((entry) => (entry.id === item.id ? { ...entry, status: 'failed', error: error.message } : entry)));
+            // The session ended while the message was being written: show the ending now (the text stays in the failed message, to correct or copy).
+            if (error.status === 422 && /finalizada/.test(error.message)) load(true);
         } finally {
             sending.current = false;
         }
@@ -184,6 +198,33 @@ export default function SupportDesk() {
         field.current?.focus();
     };
 
+    const closed = thread?.state === 'closed';
+    const canFinish = Boolean(thread?.session) && !closed && thread?.state !== 'none';
+
+    const finish = async () => {
+        const confirmed = await confirm({ description: 'Se finalizará esta conversación y no podrás escribir más en ella. El equipo conserva el historial y, si necesitas ayuda otra vez, podrás iniciar una nueva.', confirmLabel: 'Finalizar conversación' });
+
+        if (!confirmed) return;
+
+        setFinishing(true);
+
+        try {
+            setThread(await jsonRequest(route('support.close', undefined, false), { method: 'POST', body: { session: thread.session } }));
+        } catch (error) {
+            setProblem(error.message);
+        } finally {
+            setFinishing(false);
+        }
+    };
+
+    // The ended session is left behind: the next message opens a NEW conversation with its own id and none of the old messages.
+    const startNew = () => {
+        session.current = null;
+        setQueue([]);
+        setThread({ state: 'none', label: 'Aún no has enviado ninguna solicitud.', agent: null, session: null, messages: [] });
+        field.current?.focus();
+    };
+
     const messages = thread?.messages ?? [];
     const busy = queue.some((item) => item.status === 'sending');
 
@@ -193,7 +234,7 @@ export default function SupportDesk() {
                 <section
                     role="dialog"
                     aria-label="Soporte de Zonno"
-                    className="fixed inset-x-3 bottom-20 z-50 flex h-[min(46rem,calc(100dvh-6.5rem))] flex-col overflow-hidden rounded-2xl border border-line bg-card shadow-2xl sm:inset-x-auto sm:right-5 sm:w-96"
+                    className="fixed inset-x-3 bottom-20 z-50 flex h-[min(34.5rem,calc(100dvh-6.5rem))] flex-col overflow-hidden rounded-2xl border border-line bg-card shadow-2xl sm:inset-x-auto sm:right-5 sm:w-96"
                 >
                     <header className="flex items-center gap-3 border-b border-line px-4 py-3">
                         <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/15 text-accent-blue">
@@ -222,7 +263,16 @@ export default function SupportDesk() {
                         </div>
                     ) : (
                         <>
-                            {thread && <p role="status" className={`border-b border-line px-4 py-2 text-xs font-semibold ${BANNER[thread.state] ?? 'text-ink-muted'}`}>{thread.label}</p>}
+                            {thread && (
+                                <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-2">
+                                    <p role="status" className={`min-w-0 text-xs font-semibold ${BANNER[thread.state] ?? 'text-ink-muted'}`}>{thread.label}</p>
+                                    {canFinish && (
+                                        <button type="button" onClick={finish} disabled={finishing} className="shrink-0 rounded-lg border border-line px-2.5 py-1 text-xs font-semibold text-ink-muted hover:bg-canvas hover:text-ink disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-primary">
+                                            Finalizar
+                                        </button>
+                                    )}
+                                </div>
+                            )}
 
                             <div ref={list} className="min-h-40 flex-1 space-y-2 overflow-y-auto overscroll-contain px-4 py-3" aria-live="polite" aria-label="Mensajes de la conversación de soporte">
                                 {loading && !thread && <p className="text-sm text-ink-muted">Cargando la conversación...</p>}
@@ -266,6 +316,13 @@ export default function SupportDesk() {
                                 ))}
                             </div>
 
+                            {closed ? (
+                                <div className="border-t border-line p-3">
+                                    <button type="button" onClick={startNew} className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:opacity-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+                                        Iniciar una nueva conversación
+                                    </button>
+                                </div>
+                            ) : (
                             <form onSubmit={submit} className="border-t border-line p-3">
                                 {fileErrors.length > 0 && (
                                     <ul role="alert" className="mb-2 space-y-0.5 text-xs text-danger">
@@ -279,7 +336,7 @@ export default function SupportDesk() {
                                         ))}
                                     </ul>
                                 )}
-                                <div className="flex items-end gap-2">
+                                <div className="flex items-center gap-2">
                                     <input ref={picker} type="file" multiple accept={limits?.accept} onChange={choose} className="sr-only" tabIndex={-1} aria-hidden="true" />
                                     <button type="button" onClick={() => picker.current?.click()} disabled={busy || !limits} className="grid size-11 shrink-0 place-items-center rounded-lg border border-line text-ink-muted hover:bg-canvas disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-primary" aria-label="Adjuntar capturas, videos o PDF" title="Adjuntar capturas, videos o PDF">
                                         <Paperclip className="size-5" aria-hidden="true" />
@@ -308,6 +365,7 @@ export default function SupportDesk() {
                                 </div>
                                 {limits && <p className="mt-1.5 text-[11px] text-ink-muted">PNG, JPG, WebP, MP4, WebM o PDF · hasta {limits.maxFiles} archivos · imágenes {limits.maxMb.image} MB, PDF {limits.maxMb.pdf} MB, videos {limits.maxMb.video} MB.</p>}
                             </form>
+                            )}
                         </>
                     )}
                 </section>

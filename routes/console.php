@@ -16,6 +16,10 @@ Schedule::call(fn () => Cache::put('ava:scheduler:heartbeat', now()->timestamp, 
 // Picks up chatbot executions a crash left half done (never resends a message: see ChatbotExecutions::recover).
 ScheduledCommandMonitor::watch(Schedule::command('executions:recover')->everyMinute()->withoutOverlapping()->onOneServer(), 'executions-recover');
 
+// Closes support sessions that went quiet for support.inactivity_minutes (4) and settles outgoing messages nobody confirmed (never «Enviando» forever). Both are idempotent;
+// reading or writing a support session also closes an idle one, so a stopped scheduler never keeps a session alive.
+ScheduledCommandMonitor::watch(Schedule::command('conversations:maintain')->everyMinute()->withoutOverlapping()->onOneServer(), 'conversations-maintain');
+
 // Plans and queues the confirmations and reminders of appointments (idempotent; needs the queue worker to deliver what it queues).
 ScheduledCommandMonitor::watch(Schedule::command('appointments:notify')->everyMinute()->withoutOverlapping()->onOneServer(), 'appointments-notify');
 

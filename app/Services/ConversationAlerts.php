@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Conversation;
+use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -31,12 +32,30 @@ class ConversationAlerts
             return null;
         }
 
-        return ['poll' => (int) config('support.alerts_poll_seconds')];
+        return ['poll' => (int) config('support.alerts_poll_seconds'), 'pending' => $this->pending($workspace, $request->user())];
     }
 
     public function allowed(Request $request, Workspace $workspace): bool
     {
         return in_array('view-conversations', $request->attributes->get('workspace_permissions', []), true) && $this->modules->allows($workspace, 'conversations');
+    }
+
+    /**
+     * «Pendiente de respuesta»: how many CONVERSATIONS wait for a person's answer. A conversation counts when it is open (not closed or resolved, not a demo), a person is the one
+     * who must answer (`pending`, nobody has taken it; or `human`, and it is MINE) and the last thing said in it was written by the contact. So it goes down by itself when someone
+     * answers, takes it elsewhere or closes it, never because of a refresh or a visit, never counts the assistant's or the team's own messages, never counts a retry twice (it counts
+     * conversations, not events) and never counts what the assistant is still answering.
+     */
+    public function pending(Workspace $workspace, User $user): int
+    {
+        return Conversation::query()->where('conversations.workspace_id', $workspace->id)
+            ->whereIn('conversations.channel', collect(app(ChannelCatalog::class)->all())->filter(fn (array $c) => $c['conversations'] ?? false)->pluck('key')->all())
+            ->whereNull('conversations.demo_key')->whereNull('conversations.closed_at')
+            ->where(fn ($q) => $q->where('conversations.handling', Conversation::PENDING)->orWhere(fn ($mine) => $mine->where('conversations.handling', Conversation::HUMAN)->where('conversations.assigned_user_id', $user->id)))
+            ->whereExists(fn ($last) => $last->select(DB::raw(1))->from('messages as m')
+                ->whereColumn('m.conversation_id', 'conversations.id')->where('m.sender', 'contact')->where('m.simulated', false)
+                ->whereRaw('m.id = (select max(x.id) from messages x where x.conversation_id = conversations.id and x.sender in (\'contact\', \'agent\', \'ai\'))'))
+            ->count();
     }
 
     /** The id of the newest message of the Workspace (0 when there is none). */

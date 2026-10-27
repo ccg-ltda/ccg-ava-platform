@@ -157,10 +157,44 @@ class ConversationControl
             $this->assertOpen($locked);
             $this->assertOperator($locked, $actor, $manage);
             $before = $this->snapshot($locked);
-            $this->move($locked, Conversation::RESOLVED, $locked->assigned_user_id, ['resolved_at' => now()]);
+            // Resolving a client's SUPPORT request ends its session for good (who, when and why are kept, and the person's next message opens a new conversation).
+            $this->move($locked, Conversation::RESOLVED, $locked->assigned_user_id, ['resolved_at' => now()] + (app(SupportDesk::class)->isRequest($locked) ? $this->closing($locked, 'agent', $actor) : []));
 
             return ['resolved', $before];
         });
+    }
+
+    /**
+     * Ends a support session (the client, an agent through `resolve`, or the clock). Under the row lock the messages take: `$allowed` is asked again on the fresh row (the
+     * inactivity re-check), a session that is already closed is left alone, and `$after` runs inside the same transaction (the system line). Returns whether THIS call closed it.
+     *
+     * @param  Closure(Conversation): bool  $allowed
+     * @param  Closure(Conversation): void  $after
+     */
+    public function closeSupportSession(Conversation $conversation, string $reason, ?User $by, Closure $allowed, Closure $after): bool
+    {
+        $closed = false;
+
+        $this->change($conversation, function (Conversation $locked) use ($reason, $by, $allowed, $after, &$closed) {
+            if ($locked->closed_at !== null || ! $allowed($locked)) {
+                return null;
+            }
+
+            $before = $this->snapshot($locked);
+            $this->move($locked, Conversation::RESOLVED, $locked->assigned_user_id, ['resolved_at' => now()] + $this->closing($locked, $reason, $by));
+            $after($locked);
+            $closed = true;
+
+            return ['closed_'.$reason, $before];
+        });
+
+        return $closed;
+    }
+
+    /** @return array<string, mixed> the columns of a closed session, including the archived key that frees the person's own one */
+    private function closing(Conversation $locked, string $reason, ?User $by): array
+    {
+        return ['closed_at' => now(), 'closed_by_user_id' => $by?->id, 'closed_reason' => $reason, 'contact_id' => SupportSessions::archivedKey($locked)];
     }
 
     /** The contact wrote to a resolved conversation: it opens again with the AI. Called under the caller's lock. */
@@ -253,6 +287,7 @@ class ConversationControl
         match ($action) {
             'requested' => $this->audit->recordForActor($action, 'conversation', $conversation->id, $label, $changes, $workspace, 'Asistente (automático)'),
             'reopened' => $this->audit->recordForActor($action, 'conversation', $conversation->id, $label, $changes, $workspace, 'Contacto (mensaje nuevo)'),
+            'closed_inactivity' => $this->audit->recordForActor($action, 'conversation', $conversation->id, $label, $changes, $workspace, 'Sistema (inactividad de 4 minutos)'),
             default => $this->audit->record($action, 'conversation', $conversation->id, $label, $changes, $workspace),
         };
     }

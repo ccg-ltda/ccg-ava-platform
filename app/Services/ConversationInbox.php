@@ -122,6 +122,8 @@ class ConversationInbox
             'support' => app(SupportDesk::class)->origins(collect([$conversation]))[$conversation->id] ?? null,
             'assignedUser' => $conversation->assignedUser ? ['id' => $conversation->assignedUser->id, 'name' => $conversation->assignedUser->name, 'isMe' => $conversation->assignedUser->is($user)] : null,
             'handoffReason' => $conversation->handoff_reason,
+            // A finished support session: why, who (null = the clock) and when. The messages and files stay readable here for CCG.
+            'closed' => $conversation->closed_at ? ['reason' => $conversation->closed_reason, 'label' => SupportSessions::REASONS[$conversation->closed_reason] ?? 'Finalizada', 'by' => $conversation->closed_by_user_id ? User::whereKey($conversation->closed_by_user_id)->value('name') : null, 'at' => $settings->formatDate($conversation->closed_at).' '.$settings->formatTime($conversation->closed_at)] : null,
             'handoffAt' => $conversation->handoff_requested_at ? $settings->formatDate($conversation->handoff_requested_at).' '.$settings->formatTime($conversation->handoff_requested_at) : null,
             'delivery' => $delivery,
             // The demo bench: only on a demo conversation, in a demo environment, for who manages conversations.
@@ -147,6 +149,9 @@ class ConversationInbox
                 // Files sent with the message (support requests). Each url is a route that checks the conversation and the Workspace on every read; a Workspace seen read only gets none.
                 'attachments' => $foreign ? [] : $message->attachments->map(fn ($a) => MessageAttachments::present($a, route('conversations.attachments', ['conversation' => $conversation->id, 'attachment' => $a->id], false)))->all(),
                 'status' => $message->status,
+                // The time of each state is its own: sent (`time`), delivered and read are the channel's confirmations (null when the channel gave none).
+                'deliveredTime' => $message->delivered_at ? $settings->formatTime($message->delivered_at) : null,
+                'readTime' => $message->read_at ? $settings->formatTime($message->read_at) : null,
                 'simulated' => $message->simulated,
                 'failureReason' => in_array($message->status, ['failed', Message::UNCONFIRMED], true) ? $message->failure_reason : null,
                 'day' => $settings->formatDate($message->sent_at),

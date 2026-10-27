@@ -37,7 +37,7 @@ class SupportDesk
      * The shape of the conversation key of a signed-in client (`c{workspace}u{user}`). It is RESERVED: the public widget refuses it as a visitor's session id, so nobody can
      * create or read such a conversation by choosing a session id, and a conversation with this key can only have been created by the signed-in panel or the signed context token.
      */
-    public const RESERVED_KEY = '/^c\d+u\d+$/';
+    public const RESERVED_KEY = '/^c\d+u\d+(x\d+)?$/';
 
     public function __construct(
         private readonly SupportChannel $support,
@@ -125,15 +125,26 @@ class SupportDesk
      *
      * @return array{state: string, label: string, agent: ?string, messages: list<array<string, mixed>>}
      */
-    public function thread(User $user, Workspace $workspace): array
+    public function thread(User $user, Workspace $workspace, ?int $session = null, bool $seen = false): array
     {
         $conversation = $this->find($user, $workspace);
 
-        if (! $conversation) {
-            return ['state' => 'none', 'label' => 'Aún no has enviado ninguna solicitud.', 'agent' => null, 'messages' => []];
+        // The session this browser was showing ended (the person, the team or the clock closed it): it is told so, once, and the next message starts a NEW one.
+        if ($session !== null && ($conversation === null || $conversation->id !== $session) && ($ended = $this->ended($user, $workspace, $session))) {
+            return ['state' => 'closed', 'label' => SupportSessions::notice($ended->closed_reason), 'agent' => null, 'session' => $ended->id, 'reason' => $ended->closed_reason, 'messages' => $this->messages($ended)];
         }
 
-        $conversation->messages()->where('direction', 'out')->where('sender', 'agent')->where('status', 'sent')->update(['status' => 'delivered']);
+        if (! $conversation) {
+            return ['state' => 'none', 'label' => 'Aún no has enviado ninguna solicitud.', 'agent' => null, 'session' => null, 'messages' => []];
+        }
+
+        // What the team wrote is «delivered» once the person's panel has it, and «read» only when the panel is open and VISIBLE (`seen`): a background tab or a poll proves nothing.
+        $team = $conversation->messages()->where('direction', 'out')->where('sender', 'agent');
+        (clone $team)->where('status', 'sent')->update(['status' => 'delivered', 'delivered_at' => now()]);
+
+        if ($seen) {
+            (clone $team)->whereIn('status', ['sent', 'delivered'])->update(['status' => 'read', 'read_at' => now(), 'delivered_at' => DB::raw('coalesce(delivered_at, CURRENT_TIMESTAMP)')]);
+        }
         $conversation->load('assignedUser:id,name');
 
         [$state, $label] = match ($conversation->handling) {
@@ -146,6 +157,7 @@ class SupportDesk
             'state' => $state,
             'label' => $label,
             'agent' => $conversation->handling === Conversation::HUMAN ? $conversation->assignedUser?->name : null,
+            'session' => $conversation->id,
             'messages' => $this->messages($conversation),
         ];
     }
@@ -159,9 +171,17 @@ class SupportDesk
      *
      * @throws ValidationException when the desk cannot receive requests or a file is refused
      */
-    public function send(User $user, Workspace $workspace, string $text, string $messageId, array $files = []): array
+    public function send(User $user, Workspace $workspace, string $text, string $messageId, array $files = [], ?int $session = null): array
     {
         $chatbot = $this->destination();
+
+        // The browser was showing a session that has ended since: nothing is added to it and nothing is lost silently, the person is told and starts a new one.
+        // The open session is looked up FIRST: one that went quiet is closed here, so this message can never revive it (it starts the person's new conversation).
+        $current = $this->find($user, $workspace);
+
+        if ($session !== null && ($current?->id !== $session)) {
+            throw ValidationException::withMessages(['message' => 'Esta conversación ya fue finalizada. Inicia una nueva para escribir al equipo.']);
+        }
 
         if ($chatbot === null) {
             throw ValidationException::withMessages(['message' => 'El soporte no está disponible en este momento. Usa el correo de soporte.']);
@@ -225,7 +245,7 @@ class SupportDesk
     {
         $requests = $conversations->filter(fn (Conversation $c) => $this->isRequest($c));
         $pairs = $requests->mapWithKeys(function (Conversation $c) {
-            preg_match('/^c(\d+)u(\d+)$/', $c->contact_id, $m);
+            preg_match('/^c(\d+)u(\d+)(?:x\d+)?$/', $c->contact_id, $m);
 
             return [$c->id => [(int) $m[1], (int) $m[2]]];
         });
@@ -248,11 +268,31 @@ class SupportDesk
         return MessageAttachment::where('conversation_id', $conversation->id)->where('workspace_id', $conversation->workspace_id)->findOrFail($id);
     }
 
+    /** Ends the person's OPEN session (their own: the key comes from the session, not from the request). Returns the thread, which then says it ended. */
+    public function finish(User $user, Workspace $workspace, int $session): array
+    {
+        $conversation = $this->find($user, $workspace);
+
+        if ($conversation !== null && $conversation->id === $session) {
+            app(SupportSessions::class)->close($conversation, 'client', $user);
+        }
+
+        return $this->thread($user, $workspace, $session);
+    }
+
+    /** A session of THIS person that already ended, or null: its archived key carries the person's own, so another person's id gives nothing. */
+    private function ended(User $user, Workspace $workspace, int $session): ?Conversation
+    {
+        return Conversation::whereKey($session)->where('contact_id', self::contactId($user, $workspace).'x'.$session)->whereNotNull('closed_at')->first();
+    }
+
+    /** The person's OPEN session (a finished one is never found: its key was archived). One that went quiet is closed here, so a stopped scheduler never keeps it alive. */
     private function find(User $user, Workspace $workspace): ?Conversation
     {
         $chatbot = $this->destination();
+        $conversation = $chatbot?->conversations()->where('channel', 'web')->where('contact_id', self::contactId($user, $workspace))->whereNull('closed_at')->first();
 
-        return $chatbot?->conversations()->where('channel', 'web')->where('contact_id', self::contactId($user, $workspace))->first();
+        return $conversation && app(SupportSessions::class)->closeIfIdle($conversation) ? null : $conversation;
     }
 
     /** @return list<array<string, mixed>> */

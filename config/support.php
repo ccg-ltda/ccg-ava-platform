@@ -33,6 +33,9 @@ return [
     'desk_max_message' => 2000,
     'desk_poll_seconds' => 8,
 
+    // A support session with no message from the person or the team for this many minutes is closed by the server (SupportSessions). The clock is the server's.
+    'inactivity_minutes' => (int) env('SUPPORT_INACTIVITY_MINUTES', 4),
+
     // How often (seconds) an open browser asks whether a conversation or a message arrived (the notification of the team in the app).
     'alerts_poll_seconds' => 15,
 

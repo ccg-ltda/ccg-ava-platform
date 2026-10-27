@@ -23,6 +23,7 @@ class ConversationAlertsController extends Controller
             ? $this->alerts->since($workspace, (int) $after)
             : ['cursor' => $this->alerts->latest($workspace), 'events' => []];
 
-        return response()->json($body)->header('Cache-Control', 'no-store');
+        // The count of conversations waiting for a person (sidebar badge): it does not depend on the cursor, so a refresh or a second tab shows the same number.
+        return response()->json($body + ['pending' => $this->alerts->pending($workspace, $request->user())])->header('Cache-Control', 'no-store');
     }
 }

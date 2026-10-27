@@ -39,6 +39,12 @@ class ConversationService
             // The same row lock that control changes take, so a message never lands in the middle of one.
             $conversation = Conversation::whereKey($conversation->id)->lockForUpdate()->first();
 
+            // A support session closed between the lookup and the lock (its key was archived) takes nothing more: the message starts the person's NEW conversation.
+            if ($conversation->closed_at !== null) {
+                $conversation = $chatbot->conversations()->firstOrCreate(['channel' => $channel, 'contact_id' => $data['contact_id']], ['workspace_id' => $chatbot->workspace_id]);
+                $conversation = Conversation::whereKey($conversation->id)->lockForUpdate()->first();
+            }
+
             if (filled($data['external_id'] ?? null) && $existing = $conversation->messages()->where('external_id', $data['external_id'])->first()) {
                 if (filled($data['status'] ?? null)) {
                     $existing->update(['status' => $data['status']]);
@@ -101,9 +107,14 @@ class ConversationService
 
         // Conditional update: a repeated or out-of-order event (see Message::replaceableBy) never moves the state backwards.
         $allowed = Message::replaceableBy($status);
+        $stamps = match ($status) {
+            'delivered' => ['delivered_at' => now()],
+            'read' => ['delivered_at' => DB::raw('coalesce(delivered_at, CURRENT_TIMESTAMP)'), 'read_at' => now()],
+            default => [],
+        };
         $message?->newQuery()->whereKey($message->getKey())
             ->where(fn ($q) => $q->whereIn('status', array_filter($allowed))->when(in_array(null, $allowed, true), fn ($q) => $q->orWhereNull('status')))
-            ->update(['status' => $status]);
+            ->update(['status' => $status] + $stamps);
 
         return $message !== null;
     }

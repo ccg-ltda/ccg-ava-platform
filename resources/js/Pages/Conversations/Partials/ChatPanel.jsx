@@ -53,6 +53,17 @@ function Attachments({ items, mine }) {
 
 /** One message: who wrote it, its text, what kind of content it is when it is not plain text, and the state of an outgoing one. */
 function Bubble({ message, simulate, conversationId, onFeedback }) {
+    // A system line (a session that ended): not a message of the contact or of the team, it has no state and goes nowhere.
+    if (message.sender === 'system') {
+        return (
+            <div className="flex justify-center">
+                <p className="rounded-full bg-canvas px-3 py-1 text-center text-xs text-ink-muted">
+                    {message.body} · <time>{message.day} {message.time}</time>
+                </p>
+            </div>
+        );
+    }
+
     const mine = message.direction === 'out';
     const type = TYPES[message.type];
     const Icon = type?.icon;
@@ -73,20 +84,24 @@ function Bubble({ message, simulate, conversationId, onFeedback }) {
                 {message.body ? <p className="break-words whitespace-pre-wrap">{message.body}</p> : type && !message.attachments?.length && <p className="italic opacity-80">El contenido multimedia no se guarda en Ava.</p>}
                 <Attachments items={message.attachments} mine={mine} />
                 {failed && message.failureReason && <p className="mt-1 rounded bg-white/15 px-2 py-1 text-xs">{message.failureReason}</p>}
-                <p className={`mt-1 flex items-center justify-end gap-2 text-[11px] ${mine ? 'text-white/80' : 'text-ink-muted'}`}>
-                    {message.simulated && (
-                        <span className="rounded bg-white/20 px-1.5 py-0.5 font-bold uppercase ring-1 ring-current" title="Mensaje ficticio de la demo: no pasó por ningún proveedor real">
-                            Simulado
-                        </span>
-                    )}
+                <div className={`mt-1 flex flex-col items-end text-[11px] leading-tight ${mine ? 'text-white/80' : 'text-ink-muted'}`}>
+                    <p className="flex items-center gap-2">
+                        {message.simulated && (
+                            <span className="rounded bg-white/20 px-1.5 py-0.5 font-bold uppercase ring-1 ring-current" title="Mensaje ficticio de la demo: no pasó por ningún proveedor real">
+                                Simulado
+                            </span>
+                        )}
+                        <time>{message.time}</time>
+                    </p>
                     {mine && message.status && (
-                        <span className={failed ? 'font-semibold' : ''}>
+                        <p className={failed ? 'font-semibold' : ''}>
                             {messageStatuses[message.status]}
+                            {message.status === 'delivered' && message.deliveredTime && ` · ${message.deliveredTime}`}
+                            {message.status === 'read' && message.readTime && ` · ${message.readTime}`}
                             {message.simulated && ' (simulado)'}
-                        </span>
+                        </p>
                     )}
-                    <time>{message.time}</time>
-                </p>
+                </div>
                 {simulate && mine && message.simulated && <StatusSimulator conversationId={conversationId} messageId={message.id} />}
                 {onFeedback && mine && message.sender === 'ai' && message.body && (
                     <button type="button" onClick={onFeedback} className="mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold text-white/85 underline-offset-2 hover:bg-white/15 hover:underline focus-visible:outline-2 focus-visible:outline-white">
@@ -139,12 +154,17 @@ export default function ChatPanel({ selected, backHref, agents }) {
                     )}
                 </div>
                 <div className="flex w-full shrink-0 flex-wrap items-center gap-1 pl-12 sm:w-auto sm:justify-end sm:pl-0">
-                    <Badge tone={state.tone}>{state.label}</Badge>
+                    <Badge tone={state.tone}>{selected.closed ? selected.closed.label : state.label}</Badge>
                     {selected.support && <Badge tone="blue">Soporte Zonno</Badge>}
                     {selected.demo && <Badge tone="violet">Demo</Badge>}
                 </div>
             </header>
 
+            {selected.closed && (
+                <p role="status" className="border-b border-line bg-canvas px-3 py-2 text-xs font-semibold text-ink-muted">
+                    {selected.closed.label}{selected.closed.by ? ` · ${selected.closed.by}` : ''} · {selected.closed.at}. La sesión está cerrada: no admite mensajes nuevos y el cliente empieza una conversación nueva si vuelve a escribir.
+                </p>
+            )}
             {selected.simulate && <SimulationBar conversationId={selected.id} />}
             <ChatActions selected={selected} agents={agents} />
             <Operations operations={selected.operations} tools={selected.tools} />

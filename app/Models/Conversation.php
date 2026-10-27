@@ -41,6 +41,7 @@ class Conversation extends Model
             'last_message_at' => 'datetime',
             'handoff_requested_at' => 'datetime',
             'resolved_at' => 'datetime',
+            'closed_at' => 'datetime',
             'handling_version' => 'integer',
         ];
     }

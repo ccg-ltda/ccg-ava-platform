@@ -64,7 +64,9 @@ class ConversationMessenger
             return $message;
         });
 
-        SendAgentMessage::dispatch($message->id);
+        // After the response, in THIS process: an instance whose queue nobody consumes (the `database` queue of a host-run server) must not leave the message «Enviando» forever.
+        // `tries = 1` and the status check in ChannelDelivery::deliver keep it from ever going out twice; `conversations:maintain` settles one that never got an answer.
+        SendAgentMessage::dispatchAfterResponse($message->id);
 
         return $message->refresh();
     }

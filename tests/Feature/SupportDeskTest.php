@@ -235,23 +235,32 @@ class SupportDeskTest extends TestCase
         $this->assertStringNotContainsString('te ayudo', $other->getContent());
     }
 
-    public function test_resolving_and_writing_again_reuses_the_conversation_and_reopens_it_for_a_person(): void
+    public function test_resolving_a_request_ends_the_session_and_writing_again_opens_a_new_conversation_keeping_the_old_one(): void
     {
         $admin = $this->as($this->a);
         $this->write('Primera consulta')->assertOk();
-        $conversation = $this->requestOf($admin, $this->a);
+        $first = $this->requestOf($admin, $this->a);
 
-        $this->as($this->dev, 'agente');
-        $this->post("/conversations/{$conversation->id}/take");
-        $this->post("/conversations/{$conversation->id}/resolve")->assertSessionHasNoErrors();
+        $agent = $this->as($this->dev, 'agente');
+        $this->post("/conversations/{$first->id}/take");
+        $this->post("/conversations/{$first->id}/resolve")->assertSessionHasNoErrors();
 
+        $first->refresh();
+        $this->assertSame([Conversation::RESOLVED, 'agent', $agent->id], [$first->handling, $first->closed_reason, $first->closed_by_user_id]);
+        $this->assertNotNull($first->closed_at);
+        $this->assertSame(SupportDesk::contactId($admin, $this->a).'x'.$first->id, $first->contact_id, 'its key is archived so the person own key is free');
+
+        // The client still showing that session is told it ended; its next message goes to a NEW conversation and the old one is untouched.
         $this->as($this->a, 'admin', $admin);
-        $this->getJson('/support/thread')->assertJsonPath('state', 'resolved');
-        $this->write('Segunda consulta')->assertOk()->assertJsonPath('state', 'waiting');
+        $this->getJson('/support/thread?session='.$first->id)->assertJsonPath('state', 'closed')->assertJsonPath('reason', 'agent');
+        $this->write('Segunda consulta', null, ['session' => $first->id])->assertStatus(422);
+        $this->write('Segunda consulta')->assertOk()->assertJsonPath('state', 'waiting')->assertJsonCount(1, 'messages');
 
-        $this->assertSame(1, Conversation::count(), 'no duplicate conversation');
-        $this->assertSame([Conversation::PENDING, 2], [$conversation->fresh()->handling, $conversation->messages()->where('sender', 'contact')->count()]);
-        $this->assertNull($conversation->fresh()->assigned_user_id, 'it is waiting for a person again, not «attended»');
+        $this->assertSame(2, Conversation::count());
+        $second = $this->requestOf($admin, $this->a);
+        $this->assertNotSame($first->id, $second->id);
+        $this->assertSame(1, $first->messages()->where('sender', 'contact')->count(), 'nothing was added to the closed session');
+        $this->assertSame([Conversation::PENDING, null], [$second->handling, $second->closed_at]);
     }
 
     public function test_a_repeated_request_is_stored_once(): void
