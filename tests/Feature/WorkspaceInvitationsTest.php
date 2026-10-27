@@ -10,11 +10,18 @@ use App\Models\Workspace;
 use App\Models\WorkspaceInvitation;
 use App\Notifications\WorkspaceInvitationNotification;
 use App\Services\WorkspaceInvitations;
+use Illuminate\Contracts\Notifications\Dispatcher;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Notifications\ChannelManager;
+use Illuminate\Notifications\SendQueuedNotifications;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Queue;
 use Spatie\Permission\Models\Role;
+use Symfony\Component\Mailer\SentMessage;
+use Symfony\Component\Mailer\Transport\AbstractTransport;
 use Tests\Support\BuildsBookings;
 use Tests\TestCase;
 
@@ -282,6 +289,82 @@ class WorkspaceInvitationsTest extends TestCase
         $old->failed(new \RuntimeException('smtp down'));
 
         $this->assertSame(0, WorkspaceInvitation::count());
+    }
+
+    /** Drops the setUp fake so the real notification channel (and its queue) runs. */
+    private function realNotifications(): void
+    {
+        Notification::clearResolvedInstances();
+        app()->forgetInstance(ChannelManager::class);
+        app()->forgetInstance(Dispatcher::class);
+    }
+
+    public function test_the_invitation_is_queued_not_sent_inline_and_survives_a_broken_queue_connection_choice(): void
+    {
+        Queue::fake();
+        $this->realNotifications();
+
+        $this->post("/workspaces/{$this->client->id}/invitations", ['email' => 'cola@cliente.com', 'role' => 'admin', 'name' => 'Cola'])->assertSessionHasNoErrors();
+
+        Queue::assertPushed(SendQueuedNotifications::class, fn ($job) => $job->notification instanceof WorkspaceInvitationNotification);
+        $this->assertSame(1, WorkspaceInvitation::count());
+        $this->assertSame(0, User::where('email', 'cola@cliente.com')->count());
+    }
+
+    public function test_the_e_mail_that_reaches_the_transport_is_addressed_to_the_invitee_with_the_working_link_and_no_secret(): void
+    {
+        $this->realNotifications();
+        config(['mail.default' => 'array', 'queue.default' => 'sync']);
+
+        $this->post("/workspaces/{$this->client->id}/invitations", ['email' => 'Real@Cliente.com', 'role' => 'admin', 'name' => 'Real'])->assertSessionHasNoErrors();
+
+        $messages = app('mailer')->getSymfonyTransport()->messages();
+        $this->assertCount(1, $messages);
+        $mail = $messages[0]->getOriginalMessage();
+        $this->assertSame('real@cliente.com', $mail->getTo()[0]->getAddress());
+        $body = $mail->getHtmlBody().$mail->getTextBody();
+        $this->assertSame(1, preg_match('#/invitacion/([A-Za-z0-9]{64})#', $body, $match), 'the link carries the token');
+        $this->assertNotNull(app(WorkspaceInvitations::class)->find($match[1]), 'and that link opens the pending invitation');
+        $this->assertStringNotContainsString('password', strtolower($body.'x'));
+    }
+
+    public function test_a_transport_error_leaves_a_pending_invitation_with_a_dead_token_and_the_resend_delivers_a_new_one(): void
+    {
+        $this->realNotifications();
+        config(['queue.default' => 'sync', 'mail.default' => 'boom', 'mail.mailers.boom' => ['transport' => 'boom']]);
+        Mail::extend('boom', fn () => new class extends AbstractTransport
+        {
+            protected function doSend(SentMessage $message): void
+            {
+                throw new \RuntimeException('smtp down');
+            }
+
+            public function __toString(): string
+            {
+                return 'boom://';
+            }
+        });
+
+        try {
+            $this->post("/workspaces/{$this->client->id}/invitations", ['email' => 'fallo@cliente.com', 'role' => 'admin', 'name' => 'Fallo']);
+        } catch (\Throwable) {
+            // the sync queue rethrows what a worker would record in failed_jobs
+        }
+
+        $invitation = WorkspaceInvitation::where('email', 'fallo@cliente.com')->firstOrFail();
+        $this->assertSame(WorkspaceInvitation::PENDING, $invitation->status());
+        $this->assertSame(1, WorkspaceInvitation::count(), 'no duplicate invitation');
+        $this->assertSame(0, User::where('email', 'fallo@cliente.com')->count());
+
+        config(['mail.default' => 'array']);
+        app('mail.manager')->forgetMailers();
+        $this->post("/workspaces/{$this->client->id}/invitations/{$invitation->id}/resend")->assertSessionHasNoErrors();
+
+        $messages = app('mailer')->getSymfonyTransport()->messages();
+        $this->assertCount(1, $messages);
+        $this->assertSame(1, preg_match('#/invitacion/([A-Za-z0-9]{64})#', $messages[0]->getOriginalMessage()->getHtmlBody().$messages[0]->getOriginalMessage()->getTextBody(), $match));
+        $this->assertNotNull(app(WorkspaceInvitations::class)->find($match[1]));
+        $this->assertSame(1, WorkspaceInvitation::count());
     }
 
     private function lastToken(): string

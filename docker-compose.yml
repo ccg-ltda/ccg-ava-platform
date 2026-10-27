@@ -84,6 +84,16 @@ services:
       retries: 3
       start_period: 20s
 
+  # OPT-IN (profile `host-queue`, never started by a plain `up`): consumes the `database` queue of the shared ccg_ava. Needed only while a host-run
+  # `php artisan serve` with QUEUE_CONNECTION=database enqueues jobs (invitations, mail) that Horizon (Redis) never reads. BEFORE starting it, review
+  # `select id, queue, left(payload, 120) from jobs`: every pending job will be executed (real e-mails). See RECOMENDACIONES.md.
+  worker-db:
+    <<: *php
+    profiles: ["host-queue"]
+    command: ["php", "artisan", "queue:work", "database", "--queue=default", "--tries=3", "--sleep=3", "--max-time=3600"]
+    depends_on:
+      app: { condition: service_healthy }
+
   scheduler:
     <<: *php
     command: ["php", "artisan", "schedule:work"]
