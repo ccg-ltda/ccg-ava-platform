@@ -15,12 +15,14 @@ import PageHeader from '@/Components/PageHeader';
 import PrimaryButton from '@/Components/PrimaryButton';
 import Select from '@/Components/Select';
 import SecondaryButton from '@/Components/SecondaryButton';
+import Tabs from '@/Components/Tabs';
 import { TableWrap, Td, Th } from '@/Components/Table';
 import Textarea from '@/Components/Textarea';
 import TextInput from '@/Components/TextInput';
 import useAccess from '@/Hooks/useAccess';
+import useUrlTab from '@/Hooks/useUrlTab';
 import AppLayout from '@/Layouts/AppLayout';
-import CategoriesModal from './Partials/CategoriesModal';
+import CategoriesPanel from './Partials/CategoriesPanel';
 
 const money = (value, currency) => (value === null || value === undefined ? '—' : new Intl.NumberFormat('es', { style: 'currency', currency }).format(value));
 
@@ -145,7 +147,8 @@ export default function Index({ capabilities, services, external, externalError,
     const canToggle = permissions.includes('activate-services') && !capabilities.external;
     const canAct = canEdit || canToggle;
     const [editing, setEditing] = useState(null);
-    const [managingCategories, setManagingCategories] = useState(false);
+    const [tab, selectTab] = useUrlTab(['servicios', 'categorias']);
+    const tabs = [{ id: 'servicios', label: 'Servicios', icon: Scissors, count: services.length }, { id: 'categorias', label: 'Categorías', icon: Tag, count: categoryAdmin?.data.length }];
     const { errors } = usePage().props;
 
     const toggle = async (service) => {
@@ -176,6 +179,8 @@ export default function Index({ capabilities, services, external, externalError,
             <ExternalAgendaNotice capabilities={capabilities} error={externalError} what="Los servicios" />
             {errors?.status && <InputError message={errors.status} />}
 
+            {(() => {
+                const servicesPanel = (
             <Card className="overflow-hidden">
                 {list.length === 0 ? (
                     <div className="p-6">
@@ -236,9 +241,12 @@ export default function Index({ capabilities, services, external, externalError,
                     </TableWrap>
                 )}
             </Card>
+                );
 
-            {editing && <ServiceModal service={editing} resources={resources} locations={locations} locationsLimited={locationsLimited} categoryAdmin={categoryAdmin} onManageCategories={() => setManagingCategories(true)} onClose={() => setEditing(null)} />}
-            {managingCategories && categoryAdmin && <CategoriesModal admin={categoryAdmin} onClose={() => setManagingCategories(false)} />}
+                return categoryAdmin && !capabilities.external ? <Tabs tabs={tabs} selectedIndex={tab} onChange={selectTab}>{servicesPanel}<CategoriesPanel admin={categoryAdmin} /></Tabs> : servicesPanel;
+            })()}
+
+            {editing && <ServiceModal service={editing} resources={resources} locations={locations} locationsLimited={locationsLimited} categoryAdmin={categoryAdmin} onManageCategories={() => { setEditing(null); selectTab(1); }} onClose={() => setEditing(null)} />}
         </>
     );
 }
