@@ -6,6 +6,7 @@ use App\Audit\AuditLogger;
 use App\Booking\BookingException;
 use App\Booking\BookingManager;
 use App\Booking\Locations;
+use App\Booking\ServiceCategories;
 use App\Http\Controllers\Concerns\HandlesBooking;
 use App\Http\Requests\SaveServiceRequest;
 use App\Models\Service;
@@ -53,6 +54,7 @@ class ServiceController extends Controller
                 'name' => $service->name,
                 'description' => $service->description,
                 'category' => $service->category,
+                'categoryId' => $service->category_id,
                 'durationMinutes' => $service->duration_minutes,
                 'bufferMinutes' => $service->buffer_minutes,
                 'price' => $service->price === null ? null : (float) $service->price,
@@ -67,7 +69,15 @@ class ServiceController extends Controller
             ])->all(),
             'external' => $external,
             'externalError' => $error,
+            // Every category (active or not, to administer and to keep showing the one a service already has) and what this person may do with them.
+            'categoryAdmin' => $capabilities['external'] || ! app(ServiceCategories::class)->ready() ? null : [
+                'data' => app(ServiceCategories::class)->administration($workspace)->map(fn ($category) => ['id' => $category->id, 'name' => $category->name, 'isActive' => $category->is_active, 'services' => $category->services_count])->values()->all(),
+                'canCreate' => in_array('create-services', $request->attributes->get('workspace_permissions', []), true) || in_array('edit-services', $request->attributes->get('workspace_permissions', []), true),
+                'canEdit' => in_array('edit-services', $request->attributes->get('workspace_permissions', []), true),
+            ],
             'locations' => $capabilities['external'] || ! $pivot ? [] : app(Locations::class)->active($workspace)->map(fn ($location) => ['id' => $location->id, 'name' => $location->name])->values()->all(),
+            // A member limited to selected locations can not leave a service «in every location»: the picker then has no «Todas las sedes».
+            'locationsLimited' => $pivot && $scope->restricted($workspace, $request->user()),
             'resources' => $capabilities['external'] ? [] : $workspace->bookableResources()->where('is_active', true)->orderBy('name')->get(['id', 'name', 'kind'])->all(),
             'currency' => $workspace->settingsOrDefault()->currency,
         ]);

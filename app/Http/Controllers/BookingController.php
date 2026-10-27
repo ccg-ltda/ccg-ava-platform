@@ -28,6 +28,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -384,7 +385,9 @@ class BookingController extends Controller
         $gives = DB::table('professional_service')->where('workspace_id', $workspace->id)->get(['professional_id', 'service_id'])->groupBy('professional_id')->map(fn ($rows) => $rows->pluck('service_id')->map(fn ($id) => (int) $id)->all());
         $allowed = app(LocationScope::class)->allowedIds($workspace, $request?->user());
 
-        $services = array_map(fn (array $service) => $service + ['locationIds' => $serviceLocations[$service['id']] ?? [], 'everywhere' => ! isset($serviceLocations[$service['id']])], $services);
+        // A location marked «Todos los servicios» offers every service, so it counts among the places of each one that is restricted to some.
+        $allServices = Schema::hasColumn('locations', 'offers_all_services') ? $workspace->locations()->where('offers_all_services', true)->pluck('id')->map(fn ($id) => (int) $id)->all() : [];
+        $services = array_map(fn (array $service) => $service + ['locationIds' => isset($serviceLocations[$service['id']]) ? array_values(array_unique([...$serviceLocations[$service['id']], ...$allServices])) : [], 'everywhere' => ! isset($serviceLocations[$service['id']])], $services);
         $professionals = array_map(fn (array $professional) => $professional + [
             'locationIds' => collect($hours[$professional['id']] ?? [])->pluck('location_id')->filter()->map(fn ($id) => (int) $id)->unique()->values()->all(),
             'everywhere' => collect($hours[$professional['id']] ?? [])->contains(fn ($rule) => $rule->location_id === null),

@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /** What a Workspace offers to be booked. Created and read only through `$workspace->services()`; never deleted, only deactivated. */
-#[Fillable(['name', 'description', 'category', 'duration_minutes', 'buffer_minutes', 'price', 'is_active'])]
+#[Fillable(['name', 'description', 'category', 'category_id', 'duration_minutes', 'buffer_minutes', 'price', 'is_active'])]
 class Service extends Model
 {
     use Audited;

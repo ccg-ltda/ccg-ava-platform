@@ -7,6 +7,7 @@ use App\Rules\InternationalPhone;
 use App\Services\LocationScope;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
 /** Create / update of a location (sede) of the ACTIVE Workspace. Authorization is the `workspace.permission:create-locations` / `edit-locations` route middleware. */
@@ -53,7 +54,9 @@ class SaveLocationRequest extends FormRequest
             'city' => ['nullable', 'string', 'max:120'],
             'phone' => ['nullable', 'string', 'max:32', new InternationalPhone($stored)],
             'notes' => ['nullable', 'string', 'max:500'],
-            'service_ids' => ['required', 'array', 'min:1'],
+            // «Todos los servicios» is the flag (no list, no ids); otherwise at least one service of this Workspace. With the flag on, a list is ignored.
+            'offers_all_services' => ['nullable', 'boolean'],
+            'service_ids' => $this->boolean('offers_all_services') ? ['nullable', 'array'] : ['required', 'array', 'min:1'],
             'service_ids.*' => ['integer', 'distinct', Rule::exists('services', 'id')->where('workspace_id', $workspace->id)],
         ];
     }
@@ -93,12 +96,17 @@ class SaveLocationRequest extends FormRequest
         $data = $this->validated();
         $text = fn (string $key) => filled($data[$key] ?? null) ? trim($data[$key]) : null;
 
-        return ['name' => trim($data['name']), 'address' => $text('address'), 'city' => $text('city'), 'phone' => $text('phone'), 'notes' => $text('notes')];
+        return ['name' => trim($data['name']), 'address' => $text('address'), 'city' => $text('city'), 'phone' => $text('phone'), 'notes' => $text('notes')] + (Schema::hasColumn('locations', 'offers_all_services') ? ['offers_all_services' => $this->offersAllServices()] : []);
     }
 
-    /** @return list<int> */
+    public function offersAllServices(): bool
+    {
+        return $this->boolean('offers_all_services');
+    }
+
+    /** @return list<int> the services chosen one by one; none while «Todos los servicios» is on (an ambiguous mix is not accepted) */
     public function serviceIds(): array
     {
-        return array_map('intval', $this->validated('service_ids') ?? []);
+        return $this->offersAllServices() ? [] : array_map('intval', $this->validated('service_ids') ?? []);
     }
 }

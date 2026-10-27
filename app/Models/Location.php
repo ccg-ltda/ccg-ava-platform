@@ -13,14 +13,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * A place where the business attends (sede). Created and read only through `$workspace->locations()`; never deleted, only deactivated,
  * so the appointments that point to it keep their history.
  */
-#[Fillable(['name', 'address', 'city', 'phone', 'notes', 'is_active'])]
+#[Fillable(['name', 'address', 'city', 'phone', 'notes', 'is_active', 'offers_all_services'])]
 class Location extends Model
 {
     use Audited;
 
     protected function casts(): array
     {
-        return ['is_active' => 'boolean'];
+        return ['is_active' => 'boolean', 'offers_all_services' => 'boolean'];
     }
 
     public function workspace(): BelongsTo

@@ -54,6 +54,28 @@ class SaveProfessionalRequest extends FormRequest
                 return;
             }
 
+            // A new assignment only takes ACTIVE services and locations of this Workspace; one the professional already has stays even if it was switched off
+            // later (editing never drops it silently, and the history is kept). A forged id of an inactive record is refused here, not only hidden in the form.
+            $workspace = $this->attributes->get('workspace');
+            $professional = $this->route('professional') ? $workspace->professionals()->find($this->route('professional')) : null;
+            $keptServices = $professional ? $professional->services()->pluck('services.id')->map(fn ($id) => (int) $id) : collect();
+            $inactive = $workspace->services()->whereIn('id', $this->serviceIds())->where('is_active', false)->pluck('id')->map(fn ($id) => (int) $id)->diff($keptServices);
+
+            if ($inactive->isNotEmpty()) {
+                $validator->errors()->add('service_ids', 'Uno de los servicios elegidos no está activo.');
+            }
+
+            $placeIds = $named->pluck('location_id')->map(fn ($id) => (int) $id)->unique();
+
+            if ($placeIds->isNotEmpty()) {
+                $keptPlaces = $professional ? $professional->scheduleRules()->whereNotNull('location_id')->pluck('location_id')->map(fn ($id) => (int) $id) : collect();
+                $closed = $workspace->locations()->whereIn('id', $placeIds)->where('is_active', false)->pluck('id')->map(fn ($id) => (int) $id)->diff($keptPlaces);
+
+                if ($closed->isNotEmpty()) {
+                    $validator->errors()->add('schedule', 'Una de las sedes elegidas no está activa.');
+                }
+            }
+
             $byDay = collect($this->input('schedule', []))->filter(fn ($row) => is_array($row))->groupBy('weekday');
 
             foreach ($byDay as $rows) {

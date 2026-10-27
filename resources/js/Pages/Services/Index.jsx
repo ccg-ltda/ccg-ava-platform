@@ -1,5 +1,5 @@
 import { Head, router, useForm, usePage } from '@inertiajs/react';
-import { Clock, Pencil, Plus, Power, Scissors } from 'lucide-react';
+import { Clock, Pencil, Plus, Power, Scissors, Tag } from 'lucide-react';
 import { useState } from 'react';
 import Badge from '@/Components/Badge';
 import ExternalAgendaNotice from '@/Components/Booking/ExternalAgendaNotice';
@@ -13,21 +13,23 @@ import InputLabel from '@/Components/InputLabel';
 import Modal from '@/Components/Modal';
 import PageHeader from '@/Components/PageHeader';
 import PrimaryButton from '@/Components/PrimaryButton';
+import Select from '@/Components/Select';
 import SecondaryButton from '@/Components/SecondaryButton';
 import { TableWrap, Td, Th } from '@/Components/Table';
 import Textarea from '@/Components/Textarea';
 import TextInput from '@/Components/TextInput';
 import useAccess from '@/Hooks/useAccess';
 import AppLayout from '@/Layouts/AppLayout';
+import CategoriesModal from './Partials/CategoriesModal';
 
 const money = (value, currency) => (value === null || value === undefined ? '—' : new Intl.NumberFormat('es', { style: 'currency', currency }).format(value));
 
-function ServiceModal({ service, resources, locations = [], onClose }) {
+function ServiceModal({ service, resources, locations = [], locationsLimited = false, categoryAdmin, onManageCategories, onClose }) {
     const editing = Boolean(service?.id);
     const form = useForm({
         name: service?.name ?? '',
         description: service?.description ?? '',
-        category: service?.category ?? '',
+        category_id: service?.categoryId ?? '',
         duration_minutes: service?.durationMinutes ?? 30,
         buffer_minutes: service?.bufferMinutes ?? 0,
         price: service?.price ?? '',
@@ -36,6 +38,8 @@ function ServiceModal({ service, resources, locations = [], onClose }) {
     });
     const { data, setData, errors } = form;
     const locationOptions = locations.map((location) => ({ value: location.id, label: location.name }));
+    // Active categories only; the one the service already has stays listed even if it was switched off, so editing never drops it silently.
+    const categoryOptions = [{ value: '', label: 'Sin categoría' }, ...(categoryAdmin?.data ?? []).filter((category) => category.isActive || category.id === service?.categoryId).map((category) => ({ value: String(category.id), label: category.isActive ? category.name : `${category.name} (inactiva)` }))];
     const resourceOptions = resources.map((resource) => ({ value: resource.id, label: resource.name }));
 
     const submit = (event) => {
@@ -81,9 +85,21 @@ function ServiceModal({ service, resources, locations = [], onClose }) {
                             <InputError message={errors.price} className="mt-1" />
                         </div>
                         <div>
-                            <InputLabel htmlFor="service_category" value="Categoría (opcional)" />
-                            <TextInput id="service_category" className="mt-1" value={data.category} maxLength={80} onChange={(e) => setData('category', e.target.value)} />
-                            <InputError message={errors.category} className="mt-1" />
+                            <div className="flex items-center justify-between gap-2">
+                                <InputLabel htmlFor="service_category" value="Categoría (opcional)" />
+                                {categoryAdmin && (categoryAdmin.canCreate || categoryAdmin.canEdit) && (
+                                    <button type="button" onClick={onManageCategories} className="inline-flex items-center gap-1 text-xs font-semibold text-accent-blue hover:underline focus-visible:outline-2 focus-visible:outline-primary">
+                                        <Tag className="size-3" aria-hidden="true" />
+                                        Administrar categorías
+                                    </button>
+                                )}
+                            </div>
+                            {categoryAdmin ? (
+                                <Select id="service_category" className="mt-1" value={data.category_id === '' || data.category_id === null ? '' : String(data.category_id)} onChange={(value) => setData('category_id', value === '' ? '' : Number(value))} options={categoryOptions} />
+                            ) : (
+                                <p className="mt-1 text-xs text-ink-muted">Las categorías estarán disponibles al aplicar la última migración.</p>
+                            )}
+                            <InputError message={errors.category_id ?? errors.category} className="mt-1" />
                         </div>
                     </div>
                     {(locations.length > 0 || resources.length > 0) && (
@@ -94,7 +110,7 @@ function ServiceModal({ service, resources, locations = [], onClose }) {
                                     <p className="mt-0.5 mb-2 text-xs text-ink-muted">
                                         {service?.canManage === false ? 'Este servicio se ofrece en sedes que no son tuyas: no puedes cambiarlo.' : 'Si no eliges ninguna, el servicio se ofrece en todas las sedes. Cada profesional sigue ofreciendo solo los servicios que tiene asignados.'}
                                     </p>
-                                    <EntityPicker id="service_locations" options={locationOptions} value={data.location_ids} onChange={(ids) => setData('location_ids', ids)} placeholder="Buscar sede" noneLabel="Todas las sedes" disabled={service?.canManage === false} error={errors.location_ids ?? errors['location_ids.0']} />
+                                    <EntityPicker id="service_locations" options={locationOptions} value={data.location_ids} onChange={(ids) => setData('location_ids', ids)} placeholder="Buscar sede" allLabel={locationsLimited ? null : 'Todas las sedes'} noneLabel={locationsLimited ? 'Elige al menos una de tus sedes' : 'Todas las sedes'} disabled={service?.canManage === false} error={errors.location_ids ?? errors['location_ids.0']} />
                                 </div>
                             )}
                             {resources.length > 0 && (
@@ -121,7 +137,7 @@ function ServiceModal({ service, resources, locations = [], onClose }) {
 }
 
 /** Servicios: what the Workspace offers to be booked (its own, or read-only from its external agenda). */
-export default function Index({ capabilities, services, external, externalError, resources, locations = [], currency }) {
+export default function Index({ capabilities, services, external, externalError, resources, locations = [], locationsLimited = false, categoryAdmin = null, currency }) {
     const confirm = useConfirm();
     const { permissions } = useAccess();
     const canCreate = permissions.includes('create-services') && !capabilities.external;
@@ -129,6 +145,7 @@ export default function Index({ capabilities, services, external, externalError,
     const canToggle = permissions.includes('activate-services') && !capabilities.external;
     const canAct = canEdit || canToggle;
     const [editing, setEditing] = useState(null);
+    const [managingCategories, setManagingCategories] = useState(false);
     const { errors } = usePage().props;
 
     const toggle = async (service) => {
@@ -220,7 +237,8 @@ export default function Index({ capabilities, services, external, externalError,
                 )}
             </Card>
 
-            {editing && <ServiceModal service={editing} resources={resources} locations={locations} onClose={() => setEditing(null)} />}
+            {editing && <ServiceModal service={editing} resources={resources} locations={locations} locationsLimited={locationsLimited} categoryAdmin={categoryAdmin} onManageCategories={() => setManagingCategories(true)} onClose={() => setEditing(null)} />}
+            {managingCategories && categoryAdmin && <CategoriesModal admin={categoryAdmin} onClose={() => setManagingCategories(false)} />}
         </>
     );
 }

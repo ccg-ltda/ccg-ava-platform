@@ -97,9 +97,16 @@ class Locations
         return $active ? $appointment->location_id : throw BookingException::state('La sede de esta cita ya no está activa. Cancélala y crea una nueva en otra sede.');
     }
 
-    /** Whether the location offers the service (a service with no location of its own is offered in all of them). */
+    /**
+     * Whether the location offers the service: a location marked «Todos los servicios» offers every service (new ones included, no list to keep); otherwise a
+     * service with no location of its own is offered in all of them and one with locations only in those. The flag wins over a service's own list.
+     */
     public function offers(Location $location, int $serviceId): bool
     {
+        if ($location->offers_all_services) {
+            return true;
+        }
+
         $rows = DB::table('location_service')->where('workspace_id', $location->workspace_id)->where('service_id', $serviceId);
 
         return ! $rows->exists() || (clone $rows)->where('location_id', $location->id)->exists();

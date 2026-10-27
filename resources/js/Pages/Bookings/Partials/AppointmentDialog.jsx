@@ -1,6 +1,7 @@
 import { router } from '@inertiajs/react';
 import { UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { professionalsFor, servicesForLocation, stillCompatible } from '@/lib/bookingCompat';
 import Alert from '@/Components/Alert';
 import DateField from '@/Components/DateField';
 import InputError from '@/Components/InputError';
@@ -84,16 +85,30 @@ export default function AppointmentDialog({ appointment, options, today, onClose
     const [locationId, setLocationId] = useState(options.locations?.length === 1 ? options.locations[0].id : '');
     const [from, setFrom] = useState(today);
     const [slot, setSlot] = useState(null);
+    const [dropped, setDropped] = useState(null);
     const [customer, setCustomer] = useState({ name: '', phone: '', email: '' });
     const [notes, setNotes] = useState('');
     const [errors, setErrors] = useState({});
     const [saving, setSaving] = useState(false);
 
-    const services = options.services.map((service) => ({ value: service.id, label: service.name }));
     const locations = options.locations ?? [];
+    const services = servicesForLocation(options.services, locationId).map((service) => ({ value: service.id, label: service.name }));
     const service = options.services.find((item) => String(item.id) === String(serviceId));
     const needsLocation = !rescheduling && options.locationRequired && !locationId;
-    const professionals = [{ value: '', label: 'Cualquiera disponible' }, ...options.professionals.map((professional) => ({ value: professional.id, label: professional.name }))];
+    // Only professionals who perform the service and work in the sede are offered; if a change makes the one chosen before incompatible, it is dropped out loud.
+    const professionals = [{ value: '', label: 'Cualquiera disponible' }, ...professionalsFor(options.professionals, serviceId, locationId).map((professional) => ({ value: professional.id, label: professional.name }))];
+
+    const narrow = (nextService, nextLocation) => {
+        setSlot(null);
+
+        if (!stillCompatible(options.professionals, professionalId, nextService, nextLocation)) {
+            const name = options.professionals.find((professional) => String(professional.id) === String(professionalId))?.name ?? 'El profesional';
+            setProfessionalId('');
+            setDropped(`${name} ya no aplica para este servicio o sede: elige otro profesional o deja «Cualquiera disponible».`);
+        } else {
+            setDropped(null);
+        }
+    };
 
     const submit = (event) => {
         event.preventDefault();
@@ -123,24 +138,25 @@ export default function AppointmentDialog({ appointment, options, today, onClose
                 </header>
                 <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5 sm:px-8">
                     {options.error && <Alert tone="warning">{options.error}</Alert>}
+                    {dropped && <Alert tone="warning">{dropped}</Alert>}
                     <div className="grid gap-4 sm:grid-cols-2">
                         {!rescheduling && (
                             <div>
                                 <InputLabel htmlFor="appt_service" value="Servicio" />
-                                <SearchableSelect id="appt_service" className="mt-1" value={serviceId} onChange={(value) => { setServiceId(value); setSlot(null); }} options={services} placeholder="Escribe para buscar o elige" invalid={Boolean(errors.service_id)} />
+                                <SearchableSelect id="appt_service" className="mt-1" value={serviceId} onChange={(value) => { setServiceId(value); narrow(value, locationId); }} options={services} placeholder="Escribe para buscar o elige" invalid={Boolean(errors.service_id)} />
                                 <InputError message={errors.service_id} className="mt-1" />
                             </div>
                         )}
                         {!rescheduling && locations.length > 0 && (
                             <div>
                                 <InputLabel htmlFor="appt_location" value={options.locationRequired ? 'Sede' : 'Sede (opcional)'} />
-                                <Select id="appt_location" className="mt-1" value={locationId} onChange={(value) => { setLocationId(value); setSlot(null); }} options={options.locationRequired ? locations.map((l) => ({ value: l.id, label: l.name })) : [{ value: '', label: 'Sin sede' }, ...locations.map((l) => ({ value: l.id, label: l.name }))]} placeholder="Elige una sede" invalid={Boolean(errors.location_id)} />
+                                <Select id="appt_location" className="mt-1" value={locationId} onChange={(value) => { setLocationId(value); if (serviceId && !servicesForLocation(options.services, value).some((item) => String(item.id) === String(serviceId))) { setServiceId(''); setDropped('Ese servicio no se ofrece en la sede elegida: elige otro servicio.'); setSlot(null); } else { narrow(serviceId, value); } }} options={options.locationRequired ? locations.map((l) => ({ value: l.id, label: l.name })) : [{ value: '', label: 'Sin sede' }, ...locations.map((l) => ({ value: l.id, label: l.name }))]} placeholder="Elige una sede" invalid={Boolean(errors.location_id)} />
                                 <InputError message={errors.location_id} className="mt-1" />
                             </div>
                         )}
                         <div>
                             <InputLabel htmlFor="appt_pro" value="Profesional" />
-                            <SearchableSelect id="appt_pro" className="mt-1" value={professionalId} onChange={(value) => { setProfessionalId(value); setSlot(null); }} options={professionals} placeholder="Escribe para buscar o elige" />
+                            <SearchableSelect id="appt_pro" className="mt-1" value={professionalId} onChange={(value) => { setProfessionalId(value); setSlot(null); setDropped(null); }} options={professionals} placeholder="Escribe para buscar o elige" />
                         </div>
                         <div>
                             <DateField id="appt_from" label="Buscar desde" clearable={false} today={today} value={from} min={today} onChange={(value) => { setFrom(value || today); setSlot(null); }} />

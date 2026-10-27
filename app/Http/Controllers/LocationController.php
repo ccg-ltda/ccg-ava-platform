@@ -52,6 +52,7 @@ class LocationController extends Controller
                 'isActive' => $location->is_active,
                 'upcomingCount' => $location->upcoming_count,
                 'serviceIds' => $location->services->pluck('id')->all(),
+                'offersAllServices' => (bool) ($location->offers_all_services ?? false),
             ])->all(),
             'services' => $workspace->services()->orderByDesc('is_active')->orderBy('name')->get(['id', 'name', 'is_active'])->map(fn ($service) => ['id' => $service->id, 'name' => $service->name, 'isActive' => (bool) $service->is_active])->all(),
         ]);
@@ -73,7 +74,7 @@ class LocationController extends Controller
                 $limits->lockWorkspace($workspace);
                 $limits->assertCanAddLocation($workspace);
                 $location = $workspace->locations()->create($request->location());
-                $this->syncServices($location, $request->serviceIds());
+                $this->syncServices($location, $request->serviceIds(), $request->offersAllServices());
             }));
         }, 'Sede creada correctamente');
     }
@@ -91,8 +92,9 @@ class LocationController extends Controller
         return $this->attempt(function () use ($request, $workspace, $model) {
             $this->assertOwnAgenda($workspace);
             $this->assertSchema();
+            $before = (bool) ($model->offers_all_services ?? false);
             $model->update($request->location());
-            $this->syncServices($model, $request->serviceIds());
+            $this->syncServices($model, $request->serviceIds(), $request->offersAllServices(), $before);
         }, 'Sede actualizada correctamente');
     }
 
@@ -154,8 +156,17 @@ class LocationController extends Controller
     }
 
     /** The services a location offers (none = all of them). They are of the same Workspace (validated) and the pivot rows carry it so the database enforces it too. */
-    private function syncServices(Location $location, array $ids): void
+    private function syncServices(Location $location, array $ids, bool $all = false, bool $wasAll = false): void
     {
+        if ($all !== $wasAll) {
+            $this->audit->record('updated', 'location', $location->id, $location->name, [AuditLogger::change('Ofrece todos los servicios', $wasAll ? 'Sí' : 'No', $all ? 'Sí' : 'No')], $location->workspace);
+        }
+
+        // «Todos los servicios»: the flag covers every service, new ones included. The rows already there are not touched (they keep their meaning if it is turned off).
+        if ($all) {
+            return;
+        }
+
         $names = fn () => $location->services()->orderBy('services.name')->pluck('services.name')->implode(', ');
         $before = $names();
         $location->services()->sync(collect($ids)->mapWithKeys(fn (int $id) => [$id => ['workspace_id' => $location->workspace_id]])->all());

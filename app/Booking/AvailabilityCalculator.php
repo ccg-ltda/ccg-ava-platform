@@ -15,7 +15,8 @@ use Illuminate\Support\Collection;
 /**
  * The only place that decides when something can be booked in Ava's own agenda. A start is free when the professional works
  * then (weekly intervals, in the Workspace's timezone), no exception (holiday, vacation, a blocked hour) covers it, no active
- * appointment of that professional overlaps what the new one would occupy (its duration plus the service's buffer), a resource
+ * appointment of that professional overlaps what the new one would occupy (its duration plus the service's buffer), the whole occupation (rest
+ * included) ends inside the working interval and clear of every exception (the rest is never cut short to make a start fit), a resource
  * the service needs is free, and the booking rules of the Workspace (notice, how far ahead) allow it. Creating, rescheduling and
  * the public search all ask it, so what is offered and what is accepted can never disagree.
  */
@@ -83,7 +84,7 @@ class AvailabilityCalculator
                 foreach ($rules->get($professional->id.'|'.$day->dayOfWeekIso, collect()) as $rule) {
                     $intervalEnd = $day->setTimeFromTimeString($rule->ends_at);
 
-                    for ($start = $day->setTimeFromTimeString($rule->starts_at); $start->addMinutes($duration) <= $intervalEnd; $start = $start->addMinutes($step)) {
+                    for ($start = $day->setTimeFromTimeString($rule->starts_at); $start->addMinutes($duration + $service->buffer_minutes) <= $intervalEnd; $start = $start->addMinutes($step)) {
                         $startUtc = $start->utc();
                         $endUtc = $startUtc->addMinutes($duration);
                         $occupiedUntil = $endUtc->addMinutes($service->buffer_minutes);
@@ -92,7 +93,7 @@ class AvailabilityCalculator
                             continue;
                         }
 
-                        if ($this->overlaps($blocked, $startUtc, $endUtc) || $this->overlaps($busy['professional'][$professional->id] ?? [], $startUtc, $occupiedUntil)) {
+                        if ($this->overlaps($blocked, $startUtc, $occupiedUntil) || $this->overlaps($busy['professional'][$professional->id] ?? [], $startUtc, $occupiedUntil)) {
                             continue;
                         }
 

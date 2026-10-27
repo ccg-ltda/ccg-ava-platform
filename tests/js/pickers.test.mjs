@@ -139,3 +139,15 @@ test('every icon a page or component draws is imported (a missing import blanks 
         }
     }
 });
+
+test('the all scope: excluding one makes an explicit list, picking every one collapses back, and never an empty explicit list', async () => {
+    const { toggleInScope } = await import('../../resources/js/lib/pickers.js');
+    const offered = [1, 2, 3];
+
+    assert.deepEqual(toggleInScope([], 2, offered), [1, 3]);          // «all» minus Norte
+    assert.deepEqual(toggleInScope([1, 3], 2, offered), []);          // all individually chosen = «all»
+    assert.deepEqual(toggleInScope([1, 3], 1, offered), [3]);
+    assert.deepEqual(toggleInScope([3], 3, offered), []);             // nothing explicit left stays «all»
+    assert.deepEqual(toggleInScope([], 1, [1]), []);                  // a single option: still «all»
+    assert.deepEqual(toggleInScope([9], 1, offered), [9, 1]);         // a kept value that is no longer offered stays
+});

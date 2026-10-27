@@ -3,6 +3,8 @@
 namespace App\Http\Requests;
 
 use App\Booking\Locations;
+use App\Booking\ServiceCategories;
+use App\Models\ServiceCategory;
 use App\Services\LocationScope;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -26,6 +28,9 @@ class SaveServiceRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:120', Rule::unique('services', 'name')->where('workspace_id', $workspace->id)->ignore($current)],
             'description' => ['nullable', 'string', 'max:1000'],
+            // The category is chosen from the Workspace's own list (never typed): this Workspace's id, active unless the service already has it. Before the
+            // migration there is no list and the old free text is still accepted.
+            'category_id' => ['nullable', 'integer', Rule::exists('service_categories', 'id')->where('workspace_id', $workspace->id)],
             'category' => ['nullable', 'string', 'max:80'],
             'duration_minutes' => ['required', 'integer', 'between:5,720'],
             'buffer_minutes' => ['nullable', 'integer', 'between:0,240'],
@@ -42,6 +47,15 @@ class SaveServiceRequest extends FormRequest
     public function after(): array
     {
         return [function ($validator) {
+            if (app(ServiceCategories::class)->ready() && filled($this->input('category_id'))) {
+                $current = $this->route('service') ? $this->attributes->get('workspace')->services()->whereKey($this->route('service'))->value('category_id') : null;
+                $active = ServiceCategory::where('workspace_id', $this->attributes->get('workspace')->id)->whereKey((int) $this->input('category_id'))->where('is_active', true)->exists();
+
+                if (! $active && (int) $this->input('category_id') !== (int) $current) {
+                    $validator->errors()->add('category_id', 'Esa categoría no está activa.');
+                }
+            }
+
             if (! app(Locations::class)->schemaReady()) {
                 return;
             }
@@ -84,11 +98,14 @@ class SaveServiceRequest extends FormRequest
     public function service(): array
     {
         $data = $this->validated();
+        $ready = app(ServiceCategories::class)->ready();
+        $category = $ready && filled($data['category_id'] ?? null) ? ServiceCategory::find((int) $data['category_id']) : null;
 
         return [
             'name' => trim($data['name']),
             'description' => filled($data['description'] ?? null) ? trim($data['description']) : null,
-            'category' => filled($data['category'] ?? null) ? trim($data['category']) : null,
+            // With the list, the text is only the copy of the chosen category's name; a typed `category` is ignored (it would be a second, free-text source).
+            ...($ready ? ['category_id' => $category?->id, 'category' => $category?->name] : ['category' => filled($data['category'] ?? null) ? trim($data['category']) : null]),
             'duration_minutes' => (int) $data['duration_minutes'],
             'buffer_minutes' => (int) ($data['buffer_minutes'] ?? 0),
             'price' => isset($data['price']) && $data['price'] !== '' ? $data['price'] : null,

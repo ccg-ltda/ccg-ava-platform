@@ -29,7 +29,9 @@ function LocationModal({ location, services, onClose }) {
         city: location?.city ?? '',
         phone: location?.phone ?? '',
         notes: location?.notes ?? '',
-        service_ids: location?.serviceIds ?? [],
+        // «Todos los servicios» is the flag, not a list: it is on when no service is chosen one by one (the server ignores any list while it is on).
+        service_ids: location?.offersAllServices ? [] : (location?.serviceIds ?? []),
+        offers_all_services: location ? Boolean(location.offersAllServices) : false,
     });
     const { data, setData, errors } = form;
     const serviceOptions = services.map((service) => ({ value: service.id, label: service.isActive ? service.name : `${service.name} (inactivo)`, disabled: !service.isActive && !data.service_ids.includes(service.id) }));
@@ -78,8 +80,8 @@ function LocationModal({ location, services, onClose }) {
                     </div>
                     <div>
                         <InputLabel htmlFor="location_services" value="Servicios que ofrece" />
-                        <p className="mt-0.5 mb-2 text-xs text-ink-muted">Obligatorio: elige al menos uno. Los horarios de cada profesional por sede se eligen en Profesionales.</p>
-                        <EntityPicker id="location_services" options={serviceOptions} value={data.service_ids} onChange={(ids) => setData('service_ids', ids)} placeholder="Buscar servicio" noneLabel={services.length === 0 ? 'Primero crea un servicio en Servicios' : 'Ningún servicio elegido'} invalid={Boolean(errors.service_ids)} error={errors.service_ids ?? errors['service_ids.0']} />
+                        <p className="mt-0.5 mb-2 text-xs text-ink-muted">«Todos los servicios» incluye los que crees más adelante. Si excluyes alguno, la sede ofrece solo los que quedan. Los horarios de cada profesional por sede se eligen en Profesionales.</p>
+                        <EntityPicker id="location_services" options={serviceOptions} value={data.service_ids} onChange={(ids) => setData((current) => ({ ...current, service_ids: ids, offers_all_services: ids.length === 0 }))} placeholder="Buscar servicio" allLabel="Todos los servicios" noneLabel={services.length === 0 ? 'Primero crea un servicio en Servicios' : 'Todos los servicios'} invalid={Boolean(errors.service_ids)} error={errors.service_ids ?? errors['service_ids.0']} />
                     </div>
                 </div>
                 <div className="flex justify-end gap-3 border-t border-line bg-card px-5 py-4 sm:px-8">

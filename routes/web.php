@@ -37,6 +37,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SavedFilterController;
 use App\Http\Controllers\ScheduleExceptionController;
+use App\Http\Controllers\ServiceCategoryController;
 use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SignupController;
@@ -237,6 +238,13 @@ Route::middleware(['auth', 'workspace'])->group(function () {
     Route::middleware(['workspace.module:service_catalog', 'workspace.permission:view-services'])->prefix('services')->name('services.')->group(function () {
         Route::get('/', [ServiceController::class, 'index'])->name('index');
         Route::post('/', [ServiceController::class, 'store'])->middleware('workspace.permission:create-services')->name('store');
+        // Categories (modal «Categorías»): a service chooses one from the Workspace's own list. Creating needs create or edit services; renaming and switching one off, edit services.
+        Route::prefix('categories')->name('categories.')->group(function () {
+            Route::post('/', [ServiceCategoryController::class, 'store'])->middleware(['workspace.permission:create-services,edit-services', 'throttle:60,1'])->name('store');
+            Route::put('/{category}', [ServiceCategoryController::class, 'update'])->whereNumber('category')->middleware('workspace.permission:edit-services')->name('update');
+            Route::post('/{category}/activate', [ServiceCategoryController::class, 'activate'])->whereNumber('category')->middleware('workspace.permission:edit-services')->name('activate');
+            Route::post('/{category}/deactivate', [ServiceCategoryController::class, 'deactivate'])->whereNumber('category')->middleware('workspace.permission:edit-services')->name('deactivate');
+        });
         Route::put('/{service}', [ServiceController::class, 'update'])->whereNumber('service')->middleware('workspace.permission:edit-services')->name('update');
         Route::post('/{service}/activate', [ServiceController::class, 'activate'])->whereNumber('service')->middleware('workspace.permission:activate-services')->name('activate');
         Route::post('/{service}/deactivate', [ServiceController::class, 'deactivate'])->whereNumber('service')->middleware('workspace.permission:activate-services')->name('deactivate');
