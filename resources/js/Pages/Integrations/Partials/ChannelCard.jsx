@@ -43,6 +43,11 @@ function ConnectionStages({ connection }) {
             <div className="mt-3 space-y-1.5">
                 <p className="text-xs font-semibold text-ink">URL del webhook para Meta (Callback URL)</p>
                 <CopyBlock value={connection.webhook.url} label="URL del webhook de WhatsApp" />
+                {connection.webhook.public === false && (
+                    <p role="alert" className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                        Esta URL se generó desde una dirección local o sin HTTPS: Meta no puede llamarla. Abre Zonno desde su dominio público (https) y vuelve a copiarla, o publica esta instalación con un túnel HTTPS. Que la URL exista no significa que Meta la haya verificado.
+                    </p>
+                )}
                 <p className="text-xs text-ink-muted">Pégala en Meta for Developers &gt; WhatsApp &gt; Configuración &gt; Webhook, con el Verify Token que guardaste en esta conexión (por seguridad no se vuelve a mostrar), y suscribe el campo «messages». Meta solo alcanza una URL pública con HTTPS: una dirección local no sirve.</p>
             </div>
             )}

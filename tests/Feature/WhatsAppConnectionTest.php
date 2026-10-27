@@ -57,6 +57,19 @@ class WhatsAppConnectionTest extends TestCase
         $this->assertSame(['credentials' => false, 'webhook_configured' => false, 'webhook_verified' => false, 'traffic' => false], $this->stages());
     }
 
+    public function test_a_webhook_url_is_flagged_as_unreachable_for_meta_unless_it_is_public_https(): void
+    {
+        foreach (['http://localhost:8000/api/webhooks/whatsapp', 'https://localhost/x', 'http://zonno.example.com/x', 'https://127.0.0.1/x', 'https://192.168.1.5/x', 'https://miequipo/x', 'https://app.local/x', 'https://zonno.test/x'] as $url) {
+            $this->assertFalse(WhatsAppConnection::isPublicUrl($url), $url);
+        }
+
+        foreach (['https://zonno.example.com/api/webhooks/whatsapp', 'https://abc123.ngrok-free.app/x'] as $url) {
+            $this->assertTrue(WhatsAppConnection::isPublicUrl($url), $url);
+        }
+
+        $this->assertFalse($this->connection()['webhook']['public'], 'the test application is served at a local address');
+    }
+
     public function test_saved_credentials_are_pending_until_a_real_test_runs_and_a_failed_test_is_an_error(): void
     {
         $integration = $this->integration();

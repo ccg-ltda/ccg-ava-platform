@@ -37,6 +37,23 @@ class WhatsAppConnection
         return is_string($key) && $key !== '' ? url('/api/webhooks/whatsapp/'.$key) : $this->webhookUrl();
     }
 
+    /**
+     * Whether Meta could reach the URL at all: HTTPS on a host that is not local or private. The URL is built from the address the application is served at, so one
+     * generated while using `localhost` (or an internal address) is right for this machine and useless for Meta. It says nothing about whether Meta DID reach it.
+     */
+    public static function isPublicUrl(string $url): bool
+    {
+        $parts = parse_url($url);
+        $host = strtolower((string) ($parts['host'] ?? ''));
+        $local = $host === '' || $host === 'localhost' || str_ends_with($host, '.local') || str_ends_with($host, '.test') || str_ends_with($host, '.localhost') || (! str_contains($host, '.') && ! str_contains($host, ':'));
+
+        if (($parts['scheme'] ?? '') !== 'https' || $local) {
+            return false;
+        }
+
+        return filter_var(trim($host, '[]'), FILTER_VALIDATE_IP) === false || filter_var(trim($host, '[]'), FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false;
+    }
+
     /** Whether this integration verifies events itself (Client Secret and Verify Token saved) instead of relying on the platform settings. */
     public function ownWebhook(?Integration $integration): bool
     {
@@ -83,7 +100,7 @@ class WhatsAppConnection
     }
 
     /**
-     * @return array{state: string, label: string, tone: string, webhook: array{url: string, configured: bool}, stages: list<array{key: string, label: string, done: bool, detail: string}>}
+     * @return array{state: string, label: string, tone: string, webhook: array{url: string, configured: bool, public: bool}, stages: list<array{key: string, label: string, done: bool, detail: string}>}
      */
     public function status(Workspace $workspace, ?Integration $integration): array
     {
@@ -126,6 +143,6 @@ class WhatsAppConnection
             default => ['partial', 'Webhook verificado · esperando un mensaje real', 'amber'],
         };
 
-        return ['state' => $state, 'label' => $label, 'tone' => $tone, 'webhook' => ['url' => $this->urlFor($integration), 'configured' => $configured], 'stages' => $stages];
+        return ['state' => $state, 'label' => $label, 'tone' => $tone, 'webhook' => ['url' => $this->urlFor($integration), 'configured' => $configured, 'public' => self::isPublicUrl($this->urlFor($integration))], 'stages' => $stages];
     }
 }
