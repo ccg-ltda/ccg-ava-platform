@@ -74,6 +74,7 @@ Route::middleware(['guest', EnsureSignupSchema::class])->prefix('registro')->nam
     Route::post('/solucion', [SignupController::class, 'solution'])->middleware('throttle:signup-step')->name('solution');
     Route::post('/plan', [SignupController::class, 'plan'])->middleware('throttle:signup-step')->name('plan');
     Route::post('/contratar', [SignupController::class, 'contract'])->middleware('throttle:signup-step')->name('contract');
+    Route::post('/pagar', [SignupController::class, 'pay'])->middleware('throttle:signup-step')->name('pay');
     Route::post('/cotizacion', [SignupController::class, 'quote'])->middleware('throttle:signup-step')->name('quote');
     Route::post('/atras', [SignupController::class, 'back'])->middleware('throttle:signup-step')->name('back');
     Route::post('/cancelar', [SignupController::class, 'cancel'])->middleware('throttle:signup-step')->name('cancel');

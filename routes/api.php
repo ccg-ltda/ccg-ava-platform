@@ -8,6 +8,7 @@ use App\Http\Controllers\AgentOrderController;
 use App\Http\Controllers\PublicBookingController;
 use App\Http\Controllers\WhatsAppWebhookController;
 use App\Http\Controllers\WidgetController;
+use App\Http\Controllers\WompiWebhookController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -21,6 +22,8 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('webhooks')->name('webhooks.')->middleware('throttle:600,1')->group(function () {
     Route::get('/whatsapp', [WhatsAppWebhookController::class, 'verify'])->name('whatsapp.verify');
     Route::post('/whatsapp', [WhatsAppWebhookController::class, 'receive'])->name('whatsapp.receive');
+    // Events URL of Wompi (one per environment in the merchant portal): authenticated by checksum, then confirmed against Wompi's API.
+    Route::post('/wompi', [WompiWebhookController::class, 'receive'])->name('wompi.receive');
     // The webhook of ONE Workspace's number: the key is the public, non-secret part generated with its WhatsApp integration (the secrets stay in the integration).
     Route::get('/whatsapp/{key}', [WhatsAppWebhookController::class, 'verifyIntegration'])->where('key', '[a-f0-9]{48}')->middleware('throttle:whatsapp-integration')->name('whatsapp.integration.verify');
     Route::post('/whatsapp/{key}', [WhatsAppWebhookController::class, 'receiveIntegration'])->where('key', '[a-f0-9]{48}')->middleware('throttle:whatsapp-integration')->name('whatsapp.integration.receive');

@@ -14,6 +14,8 @@ use App\Orders\OrderNotifier;
 use App\Orders\UnavailableOrderNotifier;
 use App\Payments\PaymentGateway;
 use App\Payments\UnconfiguredPaymentGateway;
+use App\Payments\WompiConfig;
+use App\Payments\WompiPaymentGateway;
 use App\Services\AgentToolTrace;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Foundation\DevCommands;
@@ -37,8 +39,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(CommerceSchema::class);
         $this->app->scoped(AgentToolTrace::class);
 
-        // The payment provider of the public sign-up: none is connected, so the unconfigured gateway says so and charges nothing. A real provider is bound here.
-        $this->app->bind(PaymentGateway::class, UnconfiguredPaymentGateway::class);
+        // The payment provider of the public sign-up: Wompi once its keys are complete and match the environment; otherwise the unconfigured gateway says so and charges nothing.
+        $this->app->bind(PaymentGateway::class, fn ($app) => $app->make(WompiConfig::class)->usable() ? $app->make(WompiPaymentGateway::class) : new UnconfiguredPaymentGateway);
 
         // How an order event would reach the customer: no channel is connected yet, so the unavailable notifier says so and sends nothing.
         $this->app->bind(OrderNotifier::class, UnavailableOrderNotifier::class);

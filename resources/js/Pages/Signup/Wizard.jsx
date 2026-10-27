@@ -547,7 +547,10 @@ function StepPayment({ draft, payment }) {
                 <>
                     <div className="signup-note warning" role="status">
                         <div>
-                            <strong>Tu Workspace todavía no está activo.</strong> Guardamos tu contratación, pero el pago aún no está confirmado: no se ha cobrado nada y tu Workspace se crea y activa automáticamente cuando el pago se confirme.
+                            <strong>Tu Workspace todavía no está activo.</strong>{' '}
+                            {payment.paid
+                                ? 'Recibimos tu pago y estamos activando tu cuenta: revisa el estado en unos segundos.'
+                                : 'El pago aún no está confirmado por nuestro servidor. Si ya pagaste, puede tardar unos minutos: usa «Revisar estado». Tu Workspace se crea y activa automáticamente cuando el pago se confirme.'}
                             {!payment.available && (
                                 <span className="signup-example">El pago en línea todavía no está habilitado en este entorno. Escríbenos desde el botón de ayuda y te indicaremos cómo completar la contratación. Referencia: {payment.reference}</span>
                             )}
@@ -557,7 +560,8 @@ function StepPayment({ draft, payment }) {
             )}
 
             <Actions left={<button type="button" className="btn-ghost" onClick={() => go('signup.back', { to: 'summary' })}>Revisar resumen</button>}>
-                {!quote && <button type="button" className="login-btn" onClick={() => router.reload()}>Revisar estado</button>}
+                {!quote && payment.available && !payment.paid && <button type="button" className="login-btn" onClick={() => go('signup.pay')}>Ir a pagar</button>}
+                {!quote && <button type="button" className={payment.available && !payment.paid ? 'btn-ghost' : 'login-btn'} onClick={() => router.reload()}>Revisar estado</button>}
                 <button type="button" className="btn-ghost" onClick={() => go('signup.cancel')}>Cancelar contratación</button>
             </Actions>
         </div>

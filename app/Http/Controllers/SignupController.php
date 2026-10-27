@@ -69,7 +69,7 @@ class SignupController extends Controller
             'plans' => $step === 'plan' && $draft && ($key = $draft->solution_key) ? $this->catalog->plans($key) : [],
             'selected' => $draft?->plan_id && in_array($step, ['summary', 'payment'], true) ? $this->selectedPlan($draft) : null,
             'documents' => $step === 'summary' || $step === 'payment' ? $this->documents() : [],
-            'payment' => $step === 'payment' ? ['status' => $draft->status, 'reference' => $draft->public_id, 'available' => app(PaymentGateway::class)->isConfigured()] : null,
+            'payment' => $step === 'payment' ? ['status' => $draft->status, 'reference' => $draft->public_id, 'paid' => $draft->paid_at !== null, 'available' => app(PaymentGateway::class)->isConfigured()] : null,
         ]);
     }
 
@@ -178,10 +178,26 @@ class SignupController extends Controller
         $result = $this->signup->submit($draft, $data['accepted']);
 
         if ($result['checkoutUrl'] !== null) {
+            $request->session()->forget('signup.goto'); // coming back from the checkout lands on the payment state, not on an earlier step
+
             return Inertia::location($result['checkoutUrl']);
         }
 
         return $this->next($request, 'payment');
+    }
+
+    /** Back to the checkout of a contract that waits for its payment (same reference: no second transaction is created here). Never for a paid or closed one. */
+    public function pay(Request $request, PaymentGateway $gateway): SymfonyResponse
+    {
+        $draft = $this->requireDraft($request);
+
+        if ($draft->status !== SignupRequest::AWAITING_PAYMENT || $draft->paid_at !== null || ! $gateway->isConfigured()) {
+            return $this->next($request, 'payment');
+        }
+
+        $request->session()->forget('signup.goto');
+
+        return Inertia::location($gateway->checkoutUrl($draft));
     }
 
     public function quote(Request $request): RedirectResponse
