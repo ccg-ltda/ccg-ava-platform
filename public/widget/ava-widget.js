@@ -203,6 +203,11 @@
 
         var current = config;
         var open = !!options.open;
+        /* The signed token the application gives to a signed-in member of a client Workspace (only the support chat has one). */
+        function withContext(headers) {
+            if (options.context) headers['X-Zonno-Context'] = options.context;
+            return headers;
+        }
         var session = preview ? null : sessionId(options.key);
         var busy = false;
         var log = null;
@@ -233,7 +238,7 @@
         function poll() {
             if (preview || !session) return;
 
-            fetch(options.api + '/messages?session_id=' + encodeURIComponent(session), { headers: { 'Accept': 'application/json' } })
+            fetch(options.api + '/messages?session_id=' + encodeURIComponent(session), { headers: withContext({ 'Accept': 'application/json' }) })
                 .then(function (response) { return response.ok ? response.json() : null; })
                 .then(function (body) {
                     if (!body) return;
@@ -379,7 +384,7 @@
 
                 fetch(options.api + '/messages', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    headers: withContext({ 'Content-Type': 'application/json', 'Accept': 'application/json' }),
                     body: JSON.stringify({ session_id: session, message: text, message_id: messageId })
                 }).then(function (response) {
                     return response.json().catch(function () { return {}; }).then(function (body) {
@@ -430,6 +435,8 @@
 
         return {
             update: function (next) { current = next; render(); },
+            /* The page changes who is signed in without reloading (sign-in or sign-out inside the application): the next requests carry the new token. */
+            setContext: function (token) { options.context = token || null; },
             setOpen: setOpen,
             destroy: function () {
                 if (autoTimer) window.clearTimeout(autoTimer);
@@ -453,7 +460,10 @@
     function start() {
         fetch(api + '/config', { headers: { 'Accept': 'application/json' } })
             .then(function (response) { if (!response.ok) throw new Error(String(response.status)); return response.json(); })
-            .then(function (config) { mount(config, { key: key, api: api }); })
+            .then(function (config) {
+                // The controller stays reachable so the application can open the chat from its own «Ayuda» panel.
+                (window.AvaWidget.live = window.AvaWidget.live || {})[key] = mount(config, { key: key, api: api, context: script.getAttribute('data-context') });
+            })
             .catch(function (error) { if (window.console) console.warn('[Ava widget] no disponible (' + error.message + ')'); });
     }
 

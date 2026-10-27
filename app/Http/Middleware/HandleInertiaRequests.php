@@ -2,9 +2,12 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\HelpCenter;
 use App\Services\ModuleAccess;
 use App\Services\ProfilePhoto;
 use App\Services\SupportChannel;
+use App\Services\SupportContext;
+use App\Services\SupportDesk;
 use App\Services\WorkspaceSettingsService;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -59,7 +62,11 @@ class HandleInertiaRequests extends Middleware
             'modules' => fn () => $request->attributes->has('workspace') ? app(ModuleAccess::class)->forRequest($request) : [],
             // CCG's public support chat: the public key of the web channel of the administrative Workspace, only while that channel is valid and live
             // (SupportChannel). Null = nothing is offered. The key is public by design; the destination is always resolved by the server from it.
-            'supportChat' => fn () => ($key = app(SupportChannel::class)->publicKey()) ? ['key' => $key, 'script' => url('/widget/ava-widget.js')] : null,
+            // The «Ayuda» panel of the top bar: texts and manuals come from config/help.php (HelpCenter filters the manuals by the plan of the Workspace).
+            'help' => fn () => $request->user() && $request->attributes->has('workspace') ? app(HelpCenter::class)->forRequest($request) : null,
+            'supportChat' => fn () => ($key = app(SupportChannel::class)->publicKey()) ? ['key' => $key, 'script' => url('/widget/ava-widget.js'), 'context' => $request->user() && $request->attributes->get('workspace') ? app(SupportContext::class)->issue($request->user(), $request->attributes->get('workspace')) : null] : null,
+            // The support panel of the administrators of a client Workspace: null (nothing is drawn) for everybody else. See SupportDesk.
+            'supportDesk' => fn () => app(SupportDesk::class)->forRequest($request),
             'platform' => fn () => EnsurePlatformAdministration::allows($request),
             'platformAccess' => fn () => [
                 'plans' => EnsurePlatformAdministration::allows($request, EnsurePlatformAdministration::PLANS),

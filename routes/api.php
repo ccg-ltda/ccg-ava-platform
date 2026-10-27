@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AgentBookingController;
 use App\Http\Controllers\AgentController;
+use App\Http\Controllers\AgentKnowledgeController;
 use App\Http\Controllers\AgentMessageController;
 use App\Http\Controllers\AgentOrderController;
 use App\Http\Controllers\PublicBookingController;
@@ -20,12 +21,17 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('webhooks')->name('webhooks.')->middleware('throttle:600,1')->group(function () {
     Route::get('/whatsapp', [WhatsAppWebhookController::class, 'verify'])->name('whatsapp.verify');
     Route::post('/whatsapp', [WhatsAppWebhookController::class, 'receive'])->name('whatsapp.receive');
+    // The webhook of ONE Workspace's number: the key is the public, non-secret part generated with its WhatsApp integration (the secrets stay in the integration).
+    Route::get('/whatsapp/{key}', [WhatsAppWebhookController::class, 'verifyIntegration'])->where('key', '[a-f0-9]{48}')->middleware('throttle:whatsapp-integration')->name('whatsapp.integration.verify');
+    Route::post('/whatsapp/{key}', [WhatsAppWebhookController::class, 'receiveIntegration'])->where('key', '[a-f0-9]{48}')->middleware('throttle:whatsapp-integration')->name('whatsapp.integration.receive');
 });
 
 // The token names a chatbot, so its Workspace's plan must include Asistentes; reporting or authorizing conversation traffic
 // also needs Conversaciones. (The public widget and the Meta webhook check the plan where they resolve the chatbot.)
 Route::middleware(['throttle:agent', 'agent', 'workspace.module:assistants'])->prefix('agent')->name('agent.')->group(function () {
     Route::get('/config', [AgentController::class, 'config'])->name('config');
+    // Search in the knowledge base of THIS assistant (traced like the other tools; it needs only the module Asistentes).
+    Route::get('/knowledge/search', [AgentKnowledgeController::class, 'search'])->middleware('agent.trace')->name('knowledge.search');
     Route::middleware('workspace.module:conversations')->group(function () {
         Route::post('/messages', [AgentMessageController::class, 'store'])->name('messages.store');
         Route::post('/messages/status', [AgentMessageController::class, 'status'])->name('messages.status');

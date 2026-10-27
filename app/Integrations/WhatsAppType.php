@@ -31,7 +31,11 @@ class WhatsAppType implements ChannelIntegrationType, SendsMessages, SendsTempla
     {
         return [
             ['name' => 'phone_number_id', 'label' => 'ID del número de teléfono', 'kind' => 'text', 'required' => true, 'hint' => 'Meta for Developers > WhatsApp > Configuración de la API.'],
+            ['name' => 'waba_id', 'label' => 'ID de la cuenta de WhatsApp Business (WABA)', 'kind' => 'text', 'required' => false, 'hint' => 'Meta Business Suite > Configuración > Cuentas de WhatsApp. Opcional: sirve para identificar la cuenta.'],
             ['name' => 'access_token', 'label' => 'Token de acceso', 'kind' => 'secret', 'required' => true, 'hint' => 'Token con permiso sobre este número, preferiblemente de un usuario del sistema.'],
+            ['name' => 'client_id', 'label' => 'Client ID (ID de la app de Meta)', 'kind' => 'text', 'required' => false, 'hint' => 'Meta for Developers > Tu app > Configuración > Básica > Identificador de la app.'],
+            ['name' => 'client_secret', 'label' => 'Client Secret (clave secreta de la app)', 'kind' => 'secret', 'required' => false, 'hint' => 'Meta for Developers > Tu app > Configuración > Básica > Clave secreta. Zonno la usa para comprobar la firma de cada evento que Meta envía al webhook.'],
+            ['name' => 'verify_token', 'label' => 'Verify Token (token de verificación)', 'kind' => 'secret', 'required' => false, 'hint' => 'Texto que tú inventas (8 a 128 caracteres, sin espacios). Pégalo igual en Meta al registrar el webhook.'],
         ];
     }
 
@@ -45,6 +49,10 @@ class WhatsAppType implements ChannelIntegrationType, SendsMessages, SendsTempla
         return [
             'phone_number_id' => ['required', 'string', 'regex:/^\d{5,32}$/'],
             'access_token' => ['nullable', 'string', 'max:4096'],
+            'waba_id' => ['nullable', 'string', 'regex:/^\d{5,32}$/'],
+            'client_id' => ['nullable', 'string', 'regex:/^\d{5,32}$/'],
+            'client_secret' => ['nullable', 'string', 'min:16', 'max:256', 'regex:/^\S+$/'],
+            'verify_token' => ['nullable', 'string', 'min:8', 'max:128', 'regex:/^\S+$/'],
         ];
     }
 
@@ -56,9 +64,26 @@ class WhatsAppType implements ChannelIntegrationType, SendsMessages, SendsTempla
             throw ValidationException::withMessages(['access_token' => 'Escribe el token de acceso de WhatsApp.']);
         }
 
+        $keep = fn (string $name) => filled($input[$name] ?? null) ? trim($input[$name]) : ($current?->secrets[$name] ?? null);
+        $verifyToken = $keep('verify_token');
+        $config = [
+            'phone_number_id' => $input['phone_number_id'],
+            // The public, non-secret part of this Workspace's webhook URL: it identifies the integration and is generated once, never typed.
+            'webhook_key' => $current?->config['webhook_key'] ?? bin2hex(random_bytes(24)),
+        ] + array_filter(['waba_id' => $input['waba_id'] ?? null, 'client_id' => $input['client_id'] ?? null], 'filled');
+
+        // Meta must verify the URL again whenever the verify token changes; the other facts learned from Meta survive an edit of the credentials.
+        if ($current !== null && $verifyToken === ($current->secrets['verify_token'] ?? null) && isset($current->config['webhook_verified_at'])) {
+            $config['webhook_verified_at'] = $current->config['webhook_verified_at'];
+        }
+
+        if ($current !== null && ($current->config['phone_number_id'] ?? null) === $input['phone_number_id'] && isset($current->config['display_number'])) {
+            $config['display_number'] = $current->config['display_number'];
+        }
+
         return [
-            'config' => ['phone_number_id' => $input['phone_number_id']],
-            'secrets' => ['access_token' => $token],
+            'config' => $config,
+            'secrets' => array_filter(['access_token' => $token, 'client_secret' => $keep('client_secret'), 'verify_token' => $verifyToken], 'filled'),
         ];
     }
 
@@ -66,14 +91,26 @@ class WhatsAppType implements ChannelIntegrationType, SendsMessages, SendsTempla
     {
         return [
             'phone_number_id' => $integration->config['phone_number_id'],
+            'waba_id' => $integration->config['waba_id'] ?? '',
+            'client_id' => $integration->config['client_id'] ?? '',
             'access_token' => '',
             'access_token_set' => filled($integration->secrets['access_token'] ?? null),
+            'client_secret' => '',
+            'client_secret_set' => filled($integration->secrets['client_secret'] ?? null),
+            'verify_token' => '',
+            'verify_token_set' => filled($integration->secrets['verify_token'] ?? null),
         ];
     }
 
     public function summary(Integration $integration): array
     {
         $rows = [['label' => 'ID del número', 'value' => $integration->config['phone_number_id']]];
+
+        foreach (['waba_id' => 'ID de la cuenta (WABA)', 'client_id' => 'Client ID'] as $key => $label) {
+            if (filled($integration->config[$key] ?? null)) {
+                $rows[] = ['label' => $label, 'value' => $integration->config[$key]];
+            }
+        }
 
         if ($number = $integration->config['display_number'] ?? null) {
             $rows[] = ['label' => 'Número verificado', 'value' => '+'.$number];
@@ -230,6 +267,10 @@ class WhatsAppType implements ChannelIntegrationType, SendsMessages, SendsTempla
         return [
             'ID del número' => $show($config['phone_number_id'] ?? null),
             'Token de acceso' => Masked::of($secrets['access_token'] ?? null),
+            'ID de la cuenta (WABA)' => $show($config['waba_id'] ?? null),
+            'Client ID' => $show($config['client_id'] ?? null),
+            'Client Secret' => Masked::of($secrets['client_secret'] ?? null),
+            'Verify Token' => Masked::of($secrets['verify_token'] ?? null),
         ];
     }
 

@@ -1,6 +1,6 @@
 import { usePage } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
-import SupportChat from '@/Components/SupportChat';
+import SupportDesk from '@/Components/SupportDesk';
 import { ConfirmProvider } from '@/Components/ConfirmDialog';
 import Sidebar from '@/Components/Sidebar';
 import { FlashToasts, ToastProvider } from '@/Components/Toast';
@@ -44,7 +44,7 @@ export default function AppLayout({ children }) {
                         </main>
                     </div>
 
-                    <SupportChat />
+                    <SupportDesk />
                 </div>
                 <FlashToasts />
             </ConfirmProvider>

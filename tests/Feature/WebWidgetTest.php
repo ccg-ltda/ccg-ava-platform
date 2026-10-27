@@ -11,6 +11,7 @@ use App\Models\Organization;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceSetting;
+use App\Services\WebChannelConnection;
 use App\Services\WorkspaceLimits;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -92,6 +93,49 @@ class WebWidgetTest extends TestCase
         $this->assertSame(1, Message::where('direction', 'in')->where('body', 'Hola otra vez')->count());
     }
 
+    // --- the state of the channel only moves with observed facts ----------------------------------------------
+
+    public function test_the_state_of_the_web_channel_moves_only_with_observed_facts(): void
+    {
+        config(['app.url' => 'https://zonno.example.com']);
+        $workspace = $this->workspace('WS_STATE');
+        [, $key] = $this->liveWidget($workspace);
+        $status = fn () => app(WebChannelConnection::class)->status($workspace, $workspace->integrations()->first());
+        $done = fn () => collect($status()['stages'])->pluck('done', 'key')->all();
+
+        $this->assertSame(['pending', ['configured' => true, 'widget_loaded' => false, 'conversation' => false, 'reply' => false]], [$status()['state'], $done()]);
+
+        // The preview inside Zonno (same host) and a request without Origin are not a customer's site.
+        $this->getJson("/api/widget/{$key}/config")->assertOk();
+        $this->getJson("/api/widget/{$key}/config", ['Origin' => 'https://zonno.example.com'])->assertOk();
+        $this->assertFalse($done()['widget_loaded']);
+
+        $this->getJson("/api/widget/{$key}/config", ['Origin' => 'https://tienda.example.com'])->assertOk();
+        $this->assertSame(['partial', 'Widget cargado · esperando una conversación', true], [$status()['state'], $status()['label'], $done()['widget_loaded']]);
+
+        // A visitor writes and gets an answer: only then is the channel «connected».
+        Http::fake([self::HOOK => Http::response(['reply' => 'Hola, soy Ava.'])]);
+        $this->postJson("/api/widget/{$key}/messages", ['session_id' => 'visitor-state-1', 'message' => 'Hola'])->assertOk();
+
+        $this->assertSame(['connected', ['configured' => true, 'widget_loaded' => true, 'conversation' => true, 'reply' => true]], [$status()['state'], $done()]);
+    }
+
+    public function test_simulated_messages_and_other_workspaces_are_not_evidence_for_the_web_channel(): void
+    {
+        $workspace = $this->workspace('WS_EVID');
+        [$bot] = $this->liveWidget($workspace);
+        $other = $this->workspace('WS_OTHER');
+        [$otherBot] = $this->liveWidget($other, 'Otro');
+        $status = fn () => collect(app(WebChannelConnection::class)->status($workspace, $workspace->integrations()->first())['stages'])->pluck('done', 'key')->all();
+
+        $demo = $bot->conversations()->create(['workspace_id' => $workspace->id, 'channel' => 'web', 'contact_id' => 'demo-1', 'last_message_at' => now()]);
+        $demo->messages()->create(['workspace_id' => $workspace->id, 'direction' => 'in', 'sender' => 'contact', 'type' => 'text', 'body' => 'x', 'simulated' => true, 'sent_at' => now()]);
+        $real = $otherBot->conversations()->create(['workspace_id' => $other->id, 'channel' => 'web', 'contact_id' => 'real-1', 'last_message_at' => now()]);
+        $real->messages()->create(['workspace_id' => $other->id, 'direction' => 'in', 'sender' => 'contact', 'type' => 'text', 'body' => 'hola', 'sent_at' => now()]);
+        $real->messages()->create(['workspace_id' => $other->id, 'direction' => 'out', 'sender' => 'ai', 'type' => 'text', 'body' => 'respuesta', 'sent_at' => now()]);
+
+        $this->assertSame(['conversation' => false, 'reply' => false], array_intersect_key($status(), ['conversation' => 1, 'reply' => 1]));
+    }
     // --- activating the channel ------------------------------------------------------------------------------
 
     public function test_the_web_channel_needs_its_integration_and_then_gives_the_install_code(): void

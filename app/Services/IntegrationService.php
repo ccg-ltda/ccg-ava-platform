@@ -72,7 +72,7 @@ class IntegrationService
         $when = $this->moment($workspace);
         $configured = $workspace->integrations()->whereIn('type', $this->channels->integrationTypes())->get()->keyBy('type');
 
-        return array_map(function (array $channel) use ($configured, $when) {
+        return array_map(function (array $channel) use ($configured, $when, $workspace) {
             $integration = $channel['integration'] ? $configured->get($channel['integration']) : null;
             $type = $channel['integration'] ? $this->types->get($channel['integration']) : null;
 
@@ -86,6 +86,12 @@ class IntegrationService
                 'fields' => $type instanceof ChannelIntegrationType ? $type->fields() : [],
                 'notice' => $type instanceof ChannelIntegrationType ? $type->notice() : null,
                 'testable' => (bool) $type?->supportsTest(),
+                // The stages of a real WhatsApp connection and the webhook URL to paste in Meta (never a secret). Only this channel has one.
+                'connection' => match ($channel['key']) {
+                    'whatsapp' => app(WhatsAppConnection::class)->status($workspace, $integration),
+                    'web' => app(WebChannelConnection::class)->status($workspace, $integration),
+                    default => null,
+                },
                 'integration' => $integration ? [
                     'id' => $integration->id,
                     'isActive' => $integration->is_active,

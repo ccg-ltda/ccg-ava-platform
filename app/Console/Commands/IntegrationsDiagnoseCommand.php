@@ -155,6 +155,8 @@ class IntegrationsDiagnoseCommand extends Command
             Schema::hasTable('jobs') ? $this->good('Tabla jobs presente.') : $this->blocker('Falta la tabla jobs para la cola database.');
         }
 
+        $this->stuckJobs($queue);
+
         Schema::hasTable('failed_jobs') ? $this->good('failed_jobs: '.DB::table('failed_jobs')->count().' trabajo(s) fallido(s).') : $this->blocker('Falta la tabla failed_jobs.');
 
         try {
@@ -164,6 +166,27 @@ class IntegrationsDiagnoseCommand extends Command
             Cache::forget($key);
         } catch (Throwable) {
             $this->blocker('La caché ('.config('cache.default').') no responde.');
+        }
+    }
+
+    /**
+     * Jobs that sit in the `jobs` table for minutes are never delivered when the worker (Horizon) reads Redis. That is what happens when TWO copies of the app share
+     * one database with different .env files (e.g. the Docker app with QUEUE_CONNECTION=redis and `php artisan serve` on the host with `database`): the second
+     * one queues e-mails (invitations, password recovery) and messages that nobody sends, and stores files on its own disk. Reported as counts only.
+     */
+    private function stuckJobs(string $queue): void
+    {
+        $disk = (string) config('filesystems.default');
+        $this->line("         Esta instancia usa: cola={$queue}, disco de archivos={$disk}, sesiones=".config('session.driver').', caché='.config('cache.default').'.');
+
+        if (! Schema::hasTable('jobs')) {
+            return;
+        }
+
+        $stuck = DB::table('jobs')->where('created_at', '<', now()->subMinutes(5)->timestamp)->count();
+
+        if ($stuck > 0) {
+            $this->caution("{$stuck} trabajo(s) llevan más de 5 minutos en la tabla jobs sin procesarse. Si el worker usa Redis (Horizon), nadie los entregará: otra copia de la aplicación que comparte esta base de datos (por ejemplo `php artisan serve` en el equipo con un .env distinto) los está encolando en `database`. Usa UNA sola instancia, o alinea QUEUE_CONNECTION, FILESYSTEM_DISK, SESSION_DRIVER y CACHE_STORE entre ambas.");
         }
     }
 

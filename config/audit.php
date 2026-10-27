@@ -38,6 +38,7 @@ return [
         'message_template' => ['label' => 'Plantillas de mensaje', 'noun' => 'la plantilla'],
         'campaign' => ['label' => 'Campañas', 'noun' => 'la campaña'],
         'chatbot' => ['label' => 'Chatbots', 'noun' => 'el chatbot'],
+        'knowledge_document' => ['label' => 'Base de conocimiento', 'noun' => 'el documento'],
         'chatbot_channel' => ['label' => 'Canales de chatbots', 'noun' => 'el canal'],
         'chatbot_channel_appearance' => ['label' => 'Apariencia de canales', 'noun' => 'la apariencia del canal'],
         'conversation' => ['label' => 'Conversaciones', 'noun' => 'la conversación'],

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Integrations\ChannelIntegrationType;
 use App\Integrations\IntegrationRegistry;
+use App\Services\ChatbotInstructions;
 use App\Services\ModuleAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -28,12 +29,23 @@ class AgentController extends Controller
                 return [$channel->channel => $type instanceof ChannelIntegrationType ? $type->agentView($channel->integration) : (object) []];
             });
 
+        // n8n just read this version: that is the confirmation that the workflow has it (see ChatbotInstructions::status).
+        if (ChatbotInstructions::ready()) {
+            app(ChatbotInstructions::class)->markSynced($chatbot->id, (int) $chatbot->instructions_version);
+        }
+
         return response()->json([
             'chatbot' => [
                 'id' => $chatbot->id,
                 'name' => $chatbot->name,
                 'description' => $chatbot->description,
-                'instructions' => $chatbot->instructions ?? '',
+                // The four blocks joined (ChatbotInstructions): the same text every execution carries. `instructions_version` lets the workflow know which one it has.
+                'instructions' => app(ChatbotInstructions::class)->effective($chatbot),
+                'instructions_version' => ChatbotInstructions::ready() ? (int) $chatbot->instructions_version : null,
+                // `single` (one prompt) or `modular` (three blocks). `instructions` is always the complete text of the ACTIVE mode, so a workflow written before the modes keeps working;
+                // `instruction_blocks` gives the modular blocks apart, in order, for a workflow that wants them separately.
+                'instructions_mode' => app(ChatbotInstructions::class)->mode($chatbot),
+                'instruction_blocks' => app(ChatbotInstructions::class)->activeBlocks($chatbot),
                 'updated_at' => $chatbot->updated_at?->toIso8601String(),
             ],
             'workspace' => ['code' => $workspace->code, 'name' => $workspace->name],

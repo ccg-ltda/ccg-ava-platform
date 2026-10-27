@@ -23,4 +23,13 @@ return [
     'notify_webhook_url' => env('CCG_SUPPORT_NOTIFY_URL'),
     'notify_secret' => env('CCG_SUPPORT_NOTIFY_SECRET'),
     'notify_timeout' => 10,
+
+    /*
+     * The support panel of the administrators of a client Workspace (App\Services\SupportDesk). It needs NO public key: it uses the signed-in session and writes into the
+     * module Conversaciones of the administrative Workspace. When the public chat above is configured and live, its chatbot receives the requests (one conversation per person
+     * across both doors); otherwise this chatbot does, created inactive the first time it is needed (it never answers with AI, only people do).
+     */
+    'desk_chatbot_name' => 'Soporte Zonno',
+    'desk_max_message' => 2000,
+    'desk_poll_seconds' => 8,
 ];

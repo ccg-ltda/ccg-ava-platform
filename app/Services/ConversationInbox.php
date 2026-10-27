@@ -69,7 +69,7 @@ class ConversationInbox
      */
     public function list(Builder $scope, ?string $handling, string $search, WorkspaceSetting $settings, bool $mask = false): array
     {
-        $query = (clone $scope)->with(['chatbot:id,name', 'assignedUser:id,name'])
+        $query = (clone $scope)->with(['chatbot:id,name,workspace_id', 'chatbot.workspace:id,code', 'assignedUser:id,name'])
             ->when(in_array($handling, Conversation::HANDLING, true), fn (Builder $q) => $q->where('conversations.handling', $handling))
             ->orderByDesc('conversations.last_message_at')->orderByDesc('conversations.id')->limit(self::LIST_LIMIT);
 
@@ -80,6 +80,7 @@ class ConversationInbox
         }
 
         $conversations = $query->get();
+        $origins = app(SupportDesk::class)->origins($conversations);
         $last = Message::whereIn('id', Message::selectRaw('max(id)')->whereIn('conversation_id', $conversations->pluck('id'))->groupBy('conversation_id'))->get()->keyBy('conversation_id');
 
         return $conversations->map(fn (Conversation $conversation) => [
@@ -91,6 +92,8 @@ class ConversationInbox
             'handling' => $conversation->handling,
             'demo' => $conversation->isDemo(),
             'assignedName' => $conversation->assignedUser?->name,
+            // A client's request for support: who wrote and from which Workspace (read back from the conversation key), so it is never mistaken for a conversation of one of CCG's own customers.
+            'support' => $origins[$conversation->id] ?? null,
             'lastAt' => $conversation->last_message_at ? $settings->formatDate($conversation->last_message_at).' '.$settings->formatTime($conversation->last_message_at) : null,
             'preview' => $this->preview($last->get($conversation->id)),
         ])->all();
@@ -116,6 +119,7 @@ class ConversationInbox
             'chatbot' => ['id' => $conversation->chatbot->id, 'name' => $conversation->chatbot->name],
             'handling' => $conversation->handling,
             'demo' => $conversation->isDemo(),
+            'support' => app(SupportDesk::class)->origins(collect([$conversation]))[$conversation->id] ?? null,
             'assignedUser' => $conversation->assignedUser ? ['id' => $conversation->assignedUser->id, 'name' => $conversation->assignedUser->name, 'isMe' => $conversation->assignedUser->is($user)] : null,
             'handoffReason' => $conversation->handoff_reason,
             'handoffAt' => $conversation->handoff_requested_at ? $settings->formatDate($conversation->handoff_requested_at).' '.$settings->formatTime($conversation->handoff_requested_at) : null,
@@ -127,6 +131,10 @@ class ConversationInbox
             'operations' => $foreign ? [] : $this->operations->for($conversation, $permissions, $settings),
             // The tools the assistant ran for this conversation, as traced (see AgentToolTrace): operational facts only.
             'tools' => $foreign ? [] : $this->operations->tools($conversation, $settings),
+            // «Esta respuesta no me gustó»: only for who may change the assistant, in the Workspace of the session and while its plan includes Asistentes. The blocks give the starting text of the proposal.
+            'feedback' => ! $foreign && ChatbotFeedback::ready() && in_array('edit-chatbots', $permissions, true) && app(ModuleAccess::class)->allowsAll($conversation->chatbot->workspace, ['assistants'])
+                ? ['blocks' => collect(app(ChatbotInstructions::class)->blocks($conversation->chatbot))->whereIn('key', ChatbotInstructions::blocksOf(app(ChatbotInstructions::class)->mode($conversation->chatbot)))->map(fn (array $block) => ['key' => $block['key'], 'label' => $block['label'], 'text' => $block['text']])->values()->all()]
+                : null,
             'truncated' => $newest->count() > self::MESSAGE_LIMIT,
             'items' => $newest->take(self::MESSAGE_LIMIT)->reverse()->values()->map(fn (Message $message) => [
                 'id' => $message->id,
@@ -165,7 +173,8 @@ class ConversationInbox
         return [
             'take' => $can('take-conversations') && in_array($handling, [Conversation::AI, Conversation::PENDING], true),
             'reply' => $can(ConversationAgents::PERMISSION) && $handling === Conversation::HUMAN && $operator && $deliverable,
-            'release' => $can('release-conversations') && $this->control->aiAvailable($conversation) && (($handling === Conversation::HUMAN && $operator) || $handling === Conversation::PENDING),
+            // A support request has no assistant behind it to hand it back to.
+            'release' => $can('release-conversations') && ! app(SupportDesk::class)->isRequest($conversation) && $this->control->aiAvailable($conversation) && (($handling === Conversation::HUMAN && $operator) || $handling === Conversation::PENDING),
             'resolve' => $can('resolve-conversations') && $handling !== Conversation::RESOLVED && ($handling !== Conversation::HUMAN || $operator),
             'assign' => $manage && $handling !== Conversation::RESOLVED,
         ];
@@ -180,6 +189,12 @@ class ConversationInbox
     /** @return array{key: string, label: string} */
     private function channel(Conversation $conversation): array
     {
+        // A client's request for support travels over the web transport but is NOT a web conversation: it is shown (and filtered by people) as Soporte. The signal is the server's
+        // own (SupportDesk::isRequest: the reserved key only the signed-in panel can create, in the administrative Workspace), never the channel name.
+        if (app(SupportDesk::class)->isRequest($conversation)) {
+            return ['key' => 'support', 'label' => 'Soporte'];
+        }
+
         return ['key' => $conversation->channel, 'label' => $this->channels->get($conversation->channel)['label']];
     }
 

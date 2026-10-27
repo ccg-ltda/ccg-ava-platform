@@ -2,11 +2,13 @@
 
 namespace App\Notifications;
 
+use App\Models\WorkspaceInvitation;
 use App\Services\EmailTemplates;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
+use Illuminate\Support\Str;
 
 /**
  * The invitation e-mail: a one-time link to choose a password and join ONE Workspace. It is queued (like the password recovery) and carries no password and no
@@ -20,7 +22,19 @@ class WorkspaceInvitationNotification extends Notification implements ShouldQueu
 
     public array $backoff = [30, 120];
 
-    public function __construct(private readonly string $url, private readonly string $workspaceName, private readonly int $hours) {}
+    public function __construct(private readonly string $url, private readonly string $workspaceName, private readonly int $hours, private readonly ?int $invitationId = null) {}
+
+    /**
+     * The link travels in the queued payload, so when delivery fails for good (and that payload stays in `failed_jobs`) the token is killed: what is left
+     * there opens nothing. The invitation stays pending and the administration re-sends it, which issues a new token.
+     */
+    public function failed(\Throwable $exception): void
+    {
+        // A job queued before the invitation id existed was serialized without it: nothing to invalidate, and reading the property must not fail.
+        if (isset($this->invitationId)) {
+            WorkspaceInvitation::whereKey($this->invitationId)->whereNull('accepted_at')->update(['token_hash' => WorkspaceInvitation::hash(Str::random(64))]);
+        }
+    }
 
     /** @return list<string> */
     public function via(object $notifiable): array

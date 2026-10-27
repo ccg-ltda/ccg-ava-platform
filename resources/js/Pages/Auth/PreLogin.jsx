@@ -1,5 +1,5 @@
 import { Head, Link, useForm } from '@inertiajs/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAccess } from '@/Components/Access/AccessContext';
 import { AccessInput } from '@/Components/Access/AccessInput';
 import AccessLayout from '@/Layouts/AccessLayout';
@@ -7,10 +7,16 @@ import AccessLayout from '@/Layouts/AccessLayout';
 const REQUIRED = 'Ingrese el código de su Workspace';
 
 /** Step 1 of access: choose the Workspace. The server validates the code and keeps it in the session. */
-export default function PreLogin() {
+export default function PreLogin({ status = null }) {
     const { showToast } = useAccess();
     const { data, setData, post, processing, errors, clearErrors } = useForm({ workspace_code: '' });
     const [clientError, setClientError] = useState('');
+
+    // A message that comes with the redirect (the account created from an invitation).
+    useEffect(() => {
+        if (status) showToast(status, 'success');
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [status]);
 
     const submit = (e) => {
         e.preventDefault();

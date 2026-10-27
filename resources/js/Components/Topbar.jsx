@@ -1,17 +1,21 @@
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
 import RoleLabel from '@/Components/RoleLabel';
-import { Link, router } from '@inertiajs/react';
-import { ChevronDown, LogOut, Menu as MenuIcon, User } from 'lucide-react';
+import { Link, router, usePage } from '@inertiajs/react';
+import { ChevronDown, CircleHelp, LogOut, Menu as MenuIcon, User } from 'lucide-react';
+import { useState } from 'react';
 import { isOffered, topTabs } from '@/config/navigation';
 import useAccess from '@/Hooks/useAccess';
 import { useBrandShort } from '@/Hooks/useBrand';
 import Avatar from './Avatar';
 import Badge from './Badge';
+import HelpPanel from './HelpPanel';
 
 /** Navy top bar: brand, the single "General" tab, user menu and logout. Decoration stays behind the controls. */
 export default function Topbar({ user, role, onMenu }) {
     const access = useAccess();
     const brand = useBrandShort();
+    const hasHelp = Boolean(usePage().props.help);
+    const [helpOpen, setHelpOpen] = useState(false);
 
     return (
         <header className="brand-surface topbar-surface sticky top-0 z-30 flex h-16 items-center gap-3 px-4 text-white shadow-card sm:px-6">
@@ -40,6 +44,22 @@ export default function Topbar({ user, role, onMenu }) {
             </nav>
 
             <div className="flex-1" />
+
+            {hasHelp && (
+                <>
+                    <button
+                        type="button"
+                        onClick={() => setHelpOpen(true)}
+                        aria-haspopup="dialog"
+                        className="flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold transition-colors duration-150 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-white"
+                    >
+                        <CircleHelp className="size-4" aria-hidden="true" />
+                        <span className="hidden sm:inline">Ayuda</span>
+                        <span className="sr-only sm:hidden">Ayuda</span>
+                    </button>
+                    <HelpPanel show={helpOpen} onClose={() => setHelpOpen(false)} />
+                </>
+            )}
 
             <Menu as="div" className="relative">
                 <MenuButton className="flex items-center gap-2 rounded-full py-1 pr-2 pl-1 transition-colors duration-150 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-white">

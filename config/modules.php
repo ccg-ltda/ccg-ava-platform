@@ -153,7 +153,7 @@ return [
      * page can not be left outside the plan by accident.
      */
     'core_routes' => [
-        'profile.*', 'legal.accept', 'legal.accept.store', 'logout', 'verification.*', 'password.*', 'confirm-password',
+        'profile.*', 'help.*', 'support.*', 'legal.accept', 'legal.accept.store', 'logout', 'verification.*', 'password.*', 'confirm-password',
         'workspaces.search', 'workspace.logo',
         'saved-filters.*',
         'workspace.empty', 'workspaces.modules.*', 'workspaces.limits.*', 'workspaces.trial.*', 'workspaces.terms.*', 'plans.*', 'modules.*', 'module-categories.*', 'workspaces.plan.update', 'support-access.*', 'email-template.*',

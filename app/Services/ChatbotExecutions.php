@@ -196,6 +196,11 @@ class ChatbotExecutions
             return $this->settle($execution, ChatbotExecution::FAILED, $outcome->code);
         }
 
+        // n8n accepted this run with the instructions of that version: the only confirmation Zonno has that the workflow received them.
+        if (ChatbotInstructions::ready()) {
+            app(ChatbotInstructions::class)->markSynced($execution->chatbot_id, (int) $execution->chatbot->instructions_version);
+        }
+
         return $this->complete($execution, $outcome);
     }
 
@@ -334,7 +339,12 @@ class ChatbotExecutions
             'execution_id' => $execution->correlation_id,
             'event' => 'message',
             'workflow' => ['key' => $workflow->key, 'id' => $workflow->n8nId],
-            'chatbot' => ['id' => $chatbot->id, 'name' => $chatbot->name, 'instructions' => mb_substr((string) $chatbot->instructions, 0, (int) config('n8n.max_instructions'))],
+            'chatbot' => [
+                'id' => $chatbot->id, 'name' => $chatbot->name,
+                'instructions' => mb_substr(app(ChatbotInstructions::class)->effective($chatbot), 0, (int) config('n8n.max_instructions')),
+                'instructions_version' => ChatbotInstructions::ready() ? (int) $chatbot->instructions_version : null,
+                'instructions_mode' => app(ChatbotInstructions::class)->mode($chatbot),
+            ],
             'conversation' => [
                 'id' => $conversation->id,
                 'channel' => $conversation->channel,

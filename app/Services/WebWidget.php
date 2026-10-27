@@ -88,11 +88,11 @@ class WebWidget
      *
      * @return array{status: int, reply?: ?string, handling?: string, pending?: bool, message?: string}
      */
-    public function relay(ChatbotChannel $channel, string $sessionId, string $message, ?string $messageId = null): array
+    public function relay(ChatbotChannel $channel, string $sessionId, string $message, ?string $messageId = null, ?string $contactName = null): array
     {
         $chatbot = $channel->chatbot;
         $recorded = $this->conversations->record($chatbot, 'web', [
-            'contact_id' => $sessionId, 'direction' => 'in', 'type' => 'text', 'body' => $message, 'sent_at' => now(),
+            'contact_id' => $sessionId, 'contact_name' => $contactName, 'direction' => 'in', 'type' => 'text', 'body' => $message, 'sent_at' => now(),
             // The widget's own id of this message: a retry of the same request (a dropped connection, a double tap) is stored and answered once.
             'external_id' => $messageId !== null ? 'w:'.$messageId : null,
         ]);

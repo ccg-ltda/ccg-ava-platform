@@ -1,6 +1,7 @@
-import { Pencil, PlugZap, Power, Settings2 } from 'lucide-react';
+import { Check, Circle, Pencil, PlugZap, Power, Settings2 } from 'lucide-react';
 import Badge from '@/Components/Badge';
 import Card from '@/Components/Card';
+import CopyBlock from '@/Components/CopyBlock';
 import IconButton from '@/Components/IconButton';
 import PrimaryButton from '@/Components/PrimaryButton';
 import { channelIcon } from '@/config/chatbots';
@@ -15,9 +16,38 @@ function status(channel) {
     if (!channel.available) return { label: 'No disponible todavía', tone: 'neutral' };
     if (!integration) return { label: 'No configurado', tone: 'amber' };
     if (!integration.isActive) return { label: 'Inactivo', tone: 'neutral' };
+    // WhatsApp: «conectado» only when credentials, webhook, Meta's verification and real traffic are all proven (see App\Services\WhatsAppConnection).
+    if (channel.connection) return { label: channel.connection.label, tone: channel.connection.tone };
     if (integration.lastTest) return integration.lastTest.ok ? { label: 'Conexión verificada', tone: 'green' } : { label: 'Error de conexión', tone: 'red' };
 
     return { label: 'Configurado', tone: 'blue' };
+}
+
+/** The stages of a channel connection (and the webhook URL to paste in Meta, for WhatsApp). Each stage is done only when it was really observed. */
+function ConnectionStages({ connection }) {
+    return (
+        <details className="mt-3 rounded-lg border border-line px-3 py-2 text-sm">
+            <summary className="cursor-pointer font-semibold text-ink">{connection.webhook ? 'Webhook y estado de la conexión' : 'Estado de la conexión'}</summary>
+            <ol className="mt-3 space-y-2" aria-label="Etapas de la conexión">
+                {connection.stages.map((stage) => (
+                    <li key={stage.key} className="flex items-start gap-2">
+                        {stage.done ? <Check className="mt-0.5 size-4 shrink-0 text-accent-green" aria-label="Hecho" /> : <Circle className="mt-0.5 size-4 shrink-0 text-ink-muted" aria-label="Pendiente" />}
+                        <span>
+                            <span className="font-medium text-ink">{stage.label}</span>
+                            <span className="block text-xs text-ink-muted">{stage.detail}</span>
+                        </span>
+                    </li>
+                ))}
+            </ol>
+            {connection.webhook && (
+            <div className="mt-3 space-y-1.5">
+                <p className="text-xs font-semibold text-ink">URL del webhook para Meta (Callback URL)</p>
+                <CopyBlock value={connection.webhook.url} label="URL del webhook de WhatsApp" />
+                <p className="text-xs text-ink-muted">Pégala en Meta for Developers &gt; WhatsApp &gt; Configuración &gt; Webhook, con el Verify Token que guardaste en esta conexión (por seguridad no se vuelve a mostrar), y suscribe el campo «messages». Meta solo alcanza una URL pública con HTTPS: una dirección local no sirve.</p>
+            </div>
+            )}
+        </details>
+    );
 }
 
 /**
@@ -67,6 +97,7 @@ export default function ChannelCard({ channel, delay, readOnly, can = { edit: tr
                     <span className="mt-0.5 block text-xs text-ink-muted">{integration.lastTest.at}</span>
                 </p>
             )}
+            {channel.connection && integration && <ConnectionStages connection={channel.connection} />}
             {integration && testable && !readOnly && can.test && !integration.lastTest && <p className="mt-3 text-sm text-ink-muted">Conexión sin verificar. Usa «Probar conexión» para comprobarla con el proveedor.</p>}
 
             {available && !readOnly && (integration ? can.edit || can.test || can.toggle : can.edit) && (

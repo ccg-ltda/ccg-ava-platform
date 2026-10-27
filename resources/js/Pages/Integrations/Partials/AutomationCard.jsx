@@ -19,11 +19,11 @@ const CONNECTION = {
     error: { label: 'Error de conexión', tone: 'red' },
 };
 
-/** What Ava can really say about n8n reading from it: only a real read by n8n counts. */
+/** What Ava can really say: only an authenticated call with the token counts, and it proves the token was used, not which endpoint (the instructions have their own confirmation: «Sincronizado» only after n8n READ them). */
 const WORKFLOW = {
     not_configured: { label: 'Sin token', tone: 'amber' },
     configured: { label: 'Esperando a n8n', tone: 'blue' },
-    connected: { label: 'n8n ya leyó la configuración', tone: 'green' },
+    connected: { label: 'El token ya fue usado desde n8n', tone: 'green' },
 };
 
 function Step({ number, title, children }) {
@@ -153,10 +153,29 @@ function Workflow_({ automation, newToken, readOnly, workspaceId }) {
                 <CopyBlock value={automation.messagesEndpoint} label="Dirección para enviar mensajes a Ava" />
             </div>
 
+            <details className="rounded-lg border border-line px-4 py-3 text-sm">
+                <summary className="cursor-pointer font-semibold text-ink">Ejemplos cURL para probar o configurar tu workflow</summary>
+                <div className="mt-3 space-y-4">
+                    <Alert tone="info">
+                        cURL es solo una forma de hacer la petición HTTP: no reemplaza la API ni el token. Define primero tu token en la terminal (<code>export {automation.curl.tokenVariable}=&lt;token del chatbot&gt;</code>) y copia los comandos tal cual. En n8n usa el nodo «HTTP Request» con el mismo método, dirección, cabeceras y cuerpo, y guarda el token como credencial de n8n, no dentro del flujo. Ava nunca incluye el token en estos comandos.
+                    </Alert>
+                    {automation.curl.examples.map((example) => (
+                        <div key={example.key} className="space-y-1.5">
+                            <p className="font-semibold text-ink">
+                                {example.title} <span className="font-mono text-xs font-normal text-ink-muted">{example.method}</span>
+                            </p>
+                            <p className="text-xs text-ink-muted">{example.description}</p>
+                            <CopyBlock value={example.command} label={`Comando cURL: ${example.title}`} />
+                            <p className="text-xs text-ink-muted">Respuesta esperada: {example.expect}</p>
+                        </div>
+                    ))}
+                </div>
+            </details>
+
             <div className="flex flex-wrap items-center gap-2">
                 <p className="text-sm font-semibold text-ink">Token del chatbot</p>
                 <Badge tone={state.tone}>{state.label}</Badge>
-                {automation.lastSeen && <span className="text-xs text-ink-muted">Última lectura: {automation.lastSeen}</span>}
+                {automation.lastSeen && <span className="text-xs text-ink-muted">Última actividad con el token: {automation.lastSeen}</span>}
             </div>
             <Alert tone="info">Este token identifica a cada chatbot cuando n8n envía información a Ava. No es la API Key de n8n. Por seguridad, Ava solo lo muestra en el momento de generarlo.</Alert>
 
@@ -172,7 +191,7 @@ function Workflow_({ automation, newToken, readOnly, workspaceId }) {
                                     {!chatbot.isActive && <span className="ml-2 font-normal text-ink-muted">(inactivo)</span>}
                                 </span>
                                 <span className="text-ink-muted">
-                                    {chatbot.hasToken ? <>Token ••••{chatbot.hint}</> : 'Sin token'} · {chatbot.lastSeen ? `leído ${chatbot.lastSeen}` : 'sin lecturas'}
+                                    {chatbot.hasToken ? <>Token ••••{chatbot.hint}</> : 'Sin token'} · {chatbot.lastSeen ? `usado ${chatbot.lastSeen}` : 'sin uso'}
                                 </span>
                                 <span className="flex flex-wrap gap-2">
                                     {canGenerate && (

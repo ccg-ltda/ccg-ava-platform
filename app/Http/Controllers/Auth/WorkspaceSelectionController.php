@@ -27,7 +27,7 @@ class WorkspaceSelectionController extends Controller
             return redirect()->route('login');
         }
 
-        return Inertia::render('Auth/PreLogin');
+        return Inertia::render('Auth/PreLogin', ['status' => session('status')]);
     }
 
     /**

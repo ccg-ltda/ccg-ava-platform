@@ -1,7 +1,7 @@
-import { Camera, Globe, MessageCircle, MessagesSquare } from 'lucide-react';
+import { Camera, Globe, LifeBuoy, MessageCircle, MessagesSquare } from 'lucide-react';
 
 /** Icon of each channel of the global catalog (config/chatbots.php). A channel the server adds without an icon gets the generic one. */
-export const channelIcons = { web: Globe, whatsapp: MessageCircle, instagram: Camera, messenger: MessagesSquare };
+export const channelIcons = { web: Globe, whatsapp: MessageCircle, instagram: Camera, messenger: MessagesSquare, support: LifeBuoy };
 
 export const channelIcon = (key) => channelIcons[key] ?? MessagesSquare;
 

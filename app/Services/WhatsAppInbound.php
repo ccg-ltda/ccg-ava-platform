@@ -31,8 +31,11 @@ class WhatsAppInbound
         private readonly ModuleAccess $modules,
     ) {}
 
-    /** @param  array<string, mixed>  $payload */
-    public function handle(array $payload): void
+    /**
+     * @param  array<string, mixed>  $payload
+     * @param  ?Integration  $only  the integration whose webhook received the event: events about any other number are ignored
+     */
+    public function handle(array $payload, ?Integration $only = null): void
     {
         if (($payload['object'] ?? null) !== 'whatsapp_business_account') {
             return;
@@ -43,6 +46,10 @@ class WhatsAppInbound
                 $value = $change['value'] ?? null;
 
                 if (($change['field'] ?? null) !== 'messages' || ! is_array($value) || ! is_string($phoneId = $value['metadata']['phone_number_id'] ?? null)) {
+                    continue;
+                }
+
+                if ($only !== null && $phoneId !== (string) ($only->config['phone_number_id'] ?? '')) {
                     continue;
                 }
 

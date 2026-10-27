@@ -72,8 +72,11 @@ export default function ConversationList({ conversations, selectedId, search, hr
                                             <Badge tone={state.tone} className="shrink-0 px-2! py-0.5 text-[10px]! tracking-wide! whitespace-nowrap">
                                                 {state.label}
                                             </Badge>
-                                            {showChannel && (
-                                                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-canvas px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap text-ink-muted ring-1 ring-line">
+                                            {(showChannel || conversation.channel.key === 'support') && (
+                                                <span
+                                                    className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap ring-1 ${conversation.channel.key === 'support' ? 'bg-primary/15 text-accent-blue ring-primary/40' : 'bg-canvas text-ink-muted ring-line'}`}
+                                                    title={conversation.support ? `Solicitud de soporte de ${conversation.support.workspaceName ?? 'un cliente'}` : undefined}
+                                                >
                                                     <ChannelIcon className="size-3" aria-hidden="true" />
                                                     {conversation.channel.label}
                                                 </span>

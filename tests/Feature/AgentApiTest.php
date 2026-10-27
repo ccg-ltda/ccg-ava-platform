@@ -166,6 +166,10 @@ class AgentApiTest extends TestCase
                     'name' => 'Agente de ventas',
                     'description' => 'Atiende ventas',
                     'instructions' => "Eres un asistente comercial.\nNunca inventes precios.",
+                    // The version of the instructions n8n is reading (additive field; saving through the old form made version 2).
+                    'instructions_version' => 2,
+                    'instructions_mode' => 'single',
+                    'instruction_blocks' => [],
                     'updated_at' => $bot->fresh()->updated_at->toIso8601String(),
                 ],
                 'workspace' => ['code' => $workspace->code, 'name' => $workspace->name],

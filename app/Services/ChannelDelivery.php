@@ -36,6 +36,11 @@ class ChannelDelivery
             return ['ok' => true, 'message' => null];
         }
 
+        // A client's support request is answered by CCG's team in this inbox and read by the person in their panel: it needs no chatbot, plan module or channel account.
+        if (app(SupportDesk::class)->isRequest($conversation)) {
+            return ['ok' => true, 'message' => null];
+        }
+
         $label = config("chatbots.channels.{$conversation->channel}.label", $conversation->channel);
 
         // Same switches as every other path (agent API, widget, webhook, executions): a deactivated chatbot or a channel that is off is silent,
@@ -75,8 +80,8 @@ class ChannelDelivery
             return;
         }
 
-        // A demo conversation has no real channel: the message is only marked as sent in Ava, and it says so (`simulated`).
-        if ($conversation->isDemo() || config("chatbots.channels.{$conversation->channel}.delivery") === self::PULL) {
+        // A demo conversation has no real channel: the message is only marked as sent in Ava, and it says so (`simulated`). A support request is read by its person in the panel.
+        if ($conversation->isDemo() || app(SupportDesk::class)->isRequest($conversation) || config("chatbots.channels.{$conversation->channel}.delivery") === self::PULL) {
             $message->update(['status' => 'sent']);
 
             return;

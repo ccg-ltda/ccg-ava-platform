@@ -43,6 +43,6 @@ class InvitationController extends Controller
         $code = $this->invitations->find($token)?->workspace->code;
         $this->invitations->accept($token, $data['name'], $data['password']);
 
-        return redirect()->route('pre-login')->with('success', "Tu cuenta está lista. Ingresa con el código de Workspace {$code}, tu correo y la contraseña que elegiste.");
+        return redirect()->route('pre-login')->with('status', "Tu cuenta está lista. Ingresa con el código de Workspace {$code}, tu correo y la contraseña que elegiste.");
     }
 }

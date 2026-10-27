@@ -26,12 +26,14 @@ const FIELDS = ['name', 'description', 'instructions', 'avatar'];
  * The form lives here so it survives switching tabs. Everything is read only when the user cannot manage chatbots or
  * is looking at another Workspace.
  */
-export default function Show({ chatbot, channels, appearance, agentToken, instructionsMax, avatar, scope }) {
+export default function Show({ chatbot, channels, appearance, agentToken, instructionsMax, avatar, scope, feedback = [], knowledge = null }) {
     const { auth } = usePage().props;
     const confirm = useConfirm();
     const toast = useToast();
     const [selected, select] = useUrlTab(TAB_IDS);
-    const form = useForm({ name: chatbot.name, description: chatbot.description, instructions: chatbot.instructions, avatar: null, remove_avatar: false });
+    // With the three blocks the identity form does not carry the instructions at all (each block saves on its own).
+    const withInstructions = !chatbot.instructionBlocks;
+    const form = useForm({ name: chatbot.name, description: chatbot.description, ...(withInstructions ? { instructions: chatbot.instructions } : {}), avatar: null, remove_avatar: false });
 
     const save = (event) => {
         event.preventDefault();
@@ -40,7 +42,7 @@ export default function Show({ chatbot, channels, appearance, agentToken, instru
             preserveScroll: true,
             onSuccess: (page) => {
                 // What the server saved becomes the new baseline of the form.
-                const saved = { name: page.props.chatbot.name, description: page.props.chatbot.description, instructions: page.props.chatbot.instructions, avatar: null, remove_avatar: false };
+                const saved = { name: page.props.chatbot.name, description: page.props.chatbot.description, ...(withInstructions ? { instructions: page.props.chatbot.instructions } : {}), avatar: null, remove_avatar: false };
                 form.setDefaults(saved);
                 form.setData(saved);
             },
@@ -105,7 +107,7 @@ export default function Show({ chatbot, channels, appearance, agentToken, instru
                 <GeneralTab form={form} chatbot={chatbot} channels={channels} canManage={scope.can?.edit} avatarMaxKb={avatar.maxKb} onSubmit={save} onEdit={() => select(tabIndex('ia'))} onChannels={() => select(tabIndex('canales'))} />
                 <ChannelsTab chatbot={chatbot} channels={channels} canManage={scope.can?.channels} workspaceId={scope.readOnly ? scope.workspace.id : undefined} />
                 <AppearanceTab chatbot={chatbot} appearance={appearance} channels={channels} canManage={scope.can?.channels} canConfigure={auth.user.permissions.includes('manage-integrations')} onChannels={() => select(tabIndex('canales'))} />
-                <BehaviorTab form={form} chatbot={chatbot} canManage={scope.can?.edit} canTokens={scope.can?.tokens} instructionsMax={instructionsMax} avatarMaxKb={avatar.maxKb} onSubmit={save} agentToken={agentToken} />
+                <BehaviorTab form={form} chatbot={chatbot} feedback={feedback} knowledge={knowledge} canManage={scope.can?.edit} canTokens={scope.can?.tokens} instructionsMax={instructionsMax} avatarMaxKb={avatar.maxKb} onSubmit={save} agentToken={agentToken} />
             </Tabs>
         </>
     );

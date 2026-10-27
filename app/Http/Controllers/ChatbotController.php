@@ -7,7 +7,9 @@ use App\Http\Requests\SaveChatbotRequest;
 use App\Models\Chatbot;
 use App\Services\AgentAccess;
 use App\Services\ChannelAppearanceService;
+use App\Services\ChatbotFeedback;
 use App\Services\ChatbotService;
+use App\Services\KnowledgeBase;
 use App\Services\PrivateImage;
 use App\Services\WorkspaceScope;
 use Illuminate\Http\RedirectResponse;
@@ -64,6 +66,10 @@ class ChatbotController extends Controller
                 'scriptUrl' => url('/widget/ava-widget.js'),
             ],
             'instructionsMax' => config('chatbots.instructions_max'),
+            // Proposals made from conversations, waiting for a person to review them: only for who may change the assistant, never in another Workspace's view.
+            'feedback' => ! $foreign && in_array('edit-chatbots', $request->attributes->get('workspace_permissions', []), true) ? app(ChatbotFeedback::class)->pending($chatbot) : [],
+            // Documents the Workspace uploaded for its assistants (null until the migration of the knowledge base exists).
+            'knowledge' => app(KnowledgeBase::class)->ready() ? ['documents' => app(KnowledgeBase::class)->forPage($viewing, $chatbot), 'extensions' => config('chatbots.knowledge.extensions'), 'maxKb' => config('chatbots.knowledge.max_kb')] : null,
             'avatar' => ['maxKb' => config('chatbots.avatar.max_kb')],
             'scope' => $this->scopeProps($request, $viewing, $foreign, ['create' => 'create-chatbots', 'edit' => 'edit-chatbots', 'activate' => 'activate-chatbots', 'channels' => 'manage-chatbot-channels', 'tokens' => 'manage-agent-tokens']),
         ]);

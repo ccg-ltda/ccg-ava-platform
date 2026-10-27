@@ -153,6 +153,22 @@ return [
         'orders.products' => ['label' => 'Consulta del catálogo', 'kind' => 'read'],
         'orders.index' => ['label' => 'Consulta de sus pedidos', 'kind' => 'read'],
         'orders.store' => ['label' => 'Creación de un pedido', 'kind' => 'write'],
+        'knowledge.search' => ['label' => 'Búsqueda en la base de conocimiento', 'kind' => 'read'],
+    ],
+
+    /*
+     * Base de conocimiento: what a Workspace may upload for its assistants to consult. Only formats whose text Ava can extract itself are accepted (txt, md, csv, docx);
+     * a PDF is refused with an explanation until an extractor is installed (no parser exists in this stack), so nothing is stored that cannot be read.
+     */
+    'knowledge' => [
+        'extensions' => ['txt', 'md', 'csv', 'docx'],
+        'max_kb' => 5120,
+        'max_documents' => 50,
+        'max_text_chars' => 400000,
+        'chunk_chars' => 900,
+        'max_attempts' => 3,
+        'search_limit' => 5,
+        'query_max' => 300,
     ],
 
     /* How the interface names the status of a traced call. `started` is also what stays when the process ended before the outcome could be written. */

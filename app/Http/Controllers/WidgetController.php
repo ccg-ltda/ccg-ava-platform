@@ -4,6 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\ChatbotChannel;
 use App\Services\PrivateImage;
+use App\Services\SupportContext;
+use App\Services\SupportDesk;
+use App\Services\WebChannelConnection;
 use App\Services\WebWidget;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,11 +19,13 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class WidgetController extends Controller
 {
-    public function __construct(private readonly WebWidget $widget) {}
+    public function __construct(private readonly WebWidget $widget, private readonly SupportContext $context) {}
 
     public function config(Request $request, string $key): JsonResponse
     {
         $channel = $this->channel($request, $key);
+        // Evidence for the state of the channel in Integraciones: the widget really loaded on another site.
+        app(WebChannelConnection::class)->widgetSeen($channel, $request->header('Origin'));
 
         return response()->json($this->widget->appearance($channel, $key))->header('Cache-Control', 'no-store');
     }
@@ -38,12 +43,15 @@ class WidgetController extends Controller
         // Only the chat widget talks to the automation; a WhatsApp button is just a link.
         abort_unless($channel->channel === 'web', 404);
         $data = $request->validate([
-            'session_id' => ['required', 'string', 'regex:/^[A-Za-z0-9_-]{8,64}$/'],
+            'session_id' => ['required', 'string', 'regex:/^[A-Za-z0-9_-]{8,64}$/', 'not_regex:'.SupportDesk::RESERVED_KEY],
             'message' => ['required', 'string', 'max:'.config('chatbots.widget.max_message')],
             'message_id' => ['sometimes', 'nullable', 'string', 'regex:/^[A-Za-z0-9_-]{8,64}$/'],
         ]);
 
-        $result = $this->widget->relay($channel, $data['session_id'], trim($data['message']), $data['message_id'] ?? null);
+        // A signed-in member of a client Workspace writing to CCG's support: the conversation is theirs (and the team sees who they are). Anyone else keeps their anonymous session.
+        $who = $this->context->resolve($request, $channel);
+
+        $result = $this->widget->relay($channel, $who['contact_id'] ?? $data['session_id'], trim($data['message']), $data['message_id'] ?? null, $who['contact_name'] ?? null);
 
         return response()->json(
             $result['status'] === 200 ? $this->answer($result) : ['message' => $result['message']],
@@ -62,9 +70,11 @@ class WidgetController extends Controller
     {
         $channel = $this->channel($request, $key);
         abort_unless($channel->channel === 'web', 404);
-        $data = $request->validate(['session_id' => ['required', 'string', 'regex:/^[A-Za-z0-9_-]{8,64}$/']]);
+        $data = $request->validate(['session_id' => ['required', 'string', 'regex:/^[A-Za-z0-9_-]{8,64}$/', 'not_regex:'.SupportDesk::RESERVED_KEY]]);
 
-        return response()->json($this->widget->collect($channel, $data['session_id']))->header('Cache-Control', 'no-store');
+        $who = $this->context->resolve($request, $channel);
+
+        return response()->json($this->widget->collect($channel, $who['contact_id'] ?? $data['session_id']))->header('Cache-Control', 'no-store');
     }
 
     /** The live channel behind the key, or a 404 that does not say why; 403 when the site may not embed the widget. */

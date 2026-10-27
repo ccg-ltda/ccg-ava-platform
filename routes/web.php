@@ -7,6 +7,8 @@ use App\Http\Controllers\CampaignController;
 use App\Http\Controllers\CatalogReminderController;
 use App\Http\Controllers\ChannelAppearanceController;
 use App\Http\Controllers\ChatbotController;
+use App\Http\Controllers\ChatbotFeedbackController;
+use App\Http\Controllers\ChatbotInstructionController;
 use App\Http\Controllers\ConversationActionController;
 use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\CustomerController;
@@ -14,8 +16,10 @@ use App\Http\Controllers\CustomerTagController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DemoConversationController;
 use App\Http\Controllers\EmailTemplateController;
+use App\Http\Controllers\HelpController;
 use App\Http\Controllers\IntegrationController;
 use App\Http\Controllers\InventoryController;
+use App\Http\Controllers\KnowledgeController;
 use App\Http\Controllers\LegalController;
 use App\Http\Controllers\LocationController;
 use App\Http\Controllers\MessageTemplateController;
@@ -37,6 +41,7 @@ use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SignupController;
 use App\Http\Controllers\SupportAccessController;
+use App\Http\Controllers\SupportDeskController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserLocationScopeController;
 use App\Http\Controllers\WorkspaceController;
@@ -90,6 +95,12 @@ Route::middleware(['auth', 'verified', 'workspace'])->group(function () {
 });
 
 Route::middleware(['auth', 'workspace'])->group(function () {
+    // Manuals of the «Ayuda» panel (PDF files listed in config/help.php): any member, only those whose module the Workspace has.
+    Route::get('/help/manuals/{key}', [HelpController::class, 'manual'])->where('key', '[a-z0-9-]+')->name('help.manual');
+    // Support for the administrators of a client Workspace, answered by CCG's team in Conversaciones of the administrative Workspace. The destination is decided by the server; the controller
+    // checks the role again (the button is only a convenience).
+    Route::get('/support/thread', [SupportDeskController::class, 'thread'])->middleware('throttle:60,1')->name('support.thread');
+    Route::post('/support/messages', [SupportDeskController::class, 'send'])->middleware('throttle:20,1')->name('support.messages');
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::put('/profile/communications', [LegalController::class, 'updateCommunications'])->name('profile.communications');
@@ -138,6 +149,8 @@ Route::middleware(['auth', 'workspace'])->group(function () {
             Route::post('/{conversation}/simulate/handoff', [DemoConversationController::class, 'handoff'])->whereNumber('conversation')->name('simulate.handoff');
             Route::post('/{conversation}/messages/{message}/simulate-status', [DemoConversationController::class, 'status'])->whereNumber(['conversation', 'message'])->name('simulate.status');
         });
+        // A reply of the assistant the person did not like: it creates a PROPOSAL to change one instruction block (nothing is applied until it is approved).
+        Route::post('/{conversation}/messages/{message}/feedback', [ChatbotFeedbackController::class, 'store'])->whereNumber(['conversation', 'message'])->middleware(['workspace.module:assistants', 'workspace.permission:edit-chatbots', 'throttle:30,1'])->name('feedback.store');
         Route::post('/{conversation}/assign', [ConversationActionController::class, 'assign'])->whereNumber('conversation')->middleware('workspace.permission:manage-conversations')->name('assign');
     });
 
@@ -158,6 +171,16 @@ Route::middleware(['auth', 'workspace'])->group(function () {
             Route::post('/{chatbot}', [ChatbotController::class, 'update'])->whereNumber('chatbot')->middleware('workspace.permission:edit-chatbots')->name('update');
             Route::post('/{chatbot}/activate', [ChatbotController::class, 'activate'])->whereNumber('chatbot')->middleware('workspace.permission:activate-chatbots')->name('activate');
             Route::post('/{chatbot}/deactivate', [ChatbotController::class, 'deactivate'])->whereNumber('chatbot')->middleware('workspace.permission:activate-chatbots')->name('deactivate');
+            // Instructions in three blocks (each saved on its own) and the review of what was proposed from a conversation.
+            Route::post('/{chatbot}/instructions-mode', [ChatbotInstructionController::class, 'mode'])->whereNumber('chatbot')->middleware(['workspace.permission:edit-chatbots', 'throttle:30,1'])->name('instructions.mode');
+            Route::post('/{chatbot}/instructions/{block}', [ChatbotInstructionController::class, 'update'])->whereNumber('chatbot')->where('block', 'identity|limits|knowledge|legacy')->middleware(['workspace.permission:edit-chatbots', 'throttle:60,1'])->name('instructions.update');
+            Route::post('/{chatbot}/feedback/{feedback}/approve', [ChatbotInstructionController::class, 'approve'])->whereNumber(['chatbot', 'feedback'])->middleware(['workspace.permission:edit-chatbots', 'throttle:30,1'])->name('feedback.approve');
+            Route::post('/{chatbot}/feedback/{feedback}/reject', [ChatbotInstructionController::class, 'reject'])->whereNumber(['chatbot', 'feedback'])->middleware('workspace.permission:edit-chatbots')->name('feedback.reject');
+            // Base de conocimiento: documents of the Workspace that this assistant may consult.
+            Route::post('/{chatbot}/knowledge', [KnowledgeController::class, 'store'])->whereNumber('chatbot')->middleware(['workspace.permission:edit-chatbots', 'throttle:20,1'])->name('knowledge.store');
+            Route::post('/{chatbot}/knowledge/{document}/link', [KnowledgeController::class, 'link'])->whereNumber(['chatbot', 'document'])->middleware('workspace.permission:edit-chatbots')->name('knowledge.link');
+            Route::post('/{chatbot}/knowledge/{document}/retry', [KnowledgeController::class, 'retry'])->whereNumber(['chatbot', 'document'])->middleware(['workspace.permission:edit-chatbots', 'throttle:20,1'])->name('knowledge.retry');
+            Route::delete('/{chatbot}/knowledge/{document}', [KnowledgeController::class, 'destroy'])->whereNumber(['chatbot', 'document'])->middleware('workspace.permission:edit-chatbots')->name('knowledge.destroy');
             Route::post('/{chatbot}/agent-token', [ChatbotController::class, 'generateAgentToken'])->whereNumber('chatbot')->middleware(['workspace.permission:manage-agent-tokens', 'throttle:10,1'])->name('agent-token.generate');
             Route::delete('/{chatbot}/agent-token', [ChatbotController::class, 'revokeAgentToken'])->whereNumber('chatbot')->middleware('workspace.permission:manage-agent-tokens')->name('agent-token.revoke');
             Route::put('/{chatbot}/channels/{channel}', [ChatbotController::class, 'updateChannel'])->whereNumber('chatbot')->where('channel', '[a-z_]+')->middleware('workspace.permission:manage-chatbot-channels')->name('channels.update');

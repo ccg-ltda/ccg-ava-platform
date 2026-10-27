@@ -70,7 +70,8 @@ class ChannelIntegrationsTest extends TestCase
 
         $integration = $workspace->integrations()->firstOrFail();
         $this->assertSame(['WhatsApp', 'whatsapp', true], [$integration->name, $integration->type, $integration->is_active]);
-        $this->assertSame(['phone_number_id' => '100200300'], $integration->config);
+        $this->assertSame('100200300', $integration->config['phone_number_id']);
+        $this->assertSame(['phone_number_id', 'webhook_key'], array_keys($integration->config));
         $this->assertSame(self::TOKEN, $integration->secrets['access_token']);
 
         $channel = $this->channel();

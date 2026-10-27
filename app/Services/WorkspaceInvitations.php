@@ -227,6 +227,6 @@ class WorkspaceInvitations
 
     private function send(WorkspaceInvitation $invitation, Workspace $workspace, string $token): void
     {
-        Notification::route('mail', $invitation->email)->notify(new WorkspaceInvitationNotification(route('invitations.show', ['token' => $token]), $workspace->name, self::hours()));
+        Notification::route('mail', $invitation->email)->notify(new WorkspaceInvitationNotification(route('invitations.show', ['token' => $token]), $workspace->name, self::hours(), $invitation->id));
     }
 }

@@ -77,7 +77,7 @@ class WorkspaceInvitationsTest extends TestCase
         auth()->logout();
         $this->flushSession();
         $this->get("/invitacion/{$token}")->assertOk()->assertInertia(fn ($page) => $page->where('valid', true)->where('email', 'nuevo@cliente.com')->where('workspace', $this->client->name));
-        $this->post("/invitacion/{$token}", ['name' => 'Ana Cliente', 'password' => 'Una-clave-larga-9', 'password_confirmation' => 'Una-clave-larga-9'])->assertSessionHasNoErrors();
+        $this->post("/invitacion/{$token}", ['name' => 'Ana Cliente', 'password' => 'Una-clave-larga-9', 'password_confirmation' => 'Una-clave-larga-9'])->assertSessionHasNoErrors()->assertRedirect(route('pre-login'))->assertSessionHas('status', fn ($m) => str_contains($m, $this->client->code));
 
         $user = User::where('email', 'nuevo@cliente.com')->firstOrFail();
         $this->assertTrue(Hash::check('Una-clave-larga-9', $user->password));
@@ -258,5 +258,48 @@ class WorkspaceInvitationsTest extends TestCase
             ->where('workspaces.selected.canInvite', true)
             ->where('workspaces.selected.invitations.0.status', 'pending')
             ->where('workspaces.selected.invitations.0.email', fn ($email) => $email !== 'persona@cliente.com' && str_contains($email, '@')));
+    }
+
+    public function test_a_delivery_that_fails_for_good_kills_the_token_left_in_the_failed_job_and_the_resend_issues_a_new_one(): void
+    {
+        $token = $this->invite();
+        $invitation = WorkspaceInvitation::firstOrFail();
+        $notification = new WorkspaceInvitationNotification(route('invitations.show', ['token' => $token]), $this->client->name, 72, $invitation->id);
+
+        $notification->failed(new \RuntimeException('smtp down'));
+
+        $this->assertNull(app(WorkspaceInvitations::class)->find($token), 'what stays in failed_jobs opens nothing');
+        $this->assertSame(WorkspaceInvitation::PENDING, $invitation->fresh()->status(), 'the invitation is still pending: the administration can re-send it');
+
+        $this->post("/workspaces/{$this->client->id}/invitations/{$invitation->id}/resend")->assertSessionHasNoErrors();
+        $this->assertNotNull(app(WorkspaceInvitations::class)->find($this->lastToken()));
+    }
+
+    public function test_a_notification_queued_before_the_invitation_id_existed_fails_without_an_error(): void
+    {
+        $old = (new \ReflectionClass(WorkspaceInvitationNotification::class))->newInstanceWithoutConstructor();
+
+        $old->failed(new \RuntimeException('smtp down'));
+
+        $this->assertSame(0, WorkspaceInvitation::count());
+    }
+
+    private function lastToken(): string
+    {
+        $token = null;
+        Notification::assertSentOnDemand(WorkspaceInvitationNotification::class, function ($notification) use (&$token) {
+            $token = basename(parse_url((fn () => $this->url)->call($notification), PHP_URL_PATH));
+
+            return true;
+        });
+
+        return $token;
+    }
+
+    public function test_the_diagnosis_warns_about_jobs_that_sit_in_the_database_queue_nobody_reads(): void
+    {
+        DB::table('jobs')->insert(['queue' => 'default', 'payload' => '{}', 'attempts' => 0, 'available_at' => now()->subHour()->timestamp, 'created_at' => now()->subHour()->timestamp]);
+
+        $this->artisan('integrations:diagnose')->expectsOutputToContain('llevan más de 5 minutos en la tabla jobs')->run();
     }
 }

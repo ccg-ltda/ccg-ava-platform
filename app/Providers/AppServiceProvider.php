@@ -69,6 +69,8 @@ class AppServiceProvider extends ServiceProvider
 
         // The public widget is open to the whole internet: each visitor (IP) is limited per widget, since every message
         // reaches a workflow that may call a paid model.
+        // The webhook of one WhatsApp integration is limited by its own public key: Meta's addresses vary, an attacker's flood must not use up the budget of every integration.
+        RateLimiter::for('whatsapp-integration', fn (Request $request) => Limit::perMinute((int) config('integrations.whatsapp.webhook_per_minute'))->by('wa-webhook|'.$request->route('key')));
         RateLimiter::for('widget-poll', fn (Request $request) => Limit::perMinute((int) config('chatbots.widget.poll_per_minute'))->by($request->ip().'|'.$request->route('key')));
         RateLimiter::for('widget-messages', fn (Request $request) => Limit::perMinute((int) config('chatbots.widget.messages_per_minute'))->by($request->ip().'|'.$request->route('key')));
         RateLimiter::for('widget-config', fn (Request $request) => Limit::perMinute((int) config('chatbots.widget.config_per_minute'))->by($request->ip().'|'.$request->route('key')));

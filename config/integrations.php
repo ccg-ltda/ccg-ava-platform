@@ -84,6 +84,8 @@ return [
         'graph_url' => env('WHATSAPP_GRAPH_URL', 'https://graph.facebook.com'),
         'graph_version' => env('WHATSAPP_GRAPH_VERSION', 'v25.0'),
         'timeout' => 10,
+        // Requests per minute that ONE integration's webhook accepts (on top of the per-IP limit of the whole group): a flood aimed at one number cannot starve the others.
+        'webhook_per_minute' => 300,
     ],
 
     /*

@@ -1,12 +1,13 @@
 import { Link } from '@inertiajs/react';
-import { AudioLines, ArrowLeft, File, Image, MapPin, MessageSquareText, Sticker, Video } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { AudioLines, ArrowLeft, File, Image, MapPin, MessageSquareText, Sticker, ThumbsDown, Video } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import Badge from '@/Components/Badge';
 import { channelIcon } from '@/config/chatbots';
 import { handlingStates, messageStatuses } from '@/config/conversations';
 import ChatActions from './ChatActions';
 import { SimulationBar, StatusSimulator } from './DemoTools';
 import Composer from './Composer';
+import FeedbackDialog from './FeedbackDialog';
 import Operations from './Operations';
 import { contactLabel, contactNumber, initial } from './contact';
 
@@ -24,7 +25,7 @@ const TYPES = {
 const author = (message) => (message.sender === 'agent' ? (message.senderName ?? 'Agente') : 'IA');
 
 /** One message: who wrote it, its text, what kind of content it is when it is not plain text, and the state of an outgoing one. */
-function Bubble({ message, simulate, conversationId }) {
+function Bubble({ message, simulate, conversationId, onFeedback }) {
     const mine = message.direction === 'out';
     const type = TYPES[message.type];
     const Icon = type?.icon;
@@ -59,6 +60,12 @@ function Bubble({ message, simulate, conversationId }) {
                     <time>{message.time}</time>
                 </p>
                 {simulate && mine && message.simulated && <StatusSimulator conversationId={conversationId} messageId={message.id} />}
+                {onFeedback && mine && message.sender === 'ai' && message.body && (
+                    <button type="button" onClick={onFeedback} className="mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold text-white/85 underline-offset-2 hover:bg-white/15 hover:underline focus-visible:outline-2 focus-visible:outline-white">
+                        <ThumbsDown className="size-3" aria-hidden="true" />
+                        No me gustó
+                    </button>
+                )}
             </div>
         </div>
     );
@@ -71,6 +78,7 @@ export default function ChatPanel({ selected, backHref, agents }) {
     const lastStatus = selected.items.at(-1)?.status;
     const ChannelIcon = channelIcon(selected.channel.key);
     const state = handlingStates[selected.handling];
+    const [flagged, setFlagged] = useState(null);
 
     // Opening a conversation, or a new message arriving, shows the newest message.
     useEffect(() => {
@@ -95,9 +103,16 @@ export default function ChatPanel({ selected, backHref, agents }) {
                             {selected.contactName && ` · ${contactNumber(selected.contactId)}`} · {selected.chatbot.name}
                         </span>
                     </p>
+                    {selected.support && (
+                        <p className="truncate text-xs font-semibold text-ink">
+                            Soporte Zonno · Workspace: {selected.support.workspaceName ?? 'desconocido'}
+                            {selected.support.workspaceCode ? ` (${selected.support.workspaceCode})` : ''} · Solicitó: {selected.support.userName ?? 'desconocido'}
+                        </p>
+                    )}
                 </div>
                 <div className="flex w-full shrink-0 flex-wrap items-center gap-1 pl-12 sm:w-auto sm:justify-end sm:pl-0">
                     <Badge tone={state.tone}>{state.label}</Badge>
+                    {selected.support && <Badge tone="blue">Soporte Zonno</Badge>}
                     {selected.demo && <Badge tone="violet">Demo</Badge>}
                 </div>
             </header>
@@ -116,12 +131,13 @@ export default function ChatPanel({ selected, backHref, agents }) {
                                 <span className="rounded-full bg-card px-3 py-1 text-[11px] font-semibold text-ink-muted ring-1 ring-line">{message.day}</span>
                             </p>
                         )}
-                        <Bubble message={message} simulate={selected.simulate} conversationId={selected.id} />
+                        <Bubble message={message} simulate={selected.simulate} conversationId={selected.id} onFeedback={selected.feedback ? () => setFlagged(message) : null} />
                     </div>
                 ))}
             </div>
 
             <Composer key={selected.id} selected={selected} />
+            {flagged && selected.feedback && <FeedbackDialog conversation={selected} message={flagged} feedback={selected.feedback} onClose={() => setFlagged(null)} />}
         </div>
     );
 }

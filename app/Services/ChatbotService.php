@@ -55,6 +55,10 @@ class ChatbotService
             'name' => $chatbot->name,
             'description' => $chatbot->description ?? '',
             'instructions' => $chatbot->instructions ?? '',
+            // Null until the migration of the three blocks exists: the page then keeps the single field it always had.
+            'instructionBlocks' => ChatbotInstructions::ready() ? app(ChatbotInstructions::class)->blocks($chatbot) : null,
+            'instructionStatus' => ChatbotInstructions::ready() ? app(ChatbotInstructions::class)->status($chatbot) : null,
+            'instructionVersions' => ChatbotInstructions::ready() ? app(ChatbotInstructions::class)->versions($chatbot) : [],
             'isActive' => $chatbot->is_active,
             // False until the identity has been saved once: General then asks for it instead of showing the chatbot.
             'profileSaved' => $chatbot->profile_saved_at !== null,
@@ -134,6 +138,8 @@ class ChatbotService
             'state' => $seen ? 'connected' : ($chatbots->whereNotNull('agent_token_hash')->isNotEmpty() ? 'configured' : 'not_configured'),
             'endpoint' => url('/api/agent/config'),
             'messagesEndpoint' => url('/api/agent/messages'),
+            // Copyable cURL commands for the same endpoints (placeholders only: the token is never part of them).
+            'curl' => ['tokenVariable' => AgentCurlExamples::TOKEN_VARIABLE, 'examples' => app(AgentCurlExamples::class)->all()],
             'lastSeen' => $moment($seen),
             'chatbots' => $chatbots->map(fn (Chatbot $chatbot) => [
                 'id' => $chatbot->id,
@@ -190,11 +196,16 @@ class ChatbotService
 
         try {
             DB::transaction(function () use ($chatbot, $data, $stored, $removeAvatar, &$previous) {
+                // First, so the identity fields below are applied on top of the row it leaves (the versioned save reloads the model).
+                // With the blocks in place a form that still sends the single field goes through the VERSIONED path (the «anterior sin clasificar» block): never a silent overwrite.
+                if (array_key_exists('instructions', $data) && ChatbotInstructions::ready()) {
+                    app(ChatbotInstructions::class)->save($chatbot, 'legacy', $data['instructions'], null, auth()->user());
+                }
+
                 $chatbot->fill([
                     'name' => trim($data['name']),
                     'description' => $this->nullable($data['description'] ?? null),
-                    'instructions' => $this->nullable($data['instructions'] ?? null),
-                ]);
+                ] + (array_key_exists('instructions', $data) && ! ChatbotInstructions::ready() ? ['instructions' => $this->nullable($data['instructions'])] : []));
                 $chatbot->profile_saved_at ??= now();
 
                 if ($stored || $removeAvatar) {

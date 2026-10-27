@@ -9,6 +9,8 @@ import InputLabel from '@/Components/InputLabel';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import Textarea from '@/Components/Textarea';
+import InstructionBlocks from './InstructionBlocks';
+import KnowledgePanel from './KnowledgePanel';
 import ProfileFields from './ProfileFields';
 
 function SectionTitle({ icon: Icon, title, children }) {
@@ -51,7 +53,7 @@ function Guide() {
  * only place the instructions live; n8n reads them from here), and below it the access token the automation uses.
  * The form belongs to the page; the server validates and stores it for the active Workspace.
  */
-export default function BehaviorTab({ form, chatbot, canManage, canTokens, instructionsMax, avatarMaxKb, onSubmit, agentToken }) {
+export default function BehaviorTab({ form, chatbot, feedback = [], knowledge = null, canManage, canTokens, instructionsMax, avatarMaxKb, onSubmit, agentToken }) {
     const confirm = useConfirm();
     const { data, setData, errors, processing, isDirty } = form;
 
@@ -83,6 +85,8 @@ export default function BehaviorTab({ form, chatbot, canManage, canTokens, instr
 
                     <ProfileFields form={form} chatbot={chatbot} canManage={canManage} avatarMaxKb={avatarMaxKb} />
 
+                    {/* Until the migration of the three blocks exists the single field stays; afterwards the blocks below replace it. */}
+                    {!chatbot.instructionBlocks && (
                     <div>
                         <InputLabel htmlFor="chatbot_instructions" value="Instrucciones principales" />
                         <Textarea
@@ -103,6 +107,7 @@ export default function BehaviorTab({ form, chatbot, canManage, canTokens, instr
                             </p>
                         </div>
                     </div>
+                    )}
 
                     {canManage && (
                         <div className="flex justify-end border-t border-line pt-4">
@@ -113,6 +118,10 @@ export default function BehaviorTab({ form, chatbot, canManage, canTokens, instr
                     )}
                 </Card>
             </form>
+
+            {chatbot.instructionBlocks && <InstructionBlocks chatbot={chatbot} feedback={feedback} canEdit={canManage} max={instructionsMax} />}
+
+            {knowledge && <KnowledgePanel chatbot={chatbot} knowledge={knowledge} canEdit={canManage} />}
 
             <Card className="space-y-5 p-5 sm:p-6">
                 <SectionTitle icon={KeyRound} title="Acceso para n8n">

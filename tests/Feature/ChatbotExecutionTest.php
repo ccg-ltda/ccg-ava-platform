@@ -19,6 +19,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Services\AgentAccess;
 use App\Services\ChatbotExecutions;
+use App\Services\ChatbotInstructions;
 use App\Services\ChatbotWorkflows;
 use App\Services\ConversationControl;
 use Illuminate\Database\QueryException;
@@ -783,6 +784,39 @@ class ChatbotExecutionTest extends TestCase
             // D-FALLO: a failure the contact would never see is handed to a person (see AiFailureHandoverTest for the whole behavior).
             $this->assertSame(Conversation::PENDING, $conversation->handling, $name);
         }
+    }
+
+    public function test_an_accepted_execution_carries_only_the_active_mode_and_confirms_the_version_it_sent_and_a_rejected_one_confirms_nothing(): void
+    {
+        $this->workflow();
+        [$bot] = $this->bot($this->workspace('WS_A'), '1000001', 'support');
+        app(ChatbotInstructions::class)->setMode($bot, 'modular', null);
+        app(ChatbotInstructions::class)->save($bot->fresh(), 'identity', 'Eres Lía.', null, null);
+        $sent = [];
+        $reject = false;
+        Http::fake([self::N8N.'/*' => function (Request $request) use (&$sent, &$reject) {
+            $sent = $request->data()['chatbot'];
+
+            return $reject ? Http::response('boom', 400) : Http::response(['execution_id' => $request->header('X-Ava-Execution')[0], 'reply' => 'Hola']);
+        }, self::GRAPH => fn () => Http::response(['messages' => [['id' => 'wamid.OUT'.++$this->sequence]]])]);
+        Queue::fake();
+
+        $this->deliver($this->event('1000001', 'Hola'))->assertOk();
+        $this->assertNull($bot->fresh()->instructions_synced_version, 'saved, not yet confirmed');
+
+        $this->assertSame('ok', $this->runJob($this->queued())->code);
+
+        $this->assertSame([3, 'modular'], [$sent['instructions_version'], $sent['instructions_mode']]);
+        $this->assertSame("## Identidad y comunicación\nEres Lía.", $sent['instructions'], 'only the modular blocks travel: the Single prompt is neither merged nor sent');
+        $this->assertSame(3, (int) $bot->fresh()->instructions_synced_version);
+
+        // A run that n8n does not accept confirms nothing.
+        app(ChatbotInstructions::class)->save($bot->fresh(), 'limits', 'No inventes precios.', null, null);
+        $reject = true;
+        $this->deliver($this->event('1000001', 'Otra', '573009998877'))->assertOk();
+        $this->runJob($this->queued());
+        $this->assertSame(3, (int) $bot->fresh()->instructions_synced_version);
+        $this->assertSame(4, (int) $bot->fresh()->instructions_version);
     }
 
     public function test_an_answer_that_does_not_echo_the_execution_is_not_accepted(): void
