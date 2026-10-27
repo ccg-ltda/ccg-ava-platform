@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\MessageAttachments;
 use App\Services\SupportDesk;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
 
 /**
  * The support panel of the administrators of a client Workspace (JSON for the floating panel). Both routes need a signed-in member whose ROLE is administrator of the
@@ -27,13 +29,23 @@ class SupportDeskController extends Controller
         $this->authorizeDesk($request);
 
         $data = $request->validate([
-            'message' => ['required', 'string', 'max:'.config('support.desk_max_message')],
+            'message' => ['nullable', 'required_without:files', 'string', 'max:'.config('support.desk_max_message')],
+            'files' => ['nullable', 'array', 'max:'.config('support.attachments.max_files')],
+            'files.*' => ['file'],
             'message_id' => ['required', 'string', 'regex:/^[A-Za-z0-9_-]{8,64}$/'],
         ], [], ['message' => 'el mensaje']);
 
-        $result = $this->desk->send($request->user(), $request->attributes->get('workspace'), trim($data['message']), $data['message_id']);
+        $result = $this->desk->send($request->user(), $request->attributes->get('workspace'), trim((string) ($data['message'] ?? '')), $data['message_id'], $request->file('files', []));
 
         return response()->json($result + $this->desk->thread($request->user(), $request->attributes->get('workspace')))->header('Cache-Control', 'no-store');
+    }
+
+    /** An attachment of the person's own support conversation. */
+    public function attachment(Request $request, int $attachment, MessageAttachments $files): Response
+    {
+        $this->authorizeDesk($request);
+
+        return $files->response($this->desk->attachmentFor($request->user(), $request->attributes->get('workspace'), $attachment));
     }
 
     private function authorizeDesk(Request $request): void

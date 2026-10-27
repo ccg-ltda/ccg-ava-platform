@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\ConversationAlerts;
 use App\Services\HelpCenter;
 use App\Services\ModuleAccess;
 use App\Services\ProfilePhoto;
@@ -67,6 +68,8 @@ class HandleInertiaRequests extends Middleware
             'supportChat' => fn () => ($key = app(SupportChannel::class)->publicKey()) ? ['key' => $key, 'script' => url('/widget/ava-widget.js'), 'context' => $request->user() && $request->attributes->get('workspace') ? app(SupportContext::class)->issue($request->user(), $request->attributes->get('workspace')) : null] : null,
             // The support panel of the administrators of a client Workspace: null (nothing is drawn) for everybody else. See SupportDesk.
             'supportDesk' => fn () => app(SupportDesk::class)->forRequest($request),
+            // The notification of the team when a conversation or a message arrives: null (nothing runs) for who cannot read conversations. See ConversationAlerts.
+            'conversationAlerts' => fn () => app(ConversationAlerts::class)->forRequest($request),
             'platform' => fn () => EnsurePlatformAdministration::allows($request),
             'platformAccess' => fn () => [
                 'plans' => EnsurePlatformAdministration::allows($request, EnsurePlatformAdministration::PLANS),

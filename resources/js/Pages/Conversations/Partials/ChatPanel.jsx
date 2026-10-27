@@ -24,6 +24,33 @@ const TYPES = {
 /** Who wrote an outgoing message: the AI, or the agent by name. */
 const author = (message) => (message.sender === 'agent' ? (message.senderName ?? 'Agente') : 'IA');
 
+/** Files sent with a message (support requests): a thumbnail for an image, a player that loads only when played for a video, a link for a PDF. Each url authorizes every read. */
+function Attachments({ items, mine }) {
+    if (!items?.length) return null;
+
+    const size = (bytes) => (bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`);
+
+    return (
+        <ul className="mt-2 space-y-2" aria-label="Archivos adjuntos">
+            {items.map((item) => (
+                <li key={item.id}>
+                    {item.kind === 'image' && (
+                        <a href={item.url} target="_blank" rel="noreferrer" aria-label={`Abrir ${item.name}`}>
+                            <img src={item.url} alt={item.name} loading="lazy" className="max-h-60 w-full rounded-lg object-cover" />
+                        </a>
+                    )}
+                    {item.kind === 'video' && <video src={item.url} controls preload="none" className="max-h-60 w-full rounded-lg bg-black" aria-label={item.name} />}
+                    <a href={item.url} target="_blank" rel="noreferrer" className={`mt-1 flex items-center gap-2 rounded-lg px-2 py-1 text-xs font-medium underline-offset-2 hover:underline ${mine ? 'bg-white/15' : 'bg-canvas'}`}>
+                        <File className="size-4 shrink-0" aria-hidden="true" />
+                        <span className="min-w-0 truncate">{item.name}</span>
+                        <span className="shrink-0 opacity-75">{size(item.size)}</span>
+                    </a>
+                </li>
+            ))}
+        </ul>
+    );
+}
+
 /** One message: who wrote it, its text, what kind of content it is when it is not plain text, and the state of an outgoing one. */
 function Bubble({ message, simulate, conversationId, onFeedback }) {
     const mine = message.direction === 'out';
@@ -43,7 +70,8 @@ function Bubble({ message, simulate, conversationId, onFeedback }) {
                         {message.mediaMime && <span className="font-normal opacity-80">· {message.mediaMime}</span>}
                     </p>
                 )}
-                {message.body ? <p className="break-words whitespace-pre-wrap">{message.body}</p> : type && <p className="italic opacity-80">El contenido multimedia no se guarda en Ava.</p>}
+                {message.body ? <p className="break-words whitespace-pre-wrap">{message.body}</p> : type && !message.attachments?.length && <p className="italic opacity-80">El contenido multimedia no se guarda en Ava.</p>}
+                <Attachments items={message.attachments} mine={mine} />
                 {failed && message.failureReason && <p className="mt-1 rounded bg-white/15 px-2 py-1 text-xs">{message.failureReason}</p>}
                 <p className={`mt-1 flex items-center justify-end gap-2 text-[11px] ${mine ? 'text-white/80' : 'text-ink-muted'}`}>
                     {message.simulated && (

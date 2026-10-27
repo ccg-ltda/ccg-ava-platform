@@ -32,4 +32,19 @@ return [
     'desk_chatbot_name' => 'Soporte Zonno',
     'desk_max_message' => 2000,
     'desk_poll_seconds' => 8,
+
+    // How often (seconds) an open browser asks whether a conversation or a message arrived (the notification of the team in the app).
+    'alerts_poll_seconds' => 15,
+
+    /*
+     * Files a client administrator may attach to a support message (screenshots, videos, PDF). The server checks the real content, not the extension. The total must stay
+     * under the request limit of the stack (nginx client_max_body_size and PHP_UPLOAD_MAX are 50M in Docker).
+     */
+    'attachments' => [
+        'max_files' => 5,
+        'max_image_mb' => 8,
+        'max_pdf_mb' => 15,
+        'max_video_mb' => 40,
+        'max_total_mb' => 45,
+    ],
 ];

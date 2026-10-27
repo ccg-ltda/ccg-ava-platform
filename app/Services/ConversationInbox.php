@@ -108,7 +108,7 @@ class ConversationInbox
      */
     public function detail(Conversation $conversation, WorkspaceSetting $settings, User $user, array $permissions, bool $foreign, bool $mask = false): array
     {
-        $newest = $conversation->messages()->with('senderUser:id,name')->orderByDesc('sent_at')->orderByDesc('id')->limit(self::MESSAGE_LIMIT + 1)->get();
+        $newest = $conversation->messages()->with(['senderUser:id,name', 'attachments'])->orderByDesc('sent_at')->orderByDesc('id')->limit(self::MESSAGE_LIMIT + 1)->get();
         $delivery = $this->delivery->availability($conversation);
 
         return [
@@ -144,6 +144,8 @@ class ConversationInbox
                 'type' => $message->type,
                 'body' => $message->body,
                 'mediaMime' => $message->media_mime,
+                // Files sent with the message (support requests). Each url is a route that checks the conversation and the Workspace on every read; a Workspace seen read only gets none.
+                'attachments' => $foreign ? [] : $message->attachments->map(fn ($a) => MessageAttachments::present($a, route('conversations.attachments', ['conversation' => $conversation->id, 'attachment' => $a->id], false)))->all(),
                 'status' => $message->status,
                 'simulated' => $message->simulated,
                 'failureReason' => in_array($message->status, ['failed', Message::UNCONFIRMED], true) ? $message->failure_reason : null,

@@ -6,10 +6,13 @@ use App\Models\Chatbot;
 use App\Models\ChatbotChannel;
 use App\Models\Conversation;
 use App\Models\Message;
+use App\Models\MessageAttachment;
 use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Throwable;
@@ -40,6 +43,7 @@ class SupportDesk
         private readonly SupportChannel $support,
         private readonly ConversationService $conversations,
         private readonly ConversationControl $control,
+        private readonly MessageAttachments $attachments,
     ) {}
 
     /** Whether the signed-in member of the request may use the support desk: an administrator of an active client Workspace. */
@@ -60,7 +64,7 @@ class SupportDesk
             return null;
         }
 
-        return ['state' => $this->available() ? 'ready' : 'unavailable', 'poll' => (int) config('support.desk_poll_seconds')];
+        return ['state' => $this->available() ? 'ready' : 'unavailable', 'poll' => (int) config('support.desk_poll_seconds'), 'attachments' => MessageAttachments::limits()];
     }
 
     /** Whether the administrative Workspace that receives the requests exists and is active (reads only workspaces: every page can ask). */
@@ -150,11 +154,12 @@ class SupportDesk
      * Stores the message in the person's conversation (created on the first one) and, if nobody of the team has it, leaves it waiting for a person.
      * A repeated `messageId` (a double tap, a retried request) is stored once.
      *
+     * @param  list<UploadedFile>  $files  screenshots, videos or PDFs: checked, stored and tied to this message in one step (a message never claims a file that was not saved)
      * @return array{duplicate: bool}
      *
-     * @throws ValidationException when the desk cannot receive requests
+     * @throws ValidationException when the desk cannot receive requests or a file is refused
      */
-    public function send(User $user, Workspace $workspace, string $text, string $messageId): array
+    public function send(User $user, Workspace $workspace, string $text, string $messageId, array $files = []): array
     {
         $chatbot = $this->destination();
 
@@ -162,12 +167,34 @@ class SupportDesk
             throw ValidationException::withMessages(['message' => 'El soporte no está disponible en este momento. Usa el correo de soporte.']);
         }
 
-        $recorded = $this->conversations->record($chatbot, 'web', [
-            'contact_id' => self::contactId($user, $workspace),
-            'contact_name' => mb_substr("{$workspace->name} · {$user->name}", 0, 100),
-            'direction' => 'in', 'type' => 'text', 'body' => $text, 'sent_at' => now(),
-            'external_id' => 's:'.$messageId,
-        ]);
+        $checked = $this->attachments->inspect($files); // refused before anything is written
+        $written = [];
+
+        try {
+            $recorded = DB::transaction(function () use ($chatbot, $workspace, $user, $text, $messageId, $checked, &$written) {
+                $first = $checked[0]['kind'] ?? null;
+                $type = $text !== '' || $first === null ? 'text' : ['image' => 'image', 'video' => 'video', 'pdf' => 'document'][$first];
+                $recorded = $this->conversations->record($chatbot, 'web', [
+                    'contact_id' => self::contactId($user, $workspace),
+                    'contact_name' => mb_substr("{$workspace->name} · {$user->name}", 0, 100),
+                    'direction' => 'in', 'type' => $type, 'body' => $text !== '' ? $text : null, 'media_mime' => $checked[0]['mime'] ?? null, 'sent_at' => now(),
+                    'external_id' => 's:'.$messageId,
+                ]);
+
+                // A repeated message id (a double tap, a retry) is stored once, files included.
+                if ($recorded['created'] && $checked !== []) {
+                    $written = $this->attachments->put($recorded['conversation'], $checked);
+                    $this->attachments->attach($recorded['message'], $written, $user);
+                }
+
+                return $recorded;
+            });
+        } catch (Throwable $e) {
+            $this->attachments->forget($written); // the message was rolled back with its rows: no file is left behind
+
+            throw $e;
+        }
+
         $conversation = $recorded['conversation'];
 
         if (! $recorded['created']) {
@@ -212,6 +239,15 @@ class SupportDesk
         ])->all();
     }
 
+    /** An attachment of THIS person's own conversation, or a 404: the id alone gives access to nothing. */
+    public function attachmentFor(User $user, Workspace $workspace, int $id): MessageAttachment
+    {
+        $conversation = $this->find($user, $workspace);
+        abort_if($conversation === null, 404);
+
+        return MessageAttachment::where('conversation_id', $conversation->id)->where('workspace_id', $conversation->workspace_id)->findOrFail($id);
+    }
+
     private function find(User $user, Workspace $workspace): ?Conversation
     {
         $chatbot = $this->destination();
@@ -222,12 +258,13 @@ class SupportDesk
     /** @return list<array<string, mixed>> */
     private function messages(Conversation $conversation): array
     {
-        return $conversation->messages()->with('senderUser:id,name')->whereIn('sender', ['contact', 'agent'])->orderByDesc('id')->limit(100)->get()->reverse()->values()
+        return $conversation->messages()->with(['senderUser:id,name', 'attachments'])->whereIn('sender', ['contact', 'agent'])->orderByDesc('id')->limit(100)->get()->reverse()->values()
             ->map(fn (Message $m) => [
                 'id' => $m->id,
                 'mine' => $m->sender === 'contact',
                 'author' => $m->sender === 'agent' ? ($m->senderUser?->name ?? 'Soporte') : null,
                 'text' => (string) $m->body,
+                'attachments' => $m->attachments->map(fn (MessageAttachment $a) => MessageAttachments::present($a, route('support.attachments', $a->id, false)))->all(),
                 'at' => $m->sent_at?->toIso8601String(),
             ])->all();
     }

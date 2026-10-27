@@ -5,11 +5,13 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\ViewsWorkspace;
 use App\Models\Chatbot;
 use App\Models\Conversation;
+use App\Models\MessageAttachment;
 use App\Privacy\SupportAccess;
 use App\Services\ChannelCatalog;
 use App\Services\ChatbotService;
 use App\Services\ConversationInbox;
 use App\Services\DemoConversations;
+use App\Services\MessageAttachments;
 use App\Services\SavedFilters;
 use App\Services\WorkspaceScope;
 use Illuminate\Http\Request;
@@ -37,6 +39,18 @@ class ConversationController extends Controller
         WorkspaceScope $scope,
     ) {
         $this->scope = $scope;
+    }
+
+    /**
+     * A file attached to a message of a conversation of the ACTIVE Workspace (the team's inbox). The conversation is looked up inside the Workspace of the session and the file
+     * inside that conversation, so neither another Workspace's id nor another conversation's file exists from here. Needs `view-conversations` like the inbox itself.
+     */
+    public function attachment(Request $request, int $conversation, int $attachment, MessageAttachments $files): \Symfony\Component\HttpFoundation\Response
+    {
+        $workspace = $request->attributes->get('workspace');
+        $model = $this->inbox->find($this->inbox->scope($workspace), $conversation);
+
+        return $files->response(MessageAttachment::where('workspace_id', $workspace->id)->where('conversation_id', $model->id)->findOrFail($attachment));
     }
 
     public function index(Request $request, ?int $chatbot = null, ?string $channel = null): Response

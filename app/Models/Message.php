@@ -5,11 +5,18 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /** A message of a conversation, as reported by the automation. Created only through its conversation. */
 #[Fillable(['workspace_id', 'direction', 'sender', 'sender_user_id', 'type', 'body', 'media_mime', 'external_id', 'status', 'failure_reason', 'simulated', 'sent_at'])]
 class Message extends Model
 {
+    /** The files attached to it (support requests). */
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(MessageAttachment::class);
+    }
+
     public const DIRECTIONS = ['in', 'out'];
 
     public const TYPES = ['text', 'audio', 'image', 'video', 'document', 'sticker', 'location', 'other'];
