@@ -73,7 +73,7 @@ function RowActions({ product, canEdit, onEdit }) {
 }
 
 /** Catálogo de productos and its inventory: what the Workspace sells and how much of it is where. Never deleted, only deactivated. */
-export default function Index({ schemaPending, categoryAdmin, products, filters, perPageOptions, categories, locations, currency, total, inventory }) {
+export default function Index({ schemaPending, categoryAdmin, products, filters, perPageOptions, categories, locations, locationsLimited = false, currency, total, inventory }) {
     const confirm = useConfirm();
     const { permissions } = useAccess();
     const canCreate = permissions.includes('create-products') && !schemaPending;
@@ -281,7 +281,7 @@ export default function Index({ schemaPending, categoryAdmin, products, filters,
 
             {!schemaPending && (categoryAdmin ? <Tabs tabs={tabs} selectedIndex={tab} onChange={selectTab}>{catalogPanel}<CategoriesPanel admin={categoryAdmin} /></Tabs> : catalogPanel)}
 
-            {editing && <ProductModal product={editing} locations={locations} categories={categories} currency={currency} inventory={inventory} canActivate={canToggle} onClose={() => setEditing(null)} />}
+            {editing && <ProductModal product={editing} locations={locations} locationsLimited={locationsLimited} categories={categories} currency={currency} inventory={inventory} canActivate={canToggle} onClose={() => setEditing(null)} />}
         </>
     );
 }

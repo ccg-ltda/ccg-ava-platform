@@ -34,3 +34,16 @@ test('services are narrowed by the sede and unknown fields never exclude', () =>
     assert.equal(servicesForLocation(services, '').length, 3);
     assert.deepEqual(professionalsFor([{ id: 9, name: 'X' }], 1, 5).map((p) => p.id), [9]);
 });
+
+test('the sedes offered are those of the chosen service: the service comes first', async () => {
+    const { locationsForService } = await import('../../resources/js/lib/bookingCompat.js');
+    const sedes = ['Norte', 'Sur', 'Centro', 'Oriente', 'Occidente', 'Parque'].map((name, index) => ({ id: index + 1, name }));
+    const beard = { id: 1, everywhere: false, locationIds: [1, 2] };
+    const color = { id: 2, everywhere: false, locationIds: [3, 4] };
+    const everything = { id: 3, everywhere: true, locationIds: [] };
+
+    assert.deepEqual(locationsForService(sedes, beard).map((s) => s.name), ['Norte', 'Sur']);
+    assert.deepEqual(locationsForService(sedes, color).map((s) => s.name), ['Centro', 'Oriente']);
+    assert.equal(locationsForService(sedes, everything).length, 6);
+    assert.deepEqual(locationsForService(sedes, undefined), []);
+});

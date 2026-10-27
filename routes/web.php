@@ -10,6 +10,7 @@ use App\Http\Controllers\ChatbotController;
 use App\Http\Controllers\ChatbotFeedbackController;
 use App\Http\Controllers\ChatbotInstructionController;
 use App\Http\Controllers\ConversationActionController;
+use App\Http\Controllers\ConversationAlertsController;
 use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\CustomerTagController;
@@ -102,6 +103,7 @@ Route::middleware(['auth', 'workspace'])->group(function () {
     // Support for the administrators of a client Workspace, answered by CCG's team in Conversaciones of the administrative Workspace. The destination is decided by the server; the controller
     // checks the role again (the button is only a convenience).
     Route::get('/support/thread', [SupportDeskController::class, 'thread'])->middleware('throttle:60,1')->name('support.thread');
+    Route::get('/support/attachments/{attachment}', [SupportDeskController::class, 'attachment'])->whereNumber('attachment')->middleware('throttle:120,1')->name('support.attachments');
     Route::post('/support/messages', [SupportDeskController::class, 'send'])->middleware('throttle:20,1')->name('support.messages');
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
@@ -139,6 +141,9 @@ Route::middleware(['auth', 'workspace'])->group(function () {
     // back to the AI, resolve); assigning them to another agent is `manage-conversations`.
     Route::middleware(['workspace.module:conversations', 'workspace.permission:view-conversations'])->prefix('conversations')->name('conversations.')->group(function () {
         Route::get('/', [ConversationController::class, 'index'])->name('index');
+        // «Anything new?» for the notification of the team (ids and kinds only, never content); asked every few seconds with a cursor.
+        Route::get('/alerts', ConversationAlertsController::class)->middleware('throttle:60,1')->name('alerts');
+        Route::get('/{conversation}/attachments/{attachment}', [ConversationController::class, 'attachment'])->whereNumber(['conversation', 'attachment'])->middleware('throttle:240,1')->name('attachments');
         Route::post('/{conversation}/take', [ConversationActionController::class, 'take'])->whereNumber('conversation')->middleware('workspace.permission:take-conversations')->name('take');
         Route::post('/{conversation}/release', [ConversationActionController::class, 'release'])->whereNumber('conversation')->middleware('workspace.permission:release-conversations')->name('release');
         Route::post('/{conversation}/resolve', [ConversationActionController::class, 'resolve'])->whereNumber('conversation')->middleware('workspace.permission:resolve-conversations')->name('resolve');

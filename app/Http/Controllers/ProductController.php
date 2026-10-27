@@ -19,6 +19,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -93,6 +94,8 @@ class ProductController extends Controller
             'perPageOptions' => ListPagination::OPTIONS,
             'categories' => $inventory ? $this->categories->options($workspace)->map(fn ($category) => ['id' => $category->id, 'name' => $category->name])->values()->all() : $workspace->products()->whereNotNull('category')->distinct()->orderBy('category')->pluck('category')->all(),
             'locations' => $locations->map(fn ($location) => ['id' => $location->id, 'name' => $location->name])->values()->all(),
+            // A member limited to selected sedes can not cover «todas las sedes»: the picker then has no such option.
+            'locationsLimited' => $this->scope->restricted($workspace, $request->user()),
             'currency' => $workspace->settingsOrDefault()->currency,
             'total' => $workspace->products()->when(($scoped = $this->scope->allowedIds($workspace, $request->user())) !== null, fn ($q) => $q->whereIn('id', DB::table('location_product')->whereIn('location_id', $scoped)->select('product_id')))->count(),
             'inventory' => [
@@ -157,7 +160,7 @@ class ProductController extends Controller
         $control = $this->inventoryControl($request, true);
         $product = DB::transaction(function () use ($request, $workspace, $control) {
             $product = $workspace->products()->create($request->product() + $control['attributes']);
-            $this->syncLocations($product, $request->locationIds());
+            $this->syncLocations($product, $request->locationIds(), $request->offersAllLocations());
 
             if ($control['initialize']) {
                 $this->inventory->initialize($product, $request->stocks(), $request->user());
@@ -180,7 +183,7 @@ class ProductController extends Controller
         $this->assertChanges($request, $model);
         $control = $this->inventoryControl($request, false);
         $model->update($request->product() + $control['attributes']);
-        $this->syncLocations($model, $request->locationIds());
+        $this->syncLocations($model, $request->locationIds(), $request->offersAllLocations());
         $this->storePicture($model, $request);
 
         return back()->with('success', 'Producto actualizado correctamente');
@@ -292,8 +295,14 @@ class ProductController extends Controller
     }
 
     /** The locations that offer a product (none = all of them): the same Workspace is validated and the pivot rows carry it so the database enforces it too. */
-    private function syncLocations(Product $product, array $ids): void
+    private function syncLocations(Product $product, array $ids, bool $all = false): void
     {
+        // «Todas las sedes»: a mark of coverage, stored on the product with no rows (future sedes are covered; no stock is created or moved here). Choosing sedes one by one clears it.
+        if (Schema::hasColumn('products', 'offers_all_locations') && (bool) $product->offers_all_locations !== $all) {
+            $product->forceFill(['offers_all_locations' => $all])->save();
+            $this->audit->record('updated', 'product', $product->id, $product->name, [AuditLogger::change('Ofrecido en todas las sedes', $all ? 'No' : 'Sí', $all ? 'Sí' : 'No')], $product->workspace);
+        }
+
         $names = fn () => $product->locations()->orderBy('locations.name')->pluck('locations.name')->implode(', ');
         $before = $names();
         $product->locations()->sync(collect($ids)->mapWithKeys(fn (int $id) => [$id => ['workspace_id' => $product->workspace_id]])->all());
@@ -329,9 +338,9 @@ class ProductController extends Controller
         return [
             'id' => $product->id, 'sku' => $product->sku, 'name' => $product->name, 'description' => $product->description,
             'category' => $product->category, 'categoryId' => $inventory ? $product->category_id : null,
-            'price' => (float) $product->price, 'isActive' => $product->is_active, 'locationIds' => $product->locations->pluck('id')->all(),
+            'price' => (float) $product->price, 'isActive' => $product->is_active, 'locationIds' => $product->locations->pluck('id')->all(), 'offersAllLocations' => (bool) ($product->offers_all_locations ?? false),
             // A historical product offered in no location: it still sells as before, but it is flagged until someone assigns it on purpose.
-            'needsLocation' => $product->locations->isEmpty() && $locations->isNotEmpty(),
+            'needsLocation' => $product->locations->isEmpty() && ! ($product->offers_all_locations ?? false) && $locations->isNotEmpty(),
             'imageUrl' => $inventory && $product->image_path ? route('catalog.image', $product->id).'?v='.$product->updated_at?->timestamp : null,
             'tracksInventory' => $inventory && $product->tracks_inventory, 'openOrders' => $openOrders,
             'stock' => $canInventory ? $this->catalog->stockView($product, $locations, $place) : null,

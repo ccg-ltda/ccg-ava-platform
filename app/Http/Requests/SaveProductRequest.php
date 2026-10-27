@@ -42,6 +42,8 @@ class SaveProductRequest extends FormRequest
             'name' => ['required', 'string', 'max:160'],
             'description' => ['nullable', 'string', 'max:2000'],
             'price' => ['required', 'numeric', 'min:0', 'max:'.config('orders.limits.price'), 'decimal:0,2'],
+            // «Todas las sedes» is a mark of COVERAGE (no list, no ids, no stock); otherwise the sedes chosen one by one. With the mark on, a list is ignored.
+            'offers_all_locations' => ['nullable', 'boolean'],
             'location_ids' => ['nullable', 'array'],
             'location_ids.*' => ['integer', Rule::exists('locations', 'id')->where('workspace_id', $workspace->id)],
         ];
@@ -80,7 +82,12 @@ class SaveProductRequest extends FormRequest
             // was switched off may stay). Without locations there is nothing to assign: the stock is the general one.
             $usesLocations = app(Locations::class)->enabled($workspace) && $workspace->locations()->where('is_active', true)->exists();
 
-            if ($usesLocations) {
+            if ($usesLocations && $this->offersAllLocations()) {
+                // Covering every sede (future ones included) is a decision for who is not limited to selected sedes.
+                if (app(LocationScope::class)->restricted($workspace, $this->user())) {
+                    $validator->errors()->add('location_ids', 'Elige al menos una de tus sedes: ofrecer un producto en todas las sedes no está a tu alcance.');
+                }
+            } elseif ($usesLocations) {
                 $kept = $this->route('product') ? DB::table('location_product')->where('product_id', $this->route('product'))->pluck('location_id')->map(fn ($id) => (int) $id) : collect();
                 $active = $workspace->locations()->where('is_active', true)->whereIn('id', $ids)->pluck('id')->map(fn ($id) => (int) $id);
 
@@ -168,10 +175,15 @@ class SaveProductRequest extends FormRequest
         return $this->file('image');
     }
 
-    /** @return list<int> */
+    public function offersAllLocations(): bool
+    {
+        return $this->boolean('offers_all_locations');
+    }
+
+    /** @return list<int> the sedes chosen one by one; none while «Todas las sedes» is on (an ambiguous mix is not accepted) */
     public function locationIds(): array
     {
-        return array_map('intval', $this->validated('location_ids') ?? []);
+        return $this->offersAllLocations() ? [] : array_map('intval', $this->validated('location_ids') ?? []);
     }
 
     /** @return list<array{location_id: ?int, quantity: int, min_quantity: int}> */

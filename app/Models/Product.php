@@ -14,14 +14,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * offered for new orders, and the orders that already used it keep their own copy of its name, sku and price).
  * It is NOT a bookable service: those have a duration and a professional and live in Servicios y Reservas.
  */
-#[Fillable(['sku', 'name', 'description', 'category', 'category_id', 'image_path', 'price', 'cost', 'is_active', 'tracks_inventory'])]
+#[Fillable(['sku', 'name', 'description', 'category', 'category_id', 'image_path', 'price', 'cost', 'is_active', 'tracks_inventory', 'offers_all_locations'])]
 class Product extends Model
 {
     use Audited;
 
     protected function casts(): array
     {
-        return ['is_active' => 'boolean', 'tracks_inventory' => 'boolean', 'price' => 'decimal:2', 'cost' => 'decimal:2'];
+        return ['is_active' => 'boolean', 'tracks_inventory' => 'boolean', 'offers_all_locations' => 'boolean', 'price' => 'decimal:2', 'cost' => 'decimal:2'];
     }
 
     public function workspace(): BelongsTo

@@ -1,7 +1,7 @@
 import { router } from '@inertiajs/react';
 import { UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { professionalsFor, servicesForLocation, stillCompatible } from '@/lib/bookingCompat';
+import { locationsForService, professionalsFor, stillCompatible } from '@/lib/bookingCompat';
 import Alert from '@/Components/Alert';
 import DateField from '@/Components/DateField';
 import InputError from '@/Components/InputError';
@@ -92,11 +92,33 @@ export default function AppointmentDialog({ appointment, options, today, onClose
     const [saving, setSaving] = useState(false);
 
     const locations = options.locations ?? [];
-    const services = servicesForLocation(options.services, locationId).map((service) => ({ value: service.id, label: service.name }));
+    const services = options.services.map((service) => ({ value: service.id, label: service.name }));
     const service = options.services.find((item) => String(item.id) === String(serviceId));
+    // The sedes offered are only those where the chosen service is offered (the service comes first); the server checks it again on the booking.
+    const placeOptions = locationsForService(locations, service);
     const needsLocation = !rescheduling && options.locationRequired && !locationId;
     // Only professionals who perform the service and work in the sede are offered; if a change makes the one chosen before incompatible, it is dropped out loud.
     const professionals = [{ value: '', label: 'Cualquiera disponible' }, ...professionalsFor(options.professionals, serviceId, locationId).map((professional) => ({ value: professional.id, label: professional.name }))];
+
+    // Choosing a service recalculates the sedes: one that no longer offers it is cleared out loud, and when only one offers it that one is chosen.
+    const changeService = (value) => {
+        setServiceId(value);
+        const next = options.services.find((item) => String(item.id) === String(value));
+        const places = locationsForService(locations, next);
+        let place = locationId;
+        let notice = null;
+
+        if (locationId && !places.some((item) => String(item.id) === String(locationId))) {
+            place = '';
+            notice = 'La sede elegida no ofrece este servicio: elige otra de la lista.';
+        }
+
+        if (!place && places.length === 1) place = places[0].id;
+
+        setLocationId(place);
+        narrow(value, place);
+        if (notice && !place) setDropped(notice);
+    };
 
     const narrow = (nextService, nextLocation) => {
         setSlot(null);
@@ -143,14 +165,14 @@ export default function AppointmentDialog({ appointment, options, today, onClose
                         {!rescheduling && (
                             <div>
                                 <InputLabel htmlFor="appt_service" value="Servicio" />
-                                <SearchableSelect id="appt_service" className="mt-1" value={serviceId} onChange={(value) => { setServiceId(value); narrow(value, locationId); }} options={services} placeholder="Escribe para buscar o elige" invalid={Boolean(errors.service_id)} />
+                                <SearchableSelect id="appt_service" className="mt-1" value={serviceId} onChange={(value) => changeService(value)} options={services} placeholder="Escribe para buscar o elige" invalid={Boolean(errors.service_id)} />
                                 <InputError message={errors.service_id} className="mt-1" />
                             </div>
                         )}
                         {!rescheduling && locations.length > 0 && (
                             <div>
                                 <InputLabel htmlFor="appt_location" value={options.locationRequired ? 'Sede' : 'Sede (opcional)'} />
-                                <Select id="appt_location" className="mt-1" value={locationId} onChange={(value) => { setLocationId(value); if (serviceId && !servicesForLocation(options.services, value).some((item) => String(item.id) === String(serviceId))) { setServiceId(''); setDropped('Ese servicio no se ofrece en la sede elegida: elige otro servicio.'); setSlot(null); } else { narrow(serviceId, value); } }} options={options.locationRequired ? locations.map((l) => ({ value: l.id, label: l.name })) : [{ value: '', label: 'Sin sede' }, ...locations.map((l) => ({ value: l.id, label: l.name }))]} placeholder="Elige una sede" invalid={Boolean(errors.location_id)} />
+                                <Select id="appt_location" className="mt-1" value={locationId} disabled={!service} onChange={(value) => { setLocationId(value); narrow(serviceId, value); }} options={options.locationRequired ? placeOptions.map((l) => ({ value: l.id, label: l.name })) : [{ value: '', label: 'Sin sede' }, ...placeOptions.map((l) => ({ value: l.id, label: l.name }))]} placeholder={service ? (placeOptions.length === 0 ? 'Este servicio no tiene sedes activas' : 'Elige una sede') : 'Elige primero el servicio'} invalid={Boolean(errors.location_id)} />
                                 <InputError message={errors.location_id} className="mt-1" />
                             </div>
                         )}

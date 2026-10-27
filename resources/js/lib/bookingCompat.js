@@ -3,6 +3,13 @@
 
 const sameId = (a, b) => String(a) === String(b);
 
+/** The sedes where the service is offered (a service offered everywhere, or one that lists them). With no service chosen yet, none: the service comes first. */
+export function locationsForService(locations, service) {
+    if (!service) return [];
+
+    return locations.filter((location) => service.everywhere !== false || (service.locationIds ?? []).some((id) => sameId(id, location.id)));
+}
+
 /** Services offered in the chosen sede (a service offered everywhere, or one that lists it). With no sede chosen, all of them. */
 export function servicesForLocation(services, locationId) {
     if (locationId === '' || locationId === null || locationId === undefined) return services;

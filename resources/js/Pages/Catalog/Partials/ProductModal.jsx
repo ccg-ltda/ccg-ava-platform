@@ -86,7 +86,7 @@ function StockRows({ rows, offered, onChange, errors }) {
  * stock control is its own switch, and the first stock is only asked for a new product: later quantities change through entries and adjustments (with their
  * history). Each part appears only when the person has the permission and the inventory exists in this environment; the server validates everything again.
  */
-export default function ProductModal({ product, locations, categories, currency, inventory, canActivate, onClose }) {
+export default function ProductModal({ product, locations, locationsLimited = false, categories, currency, inventory, canActivate, onClose }) {
     const editing = Boolean(product?.id);
     const confirm = useConfirm();
     const ready = inventory.ready;
@@ -103,7 +103,9 @@ export default function ProductModal({ product, locations, categories, currency,
         cost: product?.cost ?? '',
         is_active: product?.isActive ?? true,
         tracks_inventory: product?.tracksInventory ?? false,
-        location_ids: product?.locationIds ?? [],
+        // «Todas las sedes» is a mark of coverage, not a list: it is on when no sede is chosen one by one (the server ignores any list while it is on).
+        location_ids: product?.offersAllLocations ? [] : (product?.locationIds ?? []),
+        offers_all_locations: product ? Boolean(product.offersAllLocations) : !locationsLimited,
     });
     const { data, setData, errors } = form;
     const locationOptions = locations.map((location) => ({ value: location.id, label: location.name }));
@@ -133,7 +135,7 @@ export default function ProductModal({ product, locations, categories, currency,
                 ...(ready && !canActivate ? { is_active: undefined } : {}),
                 ...(ready && !inventory.canAdjust ? { tracks_inventory: undefined } : {}),
                 ...(ready ? { image: file ?? undefined, remove_image: removed || undefined } : {}),
-                ...(!editing && ready && values.tracks_inventory ? { stocks: stocksPayload(stocks, locations.length > 0 ? values.location_ids : null) } : {}),
+                ...(!editing && ready && values.tracks_inventory ? { stocks: stocksPayload(stocks, locations.length > 0 ? (values.offers_all_locations ? locations.map((location) => location.id) : values.location_ids) : null) } : {}),
                 ...(editing ? { _method: 'put' } : {}),
             };
 
@@ -232,7 +234,7 @@ export default function ProductModal({ product, locations, categories, currency,
                             {data.tracks_inventory && !editing && inventory.canAdjust && (
                                 <div className="border-t border-line pt-4">
                                     <p className="mb-2 text-sm font-semibold text-ink">Existencias iniciales</p>
-                                    <StockRows rows={stocks} offered={data.location_ids} onChange={setStocks} errors={errors} />
+                                    <StockRows rows={stocks} offered={data.offers_all_locations ? locations.map((location) => location.id) : data.location_ids} onChange={setStocks} errors={errors} />
                                 </div>
                             )}
                             {data.tracks_inventory && editing && (
@@ -243,9 +245,9 @@ export default function ProductModal({ product, locations, categories, currency,
 
                     {locations.length > 0 && (
                         <div>
-                            <InputLabel htmlFor="product_locations" value="Sedes que lo ofrecen (obligatorio)" />
-                            <p className="mt-0.5 mb-2 text-xs text-ink-muted">Elige al menos una sede activa. Es el mismo producto en todas; las existencias se llevan por sede y solo en las que elijas.{editing && product?.needsLocation ? ' Este producto es anterior y no tenía sede: asígnalo a la que corresponda.' : ''}{editing ? ' Si quitas una sede, sus existencias y su historial se conservan, pero dejan de mostrarse y de poder modificarse.' : ''}</p>
-                            <EntityPicker id="product_locations" options={locationOptions} value={data.location_ids} onChange={(ids) => setData('location_ids', ids)} placeholder="Buscar sede" noneLabel="Ninguna sede elegida" invalid={Boolean(errors.location_ids)} error={errors.location_ids ?? errors['location_ids.0']} />
+                            <InputLabel htmlFor="product_locations" value="Sedes que lo ofrecen" />
+                            <p className="mt-0.5 mb-2 text-xs text-ink-muted">«Todas las sedes» incluye las que crees más adelante; si excluyes alguna, el producto se ofrece solo en las que quedan. Es una cobertura: no crea existencias. Las existencias se llevan por sede y se registran con entradas y ajustes.{editing && product?.needsLocation ? ' Este producto es anterior y no tenía sede: asígnalo a la que corresponda.' : ''}{editing ? ' Si quitas una sede, sus existencias y su historial se conservan, pero dejan de mostrarse y de poder modificarse.' : ''}</p>
+                            <EntityPicker id="product_locations" options={locationOptions} value={data.location_ids} onChange={(ids) => setData((current) => ({ ...current, location_ids: ids, offers_all_locations: !locationsLimited && ids.length === 0 }))} placeholder="Buscar sede" allLabel={locationsLimited ? null : 'Todas las sedes'} noneLabel={locationsLimited ? 'Elige al menos una de tus sedes' : 'Todas las sedes'} invalid={Boolean(errors.location_ids)} error={errors.location_ids ?? errors['location_ids.0']} />
                         </div>
                     )}
                     {editing && <p className="text-xs text-ink-muted">Cambiar el precio solo afecta a los pedidos nuevos: los pedidos ya registrados conservan el precio con el que se hicieron.</p>}
