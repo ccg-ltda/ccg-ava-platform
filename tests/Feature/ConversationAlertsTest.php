@@ -96,6 +96,8 @@ class ConversationAlertsTest extends TestCase
         $cursor = $this->alerts()->json('cursor');
 
         $this->receive($this->tokenA, 'm-1')->assertCreated();
+        $this->alerts($cursor)->assertOk()->assertJsonPath('events', []); // the AI has it: a client's team is not alerted
+        Conversation::query()->update(['handling' => Conversation::PENDING]); // it needs a person
         $first = $this->alerts($cursor)->assertOk();
         $this->assertSame([['conversationId' => Conversation::firstOrFail()->id, 'kind' => 'conversation', 'channel' => 'whatsapp', 'support' => false, 'count' => 1]], $first->json('events'));
 
@@ -136,6 +138,7 @@ class ConversationAlertsTest extends TestCase
         $this->receive($this->tokenA, 'a-1')->assertCreated();
         $this->receive($this->tokenA, 'a-2')->assertCreated();
         $this->receive($this->tokenA, 'b-1', ['contact_id' => '573009998877'])->assertCreated();
+        Conversation::query()->update(['handling' => Conversation::PENDING]);
 
         $events = collect($this->alerts($cursor)->json('events'));
         $this->assertCount(2, $events);

@@ -69,11 +69,27 @@ class AvailabilityCalculator
         $exceptions = ScheduleException::where('workspace_id', $workspace->id)->where('date_to', '>=', $firstDay->toDateString())->where('date_from', '<=', $lastDay->toDateString())
             ->where(fn ($query) => $query->whereNull('professional_id')->orWhereIn('professional_id', $professionals->modelKeys()))->get();
 
+        // The opening hours of the sede, when it has any (see Locations::weeklyHours): the day must be an open day and the WHOLE occupation (attention + rest) must fit between opening
+        // and closing, which is then intersected with the professional's own hours and every other rule. A sede without hours adds no restriction (nothing is assumed for it).
+        $opening = $locationId !== null ? app(Locations::class)->weeklyHours($workspace, [$locationId])[$locationId] : null;
+
         $duration = $service->duration_minutes;
         $step = max(1, $settings->slot_step_minutes);
         $slots = [];
 
         for ($day = $firstDay; $day <= $lastDay; $day = $day->addDay()) {
+            $window = null;
+
+            if ($opening !== null) {
+                $hours = $opening[$day->dayOfWeekIso] ?? null;
+
+                if ($hours === null) {
+                    continue; // the sede is closed that day
+                }
+
+                $window = [$day->addMinutes($hours[0])->utc(), $day->addMinutes($hours[1])->utc()];
+            }
+
             foreach ($professionals as $professional) {
                 $blocked = $this->blockedWindows($exceptions, $professional, $day, $timezone);
 
@@ -91,6 +107,10 @@ class AvailabilityCalculator
 
                         if ($startUtc < $earliest || $startUtc > $latest || $startUtc < $from || $startUtc >= $to) {
                             continue;
+                        }
+
+                        if ($window !== null && ($startUtc < $window[0] || $occupiedUntil > $window[1])) {
+                            continue; // before the sede opens, or the rest would run past its closing
                         }
 
                         if ($this->overlaps($blocked, $startUtc, $occupiedUntil) || $this->overlaps($busy['professional'][$professional->id] ?? [], $startUtc, $occupiedUntil)) {

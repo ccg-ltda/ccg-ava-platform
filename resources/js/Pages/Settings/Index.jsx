@@ -1,6 +1,6 @@
 import { Head, useForm } from '@inertiajs/react';
 import { useState } from 'react';
-import { Globe, Mail, Palette, Receipt, SlidersHorizontal } from 'lucide-react';
+import { Bot, Globe, Mail, MessageSquare, Palette, Receipt, SlidersHorizontal } from 'lucide-react';
 import PageHeader from '@/Components/PageHeader';
 import Tabs from '@/Components/Tabs';
 import { useToast } from '@/Components/Toast';
@@ -8,8 +8,10 @@ import useUrlTab from '@/Hooks/useUrlTab';
 import AppLayout from '@/Layouts/AppLayout';
 import AppearancePanel from './Partials/AppearancePanel';
 import EmailTemplatePanel from './Partials/EmailTemplatePanel';
+import AutoClosePanel from './Partials/AutoClosePanel';
 import GeneralPanel from './Partials/GeneralPanel';
 import RegionalPanel from './Partials/RegionalPanel';
+import SupportAiPanel from './Partials/SupportAiPanel';
 import TaxesPanel from './Partials/TaxesPanel';
 
 /** The tab that owns each field, to take the user to the first one with an error. */
@@ -36,10 +38,10 @@ const BASE_TAB_IDS = ['general', 'regional', 'apariencia', 'impuestos'];
  * (one at a time) and saving or cancelling returns to the summary. The one form of the page holds the saved values while nothing is edited (the server
  * only ever writes to the Workspace of the session). Success arrives as a toast.
  */
-export default function Index({ settings, catalog, canEdit, emailTemplate = null }) {
+export default function Index({ settings, catalog, canEdit, emailTemplate = null, wompi = null, autoClose = null, supportAi = null }) {
     const toast = useToast();
     // The global email template tab exists only for the platform administration (the server sends its data to nobody else).
-    const TAB_IDS = emailTemplate ? [...BASE_TAB_IDS, 'correos'] : BASE_TAB_IDS;
+    const TAB_IDS = [...BASE_TAB_IDS, ...(autoClose ? ['conversaciones'] : []), ...(supportAi ? ['soporte-ia'] : []), ...(emailTemplate ? ['correos'] : [])];
     const [selected, select] = useUrlTab(TAB_IDS);
     const form = useForm({ ...settings, logo: null, remove_logo: false });
     const [editing, setEditing] = useState(null); // the id of the tab being edited, or null
@@ -89,6 +91,8 @@ export default function Index({ settings, catalog, canEdit, emailTemplate = null
         { id: 'regional', label: 'Regional', icon: Globe },
         { id: 'apariencia', label: 'Apariencia', icon: Palette },
         { id: 'impuestos', label: 'Impuestos y facturación', icon: Receipt },
+        ...(autoClose ? [{ id: 'conversaciones', label: 'Conversaciones', icon: MessageSquare }] : []),
+        ...(supportAi ? [{ id: 'soporte-ia', label: 'Soporte con IA', icon: Bot }] : []),
         ...(emailTemplate ? [{ id: 'correos', label: 'Plantilla HTML para correos', icon: Mail }] : []),
     ];
 
@@ -102,7 +106,9 @@ export default function Index({ settings, catalog, canEdit, emailTemplate = null
                 <GeneralPanel settings={settings} form={form} onSave={save} section={sectionOf('general')} />
                 <RegionalPanel settings={settings} form={form} onSave={save} catalog={catalog} section={sectionOf('regional')} />
                 <AppearancePanel settings={settings} form={form} onSave={save} catalog={catalog} section={sectionOf('apariencia')} />
-                <TaxesPanel settings={settings} form={form} onSave={save} catalog={catalog} section={sectionOf('impuestos')} />
+                <TaxesPanel settings={settings} form={form} onSave={save} catalog={catalog} section={sectionOf('impuestos')} wompi={wompi} />
+                {autoClose && <AutoClosePanel autoClose={autoClose} canEdit={canEdit} />}
+                {supportAi && <SupportAiPanel supportAi={supportAi} />}
                 {emailTemplate && <EmailTemplatePanel template={emailTemplate} />}
             </Tabs>
         </>

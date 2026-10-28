@@ -583,11 +583,11 @@ class HumanHandlingTest extends TestCase
         $admin = $this->member($workspace, 'admin');
 
         $this->signIn($agent, $workspace)->get("/conversations?c={$conversation->id}")->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('selected.handling', 'ai')->where('selected.can', ['take' => true, 'reply' => false, 'release' => false, 'resolve' => true, 'assign' => false])->where('agents', []));
+            ->where('selected.handling', 'ai')->where('selected.can', ['take' => true, 'reply' => false, 'release' => false, 'resolve' => true, 'assign' => false, 'context' => false])->where('agents', []));
 
         $this->post("/conversations/{$conversation->id}/take");
         $this->get("/conversations?c={$conversation->id}")->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('selected.assignedUser.isMe', true)->where('selected.can', ['take' => false, 'reply' => true, 'release' => true, 'resolve' => true, 'assign' => false]));
+            ->where('selected.assignedUser.isMe', true)->where('selected.can', ['take' => false, 'reply' => true, 'release' => true, 'resolve' => true, 'assign' => false, 'context' => true]));
 
         $this->signIn($admin, $workspace)->get("/conversations?c={$conversation->id}")->assertInertia(fn (AssertableInertia $page) => $page
             ->where('selected.assignedUser.isMe', false)->where('selected.can.assign', true)->where('selected.can.reply', true)->has('agents', 2));
@@ -636,7 +636,7 @@ class HumanHandlingTest extends TestCase
         // Reading another Workspace's conversations needs a support access (see PrivacyTest); a live grant is enough here.
         SupportAccess::create(['workspace_id' => $client->id, 'user_id' => $admin->id, 'data_type' => 'conversations', 'reason' => 'ticket de prueba de soporte', 'expires_at' => now()->addMinutes(30)]);
         $this->get("/conversations?workspace={$client->id}&c={$conversation->id}")->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('scope.readOnly', true)->where('selected.can', ['take' => false, 'reply' => false, 'release' => false, 'resolve' => false, 'assign' => false])->where('agents', []));
+            ->where('scope.readOnly', true)->where('selected.can', ['take' => false, 'reply' => false, 'release' => false, 'resolve' => false, 'assign' => false, 'context' => false])->where('agents', []));
         $this->post("/conversations/{$conversation->id}/take")->assertNotFound();
         $this->assertSame('ai', $conversation->fresh()->handling);
     }

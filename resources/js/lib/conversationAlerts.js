@@ -11,6 +11,14 @@ const CHANNELS = { whatsapp: 'WhatsApp', web: 'Web', instagram: 'Instagram', mes
 export function describeEvents(events) {
     if (!events?.length) return null;
 
+    // A conversation that moved to a person. Discreet, never with content; the text is the same for one or many.
+    const handoffs = events.filter((event) => event.kind === 'handoff');
+    if (handoffs.length > 0) {
+        return handoffs.length === 1
+            ? { title: 'Una conversación necesita tu atención', detail: null, conversationId: handoffs[0].conversationId }
+            : { title: `${handoffs.length} conversaciones necesitan tu atención`, detail: null, conversationId: null };
+    }
+
     const fresh = events.filter((event) => event.kind === 'conversation');
     const messages = events.reduce((sum, event) => sum + event.count, 0);
     const first = events[0];

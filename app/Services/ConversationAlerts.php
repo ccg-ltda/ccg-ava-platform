@@ -58,6 +58,36 @@ class ConversationAlerts
             ->count();
     }
 
+    /** The id of the newest handoff notification visible to this user (0 when none): where the «needs your attention» cursor starts. */
+    public function latestHandoff(Workspace $workspace, User $user, array $permissions): int
+    {
+        if (! Notifications::ready()) {
+            return 0;
+        }
+
+        return (int) app(Notifications::class)->visible($workspace, $user, $permissions)->where('type', 'conversation_pending')->max('workspace_notifications.id');
+    }
+
+    /**
+     * «A conversation needs your attention»: the handoff notifications (a real transition to a person, created once) after a cursor. Ids only, never content.
+     *
+     * @return array{cursor: int, events: list<array{conversationId: int, kind: string}>}
+     */
+    public function handoffsSince(Workspace $workspace, User $user, array $permissions, int $after): array
+    {
+        $latest = $this->latestHandoff($workspace, $user, $permissions);
+
+        // The administrative Workspace keeps its own alerts (support requests and messages, see since()): a second toast for the same event would be a duplicate.
+        if ($after > $latest || ! Notifications::ready() || $workspace->isAdministrative()) {
+            return ['cursor' => $latest, 'events' => []];
+        }
+
+        $rows = app(Notifications::class)->visible($workspace, $user, $permissions)->where('type', 'conversation_pending')->where('workspace_notifications.id', '>', $after)
+            ->orderBy('workspace_notifications.id')->limit(self::LIMIT)->get(['workspace_notifications.id', 'workspace_notifications.resource_id']);
+
+        return ['cursor' => (int) ($rows->last()->id ?? $latest), 'events' => $rows->map(fn ($n) => ['conversationId' => (int) $n->resource_id, 'kind' => 'handoff'])->values()->all()];
+    }
+
     /** The id of the newest message of the Workspace (0 when there is none). */
     public function latest(Workspace $workspace): int
     {
@@ -82,6 +112,7 @@ class ConversationAlerts
             ->where('messages.direction', 'in')->where('messages.sender', 'contact')->where('messages.simulated', false)
             ->whereIn('conversations.channel', collect(app(ChannelCatalog::class)->all())->filter(fn (array $c) => $c['conversations'] ?? false)->pluck('key')->all())
             ->orderBy('messages.id')->limit(self::LIMIT)
+            ->when(! $workspace->isAdministrative(), fn ($q) => $q->where('conversations.handling', '!=', Conversation::AI)) // a client's AI-handled message is not an alert: only what needs a person is
             ->get(['messages.id', 'messages.conversation_id', 'conversations.channel', 'conversations.contact_id', 'conversations.chatbot_id']);
 
         // Where to resume: the last row read, or the newest message if nothing qualified (so a long run of the team's own replies is not re-scanned every time).

@@ -5,9 +5,10 @@ import TextInput from '@/Components/TextInput';
 import Toggle from '@/Components/Toggle';
 import FiscalCards from './FiscalCards';
 import SettingsSection, { Fact } from './SettingsSection';
+import WompiPanel from './WompiPanel';
 
 /** Impuestos y facturación: country, tax and currency on top, then the two protagonist cards (fiscal authority and electronic invoicing). Country defaults are starting values the user can change. */
-export default function TaxesPanel({ settings, form, onSave, catalog, section }) {
+export default function TaxesPanel({ settings, form, onSave, catalog, section, wompi = null }) {
     const { data, setData, errors } = form;
     const country = catalog.taxCountries.find((item) => item.code === data.tax_country);
     const savedCountry = catalog.taxCountries.find((item) => item.code === settings.tax_country);
@@ -25,6 +26,7 @@ export default function TaxesPanel({ settings, form, onSave, catalog, section })
                 </dl>
             </section>
             <FiscalCards country={savedCountry} />
+            {wompi && <WompiPanel wompi={wompi} />}
         </div>
     );
 

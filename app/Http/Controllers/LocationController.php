@@ -39,6 +39,9 @@ class LocationController extends Controller
         // The code can be deployed before the migration: the page opens and says what is missing instead of failing on a missing table.
         $ready = $this->locations->schemaReady();
 
+        $visible = $ready ? $workspace->locations()->when($allowed !== null, fn ($query) => $query->whereIn('id', $allowed))->pluck('id')->map(fn ($id) => (int) $id)->all() : [];
+        $hours = $this->locations->weeklyHours($workspace, $visible);
+
         return Inertia::render('Locations/Index', [
             'capabilities' => $capabilities,
             'schemaPending' => ! $ready,
@@ -53,6 +56,7 @@ class LocationController extends Controller
                 'upcomingCount' => $location->upcoming_count,
                 'serviceIds' => $location->services->pluck('id')->all(),
                 'offersAllServices' => (bool) ($location->offers_all_services ?? false),
+                'hours' => $hours[$location->id] === null ? null : collect($hours[$location->id])->map(fn (array $day, int $weekday) => ['weekday' => $weekday, 'opensAt' => sprintf('%02d:%02d', intdiv($day[0], 60), $day[0] % 60), 'closesAt' => sprintf('%02d:%02d', intdiv($day[1], 60), $day[1] % 60)])->values()->all(),
             ])->all(),
             'services' => $workspace->services()->orderByDesc('is_active')->orderBy('name')->get(['id', 'name', 'is_active'])->map(fn ($service) => ['id' => $service->id, 'name' => $service->name, 'isActive' => (bool) $service->is_active])->all(),
         ]);
@@ -75,6 +79,7 @@ class LocationController extends Controller
                 $limits->assertCanAddLocation($workspace);
                 $location = $workspace->locations()->create($request->location());
                 $this->syncServices($location, $request->serviceIds(), $request->offersAllServices());
+                $this->syncHours($location, $request);
             }));
         }, 'Sede creada correctamente');
     }
@@ -95,6 +100,7 @@ class LocationController extends Controller
             $before = (bool) ($model->offers_all_services ?? false);
             $model->update($request->location());
             $this->syncServices($model, $request->serviceIds(), $request->offersAllServices(), $before);
+            $this->syncHours($model, $request);
         }, 'Sede actualizada correctamente');
     }
 
@@ -152,6 +158,33 @@ class LocationController extends Controller
     {
         if (! $this->locations->schemaReady()) {
             throw BookingException::state('Falta aplicar la última migración de la base de datos: un administrador debe ejecutar «php artisan migrate».');
+        }
+    }
+
+    /**
+     * The opening hours of the sede, written as the form sent them (nothing is written when the form said nothing). The rows are replaced as a set inside the caller's transaction
+     * of this request; a sede with no rows has no hours configured. Existing appointments are never touched: hours only decide what is offered from now on.
+     */
+    private function syncHours(Location $location, SaveLocationRequest $request): void
+    {
+        if (! $request->hasHoursInput() || ! $this->locations->hoursReady()) {
+            return;
+        }
+
+        $summary = fn (array $rows) => collect($rows)->map(fn ($row) => ['', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'][$row['weekday']].' '.substr($row['opens_at'], 0, 5).'-'.substr($row['closes_at'], 0, 5))->implode(', ');
+        $before = $summary(DB::table('location_hours')->where('location_id', $location->id)->orderBy('weekday')->get()->map(fn ($row) => ['weekday' => (int) $row->weekday, 'opens_at' => $row->opens_at, 'closes_at' => $row->closes_at])->all());
+        $rows = $request->hours();
+
+        DB::table('location_hours')->where('location_id', $location->id)->where('workspace_id', $location->workspace_id)->delete();
+
+        foreach ($rows as $row) {
+            DB::table('location_hours')->insert($row + ['workspace_id' => $location->workspace_id, 'location_id' => $location->id, 'created_at' => now(), 'updated_at' => now()]);
+        }
+
+        $after = $summary($rows);
+
+        if ($before !== $after) {
+            $this->audit->record('updated', 'location', $location->id, $location->name, [AuditLogger::change('Horario de atención', $before ?: null, $after ?: null)], $location->workspace);
         }
     }
 

@@ -33,7 +33,8 @@ class EffectivePermissionsTest extends TestCase
         'GET profile', 'PATCH profile', 'PUT profile/communications', 'GET profile/photo', 'POST profile/photo', 'DELETE profile/photo',
         'GET workspace/logo', 'GET workspaces/search', 'GET sin-modulos', // sin-modulos: only reads which modules the Workspace has and grants nothing
         'GET help/manuals/{key}', // authorized inside HelpCenter, not by a route permission: general manuals for every member; a module manual only if the plan has the module AND the role holds the permission that opens it
-        'GET support/thread', 'POST support/messages', // authorized inside SupportDesk, not by a catalog permission: only the ROLE `admin` of a CLIENT Workspace (403 for any other role, for the administrative Workspace and for guests); SupportDeskTest covers it
+        'GET notifications', 'POST notifications/read-all', 'POST notifications/{notification}/read', // the bell: resolved from the session's Workspace and the user's own permissions inside Notifications (NotificationsTest covers isolation); a forged id is a 404
+        'GET support/thread', 'POST support/messages', 'POST support/close', 'GET support/attachments/{attachment}', // authorized inside SupportDesk, not by a catalog permission: only the ROLE `admin` of a CLIENT Workspace (403 for any other role, for the administrative Workspace and for guests); SupportDeskTest covers it
         'POST saved-filters/{scope}', 'PUT saved-filters/{scope}/{filter}', 'DELETE saved-filters/{scope}/{filter}',
     ];
 

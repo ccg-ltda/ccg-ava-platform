@@ -82,12 +82,15 @@ class ChatbotExecutions
      * Records and queues the execution for a message the contact JUST wrote. Nothing happens when the chatbot has no
      * authorized workflow, a person has the conversation, the message is not a real text, or it already has an execution.
      */
-    public function schedule(Conversation $conversation, Message $inbound): ?ChatbotExecution
+    public function schedule(Conversation $conversation, Message $inbound, bool $resume = false): ?ChatbotExecution
     {
         $chatbot = $conversation->chatbot;
 
+        // A resume (`event: resume`) hangs from the last message a person or the AI wrote, never from a contact's: it only exists when an agent hands the conversation back on purpose.
+        $eligible = $resume ? in_array($inbound->sender, ['agent', 'ai'], true) : $inbound->direction === 'in';
+
         if (! $this->active($chatbot) || ! ($workflow = $this->workflows->for($chatbot)) || ! $this->belongsTogether($chatbot, $conversation, $inbound)
-            || $inbound->direction !== 'in' || $inbound->simulated || $conversation->isDemo() || blank($inbound->body)
+            || ! $eligible || $inbound->simulated || $conversation->isDemo() || blank($inbound->body)
             || ! $conversation->aiMayReply()) {
             return null;
         }
@@ -139,6 +142,25 @@ class ChatbotExecutions
         RunChatbotExecution::dispatch($execution->id);
 
         return $execution;
+    }
+
+    /**
+     * A person gave the conversation back to the AI. If the last thing said is a message of the contact that nobody answered (they replied to the agent's question, say),
+     * the AI answers THAT message now, with the persisted state and the wider history of a resume. If the agent spoke last there is nothing to answer: the AI continues
+     * with the contact's next message (the contract has no event without an inbound message). Duplicate-safe: a message has at most one execution.
+     */
+    public function resumeAfterReturn(Conversation $conversation, bool $continueNow = false): ?ChatbotExecution
+    {
+        $conversation = $conversation->fresh(['chatbot.workspace.organization']);
+        $last = $conversation->messages()->whereIn('sender', ['contact', 'agent', 'ai'])->orderByDesc('id')->first();
+
+        if (! $last) {
+            return null;
+        }
+
+        // The contact is waiting: answer that message. Otherwise (the agent spoke last) the AI speaks only if the agent asked it to continue now: a workflow that is not expecting
+        // a `resume` event must not answer a customer who wrote nothing.
+        return $last->sender === 'contact' ? $this->schedule($conversation, $last) : ($continueNow ? $this->schedule($conversation, $last, true) : null);
     }
 
     /**
@@ -304,7 +326,7 @@ class ChatbotExecutions
             ! $active => 'chatbot_off',
             $workflow === null => 'no_workflow',
             $workflow->key !== $execution->workflow_key => 'workflow_changed',
-            $execution->message->direction !== 'in' || blank($execution->message->body) => 'not_text',
+            ($execution->message->direction !== 'in' && ! in_array($execution->message->sender, ['agent', 'ai'], true)) || blank($execution->message->body) => 'not_text',
             $execution->message->created_at->lt(now()->subMinutes((int) config('n8n.max_age_minutes'))) => 'stale',
             ! $conversation || ! $conversation->aiMayReply() || $conversation->handling_version !== $execution->handling_version => 'superseded',
             default => $workflow,
@@ -331,13 +353,18 @@ class ChatbotExecutions
     {
         $conversation = $execution->conversation;
         $chatbot = $execution->chatbot;
-        $history = $conversation->messages()->where('id', '<', $execution->message_id)->whereNotNull('body')
-            ->orderByDesc('id')->limit((int) config('n8n.history_messages'))->get(['direction', 'body'])->reverse()->values()
-            ->map(fn (Message $m) => ['role' => $m->direction === 'in' ? 'user' : 'assistant', 'text' => $m->body])->all();
+        $state = app(ConversationContext::class)->forWorkflow($conversation);
+        // Coming back from a person the window is wider: what the agent asked and the customer answered must not fall out of it. `sender` tells contact, ai and agent apart
+        // (`role` stays user/assistant, so a workflow written before this field keeps working).
+        $limit = $state['resume'] ? (int) config('n8n.resume_history_messages') : (int) config('n8n.history_messages');
+        $resuming = $execution->message->direction !== 'in';
+        $history = $conversation->messages()->where('id', $resuming ? '<=' : '<', $execution->message_id)->whereNotNull('body')->where('sender', '!=', 'system')
+            ->orderByDesc('id')->limit($limit)->get(['direction', 'sender', 'body'])->reverse()->values()
+            ->map(fn (Message $m) => ['role' => $m->direction === 'in' ? 'user' : 'assistant', 'sender' => $m->sender ?? ($m->direction === 'in' ? 'contact' : 'ai'), 'text' => $m->body])->all();
 
         return [
             'execution_id' => $execution->correlation_id,
-            'event' => 'message',
+            'event' => $resuming ? 'resume' : 'message',
             'workflow' => ['key' => $workflow->key, 'id' => $workflow->n8nId],
             'chatbot' => [
                 'id' => $chatbot->id, 'name' => $chatbot->name,
@@ -350,8 +377,10 @@ class ChatbotExecutions
                 'channel' => $conversation->channel,
                 'memory_key' => substr(hash_hmac('sha256', "w{$chatbot->workspace_id}|b{$chatbot->id}|c{$conversation->id}", (string) config('app.key')), 0, 40),
             ],
-            'message' => ['id' => $execution->message_id, 'text' => $execution->message->body],
+            'message' => ['id' => $execution->message_id, 'text' => $execution->message->body, 'sender' => $execution->message->sender ?? 'contact'],
             'history' => $history,
+            // The persisted conversational state (facts with source and status, steps, what was already done, the human handoff). The workflow answers with `context` to change it.
+            'context' => $state,
             // How the workflow reaches Ava's tools for THIS conversation: a run-scoped token (booking and order tools only, valid while this
             // execution runs) and which tools the Workspace plan includes. The workflow never needs a long-lived chatbot token.
             'ava' => [
@@ -408,6 +437,19 @@ class ChatbotExecutions
                 ]);
                 $conversation->forceFill(['last_message_at' => $reply->sent_at])->save();
             }
+
+            // Same transaction and same lock as the reply: the state the workflow proposes is stored only if its answer is (a late answer changes nothing). A failure to store it
+            // is logged and does not lose the reply, but the next payload will simply not have it (the history is untouched either way).
+            if (is_array($outcome->context)) {
+                try {
+                    app(ConversationContext::class)->apply($conversation, $outcome->context, 'ai');
+                } catch (Throwable $e) {
+                    Log::error('conversation_context_store_failed', ['conversation' => $conversation->id, 'exception' => $e::class]);
+                }
+            }
+
+            // The AI answered after a person gave the conversation back: from here on it is a normal conversation again.
+            app(ConversationContext::class)->clearResume($conversation->refresh());
 
             $row->update([
                 'status' => ChatbotExecution::SUCCEEDED,

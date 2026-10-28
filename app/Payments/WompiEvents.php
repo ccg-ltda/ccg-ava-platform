@@ -4,6 +4,7 @@ namespace App\Payments;
 
 use App\Models\PaymentEvent;
 use App\Models\SignupRequest;
+use App\Observability\ApiCallRecorder;
 use App\Services\OperationalAlert;
 use App\Services\SignupService;
 use Illuminate\Http\Client\ConnectionException;
@@ -141,7 +142,8 @@ class WompiEvents
     private function fetch(string $id): ?array
     {
         try {
-            $response = Http::timeout((int) config('wompi.timeout_seconds'))->acceptJson()->get($this->config->apiUrl().'/transactions/'.rawurlencode($id));
+            $url = $this->config->apiUrl().'/transactions/'.rawurlencode($id);
+            $response = app(ApiCallRecorder::class)->call('wompi', 'get_transaction', 'GET', $url, fn () => Http::timeout((int) config('wompi.timeout_seconds'))->acceptJson()->get($url), ['Accept' => 'application/json'], null, ['resource_type' => 'transaction']);
         } catch (ConnectionException) {
             return null;
         }

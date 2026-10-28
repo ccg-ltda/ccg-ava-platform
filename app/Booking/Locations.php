@@ -36,6 +36,43 @@ class Locations
         return $this->schemaReady ??= Schema::hasTable('locations') && Schema::hasColumn('appointments', 'location_id');
     }
 
+    /** Whether the table of opening hours exists in this database (the code can ship before the migration). */
+    public function hoursReady(): bool
+    {
+        return Schema::hasTable('location_hours');
+    }
+
+    /**
+     * The opening hours of sedes, by day: `[location id => null | [weekday => [opens, closes]]]` with minutes since local midnight. `null` = no hours configured for the sede
+     * (nothing is assumed: it is not «closed» and it is not «8 to 18»); a sede that has hours and no entry for a weekday is CLOSED that day.
+     *
+     * @param  list<int>  $locationIds  ids that belong to the Workspace (the caller already narrowed them)
+     * @return array<int, array<int, array{0: int, 1: int}>|null>
+     */
+    public function weeklyHours(Workspace $workspace, array $locationIds): array
+    {
+        $result = array_fill_keys($locationIds, null);
+
+        if ($locationIds === [] || ! $this->hoursReady()) {
+            return $result;
+        }
+
+        foreach (DB::table('location_hours')->where('workspace_id', $workspace->id)->whereIn('location_id', $locationIds)->orderBy('weekday')->get() as $row) {
+            $result[(int) $row->location_id] ??= [];
+            $result[(int) $row->location_id][(int) $row->weekday] = [self::minutes($row->opens_at), self::minutes($row->closes_at)];
+        }
+
+        return $result;
+    }
+
+    /** «HH:MM» or «HH:MM:SS» as minutes since midnight. */
+    public static function minutes(string $time): int
+    {
+        [$hour, $minute] = array_map('intval', explode(':', $time) + [0, 0]);
+
+        return $hour * 60 + $minute;
+    }
+
     public function enabled(Workspace $workspace): bool
     {
         return $this->schemaReady() && $this->modules->allows($workspace, 'locations');

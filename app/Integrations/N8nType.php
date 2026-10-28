@@ -4,6 +4,7 @@ namespace App\Integrations;
 
 use App\Audit\Masked;
 use App\Models\Integration;
+use App\Observability\ApiCallRecorder;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Validation\ValidationException;
 use Throwable;
@@ -90,8 +91,8 @@ class N8nType implements IntegrationType
         $start = hrtime(true);
 
         try {
-            $response = $this->target->client($pinned, $timeout, [self::KEY_HEADER => (string) ($integration->secrets['api_key'] ?? ''), 'Accept' => 'application/json'])
-                ->get($url, ['limit' => 1]);
+            $response = app(ApiCallRecorder::class)->call('n8n_api', 'test_connection', 'GET', strtok($url, '?') ?: $url, fn () => $this->target->client($pinned, $timeout, [self::KEY_HEADER => (string) ($integration->secrets['api_key'] ?? ''), 'Accept' => 'application/json'])
+                ->get($url, ['limit' => 1]), [], null, ['workspace_id' => $integration->workspace_id], false);
         } catch (ConnectionException $exception) {
             return $this->failure($this->connectionReason($exception, $timeout), null, $this->elapsed($start));
         } catch (Throwable) {

@@ -156,7 +156,7 @@ return [
         'profile.*', 'help.*', 'support.*', 'legal.accept', 'legal.accept.store', 'logout', 'verification.*', 'password.*', 'confirm-password',
         'workspaces.search', 'workspace.logo',
         'saved-filters.*',
-        'workspace.empty', 'workspaces.modules.*', 'workspaces.limits.*', 'workspaces.trial.*', 'workspaces.terms.*', 'plans.*', 'modules.*', 'module-categories.*', 'workspaces.plan.update', 'support-access.*', 'email-template.*',
+        'workspace.empty', 'workspaces.modules.*', 'workspaces.limits.*', 'workspaces.trial.*', 'workspaces.terms.*', 'plans.*', 'modules.*', 'module-categories.*', 'workspaces.plan.update', 'support-access.*', 'email-template.*', 'notifications.*', 'wompi-settings.*', 'support-ai.*',
     ],
 
     'implemented' => [

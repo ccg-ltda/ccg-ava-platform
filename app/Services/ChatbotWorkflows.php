@@ -71,6 +71,12 @@ class ChatbotWorkflows
         }
     }
 
+    /** Whether a key is a registered, enabled workflow of the catalog with a safe path. */
+    public function assignable(string $key): bool
+    {
+        return $this->catalogEntry($key) !== null;
+    }
+
     /** @return array<string, array<string, mixed>> */
     public function catalog(): array
     {

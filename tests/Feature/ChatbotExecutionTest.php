@@ -528,7 +528,7 @@ class ChatbotExecutionTest extends TestCase
         $this->deliver($this->event('1000001', 'Segundo', '573001110001'));
 
         $last = Http::recorded(fn (Request $request) => str_starts_with($request->url(), self::N8N))->last()[0]->data();
-        $this->assertSame([['role' => 'user', 'text' => 'Primero'], ['role' => 'assistant', 'text' => 'Respuesta uno']], $last['history']);
+        $this->assertSame([['role' => 'user', 'sender' => 'contact', 'text' => 'Primero'], ['role' => 'assistant', 'sender' => 'ai', 'text' => 'Respuesta uno']], $last['history']);
     }
 
     public function test_a_workflow_that_asks_for_a_person_hands_over_through_ava_and_stops_the_ai(): void

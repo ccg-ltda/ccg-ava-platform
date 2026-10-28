@@ -356,6 +356,8 @@ class BookingController extends Controller
             }
 
             return [
+                // Opening hours of the sedes the member may use (minutes since local midnight; null = no hours configured for that sede, nothing assumed): the agenda scale follows them.
+                'locationHours' => $this->locations->weeklyHours($workspace, $locations->pluck('id')->map(fn ($id) => (int) $id)->all()),
                 'services' => $services,
                 'professionals' => $professionals,
                 // Locations of Ava's own agenda only; `locationRequired` = the Workspace has several, so every booking must name one.

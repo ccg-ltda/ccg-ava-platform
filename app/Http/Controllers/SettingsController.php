@@ -2,9 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Audit\AuditLogger;
 use App\Http\Middleware\EnsurePlatformAdministration;
 use App\Http\Requests\UpdateWorkspaceSettingsRequest;
+use App\Models\Workspace;
+use App\Payments\PaymentSettings;
+use App\Payments\WompiConfig;
+use App\Services\ConversationAutoClose;
 use App\Services\EmailTemplates;
+use App\Services\ModuleAccess;
+use App\Services\SupportAi;
 use App\Services\WorkspaceSettingsService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -33,7 +40,71 @@ class SettingsController extends Controller
                 'brand' => (string) config('branding.name'),
                 'maxBytes' => EmailTemplates::MAX_BYTES,
             ] : null,
+            // Cierre automático: only for a Workspace whose plan has Conversaciones.
+            'autoClose' => ConversationAutoClose::ready() && app(ModuleAccess::class)->allows($request->attributes->get('workspace'), 'conversations') ? $this->autoClose($request->attributes->get('workspace')) : null,
+            // Soporte con IA: only the platform administration inside the administrative Workspace (the route re-checks it).
+            'supportAi' => EnsurePlatformAdministration::allows($request, 'view-support-ai') ? app(SupportAi::class)->status() + ['canEdit' => EnsurePlatformAdministration::allows($request, 'edit-support-ai')] : null,
+            // Wompi: only the platform administration inside the administrative Workspace gets this (the routes re-check it). Never a secret: only "is it set" and its last characters.
+            'wompi' => EnsurePlatformAdministration::allows($request, 'view-payment-settings') ? $this->wompi($request) : null,
         ]);
+    }
+
+    /** @return array<string, mixed> */
+    private function autoClose(Workspace $workspace): array
+    {
+        $settings = app(ConversationAutoClose::class)->settings($workspace);
+
+        return [
+            // Not yet configured = the behavior from before: support sessions close at the default, ordinary conversations never close by themselves.
+            'configured' => $settings['configured'],
+            'enabled' => $settings['enabled'] ?? $workspace->isAdministrative(),
+            'minutes' => $settings['minutes'],
+            'min' => ConversationAutoClose::MIN, 'max' => ConversationAutoClose::MAX,
+        ];
+    }
+
+    public function updateSupportAi(Request $request): RedirectResponse
+    {
+        $data = $request->validate(['enabled' => ['required', 'boolean'], 'workflow' => ['nullable', 'string', 'max:64']]);
+        app(SupportAi::class)->update((bool) $data['enabled'], $data['workflow'] ?? null, $request->user());
+
+        return back()->with('success', $data['enabled'] ? 'Soporte con IA activado' : 'Soporte con IA desactivado: lo atiende el equipo');
+    }
+
+    public function updateConversations(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'enabled' => ['required', 'boolean'],
+            'minutes' => ['required', 'integer', 'min:'.ConversationAutoClose::MIN, 'max:'.ConversationAutoClose::MAX],
+        ], ['minutes.min' => 'Indica al menos 1 minuto.', 'minutes.max' => 'El máximo es 1440 minutos (24 horas).', 'minutes.integer' => 'Indica los minutos como un número entero.']);
+        $workspace = $request->attributes->get('workspace');
+        $before = app(ConversationAutoClose::class)->settings($workspace);
+        app(ConversationAutoClose::class)->save($workspace, ['enabled' => (bool) $data['enabled'], 'minutes' => (int) $data['minutes']]);
+
+        app(AuditLogger::class)->record('updated', 'settings', $workspace->id, $workspace->name, array_values(array_filter([
+            $before['enabled'] !== (bool) $data['enabled'] ? AuditLogger::change('Cierre automático', $before['enabled'] === null ? 'sin configurar' : ($before['enabled'] ? 'activo' : 'desactivado'), $data['enabled'] ? 'activo' : 'desactivado') : null,
+            $before['minutes'] !== (int) $data['minutes'] ? AuditLogger::change('Minutos de inactividad', (string) $before['minutes'], (string) $data['minutes']) : null,
+        ])));
+
+        return back()->with('success', 'Cierre automático guardado');
+    }
+
+    /** @return array<string, mixed> */
+    private function wompi(Request $request): array
+    {
+        $payments = app(PaymentSettings::class);
+        $active = $payments->active();
+
+        return [
+            'canEdit' => EnsurePlatformAdministration::allows($request, 'edit-payment-settings'),
+            'activeEnvironment' => $active?->environment,
+            // Without a database row the WOMPI_* environment variables are the fallback; say so instead of showing an empty form as "not configured".
+            'source' => app(WompiConfig::class)->source(),
+            'environments' => collect(PaymentSettings::ENVIRONMENTS)->mapWithKeys(fn (string $env) => [$env => $payments->present($payments->row($env))])->all(),
+            'eventsUrl' => url('/api/webhooks/wompi'),
+            // SIGO (invoicing) is a separate integration and is NOT connected: the interface says so.
+            'invoicing' => ['provider' => 'SIGO', 'connected' => false],
+        ];
     }
 
     public function update(UpdateWorkspaceSettingsRequest $request): RedirectResponse

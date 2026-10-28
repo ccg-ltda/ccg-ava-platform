@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ApiCallLogController;
 use App\Http\Controllers\AuditController;
 use App\Http\Controllers\BookableResourceController;
 use App\Http\Controllers\BookingController;
@@ -26,8 +27,10 @@ use App\Http\Controllers\LocationController;
 use App\Http\Controllers\MessageTemplateController;
 use App\Http\Controllers\ModuleCategoryController;
 use App\Http\Controllers\ModuleController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\OrganizationController;
+use App\Http\Controllers\PaymentSettingsController;
 use App\Http\Controllers\PlanController;
 use App\Http\Controllers\ProductCategoryController;
 use App\Http\Controllers\ProductController;
@@ -98,6 +101,10 @@ Route::middleware(['auth', 'verified', 'workspace'])->group(function () {
 });
 
 Route::middleware(['auth', 'workspace'])->group(function () {
+    // The bell: always the ACTIVE Workspace and the user's own permissions; an id outside that is a 404.
+    Route::get('/notifications', [NotificationController::class, 'index'])->middleware('throttle:120,1')->name('notifications.index');
+    Route::post('/notifications/read-all', [NotificationController::class, 'readAll'])->middleware('throttle:60,1')->name('notifications.read-all');
+    Route::post('/notifications/{notification}/read', [NotificationController::class, 'read'])->whereNumber('notification')->middleware('throttle:120,1')->name('notifications.read');
     // Manuals of the «Ayuda» panel (PDF files listed in config/help.php): any member, only those whose module the Workspace has.
     Route::get('/help/manuals/{key}', [HelpController::class, 'manual'])->where('key', '[a-z0-9-]+')->name('help.manual');
     // Support for the administrators of a client Workspace, answered by CCG's team in Conversaciones of the administrative Workspace. The destination is decided by the server; the controller
@@ -116,6 +123,9 @@ Route::middleware(['auth', 'workspace'])->group(function () {
 
     Route::get('/settings', [SettingsController::class, 'index'])
         ->middleware(['workspace.module:settings', 'workspace.permission:view-settings'])->name('settings.index');
+    // Cierre automático por inactividad (Configuraciones > Conversaciones): only the active Workspace, needs the conversations module and edit-settings.
+    Route::put('/settings/conversations', [SettingsController::class, 'updateConversations'])
+        ->middleware(['workspace.module:settings', 'workspace.module:conversations', 'workspace.permission:view-settings', 'workspace.permission:edit-settings'])->name('settings.conversations');
     Route::post('/settings', [SettingsController::class, 'update'])
         ->middleware(['workspace.module:settings', 'workspace.permission:view-settings', 'workspace.permission:edit-settings'])->name('settings.update');
     Route::get('/workspace/logo', WorkspaceLogoController::class)->name('workspace.logo');
@@ -135,6 +145,9 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         Route::post('/{integration}/deactivate', [IntegrationController::class, 'deactivate'])->whereNumber('integration')->middleware('workspace.permission:activate-integrations')->name('deactivate');
         Route::delete('/{integration}', [IntegrationController::class, 'destroy'])->whereNumber('integration')->middleware('workspace.permission:delete-integrations')->name('destroy');
         // Each test is a real outbound request: keep it from being used to hammer a third party.
+        // Historial de llamados: redacted record of the Workspace's outbound API calls (read only).
+        Route::get('/calls', [ApiCallLogController::class, 'index'])->middleware('throttle:60,1')->name('calls.index');
+        Route::get('/calls/{call}', [ApiCallLogController::class, 'show'])->whereNumber('call')->middleware('throttle:120,1')->name('calls.show');
         Route::post('/{integration}/test', [IntegrationController::class, 'test'])->whereNumber('integration')->middleware(['workspace.permission:test-integrations', 'throttle:20,1'])->name('test');
     });
 
@@ -148,6 +161,7 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         Route::post('/{conversation}/take', [ConversationActionController::class, 'take'])->whereNumber('conversation')->middleware('workspace.permission:take-conversations')->name('take');
         Route::post('/{conversation}/release', [ConversationActionController::class, 'release'])->whereNumber('conversation')->middleware('workspace.permission:release-conversations')->name('release');
         Route::post('/{conversation}/resolve', [ConversationActionController::class, 'resolve'])->whereNumber('conversation')->middleware('workspace.permission:resolve-conversations')->name('resolve');
+        Route::post('/{conversation}/context', [ConversationActionController::class, 'context'])->whereNumber('conversation')->middleware(['workspace.permission:reply-conversations', 'throttle:60,1'])->name('context.store');
         Route::post('/{conversation}/messages', [ConversationActionController::class, 'message'])->whereNumber('conversation')->middleware(['workspace.permission:reply-conversations', 'throttle:60,1'])->name('messages.store');
         // Demo bench (404 outside demo environments): generate / reset / clean scenarios and simulate traffic on DEMO conversations.
         Route::middleware('workspace.permission:use-conversation-demo')->group(function () {
@@ -420,6 +434,13 @@ Route::middleware(['auth', 'workspace'])->group(function () {
 
     // Global email template (its own permissions, not part of the module catalog group above).
     // Plantilla HTML global de los correos: solo la administración de la plataforma dentro de Desarrollo_DEV (middleware + permiso; un cliente recibe 403).
+    // Soporte con IA (platform administration only, Desarrollo_DEV): switch on/off and choose the workflow of the platform catalog.
+    Route::put('/settings/support-ai', [SettingsController::class, 'updateSupportAi'])->middleware(['workspace.platform:edit-support-ai', 'throttle:20,1'])->name('support-ai.update');
+    // Wompi (platform administration only, Desarrollo_DEV): credentials are write-only; the history lists persisted payments.
+    Route::put('/settings/wompi', [PaymentSettingsController::class, 'update'])->middleware('workspace.platform:edit-payment-settings')->name('wompi-settings.update');
+    Route::post('/settings/wompi/validate', [PaymentSettingsController::class, 'validateConnection'])->middleware(['workspace.platform:edit-payment-settings', 'throttle:10,1'])->name('wompi-settings.validate');
+    Route::get('/settings/wompi/history', [PaymentSettingsController::class, 'history'])->middleware(['workspace.platform:view-payment-settings', 'throttle:60,1'])->name('wompi-settings.history');
+    Route::get('/settings/wompi/history/{transaction}', [PaymentSettingsController::class, 'detail'])->whereNumber('transaction')->middleware(['workspace.platform:view-payment-settings', 'throttle:60,1'])->name('wompi-settings.detail');
     Route::put('/settings/email-template', [EmailTemplateController::class, 'update'])->middleware('workspace.platform:edit-email-template')->name('email-template.update');
     Route::post('/settings/email-template/preview', [EmailTemplateController::class, 'preview'])->middleware(['workspace.platform:view-email-template', 'throttle:60,1'])->name('email-template.preview');
     Route::post('/settings/email-template/restore', [EmailTemplateController::class, 'restore'])->middleware('workspace.platform:edit-email-template')->name('email-template.restore');

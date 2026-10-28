@@ -68,7 +68,11 @@ class AuthenticatedSessionController extends Controller
         $workspace = Workspace::findOrFail($workspaceId);
         $permissions = $this->administration->permissionsIn($request->user(), $workspace);
 
-        return redirect()->intended(route($this->landing->route($permissions, $this->modules->keys($workspace)), absolute: false));
+        // The page a guest asked for before signing in is honoured only when THIS account could open it (see LandingPage::afterLogin); otherwise the usual landing. Either way
+        // the remembered target is consumed, so a stale one can never wait for the next login.
+        [$path] = $this->landing->afterLogin($request->session()->pull('url.intended'), $request->getHost(), $permissions, $this->modules->keys($workspace));
+
+        return redirect($path);
     }
 
     /**

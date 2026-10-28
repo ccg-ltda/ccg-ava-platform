@@ -4,6 +4,7 @@ namespace App\Integrations;
 
 use App\Booking\ProviderException;
 use App\Models\Integration;
+use App\Observability\ApiCallRecorder;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
@@ -128,12 +129,14 @@ class BookerClient
 
         try {
             $client = $this->target->client($pinned, $timeout, $headers);
-            $response = match (true) {
+            $merchantToken = isset($options['merchant']) && ! isset($options['form_params']) && $method !== 'GET' && $method !== 'PUT' ? $this->token() : null;
+            // Recorded without bodies or request headers (they carry the subscription key, the token and customer data): method, host, path without query, status, duration, outcome.
+            $response = app(ApiCallRecorder::class)->call('booker', 'request', $method, strtok($url, '?') ?: $url, fn () => match (true) {
                 isset($options['form_params']) => $client->asForm()->post($url, $options['form_params']),
                 $method === 'GET' => $client->get($url, $options['query'] ?? []),
                 $method === 'PUT' => $client->asJson()->put($url, $options['json'] ?? []),
-                default => $client->asJson()->post($url, ($options['json'] ?? []) + (isset($options['merchant']) ? ['access_token' => $this->token()] : [])),
-            };
+                default => $client->asJson()->post($url, ($options['json'] ?? []) + ($merchantToken !== null ? ['access_token' => $merchantToken] : [])),
+            }, [], null, ['workspace_id' => $this->integration->workspace_id], false);
         } catch (ConnectionException $exception) {
             throw str_contains(strtolower($exception->getMessage()), 'time') ? ProviderException::timeout() : ProviderException::unavailable();
         } catch (ProviderException $exception) {

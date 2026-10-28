@@ -4,6 +4,7 @@ namespace App\Integrations;
 
 use App\Audit\Masked;
 use App\Models\Integration;
+use App\Observability\ApiCallRecorder;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\ValidationException;
@@ -142,9 +143,9 @@ class WhatsAppType implements ChannelIntegrationType, SendsMessages, SendsTempla
         $start = hrtime(true);
 
         try {
-            $response = Http::withToken((string) ($integration->secrets['access_token'] ?? ''))
+            $response = app(ApiCallRecorder::class)->call('whatsapp', 'verify_number', 'GET', $url, fn () => Http::withToken((string) ($integration->secrets['access_token'] ?? ''))
                 ->acceptJson()->timeout($timeout)->connectTimeout(min($timeout, 10))->withoutRedirecting()
-                ->get($url, ['fields' => 'display_phone_number,verified_name']);
+                ->get($url, ['fields' => 'display_phone_number,verified_name']), [], null, ['workspace_id' => $integration->workspace_id], false);
         } catch (ConnectionException) {
             return TestResult::failure('No se pudo conectar con Meta.', null, $this->elapsed($start));
         } catch (Throwable) {
@@ -176,11 +177,12 @@ class WhatsAppType implements ChannelIntegrationType, SendsMessages, SendsTempla
         $timeout = (int) config('integrations.whatsapp.timeout');
 
         try {
-            $response = Http::withToken((string) ($integration->secrets['access_token'] ?? ''))
+            // Metadata only (bodies = false): the body is a customer's message and phone number.
+            $response = app(ApiCallRecorder::class)->call('whatsapp', 'send_message', 'POST', $url, fn () => Http::withToken((string) ($integration->secrets['access_token'] ?? ''))
                 ->acceptJson()->asJson()->timeout($timeout)->connectTimeout(min($timeout, 10))->withoutRedirecting()
                 ->post($url, ['messaging_product' => 'whatsapp', 'recipient_type' => 'individual', 'to' => $to, 'type' => 'text', 'text' => ['body' => $text, 'preview_url' => false]]
                     // Meta echoes this string in the delivery states (`statuses`) of the message, so Ava can recognize it later.
-                    + ($reference !== null ? ['biz_opaque_callback_data' => $reference] : []));
+                    + ($reference !== null ? ['biz_opaque_callback_data' => $reference] : [])), [], null, ['workspace_id' => $integration->workspace_id], false);
         } catch (ConnectionException $e) {
             // Only a failure BEFORE the request could be processed (name, connection or certificate) proves nothing went out;
             // a timeout or a dropped connection may have happened after Meta accepted the message.
@@ -225,9 +227,9 @@ class WhatsAppType implements ChannelIntegrationType, SendsMessages, SendsTempla
         }
 
         try {
-            $response = Http::withToken((string) ($integration->secrets['access_token'] ?? ''))
+            $response = app(ApiCallRecorder::class)->call('whatsapp', 'send_template', 'POST', $url, fn () => Http::withToken((string) ($integration->secrets['access_token'] ?? ''))
                 ->acceptJson()->asJson()->timeout($timeout)->connectTimeout(min($timeout, 10))->withoutRedirecting()
-                ->post($url, $body + ($reference !== null ? ['biz_opaque_callback_data' => $reference] : []));
+                ->post($url, $body + ($reference !== null ? ['biz_opaque_callback_data' => $reference] : [])), [], null, ['workspace_id' => $integration->workspace_id], false);
         } catch (ConnectionException $e) {
             return self::neverReached($e)
                 ? SendResult::failed('No se pudo conectar con Meta.', true)

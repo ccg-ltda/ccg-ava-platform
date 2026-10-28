@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\ConversationAutoClose;
 use App\Services\SupportSessions;
 use Illuminate\Console\Command;
 
@@ -17,7 +18,7 @@ class ConversationsMaintainCommand extends Command
 
     public function handle(SupportSessions $sessions): int
     {
-        $closed = $sessions->closeIdle();
+        $closed = $sessions->closeIdle() + app(ConversationAutoClose::class)->closeIdle();
         $settled = $sessions->expirePending();
         $this->components->info("Sesiones de soporte cerradas por inactividad: {$closed}. Mensajes sin confirmar: {$settled}.");
 

@@ -124,6 +124,8 @@ class ConversationInbox
             'handoffReason' => $conversation->handoff_reason,
             // A finished support session: why, who (null = the clock) and when. The messages and files stay readable here for CCG.
             'closed' => $conversation->closed_at ? ['reason' => $conversation->closed_reason, 'label' => SupportSessions::REASONS[$conversation->closed_reason] ?? 'Finalizada', 'by' => $conversation->closed_by_user_id ? User::whereKey($conversation->closed_by_user_id)->value('name') : null, 'at' => $settings->formatDate($conversation->closed_at).' '.$settings->formatTime($conversation->closed_at)] : null,
+            // The collected data and what was already done (read only; the agent changes it through conversations.context.store). Never for a Workspace seen read only.
+            'context' => $foreign || $mask ? null : app(ConversationContext::class)->forDisplay($conversation),
             'handoffAt' => $conversation->handoff_requested_at ? $settings->formatDate($conversation->handoff_requested_at).' '.$settings->formatTime($conversation->handoff_requested_at) : null,
             'delivery' => $delivery,
             // The demo bench: only on a demo conversation, in a demo environment, for who manages conversations.
@@ -184,13 +186,15 @@ class ConversationInbox
             'release' => $can('release-conversations') && ! app(SupportDesk::class)->isRequest($conversation) && $this->control->aiAvailable($conversation) && (($handling === Conversation::HUMAN && $operator) || $handling === Conversation::PENDING),
             'resolve' => $can('resolve-conversations') && $handling !== Conversation::RESOLVED && ($handling !== Conversation::HUMAN || $operator),
             'assign' => $manage && $handling !== Conversation::RESOLVED,
+            // Recording or correcting the collected data: only the agent who has the conversation (or a manager), like writing to the contact.
+            'context' => $can(ConversationAgents::PERMISSION) && $handling === Conversation::HUMAN && $operator,
         ];
     }
 
-    /** @return array{take: false, reply: false, release: false, resolve: false, assign: false} */
+    /** @return array{take: false, reply: false, release: false, resolve: false, assign: false, context: false} */
     private function nothing(): array
     {
-        return ['take' => false, 'reply' => false, 'release' => false, 'resolve' => false, 'assign' => false];
+        return ['take' => false, 'reply' => false, 'release' => false, 'resolve' => false, 'assign' => false, 'context' => false];
     }
 
     /** @return array{key: string, label: string} */

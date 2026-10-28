@@ -70,6 +70,8 @@ class HandleInertiaRequests extends Middleware
             'supportDesk' => fn () => app(SupportDesk::class)->forRequest($request),
             // The notification of the team when a conversation or a message arrives: null (nothing runs) for who cannot read conversations. See ConversationAlerts.
             'conversationAlerts' => fn () => app(ConversationAlerts::class)->forRequest($request),
+            // The bell (common to every Workspace). The page carries NO data (no query per page load): the bell asks /notifications on mount and every poll, and the server answers for the ACTIVE Workspace and this user. Null = nothing is drawn.
+            'notifications' => fn () => $request->user() && $request->attributes->has('workspace') ? ['unread' => 0, 'items' => []] : null,
             'platform' => fn () => EnsurePlatformAdministration::allows($request),
             'platformAccess' => fn () => [
                 'plans' => EnsurePlatformAdministration::allows($request, EnsurePlatformAdministration::PLANS),

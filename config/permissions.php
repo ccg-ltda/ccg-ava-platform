@@ -36,6 +36,8 @@ return [
         'orders' => ['label' => 'Pedidos', 'description' => 'Pedidos, su detalle y su flujo de estados.', 'list' => 'view-orders', 'module' => 'orders'],
         'plans' => ['label' => 'Planes comerciales', 'description' => 'Planes de CCG y su asignación a los Workspaces de clientes.', 'list' => 'view-plans'],
         'email' => ['label' => 'Correo de la plataforma', 'description' => 'Plantilla HTML global de los correos. Solo opera en Desarrollo_DEV.', 'list' => 'view-email-template'],
+        'payments' => ['label' => 'Pagos y Wompi', 'description' => 'Credenciales de Wompi, validación de la conexión e historial de pagos. Solo opera en Desarrollo_DEV.', 'list' => 'view-payment-settings'],
+        'supportai' => ['label' => 'Soporte con IA', 'description' => 'Activa la IA del soporte de CCG y elige su workflow. Solo opera en Desarrollo_DEV.', 'list' => 'view-support-ai'],
         'modules' => ['label' => 'Catálogo de módulos', 'description' => 'Módulos y categorías que los planes pueden incluir.', 'list' => 'view-modules'],
         'platform' => ['label' => 'Soporte de la plataforma', 'description' => 'Accesos temporales y justificados de soporte de CCG.'],
     ],
@@ -161,6 +163,14 @@ return [
         // Correo de la plataforma (solo Desarrollo_DEV)
         'view-email-template' => ['group' => 'email', 'label' => 'Consultar la plantilla HTML de correos', 'description' => 'Ve la plantilla global de los correos y su vista previa. Solo opera en Desarrollo_DEV.', 'platform' => true],
         'edit-email-template' => ['group' => 'email', 'label' => 'Editar y restaurar la plantilla HTML de correos', 'description' => 'Cambia la plantilla global de todos los correos de la plataforma o la restaura a la predeterminada. Solo opera en Desarrollo_DEV.', 'platform' => true],
+
+        // Pagos de la plataforma (solo Desarrollo_DEV)
+        'view-payment-settings' => ['group' => 'payments', 'label' => 'Consultar la configuración de Wompi y el historial de pagos', 'description' => 'Ve el estado (sin secretos) de la configuración de Wompi y los pagos recibidos. Solo opera en Desarrollo_DEV.', 'platform' => true],
+        'edit-payment-settings' => ['group' => 'payments', 'label' => 'Configurar y validar Wompi', 'description' => 'Guarda las credenciales cifradas de Wompi, cambia el entorno y prueba la conexión. Solo opera en Desarrollo_DEV.', 'platform' => true],
+
+        // Soporte con IA (solo Desarrollo_DEV)
+        'view-support-ai' => ['group' => 'supportai', 'label' => 'Consultar el soporte con IA', 'description' => 'Ve el estado de la IA del soporte y los workflows disponibles. Solo opera en Desarrollo_DEV.', 'platform' => true],
+        'edit-support-ai' => ['group' => 'supportai', 'label' => 'Activar y configurar el soporte con IA', 'description' => 'Enciende o apaga la IA del soporte y elige su workflow del catálogo. Solo opera en Desarrollo_DEV.', 'platform' => true],
 
         // Soporte de la plataforma
         'access-private-data' => ['group' => 'platform', 'label' => 'Abrir accesos de soporte', 'description' => 'Permite abrir un acceso temporal, justificado y auditado a datos privados de otro Workspace. Solo opera en Desarrollo_DEV.', 'platform' => true, 'private' => true],

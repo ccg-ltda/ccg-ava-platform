@@ -4,6 +4,7 @@ namespace App\Integrations;
 
 use App\Audit\Masked;
 use App\Models\Integration;
+use App\Observability\ApiCallRecorder;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\Rule;
@@ -191,10 +192,11 @@ class HttpApiType implements IntegrationType
         $start = hrtime(true);
 
         try {
-            $response = $this->target->client($pinned, $timeout, $headers)->send($config['method'], $url, array_filter([
+            // Metadata only: the URL is stored WITHOUT its query (the Workspace's own query credentials) and neither headers nor bodies are kept.
+            $response = app(ApiCallRecorder::class)->call('http_api', 'test_connection', (string) $config['method'], strtok($url, '?') ?: $url, fn () => $this->target->client($pinned, $timeout, $headers)->send($config['method'], $url, array_filter([
                 'query' => $query,
                 'body' => $config['body'] ?? null,
-            ], fn ($value) => $value !== [] && $value !== null));
+            ], fn ($value) => $value !== [] && $value !== null)), [], null, ['workspace_id' => $integration->workspace_id], false);
         } catch (ConnectionException $exception) {
             return TestResult::failure($this->connectionMessage($exception, $timeout), null, $this->elapsed($start));
         } catch (Throwable) {

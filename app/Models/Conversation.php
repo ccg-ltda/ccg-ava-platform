@@ -43,6 +43,7 @@ class Conversation extends Model
             'resolved_at' => 'datetime',
             'closed_at' => 'datetime',
             'handling_version' => 'integer',
+            'context' => 'array',
         ];
     }
 

@@ -249,7 +249,7 @@ export default function AgendaPanel({ appointments, dayCounts, filters, options,
             ) : view === 'calendar' ? (
                 <>
                     {appointments.length === 0 && <p className="text-sm text-ink-muted" role="status">{filtered ? 'Ninguna cita coincide con los filtros en este periodo.' : 'Sin citas en este periodo.'}</p>}
-                    <CalendarGrid appointments={appointments} days={days} today={today} onSelect={setDetail} onSelectMany={setCrowd} />
+                    <CalendarGrid appointments={appointments} days={days} today={today} onSelect={setDetail} onSelectMany={setCrowd} locationHours={options.locationHours ?? null} place={place} />
                 </>
             ) : appointments.length === 0 ? (
                 <EmptyState icon={CalendarDays} title={filtered ? 'Ninguna cita coincide con los filtros' : 'Sin citas en este periodo'} description={filtered ? 'Quita algún filtro o cambia las fechas.' : 'Cambia las fechas o los filtros, o crea una cita nueva.'} />

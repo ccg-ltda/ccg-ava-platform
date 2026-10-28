@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\User;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * The life of a support request: a session opens with the person's first message and ENDS, for good, when the person or CCG's agent finishes it or when nobody writes for
@@ -33,10 +35,12 @@ class SupportSessions
     }
 
     /** The text the person sees about how their session ended. */
-    public static function notice(?string $reason): string
+    public static function notice(?string $reason, ?int $minutes = null): string
     {
+        $minutes ??= self::minutes();
+
         return match ($reason) {
-            'inactivity' => 'La conversación se cerró por inactividad (4 minutos sin mensajes). Si todavía necesitas ayuda, inicia una nueva.',
+            'inactivity' => "La conversación se cerró por inactividad ({$minutes} ".($minutes === 1 ? 'minuto' : 'minutos').' sin mensajes). Si todavía necesitas ayuda, inicia una nueva.',
             'agent' => 'El equipo de soporte finalizó la conversación. Si todavía necesitas ayuda, inicia una nueva.',
             default => 'Finalizaste la conversación. Puedes iniciar una nueva cuando quieras.',
         };
@@ -45,7 +49,14 @@ class SupportSessions
     /** Whether an open session has gone quiet for longer than the limit (server clock). */
     public function idle(Conversation $conversation): bool
     {
-        return $conversation->closed_at === null && $conversation->last_message_at !== null && $conversation->last_message_at->lte(now()->subMinutes(self::minutes()));
+        if ($conversation->closed_at !== null) {
+            return false;
+        }
+
+        // The Workspace's setting (Configuraciones > Conversaciones) decides whether and after how long; with none saved, the 4 minutes of before. A valid AI execution in flight keeps it open.
+        $auto = app(ConversationAutoClose::class);
+
+        return $auto->applies($conversation, true) && $auto->idle($conversation);
     }
 
     /**
@@ -68,7 +79,19 @@ class SupportSessions
     /** Closes this session if it has gone idle; returns whether it did. */
     public function closeIfIdle(Conversation $conversation): bool
     {
-        return $this->idle($conversation) && $this->close($conversation, 'inactivity');
+        if (! $this->idle($conversation)) {
+            return false;
+        }
+
+        try {
+            return $this->close($conversation, 'inactivity');
+        } catch (Throwable $e) {
+            // The close and its audit are ONE transaction: if it fails nothing changed (the session stays open and the scheduler tries again), and the person who only
+            // opened their panel is not shown a server error for it. Only the class is logged.
+            Log::error('support_idle_close_failed', ['exception' => $e::class, 'conversation' => $conversation->id]);
+
+            return false;
+        }
     }
 
     /**
@@ -79,10 +102,11 @@ class SupportSessions
         $closed = 0;
 
         Conversation::with('chatbot.workspace')->where('channel', 'web')->whereNull('closed_at')->where('handling', '!=', Conversation::RESOLVED)
-            ->where('last_message_at', '<=', now()->subMinutes(self::minutes()))->where('contact_id', 'like', 'c%u%')
+            ->where('last_message_at', '<=', now()->subMinutes(ConversationAutoClose::MIN))->where('contact_id', 'like', 'c%u%')
             ->orderBy('id')->limit(200)->get()
             ->each(function (Conversation $conversation) use (&$closed) {
-                if ($this->desk->isRequest($conversation) && $this->close($conversation, 'inactivity')) {
+                // One failing session (logged) never blocks the others.
+                if ($this->desk->isRequest($conversation) && $this->closeIfIdle($conversation)) {
                     $closed++;
                 }
             });

@@ -9,6 +9,7 @@ use App\Booking\ProviderException;
 use App\Integrations\BookerClient;
 use App\Integrations\IntegrationRegistry;
 use App\Integrations\SafeHttpTarget;
+use App\Models\ApiCallLog;
 use App\Models\Appointment;
 use App\Models\AuditLog;
 use App\Models\Integration;
@@ -97,6 +98,27 @@ class BookerTest extends TestCase
         Http::assertSent(fn (Request $request) => str_ends_with($request->url(), '/v4.1/customer/location/777') && $request->hasHeader('Authorization', 'Bearer tok-123') && $request->hasHeader('Ocp-Apim-Subscription-Key', 'SUB-s3cret-3'));
         $this->assertStringStartsWith('https://api-staging.booker.com/', Http::recorded()[0][0]->url());
         $this->assertTrue((bool) $integration->fresh()->last_test_ok);
+    }
+
+    public function test_every_booker_call_is_recorded_without_secrets_bodies_or_headers(): void
+    {
+        Http::fake($this->token() + ['*/v4.1/customer/location/777' => Http::response(['ID' => 777])]);
+        $integration = $this->connect();
+
+        app(IntegrationService::class)->test($integration);
+
+        $rows = ApiCallLog::where('integration', 'booker')->orderBy('id')->get();
+        $this->assertCount(2, $rows); // the token request and the location read
+        $this->assertSame([200, 200], $rows->pluck('status_code')->all());
+        $this->assertSame($integration->workspace_id, $rows->first()->workspace_id);
+        $dump = json_encode($rows->toArray());
+        foreach (self::SECRETS as $secret) {
+            $this->assertStringNotContainsString($secret, $dump);
+        }
+        $this->assertStringNotContainsString('tok-123', $dump);
+        $this->assertNull($rows->first()->request_body);
+        $this->assertNull($rows->first()->response_body);
+        $this->assertSame('[]', $rows->first()->request_headers);
     }
 
     public function test_the_production_environment_uses_the_production_host(): void

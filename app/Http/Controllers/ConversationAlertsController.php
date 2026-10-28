@@ -23,7 +23,11 @@ class ConversationAlertsController extends Controller
             ? $this->alerts->since($workspace, (int) $after)
             : ['cursor' => $this->alerts->latest($workspace), 'events' => []];
 
+        // Handoffs: conversations that moved to a person (one notification per real transition). Its own cursor, so the two feeds never confuse each other.
+        $n = $request->query('n');
+        $handoff = $this->alerts->handoffsSince($workspace, $request->user(), $request->attributes->get('workspace_permissions', []), is_string($n) && ctype_digit($n) && strlen($n) <= 18 ? (int) $n : PHP_INT_MAX);
+
         // The count of conversations waiting for a person (sidebar badge): it does not depend on the cursor, so a refresh or a second tab shows the same number.
-        return response()->json($body + ['pending' => $this->alerts->pending($workspace, $request->user())])->header('Cache-Control', 'no-store');
+        return response()->json($body + ['handoffCursor' => $handoff['cursor'], 'handoffs' => $handoff['events'], 'pending' => $this->alerts->pending($workspace, $request->user())])->header('Cache-Control', 'no-store');
     }
 }

@@ -18,8 +18,84 @@ import SecondaryButton from '@/Components/SecondaryButton';
 import { TableWrap, Td, Th } from '@/Components/Table';
 import Textarea from '@/Components/Textarea';
 import TextInput from '@/Components/TextInput';
+import TimeField from '@/Components/TimeField';
 import useAccess from '@/Hooks/useAccess';
 import AppLayout from '@/Layouts/AppLayout';
+
+const DAYS = [
+    [1, 'Lunes'],
+    [2, 'Martes'],
+    [3, 'Miércoles'],
+    [4, 'Jueves'],
+    [5, 'Viernes'],
+    [6, 'Sábado'],
+    [7, 'Domingo'],
+];
+
+/** The week the editor starts from: what the sede already has, or (a sede with no hours yet) nothing is open until the person decides. */
+const draftFrom = (hours) => DAYS.map(([weekday]) => {
+    const saved = (hours ?? []).find((day) => day.weekday === weekday);
+
+    return { weekday, open: Boolean(saved), opens: saved?.opensAt ?? '09:00', closes: saved?.closesAt ?? '18:00' };
+});
+
+/**
+ * The hours of attention of the sede, by day. Off = no hours configured (the sede is not restricted and the Agenda keeps its usual scale: nothing is assumed). On = the days marked
+ * open, each with its own opening and closing; an unmarked day is closed. The Agenda draws these hours and the server only offers appointments that fit inside them.
+ */
+function HoursEditor({ enabled, onEnabled, days, onChange, error }) {
+    const edit = (weekday, patch) => onChange(days.map((day) => (day.weekday === weekday ? { ...day, ...patch } : day)));
+    const copyFirstOpen = () => {
+        const source = days.find((day) => day.open);
+
+        if (source) onChange(days.map((day) => (day.open ? { ...day, opens: source.opens, closes: source.closes } : day)));
+    };
+
+    return (
+        <fieldset className="rounded-lg border border-line p-3">
+            <legend className="px-1 text-sm font-medium text-ink">Horario de atención</legend>
+            <label className="flex items-start gap-2 text-sm text-ink">
+                <input type="checkbox" className="mt-0.5 size-4 rounded border-field" checked={enabled} onChange={(event) => onEnabled(event.target.checked)} />
+                <span>
+                    Esta sede tiene un horario de atención
+                    <span className="block text-xs text-ink-muted">Sin horario, la sede no se limita y la Agenda usa su escala habitual (8:00 a. m. – 6:00 p. m.). Con horario, la Agenda lo dibuja y solo se ofrecen citas que terminan antes del cierre.</span>
+                </span>
+            </label>
+
+            {enabled && (
+                <div className="mt-3 divide-y divide-line rounded-lg border border-line">
+                    {days.map((day) => {
+                        const label = DAYS.find(([weekday]) => weekday === day.weekday)[1];
+
+                        return (
+                            <div key={day.weekday} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2">
+                                <label className="flex w-full items-center gap-2 text-sm font-medium text-ink sm:w-36">
+                                    <input type="checkbox" className="size-4 rounded border-field" checked={day.open} onChange={(event) => edit(day.weekday, { open: event.target.checked })} />
+                                    {label}
+                                </label>
+                                {day.open ? (
+                                    <span className="flex flex-wrap items-center gap-1.5">
+                                        <TimeField compact aria-label={`${label}: apertura`} className="min-w-[7.5rem] flex-1 sm:w-[9.5rem] sm:flex-none" value={day.opens} onChange={(time) => edit(day.weekday, { opens: time })} />
+                                        <span className="text-ink-muted" aria-hidden="true">–</span>
+                                        <TimeField compact aria-label={`${label}: cierre`} className="min-w-[7.5rem] flex-1 sm:w-[9.5rem] sm:flex-none" value={day.closes} onChange={(time) => edit(day.weekday, { closes: time })} />
+                                    </span>
+                                ) : (
+                                    <span className="text-sm text-ink-muted">Cerrada</span>
+                                )}
+                            </div>
+                        );
+                    })}
+                    <div className="px-3 py-2">
+                        <button type="button" onClick={copyFirstOpen} className="text-xs font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary">
+                            Usar el primer horario en todos los días abiertos
+                        </button>
+                    </div>
+                </div>
+            )}
+            <InputError message={error} className="mt-1" />
+        </fieldset>
+    );
+}
 
 function LocationModal({ location, services, onClose }) {
     const editing = Boolean(location?.id);
@@ -32,8 +108,12 @@ function LocationModal({ location, services, onClose }) {
         // «Todos los servicios» is the flag, not a list: it is on when no service is chosen one by one (the server ignores any list while it is on).
         service_ids: location?.offersAllServices ? [] : (location?.serviceIds ?? []),
         offers_all_services: location ? Boolean(location.offersAllServices) : false,
+        // The hours: `has_hours` false = none configured; the week below is what is sent when it is true (see `transform`).
+        has_hours: Boolean(location?.hours),
+        week: draftFrom(location?.hours),
     });
     const { data, setData, errors } = form;
+    form.transform(({ week, ...rest }) => ({ ...rest, hours: rest.has_hours ? week.filter((day) => day.open).map((day) => ({ weekday: day.weekday, opens_at: day.opens, closes_at: day.closes })) : [] }));
     const serviceOptions = services.map((service) => ({ value: service.id, label: service.isActive ? service.name : `${service.name} (inactivo)`, disabled: !service.isActive && !data.service_ids.includes(service.id) }));
 
     const submit = (event) => {
@@ -78,6 +158,7 @@ function LocationModal({ location, services, onClose }) {
                         <Textarea id="location_notes" rows={2} className="mt-1" value={data.notes} maxLength={500} onChange={(e) => setData('notes', e.target.value)} />
                         <InputError message={errors.notes} className="mt-1" />
                     </div>
+                    <HoursEditor enabled={data.has_hours} onEnabled={(value) => setData('has_hours', value)} days={data.week} onChange={(week) => setData('week', week)} error={errors.hours ?? errors['hours.0.opens_at'] ?? errors['hours.0.closes_at']} />
                     <div>
                         <InputLabel htmlFor="location_services" value="Servicios que ofrece" />
                         <p className="mt-0.5 mb-2 text-xs text-ink-muted">«Todos los servicios» incluye los que crees más adelante. Si excluyes alguno, la sede ofrece solo los que quedan. Los horarios de cada profesional por sede se eligen en Profesionales.</p>

@@ -5,6 +5,7 @@ import Badge from '@/Components/Badge';
 import { channelIcon } from '@/config/chatbots';
 import { handlingStates, messageStatuses } from '@/config/conversations';
 import ChatActions from './ChatActions';
+import ContextPanel from './ContextPanel';
 import { SimulationBar, StatusSimulator } from './DemoTools';
 import Composer from './Composer';
 import FeedbackDialog from './FeedbackDialog';
@@ -167,6 +168,7 @@ export default function ChatPanel({ selected, backHref, agents }) {
             )}
             {selected.simulate && <SimulationBar conversationId={selected.id} />}
             <ChatActions selected={selected} agents={agents} />
+            <ContextPanel key={`context-${selected.id}`} selected={selected} />
             <Operations operations={selected.operations} tools={selected.tools} />
 
             <div ref={log} className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-canvas/60 p-3 sm:p-4" role="log" aria-label="Mensajes de la conversación">

@@ -34,6 +34,10 @@ return [
 
     /* Messages of the conversation sent to the workflow as context, and the longest reply accepted (WhatsApp allows 4096). */
     'history_messages' => 10,
+
+    /* Messages sent as history while the conversation has just come back from a person (what the agent asked and the customer answered must be inside). */
+    'resume_history_messages' => 40,
+
     'max_reply' => 4000,
 
     /* Seconds the run-scoped token given to a workflow (see App\Services\ExecutionAccess) stays valid; it also dies when the execution ends. */

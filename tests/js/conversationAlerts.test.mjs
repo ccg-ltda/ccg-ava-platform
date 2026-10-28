@@ -48,3 +48,13 @@ test('after failures the next question waits longer, never shorter, and is cappe
     assert.equal(nextDelay(15, 99, true), 5 * 60 * 1000);
     assert.equal(nextDelay(1, 0, false), 5000); // never faster than every 5 seconds
 });
+
+test('a handoff to a person is announced discreetly, once per conversation, and wins over plain messages', () => {
+    const one = describeEvents([{ conversationId: 7, kind: 'handoff' }, { conversationId: 9, kind: 'message', channel: 'whatsapp', support: false, count: 2 }]);
+    assert.deepEqual(one, { title: 'Una conversación necesita tu atención', detail: null, conversationId: 7 });
+
+    const many = describeEvents([{ conversationId: 7, kind: 'handoff' }, { conversationId: 8, kind: 'handoff' }]);
+    assert.equal(many.title, '2 conversaciones necesitan tu atención');
+    assert.equal(many.conversationId, null);
+    assert.ok(!JSON.stringify(one).includes('mensaje'));
+});

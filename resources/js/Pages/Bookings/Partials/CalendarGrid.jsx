@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { byDay, collapseLanes, eventBox, halfHourMarks, HOUR_PX, hourRange, layoutDay, toneHue } from '@/lib/calendarLayout';
 import { dayLabel } from '@/config/bookings';
+import { agendaScale, closedSegments, clock } from '@/lib/agendaHours';
 
 const range = (item) => (item.endLabel ? `${item.timeLabel}–${item.endLabel}` : item.timeLabel);
 
@@ -10,9 +11,13 @@ const range = (item) => (item.endLabel ? `${item.timeLabel}–${item.endLabel}` 
  * Appointments that overlap share the width of ONE column (a clinic with many professionals does not get a column each), the color says who, and the lighter
  * band under an appointment is the rest the service reserves after it. Wider than the screen scrolls INSIDE the calendar, never the page.
  */
-export default function CalendarGrid({ appointments, days, today, onSelect, onSelectMany }) {
+export default function CalendarGrid({ appointments, days, today, onSelect, onSelectMany, locationHours = null, place = null }) {
     const grouped = useMemo(() => byDay(appointments), [appointments]);
-    const { startHour, endHour } = useMemo(() => hourRange(appointments), [appointments]);
+    // The scale follows the opening hours of the sede (or the widest range of the sedes shown); an appointment outside them still widens it so nothing is cut, and without
+    // configured hours the usual 8 to 18 stays.
+    const scale = useMemo(() => agendaScale(locationHours, place, days), [locationHours, place, days]);
+    const { startHour, endHour } = useMemo(() => hourRange(appointments, { from: scale.from, to: scale.to }), [appointments, scale]);
+    const closed = useMemo(() => Object.fromEntries(days.map((day) => [day, closedSegments(locationHours, place, day, startHour, endHour)])), [locationHours, place, days, startHour, endHour]);
     const marks = useMemo(() => halfHourMarks(startHour, endHour), [startHour, endHour]);
     const height = (endHour - startHour) * HOUR_PX;
     const columns = useMemo(() => Object.fromEntries(days.map((day) => [day, collapseLanes(layoutDay(grouped[day] ?? []), days.length > 1 ? 2 : 4)])), [grouped, days]);
@@ -45,6 +50,16 @@ export default function CalendarGrid({ appointments, days, today, onSelect, onSe
                         <div key={day} className={`relative border-l border-line ${day === today ? 'bg-primary-soft/20' : ''}`} style={{ height }} data-day={day}>
                             {marks.map((mark, index) => (
                                 <div key={mark.minute} className={`absolute inset-x-0 border-t ${mark.hour ? 'border-line' : 'border-dashed border-line/60'}`} style={{ top: index * (HOUR_PX / 2) }} aria-hidden="true" />
+                            ))}
+
+                            {closed[day].map(([from, to]) => (
+                                <div
+                                    key={`closed-${from}`}
+                                    className="absolute inset-x-0 z-0 bg-ink/[0.06] dark:bg-white/[0.05]"
+                                    style={{ top: ((from - startHour * 60) / 60) * HOUR_PX, height: ((to - from) / 60) * HOUR_PX, backgroundImage: 'repeating-linear-gradient(135deg, transparent 0 6px, rgb(128 128 128 / 0.12) 6px 7px)' }}
+                                    title={`Fuera del horario de atención (${clock(from)}–${clock(to)})`}
+                                    aria-hidden="true"
+                                />
                             ))}
 
                             {columns[day].visible.map((item) => {

@@ -8,6 +8,7 @@ import PageHeader from '@/Components/PageHeader';
 import PrimaryButton from '@/Components/PrimaryButton';
 import { ReadOnlyWorkspaceNotice, WorkspaceViewSelector } from '@/Components/WorkspaceViewSelector';
 import AppLayout from '@/Layouts/AppLayout';
+import ApiCallHistory from './Partials/ApiCallHistory';
 import AutomationCard from './Partials/AutomationCard';
 import ChannelCard from './Partials/ChannelCard';
 import ChannelIntegrationModal from './Partials/ChannelIntegrationModal';
@@ -201,6 +202,8 @@ export default function Index({ channels, providers = [], integrations, catalog,
                     </div>
                 )}
             </section>
+
+            {!readOnly && <ApiCallHistory />}
 
             {configuring && <ChannelIntegrationModal key={configuring.key} channel={configuring} onClose={() => setConfiguring(null)} />}
             {configuringProvider && <ChannelIntegrationModal key={configuringProvider.key} channel={configuringProvider} routeName="integrations.providers.update" onClose={() => setConfiguringProvider(null)} />}

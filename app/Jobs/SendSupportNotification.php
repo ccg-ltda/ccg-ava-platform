@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Integrations\SafeHttpTarget;
 use App\Integrations\UnsafeTarget;
 use App\Integrations\WebType;
+use App\Observability\ApiCallRecorder;
 use App\Services\OperationalAlert;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -50,13 +51,15 @@ class SendSupportNotification implements ShouldQueue
         }
 
         try {
-            $response = $target->client($target->resolve($url), (int) config('support.notify_timeout'), $headers)->asJson()->post($url, [
+            $pinned = $target->resolve($url);
+            // A platform call (no Workspace): metadata only, no headers (the secret) and no body.
+            $response = app(ApiCallRecorder::class)->call('support_notify', 'notify', 'POST', strtok($url, '?') ?: $url, fn () => $target->client($pinned, (int) config('support.notify_timeout'), $headers)->asJson()->post($url, [
                 'event' => $this->event,
                 'event_id' => $this->eventId(),
                 'conversation_id' => $this->conversationId,
                 'url' => route('conversations.index', ['conversation' => $this->conversationId]),
                 'at' => now()->toIso8601String(),
-            ]);
+            ]), [], null, ['resource_type' => 'conversation', 'resource_id' => $this->conversationId], false);
         } catch (UnsafeTarget|ConnectionException $e) {
             throw new RuntimeException('support_notification_unreachable');
         }

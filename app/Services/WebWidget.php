@@ -10,6 +10,7 @@ use App\Models\ChatbotChannel;
 use App\Models\ChatbotExecution;
 use App\Models\Conversation;
 use App\Models\Message;
+use App\Observability\ApiCallRecorder;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -201,13 +202,15 @@ class WebWidget
         }
 
         try {
-            $response = $this->target->client($this->target->resolve($url), $timeout, $headers)->asJson()->post($url, [
+            $pinned = $this->target->resolve($url);
+            // The Workspace's own webhook (older path): metadata only, never the visitor's message or the webhook secret.
+            $response = app(ApiCallRecorder::class)->call('web_widget', 'ask_automation', 'POST', strtok($url, '?') ?: $url, fn () => $this->target->client($pinned, $timeout, $headers)->asJson()->post($url, [
                 'event' => 'message',
                 'channel' => 'web',
                 'chatbot_id' => $channel->chatbot_id,
                 'session_id' => $sessionId,
                 'message' => $message,
-            ]);
+            ]), [], null, ['workspace_id' => $channel->workspace_id], false);
         } catch (UnsafeTarget|ConnectionException) {
             return ['status' => 504, 'message' => 'El asistente no está disponible en este momento.'];
         } catch (Throwable) {

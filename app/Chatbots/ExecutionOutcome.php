@@ -10,11 +10,13 @@ final class ExecutionOutcome
         public readonly string $code,
         public readonly ?string $reply = null,
         public readonly bool $handoff = false,
+        /** @var array<string, mixed>|null the conversational state the workflow proposes (facts, steps, next_step, operations, summary) */
+        public readonly ?array $context = null,
     ) {}
 
-    public static function answered(?string $reply, bool $handoff): self
+    public static function answered(?string $reply, bool $handoff, ?array $context = null): self
     {
-        return new self('answered', 'ok', $reply, $handoff);
+        return new self('answered', 'ok', $reply, $handoff, $context);
     }
 
     public static function temporary(string $code): self

@@ -94,6 +94,7 @@ export default function ConversationAlerts() {
     const config = page.props.conversationAlerts;
     const toast = useToast();
     const cursor = useRef(null);
+    const handoffCursor = useRef(null);
     const failures = useRef(0);
     const audio = useRef(null);
     const poll = config?.poll;
@@ -150,14 +151,16 @@ export default function ConversationAlerts() {
 
         const tick = async () => {
             try {
-                const query = cursor.current === null ? '' : `?after=${cursor.current}`;
+                const query = cursor.current === null ? '' : `?after=${cursor.current}&n=${handoffCursor.current ?? 0}`;
                 const body = await jsonRequest(route('conversations.alerts', undefined, false) + query);
                 const first = cursor.current === null;
                 cursor.current = body.cursor;
+                handoffCursor.current = body.handoffCursor ?? 0;
                 failures.current = 0;
                 setPending(body.pending ?? 0);
 
-                const next = first ? null : describeEvents(body.events);
+                // A conversation that moved to a person (shown once per real transition) wins over the message feed.
+                const next = first ? null : describeEvents([...(body.handoffs ?? []), ...(body.events ?? [])]);
 
                 if (!stopped && next && !alreadyOpen(next, window.location.search, document.visibilityState === 'visible')) show(next);
             } catch {

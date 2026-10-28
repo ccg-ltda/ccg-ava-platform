@@ -4,6 +4,8 @@ namespace App\Chatbots;
 
 use App\Integrations\SafeHttpTarget;
 use App\Integrations\UnsafeTarget;
+use App\Models\Chatbot;
+use App\Observability\ApiCallRecorder;
 use Illuminate\Http\Client\ConnectionException;
 use Throwable;
 
@@ -46,8 +48,12 @@ class N8nExecutor implements ChatbotExecutor
             'X-Ava-Signature' => 'sha256='.hash_hmac('sha256', "{$timestamp}.{$body}", $secret),
         ];
 
+        $workspaceId = Chatbot::whereKey((int) ($payload['chatbot']['id'] ?? 0))->value('workspace_id');
+
         try {
-            $response = $this->target->client($this->target->resolve($url), (int) config('n8n.timeout'), $headers)->withBody($body, 'application/json')->post($url);
+            $pinned = $this->target->resolve($url);
+            // Metadata only: the payload is a customer conversation, so no body of the request or the answer is kept.
+            $response = app(ApiCallRecorder::class)->call('n8n', 'run_workflow', 'POST', $url, fn () => $this->target->client($pinned, (int) config('n8n.timeout'), $headers)->withBody($body, 'application/json')->post($url), $headers, null, ['workspace_id' => $workspaceId, 'correlation_id' => $correlationId, 'resource_type' => 'workflow'], false);
         } catch (UnsafeTarget) {
             return ExecutionOutcome::permanent('unsafe_target');
         } catch (ConnectionException $e) {
@@ -100,6 +106,9 @@ class N8nExecutor implements ChatbotExecutor
             return ExecutionOutcome::permanent('invalid_response');
         }
 
-        return ExecutionOutcome::answered($reply === '' ? null : $reply, $handoff);
+        // Optional, additive: the conversational state the workflow proposes. A malformed `context` is ignored (the reply still counts), never half-applied.
+        $context = isset($json['context']) && is_array($json['context']) ? $json['context'] : null;
+
+        return ExecutionOutcome::answered($reply === '' ? null : $reply, $handoff, $context);
     }
 }

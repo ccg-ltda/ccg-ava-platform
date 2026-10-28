@@ -56,6 +56,12 @@ class SaveLocationRequest extends FormRequest
             'notes' => ['nullable', 'string', 'max:500'],
             // «Todos los servicios» is the flag (no list, no ids); otherwise at least one service of this Workspace. With the flag on, a list is ignored.
             'offers_all_services' => ['nullable', 'boolean'],
+            // Opening hours: `has_hours` false = no hours configured (the sede is not restricted); true = the open days listed, every other day closed. Absent = unchanged.
+            'has_hours' => ['nullable', 'boolean'],
+            'hours' => ['nullable', 'array', 'max:7'],
+            'hours.*.weekday' => ['required_with:hours', 'integer', 'between:1,7', 'distinct'],
+            'hours.*.opens_at' => ['required_with:hours', 'date_format:H:i'],
+            'hours.*.closes_at' => ['required_with:hours', 'date_format:H:i'],
             'service_ids' => $this->boolean('offers_all_services') ? ['nullable', 'array'] : ['required', 'array', 'min:1'],
             'service_ids.*' => ['integer', 'distinct', Rule::exists('services', 'id')->where('workspace_id', $workspace->id)],
         ];
@@ -69,6 +75,16 @@ class SaveLocationRequest extends FormRequest
 
             if ($validator->errors()->isNotEmpty() || ! $workspace || ! app(Locations::class)->schemaReady()) {
                 return;
+            }
+
+            if ($this->boolean('has_hours')) {
+                if (! app(Locations::class)->hoursReady()) {
+                    $validator->errors()->add('hours', 'Falta aplicar la última migración de la base de datos para guardar horarios.');
+                } elseif (collect($this->input('hours', []))->isEmpty()) {
+                    $validator->errors()->add('hours', 'Marca al menos un día de atención o desactiva el horario de la sede.');
+                } elseif (collect($this->input('hours', []))->contains(fn ($row) => is_array($row) && ($row['opens_at'] ?? '') >= ($row['closes_at'] ?? ''))) {
+                    $validator->errors()->add('hours', 'En cada día, la hora de cierre debe ser posterior a la de apertura.');
+                }
             }
 
             $kept = $this->route('location') ? $workspace->locations()->whereKey($this->route('location'))->first()?->services()->pluck('services.id')->all() ?? [] : [];
@@ -97,6 +113,18 @@ class SaveLocationRequest extends FormRequest
         $text = fn (string $key) => filled($data[$key] ?? null) ? trim($data[$key]) : null;
 
         return ['name' => trim($data['name']), 'address' => $text('address'), 'city' => $text('city'), 'phone' => $text('phone'), 'notes' => $text('notes')] + (Schema::hasColumn('locations', 'offers_all_services') ? ['offers_all_services' => $this->offersAllServices()] : []);
+    }
+
+    /** Whether the form said anything about the hours (otherwise they stay as they are). */
+    public function hasHoursInput(): bool
+    {
+        return $this->has('has_hours');
+    }
+
+    /** @return list<array{weekday: int, opens_at: string, closes_at: string}> the open days (empty = no hours configured) */
+    public function hours(): array
+    {
+        return ! $this->boolean('has_hours') ? [] : collect($this->validated('hours') ?? [])->map(fn (array $row) => ['weekday' => (int) $row['weekday'], 'opens_at' => $row['opens_at'].':00', 'closes_at' => $row['closes_at'].':00'])->sortBy('weekday')->values()->all();
     }
 
     public function offersAllServices(): bool

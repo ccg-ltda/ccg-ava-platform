@@ -27,6 +27,7 @@ class ConversationControl
         private readonly ConversationAgents $agents,
         private readonly ModuleAccess $modules,
         private readonly SupportChannel $support,
+        private readonly ConversationContext $context,
     ) {}
 
     /**
@@ -50,6 +51,7 @@ class ConversationControl
 
             $before = $this->snapshot($locked);
             $this->move($locked, Conversation::PENDING, null, ['handoff_reason' => filled($reason) ? mb_substr(trim($reason), 0, 255) : null]);
+            $this->context->markHandoff($locked, 'requested', $reason);
             $moved = true;
 
             // Only the first request is an event; an automatic one (the assistant) is attributed to its source, never to a person.
@@ -59,6 +61,7 @@ class ConversationControl
         // CCG's support chat: the team is alerted once per request (the id of the alert carries the state version).
         if ($moved) {
             $this->support->notify('human_requested', $result);
+            $this->announceHandoff($result);
         }
 
         return $result;
@@ -81,6 +84,7 @@ class ConversationControl
 
             $before = $this->snapshot($locked);
             $this->move($locked, Conversation::PENDING, null, ['handoff_reason' => "La IA no pudo responder ({$code}). Atiende a esta persona."]);
+            $this->context->markHandoff($locked, 'requested', "La IA no pudo responder ({$code}).");
             $moved = true;
 
             return ['requested', $before];
@@ -88,9 +92,24 @@ class ConversationControl
 
         if ($moved) {
             $this->support->notify('human_requested', $result);
+            $this->announceHandoff($result);
         }
 
         return $moved;
+    }
+
+    /**
+     * The persisted notification of a real transition to a person (one per transition: the key carries the state version, so a repeated request or a retry can not add a second one).
+     * A message that arrives while it is already pending is NOT a transition and never gets here.
+     */
+    private function announceHandoff(Conversation $conversation): void
+    {
+        $conversation->loadMissing('chatbot.workspace');
+
+        app(Notifications::class)->notify(
+            $conversation->chatbot->workspace, 'conversation_pending', 'Una conversación necesita tu atención', null, '/conversations?c='.$conversation->id, 'view-conversations',
+            null, 'conversation', $conversation->id, 'conv:'.$conversation->id.':handoff:v'.$conversation->handling_version,
+        );
     }
 
     /** An agent takes the conversation (from the AI or from the pending queue). */
@@ -104,6 +123,7 @@ class ConversationControl
             $this->assertOpen($locked);
             $before = $this->snapshot($locked);
             $this->move($locked, Conversation::HUMAN, $agent->id);
+            $this->context->markHandoff($locked, 'taken');
 
             return ['taken', $before];
         });
@@ -125,6 +145,7 @@ class ConversationControl
 
             $before = $this->snapshot($locked);
             $this->move($locked, Conversation::HUMAN, $assignee->id);
+            $this->context->markHandoff($locked, 'taken');
 
             return ['assigned', $before];
         });
@@ -145,6 +166,8 @@ class ConversationControl
             $this->assertOperator($locked, $actor, $manage);
             $before = $this->snapshot($locked);
             $this->move($locked, Conversation::AI, null);
+            // The state the workflow resumes from stays exactly as it was (facts the customer and the agent gave included); this only marks that a person handed it back.
+            $this->context->markHandoff($locked, 'returned');
 
             return ['returned', $before];
         });
@@ -158,9 +181,10 @@ class ConversationControl
             $this->assertOperator($locked, $actor, $manage);
             $before = $this->snapshot($locked);
             // Resolving a client's SUPPORT request ends its session for good (who, when and why are kept, and the person's next message opens a new conversation).
-            $this->move($locked, Conversation::RESOLVED, $locked->assigned_user_id, ['resolved_at' => now()] + (app(SupportDesk::class)->isRequest($locked) ? $this->closing($locked, 'agent', $actor) : []));
+            $support = app(SupportDesk::class)->isRequest($locked);
+            $this->move($locked, Conversation::RESOLVED, $locked->assigned_user_id, ['resolved_at' => now()] + ($support ? $this->closing($locked, 'agent', $actor) : []));
 
-            return ['resolved', $before];
+            return [$support ? 'closed_agent' : 'resolved', $before];
         });
     }
 
@@ -186,6 +210,31 @@ class ConversationControl
             $closed = true;
 
             return ['closed_'.$reason, $before];
+        });
+
+        return $closed;
+    }
+
+    /**
+     * Resolves an ORDINARY conversation that went quiet (the contact's next message reopens it with the AI, as with any resolution). `$allowed` is asked again on the fresh row under
+     * the lock, so activity or an AI execution that got there first keeps it open; an already resolved one is left alone (idempotent). Returns whether THIS call closed it.
+     *
+     * @param  Closure(Conversation): bool  $allowed
+     */
+    public function resolveForInactivity(Conversation $conversation, Closure $allowed): bool
+    {
+        $closed = false;
+
+        $this->change($conversation, function (Conversation $locked) use ($allowed, &$closed) {
+            if ($locked->handling === Conversation::RESOLVED || $locked->closed_at !== null || ! $allowed($locked)) {
+                return null;
+            }
+
+            $before = $this->snapshot($locked);
+            $this->move($locked, Conversation::RESOLVED, $locked->assigned_user_id, ['resolved_at' => now()]);
+            $closed = true;
+
+            return ['closed_inactivity', $before];
         });
 
         return $closed;
@@ -287,7 +336,8 @@ class ConversationControl
         match ($action) {
             'requested' => $this->audit->recordForActor($action, 'conversation', $conversation->id, $label, $changes, $workspace, 'Asistente (automático)'),
             'reopened' => $this->audit->recordForActor($action, 'conversation', $conversation->id, $label, $changes, $workspace, 'Contacto (mensaje nuevo)'),
-            'closed_inactivity' => $this->audit->recordForActor($action, 'conversation', $conversation->id, $label, $changes, $workspace, 'Sistema (inactividad de 4 minutos)'),
+            // The clock closed it: always the system's event, never the person whose request happened to run the check (their poll is not their action).
+            'closed_inactivity' => $this->audit->system($action, 'conversation', $conversation->id, $label, $changes, $workspace, 'Sistema (inactividad)'),
             default => $this->audit->record($action, 'conversation', $conversation->id, $label, $changes, $workspace),
         };
     }

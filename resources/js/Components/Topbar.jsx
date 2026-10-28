@@ -9,12 +9,14 @@ import { useBrandShort } from '@/Hooks/useBrand';
 import Avatar from './Avatar';
 import Badge from './Badge';
 import HelpPanel from './HelpPanel';
+import NotificationBell from './NotificationBell';
 
 /** Navy top bar: brand, the single "General" tab, user menu and logout. Decoration stays behind the controls. */
 export default function Topbar({ user, role, onMenu }) {
     const access = useAccess();
     const brand = useBrandShort();
     const hasHelp = Boolean(usePage().props.help);
+    const hasNotifications = Boolean(usePage().props.notifications);
     const [helpOpen, setHelpOpen] = useState(false);
 
     return (
@@ -44,6 +46,8 @@ export default function Topbar({ user, role, onMenu }) {
             </nav>
 
             <div className="flex-1" />
+
+            {hasNotifications && <NotificationBell />}
 
             {hasHelp && (
                 <>

@@ -131,7 +131,7 @@ class SupportDesk
 
         // The session this browser was showing ended (the person, the team or the clock closed it): it is told so, once, and the next message starts a NEW one.
         if ($session !== null && ($conversation === null || $conversation->id !== $session) && ($ended = $this->ended($user, $workspace, $session))) {
-            return ['state' => 'closed', 'label' => SupportSessions::notice($ended->closed_reason), 'agent' => null, 'session' => $ended->id, 'reason' => $ended->closed_reason, 'messages' => $this->messages($ended)];
+            return ['state' => 'closed', 'label' => SupportSessions::notice($ended->closed_reason, app(ConversationAutoClose::class)->minutesFor($ended)), 'agent' => null, 'session' => $ended->id, 'reason' => $ended->closed_reason, 'messages' => $this->messages($ended)];
         }
 
         if (! $conversation) {
@@ -227,9 +227,17 @@ class SupportDesk
             $this->support->notify('new_conversation', $conversation);
         }
 
-        // A support request is for people: it never waits on an assistant. «Pending» means exactly that — a person has been asked for, nobody has taken it yet.
         if ($conversation->handling === Conversation::AI) {
-            $this->control->requestHuman($conversation, 'Solicitud de soporte desde el panel de un cliente.');
+            $executions = app(ChatbotExecutions::class);
+
+            // Only when the administrative Workspace turned it on: the destination chatbot is ACTIVE, has an authorized platform workflow and the platform n8n is configured (the same
+            // checks as any other channel). Then the AI attends first, with Ava controlling the execution; a failure, a timeout or the workflow's own request moves it to a person.
+            if ($executions->available($chatbot)) {
+                $executions->schedule($conversation->load('chatbot.workspace.organization'), $recorded['message']);
+            } else {
+                // By default a support request is for people. «Pending» means exactly that — a person has been asked for, nobody has taken it yet.
+                $this->control->requestHuman($conversation, 'Solicitud de soporte desde el panel de un cliente.');
+            }
         }
 
         return ['duplicate' => false];

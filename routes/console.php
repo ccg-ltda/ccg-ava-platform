@@ -1,5 +1,6 @@
 <?php
 
+use App\Observability\ApiCallRecorder;
 use App\Support\ScheduledCommandMonitor;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -35,3 +36,6 @@ ScheduledCommandMonitor::watch(Schedule::command('subscriptions:expire-trials')-
 // Looks for public sign-ups that were PAID but not provisioned (read only: it never retries, charges or creates anything). It exits with failure while there is
 // one, which the monitor counts and `integrations:diagnose` blocks on; repeating the provisioning (`signup:reconcile --retry`) stays a deliberate act of a person.
 ScheduledCommandMonitor::watch(Schedule::command('signup:reconcile')->everyFifteenMinutes()->withoutOverlapping()->onOneServer(), 'signup-reconcile');
+
+// Deletes the redacted API call records older than the retention window (ApiCallRecorder::RETENTION_DAYS). Idempotent.
+Schedule::call(fn () => app(ApiCallRecorder::class)->prune())->name('api-calls-prune')->daily();
