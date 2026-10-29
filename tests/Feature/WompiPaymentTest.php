@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Mail\SignupCodeMail;
+use App\Models\ApiCallLog;
 use App\Models\Module;
 use App\Models\ModuleCategory;
 use App\Models\Organization;
@@ -354,5 +355,43 @@ class WompiPaymentTest extends TestCase
         foreach ([self::INTEGRITY, self::EVENTS_SECRET] as $secret) {
             $this->assertStringNotContainsString($secret, $html);
         }
+    }
+
+    public function test_the_api_history_of_wompi_keeps_metadata_only_never_the_payer_data(): void
+    {
+        $request = $this->awaitingPayment();
+        $this->contract();
+        $this->fakeWompi(Http::response(['data' => [
+            'id' => '1234-1-1', 'status' => 'APPROVED', 'amount_in_cents' => 4990000, 'currency' => 'COP', 'reference' => $request->public_id,
+            'customer_email' => 'pagador@privado.example', 'customer_data' => ['full_name' => 'Persona Pagadora', 'phone_number' => '3001112233'],
+            'payment_method' => ['type' => 'CARD', 'extra' => ['last_four' => '4242']],
+        ]]));
+
+        $this->send($this->event($request))->assertOk();
+
+        $log = ApiCallLog::where('integration', 'wompi')->where('operation', 'get_transaction')->latest('id')->firstOrFail();
+        $this->assertSame(200, $log->status_code);
+        $this->assertSame('success', $log->outcome);
+        $this->assertNull($log->response_body);
+        $this->assertNull($log->request_body);
+        $dump = json_encode($log->getAttributes());
+        foreach (['pagador@privado.example', 'Persona Pagadora', '3001112233', '4242', self::EVENTS_SECRET, self::INTEGRITY] as $private) {
+            $this->assertStringNotContainsString($private, $dump);
+        }
+    }
+
+    public function test_a_timeout_asking_wompi_is_recorded_as_a_timeout_and_asks_for_a_retry(): void
+    {
+        $request = $this->awaitingPayment();
+        $this->contract();
+        $this->fakeWompi(fn () => throw new ConnectionException('cURL error 28: Operation timed out'));
+
+        $this->send($this->event($request))->assertStatus(503);
+
+        $log = ApiCallLog::where('integration', 'wompi')->latest('id')->firstOrFail();
+        $this->assertSame('timeout', $log->outcome);
+        $this->assertNull($log->status_code);
+        $this->assertSame('awaiting_payment', $request->fresh()->status);
+        $this->assertSame('lookup_failed', PaymentEvent::latest('id')->value('outcome'));
     }
 }

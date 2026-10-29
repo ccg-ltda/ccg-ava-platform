@@ -30,7 +30,7 @@ class WompiConnection
         $url = $base.'/merchants/'.rawurlencode($row->public_key);
 
         try {
-            $response = $this->recorder->call('wompi', 'validate_merchant', 'GET', $url, fn () => Http::timeout((int) config('wompi.timeout_seconds'))->acceptJson()->get($url), ['Accept' => 'application/json'], null, ['resource_type' => 'payment_settings', 'resource_id' => $row->id]);
+            $response = $this->recorder->call('wompi', 'validate_merchant', 'GET', $url, fn () => Http::timeout((int) config('wompi.timeout_seconds'))->acceptJson()->get($url), ['Accept' => 'application/json'], null, ['resource_type' => 'payment_settings', 'resource_id' => $row->id], false); // metadata only: the merchant answer carries business data
         } catch (Throwable $e) {
             return $this->store($row, false, str_contains($e->getMessage(), 'cURL error 28') ? 'Wompi no respondió a tiempo.' : 'No se pudo conectar con Wompi.');
         }

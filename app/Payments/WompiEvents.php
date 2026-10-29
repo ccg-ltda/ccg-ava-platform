@@ -143,7 +143,7 @@ class WompiEvents
     {
         try {
             $url = $this->config->apiUrl().'/transactions/'.rawurlencode($id);
-            $response = app(ApiCallRecorder::class)->call('wompi', 'get_transaction', 'GET', $url, fn () => Http::timeout((int) config('wompi.timeout_seconds'))->acceptJson()->get($url), ['Accept' => 'application/json'], null, ['resource_type' => 'transaction']);
+            $response = app(ApiCallRecorder::class)->call('wompi', 'get_transaction', 'GET', $url, fn () => Http::timeout((int) config('wompi.timeout_seconds'))->acceptJson()->get($url), ['Accept' => 'application/json'], null, ['resource_type' => 'transaction'], false); // metadata only: the transaction carries the payer's name, email and phone
         } catch (ConnectionException) {
             return null;
         }
