@@ -50,11 +50,11 @@ class AiExecutionLimitTest extends TestCase
         parent::setUp();
 
         $this->app->instance(SafeHttpTarget::class, new SafeHttpTarget(fn (string $host) => ['93.184.216.34']));
-        config(['n8n.execution_url' => 'https://n8n.platform.example.com/webhook', 'n8n.secret' => 'n8n-shared-SECRET-123', 'services.meta.app_secret' => 'meta-app-SECRET-456', 'services.meta.webhook_verify_token' => 'verify-me']);
+        config(['n8n.legacy_environment' => 'all', 'n8n.execution_url' => 'https://n8n.platform.example.com/webhook', 'n8n.secret' => 'n8n-shared-SECRET-123', 'services.meta.app_secret' => 'meta-app-SECRET-456', 'services.meta.webhook_verify_token' => 'verify-me']);
         Http::preventStrayRequests();
         Queue::fake();
 
-        config(['n8n.workflows.support' => ['name' => 'Soporte', 'n8n_workflow_id' => 'wf_support', 'webhook_path' => 'support-v1', 'version' => '1']]);
+        config(['n8n.workflows.support' => ['name' => 'Soporte', 'n8n_workflow_id' => 'wf_support', 'webhook_path' => 'support-v1', 'version' => '1', 'workspaces' => ['*']]]);
         [$this->acme, $this->acmeBot] = $this->tenant('ACME', '1000001');
         [$this->beta, $this->betaBot] = $this->tenant('BETA', '1000002');
 

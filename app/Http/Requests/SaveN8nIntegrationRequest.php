@@ -31,7 +31,7 @@ class SaveN8nIntegrationRequest extends FormRequest
     /** @return array<string, string> */
     public function attributes(): array
     {
-        return ['base_url' => 'la URL de tu n8n', 'api_key' => 'la API Key de n8n'];
+        return ['base_url' => 'la URL de tu n8n', 'api_key' => 'la API Key de n8n', 'execution_secret' => 'el secreto de ejecución'];
     }
 
     /** @return array<string, string> */

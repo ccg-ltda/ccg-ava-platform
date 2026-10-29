@@ -300,6 +300,11 @@ class IntegrationsDiagnoseCommand extends Command
 
     private function n8n(): void
     {
+        // Each Workspace runs its conversations on its OWN n8n connection (Integraciones); only counts and where the configuration comes from are shown, never a value.
+        $own = Integration::where('type', 'n8n')->where('is_active', true)->get()->filter(fn (Integration $i) => filled($i->secrets['execution_secret'] ?? null))->count();
+        $this->line("         Workspaces con n8n propio para ejecutar conversaciones: {$own}.");
+        $this->line('         Variables heredadas N8N_EXECUTION_*: alcance «'.config('n8n.legacy_environment').'» (solo se usan donde el Workspace no tiene conexión propia).');
+
         $url = config('n8n.execution_url');
         $secret = filled(config('n8n.secret'));
 

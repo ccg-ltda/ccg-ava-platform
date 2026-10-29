@@ -14,9 +14,10 @@ import TextInput from '@/Components/TextInput';
  */
 export default function N8nConfigModal({ connection, onClose }) {
     const editing = connection.state !== 'not_configured';
-    const form = useForm({ base_url: connection.form?.base_url ?? '', api_key: '' });
+    const form = useForm({ base_url: connection.form?.base_url ?? '', api_key: '', execution_secret: '' });
     const { data, setData, errors } = form;
     const keyStored = Boolean(connection.form?.api_key_set);
+    const executionStored = Boolean(connection.form?.execution_secret_set);
 
     const save = (andTest) => (event) => {
         event.preventDefault();
@@ -37,7 +38,7 @@ export default function N8nConfigModal({ connection, onClose }) {
             <form onSubmit={save(false)} noValidate className="flex min-h-0 flex-1 flex-col">
                 <header className="border-b border-line px-5 py-4 sm:px-8 sm:py-5">
                     <h2 className="text-lg font-bold text-ink">{editing ? 'Cambiar la configuración de n8n' : 'Configurar n8n'}</h2>
-                    <p className="mt-1 text-sm text-ink-muted">Con estos dos datos Ava podrá comunicarse con tu instancia de n8n. Son propios de este Workspace.</p>
+                    <p className="mt-1 text-sm text-ink-muted">Con estos datos Ava se comunica con tu instancia de n8n y ejecuta en ella las conversaciones de este Workspace. Son propios de este Workspace: no se comparten con ningún otro.</p>
                 </header>
 
                 <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-5 py-6 sm:px-8">
@@ -67,6 +68,24 @@ export default function N8nConfigModal({ connection, onClose }) {
                             {keyStored && <p className="mt-1 text-xs text-ink-muted">Escribe una clave nueva solo para reemplazarla. Nunca se muestra la guardada.</p>}
                         </div>
 
+                        <div className="md:col-span-2">
+                            <InputLabel htmlFor="n8n_execution_secret" value="Secreto de ejecución (para las conversaciones)" />
+                            <TextInput
+                                id="n8n_execution_secret"
+                                type="password"
+                                className="mt-1"
+                                value={data.execution_secret}
+                                onChange={(e) => setData('execution_secret', e.target.value)}
+                                placeholder={executionStored ? '•••••••• (guardado)' : 'Mínimo 16 caracteres, sin espacios'}
+                                invalid={Boolean(errors.execution_secret)}
+                                maxLength={256}
+                                autoComplete="new-password"
+                                aria-describedby="n8n_execution_secret_help"
+                            />
+                            <InputError message={errors.execution_secret} className="mt-1" />
+                            <p id="n8n_execution_secret_help" className="mt-1.5 text-xs text-ink-muted">Elige un texto largo y aleatorio y pégalo también en tu workflow: Ava firma con él cada solicitud (cabecera X-Ava-Signature) y tu workflow la verifica. Los workflows se llaman en {data.base_url ? data.base_url.replace(/\/+$/, '') : 'tu-instancia'}/webhook/…</p>
+                            {executionStored && <p className="mt-1 text-xs text-ink-muted">Escribe uno nuevo solo para reemplazarlo. Nunca se muestra el guardado. Sin este secreto, las conversaciones de este Workspace no se ejecutan en tu n8n.</p>}
+                        </div>
                     </div>
 
                     <Alert tone="info">

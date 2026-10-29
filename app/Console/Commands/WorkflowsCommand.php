@@ -72,7 +72,7 @@ class WorkflowsCommand extends Command
 
     private function list(ChatbotWorkflows $workflows): int
     {
-        $this->table(['workflow', 'n8n id', 'path'], collect($workflows->catalog())->map(fn ($entry, $key) => [$key, $entry['n8n_workflow_id'] ?? '', $entry['webhook_path'] ?? ''])->values()->all());
+        $this->table(['workflow', 'n8n id', 'path', 'habilitado', 'Workspaces'], collect($workflows->catalog())->map(fn ($entry, $key) => [$key, $entry['n8n_workflow_id'] ?? '', $entry['webhook_path'] ?? '', ($entry['enabled'] ?? true) === true ? 'sí' : 'no', implode(', ', $workflows->audience((string) $key)) ?: 'solo el administrativo'])->values()->all());
         $this->table(['workspace', 'chatbot', 'workflow', 'activo'], Chatbot::with('workspace')->whereNotNull('workflow_key')->orderBy('workspace_id')->orderBy('id')->get()
             ->map(fn (Chatbot $c) => [$c->workspace->code, "#{$c->id} {$c->name}", $c->workflow_key, $c->is_active ? 'sí' : 'no'])->all());
 

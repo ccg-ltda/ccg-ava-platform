@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Audit\AuditLogger;
 use App\Chatbots\ResolvedWorkflow;
 use App\Models\Chatbot;
+use App\Models\Workspace;
 use InvalidArgumentException;
 
 /**
@@ -12,6 +13,9 @@ use InvalidArgumentException;
  * `workflows`, reviewed and deployed with the code; the assignment is `chatbots.workflow_key`, the ONLY source of truth.
  * Being a column of the chatbot, it can only belong to that chatbot's own Workspace, there is at most one per chatbot and
  * it goes away with the chatbot. Nothing here comes from a request.
+ *
+ * Which Workspaces may use an entry is part of the catalog too (`workspaces` in config/n8n.php: a list of Workspace codes, or `*` for all of them); an entry
+ * without it is reserved to the administrative Workspace. The chatbot's own Workspace is what is checked, never anything the browser sends.
  *
  * What the database cannot hold (the key must be in a catalog that lives in code) is checked on every path:
  *  - when WRITING: `assign()` and the `saving` hook of `Chatbot` (any Eloquent write that sets the key) refuse a key that
@@ -28,7 +32,7 @@ class ChatbotWorkflows
     /** The authorized workflow of the chatbot, or null when it has none (or it is switched off, unknown or malformed). */
     public function for(Chatbot $chatbot): ?ResolvedWorkflow
     {
-        return filled($chatbot->workflow_key) ? $this->catalogEntry($chatbot->workflow_key) : null;
+        return filled($chatbot->workflow_key) ? $this->catalogEntry($chatbot->workflow_key, $chatbot->workspace) : null;
     }
 
     /** Gives an ACTIVE chatbot a workflow of the catalog (platform team only). */
@@ -66,15 +70,23 @@ class ChatbotWorkflows
             throw new InvalidArgumentException('El chatbot está inactivo o es de demostración: no se le puede asignar un workflow.');
         }
 
-        if ($this->catalogEntry((string) $chatbot->workflow_key) === null) {
-            throw new InvalidArgumentException("El workflow «{$chatbot->workflow_key}» no está registrado, está deshabilitado o su ruta no es válida.");
+        if ($this->catalogEntry((string) $chatbot->workflow_key, $chatbot->workspace) === null) {
+            throw new InvalidArgumentException("El workflow «{$chatbot->workflow_key}» no está registrado, está deshabilitado, su ruta no es válida o no está autorizado para este Workspace.");
         }
     }
 
-    /** Whether a key is a registered, enabled workflow of the catalog with a safe path. */
-    public function assignable(string $key): bool
+    /** Whether a key is a registered, enabled workflow of the catalog with a safe path that this Workspace may use. */
+    public function assignable(string $key, Workspace $workspace): bool
     {
-        return $this->catalogEntry($key) !== null;
+        return $this->catalogEntry($key, $workspace) !== null;
+    }
+
+    /** The Workspaces (codes, or `*`) an entry is published to; empty = only the administrative Workspace. @return list<string> */
+    public function audience(string $key): array
+    {
+        $listed = $this->catalog()[$key]['workspaces'] ?? [];
+
+        return array_values(array_filter(array_map(fn ($code) => $code === '*' ? '*' : Workspace::normalizeCode((string) $code), (array) $listed), fn ($code) => $code !== ''));
     }
 
     /** @return array<string, array<string, mixed>> */
@@ -83,11 +95,18 @@ class ChatbotWorkflows
         return (array) config('n8n.workflows');
     }
 
-    private function catalogEntry(string $key): ?ResolvedWorkflow
+    private function authorized(string $key, Workspace $workspace): bool
+    {
+        $audience = $this->audience($key);
+
+        return $audience === [] ? $workspace->isAdministrative() : (in_array('*', $audience, true) || in_array($workspace->code, $audience, true));
+    }
+
+    private function catalogEntry(string $key, Workspace $workspace): ?ResolvedWorkflow
     {
         $entry = $this->catalog()[$key] ?? null;
 
-        if (! is_array($entry) || ($entry['enabled'] ?? true) !== true || ! is_string($entry['webhook_path'] ?? null) || ! preg_match(self::PATH, $entry['webhook_path']) || ! is_string($entry['n8n_workflow_id'] ?? null)) {
+        if (! $this->authorized($key, $workspace) || ! is_array($entry) || ($entry['enabled'] ?? true) !== true || ! is_string($entry['webhook_path'] ?? null) || ! preg_match(self::PATH, $entry['webhook_path']) || ! is_string($entry['n8n_workflow_id'] ?? null)) {
             return null;
         }
 

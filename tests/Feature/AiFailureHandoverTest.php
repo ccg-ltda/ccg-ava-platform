@@ -54,9 +54,9 @@ class AiFailureHandoverTest extends TestCase
 
         $this->app->instance(SafeHttpTarget::class, new SafeHttpTarget(fn (string $host) => ['93.184.216.34']));
         config([
-            'n8n.execution_url' => self::N8N, 'n8n.secret' => 'n8n-shared-SECRET-123', 'n8n.backoff' => [0, 0],
+            'n8n.legacy_environment' => 'all', 'n8n.execution_url' => self::N8N, 'n8n.secret' => 'n8n-shared-SECRET-123', 'n8n.backoff' => [0, 0],
             'services.meta.app_secret' => self::APP_SECRET, 'services.meta.webhook_verify_token' => 'verify-me',
-            'n8n.workflows.support' => ['name' => 'Soporte', 'n8n_workflow_id' => 'wf_support', 'webhook_path' => 'support-v1', 'version' => '1'],
+            'n8n.workflows.support' => ['name' => 'Soporte', 'n8n_workflow_id' => 'wf_support', 'webhook_path' => 'support-v1', 'version' => '1', 'workspaces' => ['*']],
         ]);
         Http::preventStrayRequests();
         Http::fake([

@@ -11,7 +11,6 @@ use App\Payments\WompiConfig;
 use App\Services\ConversationAutoClose;
 use App\Services\EmailTemplates;
 use App\Services\ModuleAccess;
-use App\Services\SupportAi;
 use App\Services\WorkspaceSettingsService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -42,8 +41,6 @@ class SettingsController extends Controller
             ] : null,
             // Cierre automático: only for a Workspace whose plan has Conversaciones.
             'autoClose' => ConversationAutoClose::ready() && app(ModuleAccess::class)->allows($request->attributes->get('workspace'), 'conversations') ? $this->autoClose($request->attributes->get('workspace')) : null,
-            // Soporte con IA: only the platform administration inside the administrative Workspace (the route re-checks it).
-            'supportAi' => EnsurePlatformAdministration::allows($request, 'view-support-ai') ? app(SupportAi::class)->status() + ['canEdit' => EnsurePlatformAdministration::allows($request, 'edit-support-ai')] : null,
             // Wompi: only the platform administration inside the administrative Workspace gets this (the routes re-check it). Never a secret: only "is it set" and its last characters.
             'wompi' => EnsurePlatformAdministration::allows($request, 'view-payment-settings') ? $this->wompi($request) : null,
         ]);
@@ -61,14 +58,6 @@ class SettingsController extends Controller
             'minutes' => $settings['minutes'],
             'min' => ConversationAutoClose::MIN, 'max' => ConversationAutoClose::MAX,
         ];
-    }
-
-    public function updateSupportAi(Request $request): RedirectResponse
-    {
-        $data = $request->validate(['enabled' => ['required', 'boolean'], 'workflow' => ['nullable', 'string', 'max:64']]);
-        app(SupportAi::class)->update((bool) $data['enabled'], $data['workflow'] ?? null, $request->user());
-
-        return back()->with('success', $data['enabled'] ? 'Soporte con IA activado' : 'Soporte con IA desactivado: lo atiende el equipo');
     }
 
     public function updateConversations(Request $request): RedirectResponse

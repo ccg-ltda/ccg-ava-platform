@@ -62,7 +62,7 @@ class PlatformAccess
     /** @return list<string> the commercial administration (plans, modules, the global email template and payments): never given to a role by a seeder, only to the internal administration */
     public function commercial(): array
     {
-        return array_keys(array_filter(config('permissions.permissions'), fn (array $permission) => in_array($permission['group'], ['plans', 'modules', 'email', 'payments', 'supportai'], true)));
+        return array_keys(array_filter(config('permissions.permissions'), fn (array $permission) => in_array($permission['group'], ['plans', 'modules', 'email', 'payments'], true)));
     }
 
     /** @return list<string> reserved: the justified, temporary access to another Workspace's private data */

@@ -1,16 +1,23 @@
 <?php
 
 /*
- * The platform's own n8n, used as the (provisional) engine that runs a chatbot's workflow. Ava starts every execution
- * and receives the answer in the same HTTP response; n8n never gets Workspace credentials and clients never reach it.
- * The workflows a chatbot may run are registered by the platform team (table `workflow_definitions`). Without
- * `execution_url` and `secret` nothing is run: the message is still stored and shown in the inbox.
+ * How Ava runs a chatbot's workflow. Ava starts every execution and receives the answer in the same HTTP response; n8n never gets Workspace
+ * credentials. Each Workspace runs its conversations on ITS OWN n8n connection (Integraciones > n8n: instance + execution secret, App\Chatbots\N8nConnection);
+ * nothing here is shared between Workspaces. The workflows a chatbot may run are the platform team's catalog below (`workflows`, in code; there is no table).
+ * Without a connection nothing is run: the message is still stored and shown in the inbox, and a person answers.
  */
 return [
-    /* Base URL of the n8n webhooks (e.g. https://n8n.example.com/webhook). The path of each workflow is appended. */
+    /*
+     * TRANSITION ONLY: the platform's own n8n through the environment (N8N_EXECUTION_URL / N8N_EXECUTION_SECRET), the way it worked before each Workspace had its connection.
+     * `legacy_environment` says who may still use it when the Workspace has no connection of its own: `administrative` (only Desarrollo_DEV, the default), `all` (every Workspace
+     * without its own connection: the old behavior) or `none`. A Workspace that has its own connection is never served by these variables.
+     */
+    'legacy_environment' => 'administrative',
+
+    /* Legacy: base URL of the n8n webhooks (e.g. https://n8n.example.com/webhook). The path of each workflow is appended. */
     'execution_url' => env('N8N_EXECUTION_URL'),
 
-    /* Shared secret: every request is signed with it (HMAC-SHA256) so the workflow can check it comes from Ava. */
+    /* Legacy: shared secret, every request is signed with it (HMAC-SHA256) so the workflow can check it comes from Ava. Each Workspace's own connection carries its own. */
     'secret' => env('N8N_EXECUTION_SECRET'),
 
     /*
@@ -18,6 +25,8 @@ return [
      * Reviewed and deployed with the code: a client can neither add nor change an entry. `webhook_path` is appended to
      * `execution_url` and may only contain letters, digits, `-`, `_` and `/`.
      * `enabled` (default true) switches a workflow off for every chatbot that has it, without touching the assignments.
+     * `workspaces` publishes it: a list of Workspace codes that may use it, or ['*'] for all. Without it the workflow is reserved to the administrative Workspace.
+     * The webhook path must exist in the n8n of each Workspace that uses it.
      * Example: 'soporte' => ['name' => 'Soporte general', 'n8n_workflow_id' => 'AbC123', 'webhook_path' => 'ava/soporte-v1', 'version' => '1', 'enabled' => true],
      */
     'workflows' => [],

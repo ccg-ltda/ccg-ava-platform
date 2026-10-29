@@ -60,7 +60,7 @@ class ChatbotExecutionTest extends TestCase
 
         $this->app->instance(SafeHttpTarget::class, new SafeHttpTarget(fn (string $host) => ['93.184.216.34']));
         config([
-            'n8n.execution_url' => self::N8N, 'n8n.secret' => self::SECRET, 'n8n.backoff' => [0, 0],
+            'n8n.legacy_environment' => 'all', 'n8n.execution_url' => self::N8N, 'n8n.secret' => self::SECRET, 'n8n.backoff' => [0, 0],
             'services.meta.app_secret' => self::APP_SECRET, 'services.meta.webhook_verify_token' => 'verify-me',
         ]);
         Http::preventStrayRequests();
@@ -77,7 +77,7 @@ class ChatbotExecutionTest extends TestCase
     /** Adds a workflow to the platform catalog (config/n8n.php) and returns its key. */
     private function workflow(string $key = 'support', string $path = 'support-v1'): string
     {
-        config(["n8n.workflows.{$key}" => ['name' => "Workflow {$key}", 'n8n_workflow_id' => 'wf_'.$key, 'webhook_path' => $path, 'version' => '1']]);
+        config(["n8n.workflows.{$key}" => ['name' => "Workflow {$key}", 'n8n_workflow_id' => 'wf_'.$key, 'webhook_path' => $path, 'version' => '1', 'workspaces' => ['*']]]);
 
         return $key;
     }

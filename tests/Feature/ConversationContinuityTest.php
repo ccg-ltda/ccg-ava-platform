@@ -54,8 +54,8 @@ class ConversationContinuityTest extends TestCase
         parent::setUp();
 
         $this->app->instance(SafeHttpTarget::class, new SafeHttpTarget(fn (string $host) => ['93.184.216.34']));
-        config(['n8n.execution_url' => self::N8N, 'n8n.secret' => 'n8n-shared-SECRET', 'n8n.backoff' => [0, 0], 'services.meta.app_secret' => 'meta-secret', 'services.meta.webhook_verify_token' => 'v',
-            'n8n.workflows.support' => ['name' => 'Soporte', 'n8n_workflow_id' => 'wf_support', 'webhook_path' => 'support-v1', 'version' => '1']]);
+        config(['n8n.legacy_environment' => 'all', 'n8n.execution_url' => self::N8N, 'n8n.secret' => 'n8n-shared-SECRET', 'n8n.backoff' => [0, 0], 'services.meta.app_secret' => 'meta-secret', 'services.meta.webhook_verify_token' => 'v',
+            'n8n.workflows.support' => ['name' => 'Soporte', 'n8n_workflow_id' => 'wf_support', 'webhook_path' => 'support-v1', 'version' => '1', 'workspaces' => ['*']]]);
         Http::preventStrayRequests();
         Queue::fake();
         $this->seedRoleCatalog();
@@ -405,5 +405,48 @@ class ConversationContinuityTest extends TestCase
         $foreign = $this->bookingWorkspace('CLIENTE_B', ['dashboard', 'conversations', 'assistants']);
         $this->actingAs($this->member($foreign, 'admin'))->withSession(['workspace_id' => $foreign->id]);
         $this->post("/conversations/{$conversation->id}/context", ['facts' => ['phone' => '3000000000']])->assertNotFound();
+    }
+
+    public function test_the_requests_to_n8n_follow_the_documented_contract_for_message_and_resume(): void
+    {
+        $this->inbound('Hola');
+        $this->aiAnswers();
+        $conversation = $this->conversation();
+        $control = app(ConversationControl::class);
+        $control->take($conversation, $this->agent);
+        app(ConversationMessenger::class)->send($conversation->refresh(), $this->agent, true, 'Ya revisé tu caso, Ana.');
+        $control->returnToAi($this->conversation(), $this->agent, true);
+        app(ChatbotExecutions::class)->resumeAfterReturn($this->conversation(), true);
+        $this->aiAnswers();
+
+        $recorded = Http::recorded();
+        $this->assertCount(2, $recorded);
+
+        foreach ($recorded as $index => [$request]) {
+            $payload = $request->data();
+            $this->assertEqualsCanonicalizing(['execution_id', 'event', 'workflow', 'chatbot', 'conversation', 'message', 'history', 'context', 'ava'], array_keys($payload));
+            $this->assertSame($request->header('X-Ava-Execution')[0], $payload['execution_id']);
+            $this->assertSame($index === 0 ? 'message' : 'resume', $payload['event']);
+            $this->assertEqualsCanonicalizing(['id', 'text', 'sender'], array_keys($payload['message']));
+            $this->assertEqualsCanonicalizing(['facts', 'steps', 'next_step', 'operations', 'conflicts', 'summary', 'handoff', 'resume', 'unknown_facts'], array_keys($payload['context']));
+            $this->assertEqualsCanonicalizing(['id', 'channel', 'memory_key'], array_keys($payload['conversation']));
+            $this->assertLessThanOrEqual($index === 0 ? 10 : 40, count($payload['history']));
+
+            foreach ($payload['history'] as $entry) {
+                $this->assertEqualsCanonicalizing(['role', 'sender', 'text'], array_keys($entry));
+                $this->assertContains($entry['sender'], ['contact', 'ai', 'agent']);
+                $this->assertSame($entry['sender'] === 'contact' ? 'user' : 'assistant', $entry['role']);
+            }
+
+            // Signed: HMAC-SHA256 of «timestamp.body» with the platform secret; nothing of the Workspace's own credentials travels.
+            $timestamp = $request->header('X-Ava-Timestamp')[0];
+            $this->assertSame('sha256='.hash_hmac('sha256', "{$timestamp}.{$request->body()}", 'n8n-shared-SECRET'), $request->header('X-Ava-Signature')[0]);
+            $this->assertStringNotContainsString('EAAB-token', $request->body());
+            $this->assertStringNotContainsString('n8n-shared-SECRET', $request->body());
+        }
+
+        $this->assertSame('contact', $recorded[0][0]->data()['message']['sender']);
+        $this->assertSame('agent', $recorded[1][0]->data()['message']['sender']);
+        $this->assertNotSame($recorded[0][0]->data()['execution_id'], $recorded[1][0]->data()['execution_id']);
     }
 }

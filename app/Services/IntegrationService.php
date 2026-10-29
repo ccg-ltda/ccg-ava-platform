@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Audit\AuditLogger;
+use App\Chatbots\N8nConnection;
 use App\Integrations\CalendarProviderType;
 use App\Integrations\ChannelIntegrationType;
 use App\Integrations\IntegrationRegistry;
@@ -201,6 +202,7 @@ class IntegrationService
             'baseUrl' => $integration->config['base_url'],
             'host' => parse_url($integration->config['base_url'], PHP_URL_HOST),
             'apiKeySet' => filled($integration->secrets['api_key'] ?? null),
+            'execution' => app(N8nConnection::class)->status($workspace),
             'updatedAt' => $when($integration->updated_at),
             'lastTest' => $integration->last_tested_at ? [
                 'at' => $when($integration->last_tested_at),

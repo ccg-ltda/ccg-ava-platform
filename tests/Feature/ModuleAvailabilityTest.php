@@ -435,8 +435,8 @@ class ModuleAvailabilityTest extends TestCase
     public function test_a_queued_execution_does_not_run_after_the_plan_loses_the_modules(): void
     {
         config([
-            'n8n.execution_url' => 'https://n8n.platform.example.com/webhook', 'n8n.secret' => 'n8n-shared-SECRET-123', 'n8n.backoff' => [0, 0],
-            'n8n.workflows.support' => ['name' => 'Soporte', 'n8n_workflow_id' => 'wf_support', 'webhook_path' => 'support-v1', 'version' => '1'],
+            'n8n.legacy_environment' => 'all', 'n8n.execution_url' => 'https://n8n.platform.example.com/webhook', 'n8n.secret' => 'n8n-shared-SECRET-123', 'n8n.backoff' => [0, 0],
+            'n8n.workflows.support' => ['name' => 'Soporte', 'n8n_workflow_id' => 'wf_support', 'webhook_path' => 'support-v1', 'version' => '1', 'workspaces' => ['*']],
             'services.meta.app_secret' => 'meta-secret', 'services.meta.webhook_verify_token' => 'verify-me',
         ]);
         Queue::fake();

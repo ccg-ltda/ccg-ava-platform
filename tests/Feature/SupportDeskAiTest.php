@@ -2,9 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Chatbots\N8nConnection;
 use App\Integrations\SafeHttpTarget;
 use App\Jobs\RunChatbotExecution;
-use App\Models\AuditLog;
+use App\Models\ApiCallLog;
 use App\Models\Chatbot;
 use App\Models\Conversation;
 use App\Models\Organization;
@@ -14,6 +15,8 @@ use App\Models\WorkspaceNotification;
 use App\Services\ChatbotExecutions;
 use App\Services\ChatbotWorkflows;
 use App\Services\ConversationContext;
+use App\Services\ConversationControl;
+use App\Services\ConversationMessenger;
 use App\Services\SupportDesk;
 use GuzzleHttp\Promise\PromiseInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -168,50 +171,77 @@ class SupportDeskAiTest extends TestCase
         return $user;
     }
 
-    public function test_the_platform_configures_the_support_ai_from_the_interface_and_nothing_is_on_by_default(): void
+    public function test_support_has_no_ai_configuration_of_its_own_anywhere(): void
     {
         $this->platformAdmin();
 
-        $this->get('/settings')->assertOk()->assertInertia(fn ($p) => $p->where('supportAi.enabled', false)->where('supportAi.n8nConfigured', true)->where('supportAi.catalog.0.key', 'soporte')->where('supportAi.problem', null));
-        $this->assertStringNotContainsString('shared-SECRET', $this->get('/settings')->getContent()); // the n8n secret never reaches the page
-
-        // Not valid: unknown workflow; then n8n not configured. Nothing changes.
-        $this->put('/settings/support-ai', ['enabled' => true, 'workflow' => 'inventado'])->assertSessionHasErrors('workflow');
-        config(['n8n.secret' => null]);
-        $this->put('/settings/support-ai', ['enabled' => true, 'workflow' => 'soporte'])->assertSessionHasErrors('enabled');
-        $this->assertFalse((bool) app(SupportDesk::class)->destination()->is_active);
-        config(['n8n.secret' => 'shared-SECRET']);
-
-        $this->put('/settings/support-ai', ['enabled' => true, 'workflow' => 'soporte'])->assertSessionHasNoErrors();
-        $bot = app(SupportDesk::class)->destination()->refresh();
-        $this->assertTrue($bot->is_active);
-        $this->assertSame('soporte', $bot->workflow_key);
-        $this->assertTrue(AuditLog::where('resource_type', 'chatbot')->where('workspace_id', $this->dev->id)->exists());
-
-        // On: the client's request is attended by the AI first. Off again: a person gets it.
-        $this->n8n(['reply' => 'Hola']);
-        $this->clientWrites($this->a);
-        $this->assertSame(Conversation::AI, $this->conversation()->handling);
-
-        $this->actingAs($this->member($this->dev, 'admin'))->withSession(['workspace_id' => $this->dev->id]);
-        $this->assertTrue(app(SupportDesk::class)->destination()->refresh()->is_active);
-        $dev = User::where('is_superuser', true)->first();
-        $this->actingAs($dev)->withSession(['workspace_id' => $this->dev->id]);
-        $this->put('/settings/support-ai', ['enabled' => false])->assertSessionHasNoErrors();
-        $this->assertFalse((bool) app(SupportDesk::class)->destination()->refresh()->is_active);
-        $this->assertSame('soporte', app(SupportDesk::class)->destination()->workflow_key); // the choice is kept
-        $this->clientWrites($this->b, 'Otra solicitud');
-        $this->assertSame(Conversation::PENDING, Conversation::where('contact_id', 'like', 'c'.$this->b->id.'u%')->latest('id')->firstOrFail()->handling);
+        // Configuraciones offers no «Soporte con IA»: the AI of the support is the ordinary chatbot of Desarrollo_DEV (Asistentes) with a workflow of the general catalog.
+        $this->get('/settings')->assertOk()->assertInertia(fn ($page) => $page->missing('supportAi'));
+        $this->assertContains($this->put('/settings/support-ai', ['enabled' => true, 'workflow' => 'soporte'])->status(), [404, 405]);
+        $this->assertFalse((bool) app(SupportDesk::class)->destination()->is_active, 'Nothing is on by default.');
+        $this->assertSame([], array_values(array_filter(array_keys(config('permissions.permissions')), fn (string $name) => str_contains($name, 'support-ai'))));
+        $this->assertArrayNotHasKey('supportai', config('permissions.groups'));
+        $this->assertFileDoesNotExist(app_path('Services/SupportAi.php'));
     }
 
-    public function test_a_client_workspace_cannot_see_or_change_the_support_ai(): void
+    public function test_a_support_conversation_runs_the_general_chain_in_the_administrative_workspace(): void
     {
-        $c = $this->bookingWorkspace('CLIENTE_C', ['dashboard', 'settings']);
-        $this->actingAs($this->member($c, 'admin'))->withSession(['workspace_id' => $c->id]);
+        $this->activateAi();
+        $this->n8n(['reply' => 'Hola, ¿en qué te ayudo?', 'context' => ['facts' => ['name' => ['value' => 'Ana', 'confirmed' => true]]]]);
 
-        $this->get('/settings')->assertOk()->assertInertia(fn ($p) => $p->where('supportAi', null));
-        $this->put('/settings/support-ai', ['enabled' => true, 'workflow' => 'soporte'])->assertForbidden();
-        $this->assertFalse((bool) app(SupportDesk::class)->destination()->is_active);
+        $this->clientWrites($this->a);
+        $this->runAi();
+
+        $conversation = $this->conversation();
+        $this->assertSame($this->dev->id, $conversation->workspace_id);
+        $this->assertSame($this->dev->id, $conversation->chatbot->workspace_id);
+        $this->assertSame('soporte', $this->received[0]['workflow']['key']);
+        $this->assertSame('message', $this->received[0]['event']);
+        $this->assertSame(['Hola, ¿en qué te ayudo?'], $conversation->messages()->where('sender', 'ai')->pluck('body')->all());
+
+        // The call is in the history of the administrative Workspace, redacted: no secret, no signature, no body of the conversation.
+        $log = ApiCallLog::where('integration', 'n8n')->latest('id')->firstOrFail();
+        $this->assertSame($this->dev->id, $log->workspace_id);
+        $this->assertSame('success', $log->outcome);
+        $dump = json_encode($log->getAttributes());
+        $this->assertStringNotContainsString('shared-SECRET', $dump);
+        $this->assertStringNotContainsString('Necesito ayuda', $dump);
+        $this->assertSame(0, ApiCallLog::where('workspace_id', $this->a->id)->count());
+
+        // Another Workspace's chatbots are untouched by it.
+        $this->assertSame(0, Chatbot::where('workspace_id', '!=', $this->dev->id)->whereNotNull('workflow_key')->count());
+    }
+
+    public function test_a_person_takes_the_support_conversation_the_ai_stays_silent_and_resumes_with_the_context(): void
+    {
+        $this->activateAi();
+        $this->n8n(['reply' => 'Hola, ¿cómo te llamas?', 'context' => ['facts' => ['topic' => ['value' => 'facturación', 'confirmed' => true]], 'next_step' => 'ask_name']]);
+        $client = $this->clientWrites($this->a);
+        $this->runAi();
+
+        $agent = $this->member($this->dev, 'admin');
+        $control = app(ConversationControl::class);
+        $control->take($this->conversation(), $agent);
+        app(ConversationMessenger::class)->send($this->conversation(), $agent, true, 'Soy Luis, del equipo. Ya revisé tu factura.');
+
+        // While the person has it, a new message from the client reaches the conversation but never the AI.
+        $calls = count($this->received);
+        $this->actingAs($client)->withSession(['workspace_id' => $this->a->id]);
+        $this->postJson('/support/messages', ['message' => '¿Me confirmas?', 'message_id' => 'ses-silence01'])->assertOk();
+        $this->assertSame(Conversation::HUMAN, $this->conversation()->handling);
+        $this->assertCount($calls, $this->received);
+        $this->assertSame(['Hola, ¿cómo te llamas?'], $this->conversation()->messages()->where('sender', 'ai')->pluck('body')->all());
+
+        // Back to the AI with «continuar ahora»: ONE `resume` with the history of the person and the persisted context.
+        $control->returnToAi($this->conversation(), $agent, true);
+        $this->assertNotNull(app(ChatbotExecutions::class)->resumeAfterReturn($this->conversation(), true));
+        $this->n8n(['reply' => 'Gracias por esperar, ya quedó.']);
+        $this->runAi();
+
+        $sent = end($this->received);
+        $this->assertSame('facturación', $sent['context']['facts']['topic']['value']);
+        $this->assertContains('agent', array_column($sent['history'], 'sender'));
+        $this->assertContains('Soy Luis, del equipo. Ya revisé tu factura.', array_column($sent['history'], 'text'));
     }
 
     public function test_two_client_workspaces_get_separate_conversations_context_and_memory(): void
@@ -230,5 +260,31 @@ class SupportDeskAiTest extends TestCase
         // B's payload starts with no facts: nothing of A's conversation reaches it.
         $this->assertSame([], $this->received[1]['context']['facts']);
         $this->assertStringNotContainsString('Hola desde A', json_encode($this->received[1]));
+    }
+
+    public function test_the_support_conversation_runs_on_the_n8n_connection_of_desarrollo_dev_not_on_the_environment(): void
+    {
+        $this->dev->integrations()->create(['name' => 'n8n', 'type' => 'n8n', 'is_active' => true, 'config' => ['base_url' => 'https://n8n.dev.example.com'], 'secrets' => ['api_key' => 'dev-api-key-123456', 'execution_secret' => 'dev-execution-SECRET-0001']]);
+        $this->activateAi();
+        $seen = [];
+        Http::swap(new Factory);
+        Http::preventStrayRequests();
+        Http::fake(['n8n.dev.example.com/*' => function (Request $request) use (&$seen) {
+            $seen[] = $request;
+
+            return Http::response(['execution_id' => $request->header('X-Ava-Execution')[0], 'reply' => 'Hola desde el n8n de DEV']);
+        }]);
+
+        $this->clientWrites($this->a);
+        $this->runAi();
+
+        $this->assertCount(1, $seen);
+        $this->assertSame('https://n8n.dev.example.com/webhook/soporte-v1', $seen[0]->url());
+        $timestamp = $seen[0]->header('X-Ava-Timestamp')[0];
+        $this->assertSame('sha256='.hash_hmac('sha256', "{$timestamp}.{$seen[0]->body()}", 'dev-execution-SECRET-0001'), $seen[0]->header('X-Ava-Signature')[0]);
+        $this->assertSame(['Hola desde el n8n de DEV'], $this->conversation()->messages()->where('sender', 'ai')->pluck('body')->all());
+        $this->assertStringNotContainsString('shared-SECRET', json_encode($seen[0]->headers()).$seen[0]->body(), 'The platform variables never reach a Workspace that has its own connection.');
+        // The client Workspace that wrote has no connection and gets nothing of it.
+        $this->assertNull(app(N8nConnection::class)->forWorkspace($this->a));
     }
 }

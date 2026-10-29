@@ -219,7 +219,7 @@ class AuditEventsTest extends TestCase
     {
         $workspace = $this->otherWorkspace('WS_A');
         $unrelated = $this->otherWorkspace('WS_B');
-        config(['n8n.workflows.support' => ['name' => 'Soporte', 'n8n_workflow_id' => 'wf_support', 'webhook_path' => 'support-v1', 'version' => '1'], 'n8n.workflows.sales' => ['name' => 'Ventas', 'n8n_workflow_id' => 'wf_sales', 'webhook_path' => 'sales-v1', 'version' => '1']]);
+        config(['n8n.workflows.support' => ['name' => 'Soporte', 'n8n_workflow_id' => 'wf_support', 'webhook_path' => 'support-v1', 'version' => '1', 'workspaces' => ['*']], 'n8n.workflows.sales' => ['name' => 'Ventas', 'n8n_workflow_id' => 'wf_sales', 'webhook_path' => 'sales-v1', 'version' => '1', 'workspaces' => ['*']]]);
         $bot = $workspace->chatbots()->create(['name' => 'Asistente', 'is_active' => true]);
         $workflows = app(ChatbotWorkflows::class);
 

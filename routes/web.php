@@ -434,8 +434,6 @@ Route::middleware(['auth', 'workspace'])->group(function () {
 
     // Global email template (its own permissions, not part of the module catalog group above).
     // Plantilla HTML global de los correos: solo la administración de la plataforma dentro de Desarrollo_DEV (middleware + permiso; un cliente recibe 403).
-    // Soporte con IA (platform administration only, Desarrollo_DEV): switch on/off and choose the workflow of the platform catalog.
-    Route::put('/settings/support-ai', [SettingsController::class, 'updateSupportAi'])->middleware(['workspace.platform:edit-support-ai', 'throttle:20,1'])->name('support-ai.update');
     // Wompi (platform administration only, Desarrollo_DEV): credentials are write-only; the history lists persisted payments.
     Route::put('/settings/wompi', [PaymentSettingsController::class, 'update'])->middleware('workspace.platform:edit-payment-settings')->name('wompi-settings.update');
     Route::post('/settings/wompi/validate', [PaymentSettingsController::class, 'validateConnection'])->middleware(['workspace.platform:edit-payment-settings', 'throttle:10,1'])->name('wompi-settings.validate');

@@ -40,6 +40,7 @@ class N8nType implements IntegrationType
         return [
             'base_url' => ['required', 'string', 'max:2048', 'url:http,https', fn ($attribute, $value, $fail) => is_string($value) && $this->checkAddress($value, $fail)],
             'api_key' => ['nullable', 'string', 'max:4096'],
+            'execution_secret' => ['nullable', 'string', 'min:16', 'max:256', 'regex:/^\S+$/'],
         ];
     }
 
@@ -51,7 +52,10 @@ class N8nType implements IntegrationType
             throw ValidationException::withMessages(['api_key' => 'Pega la API Key de n8n.']);
         }
 
-        return ['config' => ['base_url' => $this->origin($input['base_url'])], 'secrets' => ['api_key' => $key]];
+        // The signing secret of the conversations Ava runs on this n8n (shared with the workflow, which verifies `X-Ava-Signature`). Blank keeps the stored one.
+        $execution = filled($input['execution_secret'] ?? null) ? trim($input['execution_secret']) : ($current?->secrets['execution_secret'] ?? null);
+
+        return ['config' => ['base_url' => $this->origin($input['base_url'])], 'secrets' => array_filter(['api_key' => $key, 'execution_secret' => $execution], fn ($value) => filled($value))];
     }
 
     public function form(Integration $integration): array
@@ -60,12 +64,17 @@ class N8nType implements IntegrationType
             'base_url' => $integration->config['base_url'],
             'api_key' => '',
             'api_key_set' => filled($integration->secrets['api_key'] ?? null),
+            'execution_secret' => '',
+            'execution_secret_set' => filled($integration->secrets['execution_secret'] ?? null),
         ];
     }
 
     public function summary(Integration $integration): array
     {
-        return ['rows' => [['label' => 'Instancia', 'value' => parse_url($integration->config['base_url'], PHP_URL_HOST) ?: $integration->config['base_url']]]];
+        return ['rows' => [
+            ['label' => 'Instancia', 'value' => parse_url($integration->config['base_url'], PHP_URL_HOST) ?: $integration->config['base_url']],
+            ['label' => 'Conversaciones', 'value' => filled($integration->secrets['execution_secret'] ?? null) ? 'Se ejecutan en esta instancia' : 'Sin secreto de ejecución'],
+        ]];
     }
 
     public function supportsTest(): bool
@@ -119,6 +128,7 @@ class N8nType implements IntegrationType
         return [
             'URL de n8n' => ($config['base_url'] ?? '') === '' ? null : $config['base_url'],
             'API Key de n8n' => Masked::of($secrets['api_key'] ?? null),
+            'Secreto de ejecución' => Masked::of($secrets['execution_secret'] ?? null),
         ];
     }
 

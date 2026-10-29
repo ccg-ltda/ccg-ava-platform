@@ -54,7 +54,7 @@ class PlatformRunTest extends TestCase
         $this->seedRoleCatalog();
         $this->freezeAgendaTime();
         $this->app->instance(SafeHttpTarget::class, new SafeHttpTarget(fn (string $host) => ['93.184.216.34']));
-        config(['n8n.execution_url' => self::N8N, 'n8n.secret' => 'run-secret', 'n8n.backoff' => [0, 0], 'n8n.workflows.support' => ['name' => 'Soporte', 'n8n_workflow_id' => 'wf1', 'webhook_path' => 'support-v1', 'version' => '1']]);
+        config(['n8n.legacy_environment' => 'all', 'n8n.execution_url' => self::N8N, 'n8n.secret' => 'run-secret', 'n8n.backoff' => [0, 0], 'n8n.workflows.support' => ['name' => 'Soporte', 'n8n_workflow_id' => 'wf1', 'webhook_path' => 'support-v1', 'version' => '1', 'workspaces' => ['*']]]);
         Http::preventStrayRequests();
         Http::allowStrayRequests(['http://127.0.0.1:*', 'http://localhost:*']);
 

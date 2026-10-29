@@ -5,12 +5,13 @@ namespace App\Chatbots;
 use App\Integrations\SafeHttpTarget;
 use App\Integrations\UnsafeTarget;
 use App\Models\Chatbot;
+use App\Models\Workspace;
 use App\Observability\ApiCallRecorder;
 use Illuminate\Http\Client\ConnectionException;
 use Throwable;
 
 /**
- * Runs a chatbot's workflow in the platform's n8n through its production webhook. Ava calls n8n and the answer comes
+ * Runs a chatbot's workflow in the n8n of ITS Workspace (App\Chatbots\N8nConnection) through its production webhook. Ava calls n8n and the answer comes
  * back in that same response, so there is no callback to protect: what is accepted is the response to a request Ava
  * itself made for ONE execution, and it must echo that execution's correlation id.
  *
@@ -26,13 +27,17 @@ class N8nExecutor implements ChatbotExecutor
 
     public function run(ResolvedWorkflow $workflow, string $correlationId, array $payload): ExecutionOutcome
     {
-        $base = config('n8n.execution_url');
-        $secret = config('n8n.secret');
+        // The connection of the Workspace the chatbot belongs to (taken from the chatbot, never from the payload's claims about another one).
+        $workspaceId = Chatbot::whereKey((int) ($payload['chatbot']['id'] ?? 0))->value('workspace_id');
+        $workspace = $workspaceId ? Workspace::find($workspaceId) : null;
+        $target = $workspace ? app(N8nConnection::class)->forWorkspace($workspace) : null;
 
-        if (! filled($base) || ! filled($secret)) {
+        if ($target === null) {
             return ExecutionOutcome::permanent('not_configured');
         }
 
+        $base = $target->baseUrl;
+        $secret = $target->secret;
         $url = rtrim($base, '/').'/'.ltrim($workflow->path, '/');
 
         // The platform's n8n carries conversations: outside local development only over TLS.
@@ -47,8 +52,6 @@ class N8nExecutor implements ChatbotExecutor
             'X-Ava-Timestamp' => $timestamp,
             'X-Ava-Signature' => 'sha256='.hash_hmac('sha256', "{$timestamp}.{$body}", $secret),
         ];
-
-        $workspaceId = Chatbot::whereKey((int) ($payload['chatbot']['id'] ?? 0))->value('workspace_id');
 
         try {
             $pinned = $this->target->resolve($url);

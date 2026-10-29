@@ -6,6 +6,7 @@ use App\Audit\AuditLogger;
 use App\Chatbots\ChatbotExecutor;
 use App\Chatbots\ExecutionOutcome;
 use App\Chatbots\FailureKind;
+use App\Chatbots\N8nConnection;
 use App\Chatbots\ResolvedWorkflow;
 use App\Chatbots\RunResult;
 use App\Jobs\RunChatbotExecution;
@@ -69,13 +70,13 @@ class ChatbotExecutions
     }
 
     /**
-     * Whether this chatbot answers through the platform's workflow: it has an authorized workflow and the platform n8n is configured.
+     * Whether this chatbot answers through a workflow: it has an authorized workflow for its Workspace and that Workspace has an n8n connection to run it.
      * The channels (WhatsApp, web) use it to choose between this path (Ava starts and controls every execution) and the older one
      * (the Workspace's own n8n webhook, web only).
      */
     public function available(Chatbot $chatbot): bool
     {
-        return filled(config('n8n.execution_url')) && filled(config('n8n.secret')) && $this->active($chatbot) && $this->workflows->for($chatbot) !== null;
+        return $this->active($chatbot) && $this->workflows->for($chatbot) !== null && app(N8nConnection::class)->forWorkspace($chatbot->workspace) !== null;
     }
 
     /**
