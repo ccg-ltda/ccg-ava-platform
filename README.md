@@ -2,7 +2,7 @@
 
 **AvaChat (Ava Platform)** es una plataforma multi-Workspace de atención inteligente al cliente: asistentes de IA que atienden conversaciones por WhatsApp y web, personas que toman el control cuando hace falta y herramientas de negocio (clientes, servicios y agenda, catálogo y pedidos) que el asistente y los agentes usan para ejecutar operaciones reales. No es un CRM ni un ERP: sus módulos existen para que la conversación pueda consultar información real, ejecutar una operación autorizada y dejar trazabilidad. Ava es la **única fuente del comportamiento** de cada chatbot (instrucciones, canales, apariencia); la IA y la conversación con WhatsApp viven en **n8n**, que lee la configuración de Ava y le reporta los mensajes. Cuando hace falta, una persona toma el control de la conversación desde Ava y responde por el mismo canal.
 
-Este README es la guía de arranque. Las reglas de desarrollo y las decisiones permanentes están en [`reglas.md`](reglas.md), las tareas abiertas en [`pendientes.md`](pendientes.md) y la infraestructura en [`INFRASTRUCTURE.md`](INFRASTRUCTURE.md).
+Este README es la guía de arranque. Las reglas de desarrollo y las decisiones permanentes están en [`reglas.md`](reglas.md), las tareas abiertas en [`pendientes.md`](pendientes.md), la infraestructura y la operación en [`INFRASTRUCTURE.md`](INFRASTRUCTURE.md), el contrato técnico con los workflows de n8n en [`N8N_WORKFLOW_REFERENCIA.md`](N8N_WORKFLOW_REFERENCIA.md), el registro de hallazgos, riesgos y validaciones en [`RECOMENDACIONES.md`](RECOMENDACIONES.md) y la visión de producto por soluciones en [`PLAN_TRABAJO_AVACHAT.md`](PLAN_TRABAJO_AVACHAT.md) (documento de planificación, no de estado).
 
 ## Arquitectura
 
@@ -53,7 +53,7 @@ Todas están documentadas en `.env.example`; nunca escribas secretos en el repos
 
 ## Permisos por recurso y operación
 
-Cada operación de cada recurso tiene su propio permiso (82 en total, `config/permissions.php`; el editor de roles los muestra con un nombre en español y una descripción, nunca con su identificador técnico): consultar, ver detalle, crear, editar, activar/desactivar, cancelar, anonimizar o configurar, según lo que el módulo realmente hace. Son **independientes**: marcar uno no concede otro. Lo único que se exige además del permiso de la operación es el que abre la página de su recurso (`view-*`), porque cada operación se hace desde ella; el editor de roles lo avisa sin marcar nada. El módulo del plan y el permiso del rol son dos condiciones separadas y ambas se comprueban en el servidor. Un rol de una base anterior conserva lo que podía hacer: al ejecutar `php artisan db:seed --class=RolesAndPermissionsSeeder` los permisos amplios (`manage-settings`, `manage-customers`...) se reparten una sola vez en los finos y se retiran; `delete-integrations` (retirar una conexión de prueba) no se entrega a nadie por migración. El editor de roles (Usuarios y Roles > Roles) agrupa los permisos por recurso, con búsqueda, filtros y acciones explícitas por grupo; la pestaña Permisos filtra por recurso y texto en el servidor.
+Cada operación de cada recurso tiene su propio permiso (88 en total, `config/permissions.php`; el editor de roles los muestra con un nombre en español y una descripción, nunca con su identificador técnico): consultar, ver detalle, crear, editar, activar/desactivar, cancelar, anonimizar o configurar, según lo que el módulo realmente hace. Son **independientes**: marcar uno no concede otro. Lo único que se exige además del permiso de la operación es el que abre la página de su recurso (`view-*`), porque cada operación se hace desde ella; el editor de roles lo avisa sin marcar nada. El módulo del plan y el permiso del rol son dos condiciones separadas y ambas se comprueban en el servidor. Un rol de una base anterior conserva lo que podía hacer: al ejecutar `php artisan db:seed --class=RolesAndPermissionsSeeder` los permisos amplios (`manage-settings`, `manage-customers`...) se reparten una sola vez en los finos y se retiran; `delete-integrations` (retirar una conexión de prueba) no se entrega a nadie por migración. El editor de roles (Usuarios y Roles > Roles) agrupa los permisos por recurso, con búsqueda, filtros y acciones explícitas por grupo; la pestaña Permisos filtra por recurso y texto en el servidor.
 
 ### Administración interna de `DESARROLLO_DEV` (`admin@ava.com`)
 
@@ -83,7 +83,7 @@ El catálogo que recibe el editor, las listas de roles y la lista de permisos lo
 ## Acceso y usuarios
 
 1. Entra en `/pre-login` y escribe el código del Workspace (por ejemplo `DESARROLLO_DEV`).
-2. Inicia sesión con correo y contraseña. No hay registro público: un administrador crea las cuentas desde **Usuarios y Roles**.
+2. Inicia sesión con correo y contraseña. Las cuentas de un Workspace las crea un administrador desde **Usuarios y Roles** (por invitación o directamente). `/register` está cerrado. Existe además la **contratación pública** en `/registro` (verificación de correo, empresa, solución, plan, aceptación y pago con Wompi; `RECOMENDACIONES.md` §27 a §29): sin ofertas comerciales publicadas y sin pasarela de pago validada contra el servicio real, no debe tratarse como lista para clientes.
 3. **¿Olvidaste tu contraseña?** `/forgot-password` envía un enlace de un solo uso que caduca (`AUTH_PASSWORD_RESET_EXPIRE`, 60 min); la respuesta es la misma exista o no la cuenta y hay límites por IP y por correo. Exige un `MAIL_MAILER` real y un `MAIL_FROM_ADDRESS` propio: sin ellos (fuera de local) el formulario avisa de que el correo no está configurado y no finge el envío. Cada persona cambia su contraseña desde **Mi perfil**; cambiarla o restablecerla cierra las demás sesiones abiertas. En producción la contraseña exige 12 caracteres con mayúsculas, minúsculas y números.
 4. **Textos legales** públicos en `/legal` (términos, aviso de privacidad y política de datos), enlazados desde el acceso y los formularios. Son **borradores** pendientes de revisión jurídica; los datos de la empresa salen de `LEGAL_*` y, vacíos, se muestran como «[POR CONFIRMAR]». Mientras no se aplique la migración `create_legal_acceptances_tables` el perfil lo avisa y no guarda nada. La aceptación por cuenta (versión, fecha e IP) existe pero está apagada (`LEGAL_ACCEPTANCE_REQUIRED=false`) hasta que CCG confirme los textos; las comunicaciones comerciales son una autorización aparte, opcional y revocable desde el perfil.
 5. El administrador inicial sale de `ADMIN_EMAIL` / `ADMIN_PASSWORD`. En `local` y `testing` el seeder crea además cuentas de ejemplo con contraseñas conocidas; nunca existen en otros entornos.
@@ -164,8 +164,8 @@ También desde el panel DEMO de la bandeja (requiere `manage-conversations`). Lo
 ## Calidad
 
 ```bash
-make test                                                     # PHPUnit dentro de Docker, SQLite en memoria (o: docker compose exec app php artisan test)
-php -d memory_limit=1G vendor/phpunit/phpunit/phpunit         # PHPUnit en el anfitrión
+make test                                                     # PHPUnit dentro de Docker, SQLite en memoria (ver la nota sobre descubrimiento incompleto)
+php -d memory_limit=2G vendor/bin/phpunit --do-not-cache-result   # PHPUnit en el anfitrión (con las variables de entorno de la nota siguiente)
 npm run test:js                                               # pruebas de JavaScript (ejecutor de Node, sin dependencias)
 vendor/bin/pint --test                                        # estilo (o: make pint)
 npm run build                                                 # compila el frontend
@@ -173,14 +173,15 @@ make e2e-setup / make e2e-cleanup                             # datos aislados p
 graphify update .                                             # actualiza el grafo de código (graphify-out/, no se versiona)
 ```
 
+- **Suite completa en el anfitrión (la vía fiable en Windows):** `APP_ENV=testing DB_CONNECTION=sqlite DB_DATABASE=:memory: FILESYSTEM_DISK=local CACHE_STORE=array SESSION_DRIVER=array QUEUE_CONNECTION=sync BROADCAST_CONNECTION=null php -d memory_limit=2G vendor/bin/phpunit --do-not-cache-result` (unos 17 minutos). Dentro del contenedor, con el directorio montado desde Docker Desktop en Windows, PHPUnit puede descubrir solo una parte de las pruebas (`RECOMENDACIONES.md` §49.3): no tomes su conteo como el de la suite.
 - **En el anfitrión usa PHPUnit directo:** `php artisan test` lanza un proceso hijo que ignora `-d memory_limit` y con el límite de 128 MB del PHP de Windows se queda sin memoria (`Allowed memory size of 134217728 bytes exhausted`).
-- **Última validación (2026-10-20, `RECOMENDACIONES.md` §25):** PHPUnit 1602 pasadas, 5 omitidas (PostgreSQL), 0 fallos, en SQLite dentro del contenedor con las variables de `make test`; `npm run test:js` 53/53; Pint y `npm run build` correctos; `composer audit` y `npm audit` sin vulnerabilidades. Sin ejecutar: PostgreSQL desechable, concurrencia de inventario y reservas, pantallas en navegador e integraciones reales. Lanza PHPUnit con `make test` o con todas las variables de `TEST_ENV`: `TestDatabaseGuard` ya rechaza arrancar si caché, cola o sesión apuntan al Redis compartido.
+- **Última suite completa registrada:** `RECOMENDACIONES.md` §62.1 (2026-10-27, anfitrión, SQLite): 2 258 pruebas, 2 fallidas, atendidas después con pruebas focalizadas (§63); no consta una suite completa posterior. En el último bloque se ejecutaron pruebas focalizadas (§66, §67.5: 71 pruebas de notificaciones, historial de API, cierre automático, continuidad y migración pendiente; 38 de Wompi, n8n por Workspace y migración pendiente), `npm run test:js` (127) y `npm run build`, todas correctas. Ninguna toca servicios reales. No se ha ejecutado PostgreSQL desechable para inventario ni pruebas de navegador automáticas.
 - **Contra PostgreSQL:** crea una base desechable cuyo nombre acabe en `_test` (`TestDatabaseGuard` se niega a usar cualquier otra) y ejecuta PHPUnit con `DB_CONNECTION=pgsql DB_HOST=127.0.0.1 DB_PORT=5433 DB_DATABASE=<nombre>_test DB_USERNAME=... DB_PASSWORD=...`. Nunca apuntes las pruebas a `ccg_ava`.
 - `tests/TestCase.php` se niega a ejecutar tests contra la base de desarrollo. No hay ESLint ni Prettier; las pruebas de JavaScript cubren la definición del menú, los permisos y las reglas del editor de mensajes, y la interfaz solo se revisa a mano con Playwright (no hay pruebas de navegador automáticas).
 
-## Estado de preparación (2026-10-17)
+## Estado de preparación (veredictos del 2026-10-17; sigue vigente en lo esencial)
 
-Resumen; evidencia, definiciones de «listo», brechas por solución y decisiones pendientes en `RECOMENDACIONES.md` §8.
+Resumen histórico; evidencia, definiciones de «listo», brechas por solución y decisiones pendientes en `RECOMENDACIONES.md` §8. Desde entonces se añadieron contratación pública, límites por plan, pasarela Wompi (solo simulada), notificaciones, historial de llamadas a APIs, soporte integrado en Conversaciones y n8n por Workspace; ninguna integración externa se ha validado contra el servicio real, así que los veredictos no cambian.
 
 | Nivel | Veredicto |
 |---|---|
@@ -208,6 +209,12 @@ Resumen; evidencia, definiciones de «listo», brechas por solución y decisione
 | WhatsApp (Meta), n8n de la plataforma, n8n por Workspace | Sí | **Solo simulado**: faltan cuentas, workflow y licencia reales |
 | Teléfono de la reserva por WhatsApp (D-TEL) y traspaso a una persona cuando la IA falla (D-FALLO) | Sí | Pruebas automáticas (SQLite y PostgreSQL) y circuito local con dobles; sin alerta externa configurada |
 | Booker | API Merchant (horarios, clientes y creación de cita) más el modo `customer` anterior (servicios, profesionales, leer y cancelar); varias sucursales por Workspace | **Solo simulado**: ninguna llamada real a Booker; pendiente de Staging con credenciales corporativas. Reprogramar no existe; cancelar y leer no existen en modo Merchant |
+| n8n por Workspace (URL y secreto de ejecución en Integraciones), catálogo de workflows con audiencia | Sí; el catálogo está **vacío** | **Solo simulado** (`N8nWorkspaceExecutionTest`); no hay un workflow real de soporte. Contrato en `N8N_WORKFLOW_REFERENCIA.md` |
+| Contratación pública (`/registro`), planes con precio mensual y anual, límites, condiciones congeladas, pruebas gratuitas | Sí | Pruebas automáticas y navegador; sin precios ni ofertas reales publicadas |
+| Wompi (Web Checkout, firma, webhook, relectura de la transacción, historial de pagos) | Sí, solo contratación pública | **Solo simulado**: sin Sandbox real. Renovaciones, cambios de plan y cobros recurrentes **no existen** |
+| SIGO (facturación) | **No** | Sin API, credenciales ni reglas; el historial marca «pendiente de facturación» |
+| Notificaciones del equipo, historial de llamadas a APIs, cierre automático de conversaciones | Sí | Pruebas automáticas; la migración que las habilita constaba aplicada en `ccg_ava` en una inspección de solo lectura del 2026-10-29 (`RECOMENDACIONES.md` §67.1), sin verificación de las pantallas contra esa base |
+| Correo saliente (Google Workspace SMTP) | Sí (`mail:test`) | **Nunca se envió un correo real** |
 | Envío de Campañas y plantillas de Meta | **No** | No hay integración ni envío |
 | Módulos propios de Salud, Delivery y eCommerce | **No** | Categorías vacías |
 
@@ -217,6 +224,7 @@ Resumen; evidencia, definiciones de «listo», brechas por solución y decisione
 - **La ejecución iniciada por Ava (webhook de Meta + n8n de la plataforma) solo se probó con simulaciones.** Falta un n8n con el workflow, una app de Meta con el webhook apuntando a Ava y verificar con n8n que su licencia permite este modelo de servicio antes del uso comercial. Meta no ofrece idempotencia al enviar: si el resultado de un envío es incierto, Ava no lo reenvía y depende de que Meta devuelva el estado con la etiqueta `ava:{id}` para completarlo.
 - Fuera de la ventana de 24 h de WhatsApp solo se pueden enviar plantillas aprobadas, que Ava no envía.
 - Reportes no tiene Preguntas ni Encuestas (Ava no guarda esa información) ni tiempos de respuesta; la «IA» del entorno DEMO es un texto fijo.
-- Planes: los módulos específicos de Salud, Delivery y eCommerce todavía no existen (sus categorías están vacías; Salud puede usar los de Servicios y Reservas); no hay precios, límites ni renovación. La interfaz de Planes se revisó en navegador (móvil, tablet y escritorio) sin pruebas de frontend automáticas.
+- Planes: los módulos específicos de Salud, Delivery y eCommerce todavía no existen (sus categorías están vacías; Salud puede usar los de Servicios y Reservas); hay límites por plan y pruebas gratuitas, pero no hay precios reales publicados ni renovación, cambio de plan con cobro ni facturación. La interfaz de Planes se revisó en navegador (móvil, tablet y escritorio) sin pruebas de frontend automáticas.
 - Los modales de Clientes y de Plantillas (diseño por filas, contador de caracteres) se comprobaron con una maqueta estática y las pruebas de JavaScript, no dentro de la aplicación con sesión.
+- **Accesibilidad visual:** el borde de los controles se ajustó a un contraste ≥3:1 (`RECOMENDACIONES.md` §66); falta revisar la interfaz con sesión en claro y oscuro y no se han realizado pruebas con lectores de pantalla.
 - Más pendientes y decisiones abiertas en [`pendientes.md`](pendientes.md).

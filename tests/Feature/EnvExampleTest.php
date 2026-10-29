@@ -33,6 +33,19 @@ class EnvExampleTest extends TestCase
         $this->assertArrayHasKey('SUPPORT_INACTIVITY_MINUTES', $example);
     }
 
+    public function test_no_variable_is_assigned_twice_in_the_example(): void
+    {
+        $assignments = [];
+
+        foreach (file(base_path('.env.example'), FILE_IGNORE_NEW_LINES) as $line) {
+            if (preg_match('/^(# ?)?([A-Z][A-Z0-9_]*)=/', $line, $m)) {
+                $assignments[$m[2]] = ($assignments[$m[2]] ?? 0) + 1;
+            }
+        }
+
+        $this->assertSame([], array_keys(array_filter($assignments, fn (int $count) => $count > 1)), 'A variable appears more than once in .env.example');
+    }
+
     public function test_every_variable_compose_requires_is_documented_and_the_compatible_fallback_still_reads_the_environment(): void
     {
         $example = $this->example();

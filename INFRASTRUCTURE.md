@@ -67,7 +67,7 @@ make e2e-setup      # php artisan e2e:setup --users=3 --json  -> Workspace E2E_W
 make e2e-cleanup    # php artisan e2e:cleanup                 -> borra SOLO lo etiquetado; `--dry-run` para ver qué borraría
 ```
 
-Convención: usuarios `*@e2e.ccg.test`, Workspace `E2E_*` (organización `E2E Org`) y roles `e2e_*`. Los comandos se niegan a ejecutarse en producción, muestran la base de datos usada y no tocan datos reales (un rol `e2e_*` asignado a un usuario real no se elimina).
+Convención: usuarios `*@e2e.ccg.test`, Workspace `E2E_*` (organización `E2E Org`) y roles `e2e_*`. Los comandos se niegan a ejecutarse en producción, muestran la base de datos usada y solo eliminan lo etiquetado (un rol `e2e_*` asignado a un usuario real no se elimina). **Advertencia (`RECOMENDACIONES.md` §67.6):** `e2e:setup` NO tiene guardia contra la base de desarrollo real: con el `.env` actual (`pgsql`, `ccg_ava`) sembraría usuarios y un Workspace allí. Cuando no se quiera tocar `ccg_ava`, ejecútalo con variables de entorno que apunten a una base desechable (`DB_CONNECTION=sqlite DB_DATABASE=<archivo fuera del repositorio> …`; las variables del proceso prevalecen sobre `.env`) y confirma el destino con `php artisan config:show database.default` antes de escribir.
 
 ## Variables importantes
 
@@ -82,8 +82,10 @@ Todo sale de `.env` (ver `.env.example`). El cableado de arquitectura (pgsql, dr
 | `REVERB_APP_ID`, `REVERB_APP_KEY`, `REVERB_APP_SECRET` | Websockets |
 | `TRUSTED_PROXIES` | Lista de IPs o rangos CIDR de los proxies confiables. Por defecto en producción: los rangos privados `10.0.0.0/8,172.16.0.0/12,192.168.0.0/16` (red de Docker y VPC). No uses `*`: confía en `X-Forwarded-For` de cualquiera y permite falsificar la IP de los límites de tasa (comprobado) |
 | `APP_PORT`, `VITE_PORT`, `DB_FORWARD_PORT`, `MINIO_PORT` | Puertos del host (desarrollo) |
-| `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN`, `N8N_EXECUTION_URL`, `N8N_EXECUTION_SECRET`, `N8N_EXECUTION_TIMEOUT` | Integración con Meta y con el n8n de la plataforma (vacío = no configurado) |
+| `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN`, `N8N_EXECUTION_URL`, `N8N_EXECUTION_SECRET`, `N8N_EXECUTION_TIMEOUT` | Meta y n8n. Cada Workspace ejecuta en **su** n8n, configurado en Integraciones (URL y secreto de ejecución cifrado); `N8N_EXECUTION_*` solo es una transición para `DESARROLLO_DEV` (`config('n8n.legacy_environment')`) y nunca sirve a un Workspace con conexión propia (`N8N_WORKFLOW_REFERENCIA.md` §8, `RECOMENDACIONES.md` §65). Vacío = no configurado |
 | `BOOKER_STAGING_URL`, `BOOKER_PRODUCTION_URL`, `BOOKER_SCOPE`, `BOOKER_MERCHANT_VERIFIED` | Booker: hosts por entorno, scope del token y el interruptor que habilita horarios y reserva en producción (`false` hasta verificarlos en Staging). Las credenciales de Booker son de cada Workspace (cifradas en la base), no variables de entorno |
+| `MAIL_MAILER`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS`, `MAIL_TIMEOUT` | Correo saliente (Google Workspace SMTP). Con `MAIL_MAILER=log` no se envía nada; prueba con `php artisan mail:test <destinatario>`. Nunca se ha enviado un correo real (`RECOMENDACIONES.md` §30) |
+| `WOMPI_*` (ver `.env.example`) | Compatibilidad con Wompi por entorno. Si hay una fila activa en `payment_provider_settings` (Configuraciones > Impuestos y facturación, solo `Desarrollo_DEV`) manda esa y las variables no se mezclan (§64.3). URL de eventos que se registra en el panel de Wompi (una por ambiente): `POST {APP_URL}/api/webhooks/wompi`; la URL de redirección no se configura allí (Ava envía `redirect-url` = `{APP_URL}/registro` en cada checkout). Wompi no alcanza `localhost` |
 | `ALERT_LOG_CHANNELS`, `LOG_SLACK_WEBHOOK_URL` | Dónde se escribe, además de `storage/logs/alerts.log`, la alerta de un fallo definitivo de la IA (el compose de producción usa `stderr`). Sin un canal externo la alerta no sale del servidor |
 | `CHATBOT_FAILURE_NOTICE` | Único texto que recibe el contacto cuando la IA falla y la conversación pasa a una persona. Debe estar aprobado por el negocio; vacío = no se envía nada |
 
@@ -115,6 +117,10 @@ El bucket de MinIO es **privado** (`MINIO_DEFAULT_BUCKETS` sin `:public`): los a
 ### Horizon
 
 `/horizon` está abierto en `APP_ENV=local`. Fuera de local, el gate `viewHorizon` (`app/Providers/HorizonServiceProvider.php`) deja entrar solo a las cuentas **activas** cuyo correo esté en `HORIZON_ALLOWED_EMAILS` (separados por comas, sin distinguir mayúsculas). Con la variable vacía —el valor por defecto— **nadie entra**. Quién figura en la lista es una decisión del responsable (ver `pendientes.md`).
+
+## Tareas programadas
+
+El `scheduler` (una sola réplica) ejecuta, todas con `withoutOverlapping()` y `onOneServer()` y vigiladas por `ScheduledCommandMonitor` (`routes/console.php`): `executions:recover` y `conversations:maintain` y `appointments:notify` y `catalog:send-reminders` (cada minuto), `agent:tools:reconcile` (cada 5 min), `subscriptions:expire-trials` (cada 10 min) y `signup:reconcile` (cada 15 min). `integrations:diagnose` informa el último éxito, las fallas de 24 h y «NO SE EJECUTA» por comando. Tras aplicar una migración que habilita funciones nuevas, reinicia los procesos largos (`horizon:terminate`, `worker`, `scheduler`): conservan en memoria que una tabla no existía.
 
 ## Operación del piloto (copia, supervisión, despliegue y marcha atrás)
 
@@ -160,7 +166,7 @@ Cuando la IA falla de forma definitiva (n8n inaccesible tras 3 intentos, respues
 1. **Antes:** `backup.sh` + `restore-check.sh` con éxito; leer las migraciones nuevas y `migrate --pretend` en una copia restaurada de la base; confirmar variables obligatorias; tener la imagen anterior etiquetada (`APP_IMAGE=ccg-ava-platform:<etiqueta>`).
 2. **Despliegue:** `docker compose --env-file prod.env -f docker-compose.prod.yml up -d --build --scale app=N --scale worker=M`, luego `exec app php artisan migrate --force` (explícito, nunca automático) y `exec worker php artisan horizon:terminate`.
 3. **Después:** `integrations:diagnose` sin bloqueos; una conversación de prueba interna de extremo a extremo.
-4. **Marcha atrás del código:** volver a levantar con la etiqueta anterior de `APP_IMAGE`. Las migraciones son aditivas (columnas nulables, tablas y restricciones nuevas) y el código anterior las tolera; `migrate:rollback` solo se usa en una copia, nunca como primera opción. **Marcha atrás de datos:** restaurar la copia previa en una base nueva (procedimiento de arriba); se pierde lo ocurrido desde la copia, por eso se hace en una ventana acordada.
+4. **Marcha atrás del código:** volver a levantar con la etiqueta anterior de `APP_IMAGE`. Las migraciones son aditivas (columnas nulables, tablas y restricciones nuevas) y el código anterior las tolera; `migrate:rollback` solo se usa en una copia, nunca como primera opción y **nunca** para `2026_11_13_100000_create_payments_notifications_api_log_and_context` en una base con datos: su `down()` elimina 4 tablas y 3 columnas con su contenido (`RECOMENDACIONES.md` §67.1). **Marcha atrás de datos:** restaurar la copia previa en una base nueva (procedimiento de arriba); se pierde lo ocurrido desde la copia, por eso se hace en una ventana acordada.
 5. **Nunca** `migrate:fresh`, `db:wipe`, `migrate:refresh` ni `db:seed` completo en producción. Las semillas permitidas son las idempotentes de roles y catálogo de módulos.
 
 ### Acceso, aislamiento y secretos
