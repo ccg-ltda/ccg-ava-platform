@@ -479,11 +479,43 @@ class PlatformBoundaryTest extends TestCase
         $this->assertTrue($indexed('conversations', ['workspace_id', 'handling', 'last_message_at']));
     }
 
-    public function test_the_only_add_migration_left_creates_a_table_that_already_ran_in_development(): void
-    {
-        $left = collect(glob(database_path('migrations/*.php')))->map(fn ($path) => basename($path))->filter(fn (string $name) => str_contains($name, '_add_'))->values()->all();
+    /**
+     * Migrations named `*_add_*` that already ran in a database are kept by name only (renaming one would make Laravel run it again).
+     * Anything NOT in this inventory must follow the convention: new columns and tables go into the `create_*` migration of their table.
+     */
+    private const HISTORICAL_ADD_MIGRATIONS = [
+        '2026_10_09_140000_add_chatbot_executions.php', // only creates `chatbot_executions`
+        '2026_11_09_110000_add_offers_all_services_to_locations.php', // already ran in development
+        '2026_11_10_110000_add_offers_all_locations_to_products.php', // already ran in development
+    ];
 
-        // Kept by name only because the development database has it in its history; it just creates `chatbot_executions`.
-        $this->assertSame(['2026_10_09_140000_add_chatbot_executions.php'], $left);
+    /**
+     * @param  list<string>  $names
+     * @return list<string> the `*_add_*` migrations that are not part of the historical inventory
+     */
+    private function addMigrationsOutsideInventory(array $names): array
+    {
+        return array_values(array_filter($names, fn (string $name) => str_contains($name, '_add_') && ! in_array($name, self::HISTORICAL_ADD_MIGRATIONS, true)));
+    }
+
+    public function test_every_add_migration_in_the_project_is_a_justified_historical_one(): void
+    {
+        $names = collect(glob(database_path('migrations/*.php')))->map(fn ($path) => basename($path))->all();
+
+        $this->assertSame([], $this->addMigrationsOutsideInventory($names), 'New columns or tables belong in the create_* migration of their table, not in a new add_* migration.');
+        // The inventory does not rot: every entry still exists (a renamed or deleted one would hide a gap).
+        $this->assertEqualsCanonicalizing(self::HISTORICAL_ADD_MIGRATIONS, array_values(array_intersect($names, self::HISTORICAL_ADD_MIGRATIONS)));
+    }
+
+    public function test_a_new_add_migration_is_still_detected_and_the_inventory_is_not_a_blanket_exemption(): void
+    {
+        $detected = $this->addMigrationsOutsideInventory([
+            '2026_11_14_100000_add_something_to_locations.php', // new, outside the inventory
+            '2026_11_10_110000_add_offers_all_locations_to_products.php', // historical
+            '2026_11_14_110000_create_things.php', // not an add_ migration
+            '2026_11_14_120000_add_offers_all_locations_to_products.php', // same words, different file: not exempt
+        ]);
+
+        $this->assertSame(['2026_11_14_100000_add_something_to_locations.php', '2026_11_14_120000_add_offers_all_locations_to_products.php'], $detected);
     }
 }

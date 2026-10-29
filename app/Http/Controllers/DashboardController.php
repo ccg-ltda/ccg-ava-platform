@@ -37,7 +37,7 @@ class DashboardController extends Controller
         $target = $chosen['workspace'];
         $period = $request->period($active->settingsOrDefault()->timezone);
         $settings = $active->settingsOrDefault();
-        $modules = $access->forScope($target, $active);
+        $modules = $target === null || $target->is($active) ? $access->forWorkspaceInRequest($request, $active) : $access->forScope($target, $active);
         $has = fn (string $module) => in_array($module, $modules, true);
         $can = [
             'conversations' => $has('conversations') && in_array('view-conversations', $permissions, true),

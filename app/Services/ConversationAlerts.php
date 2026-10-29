@@ -37,7 +37,7 @@ class ConversationAlerts
 
     public function allowed(Request $request, Workspace $workspace): bool
     {
-        return in_array('view-conversations', $request->attributes->get('workspace_permissions', []), true) && $this->modules->allows($workspace, 'conversations');
+        return in_array('view-conversations', $request->attributes->get('workspace_permissions', []), true) && in_array('conversations', $this->modules->forWorkspaceInRequest($request, $workspace), true);
     }
 
     /**

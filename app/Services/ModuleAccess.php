@@ -92,7 +92,7 @@ class ModuleAccess
             return [];
         }
 
-        return $this->operative($this->withOverrides($workspace, $this->baseKeys($workspace, $plan, true, $subscription)));
+        return $this->operative($this->withOverrides($workspace, $this->contractKeys($plan, true, $subscription)));
     }
 
     /**
@@ -104,8 +104,14 @@ class ModuleAccess
      */
     public function baseKeys(Workspace $workspace, ?Plan $plan, bool $usableOnly = true, ?Subscription $subscription = null): array
     {
+        return $this->contractKeys($plan, $usableOnly, $subscription ?? $this->subscription($workspace));
+    }
+
+    /** @return list<string> the same as `baseKeys` for a subscription already resolved (null = the Workspace has none: it is not looked up again) */
+    private function contractKeys(?Plan $plan, bool $usableOnly, ?Subscription $subscription): array
+    {
         // `terms` is simply absent (null) on a database without the column: no schema probe is needed here.
-        $terms = ($subscription ?? $this->subscription($workspace))?->terms;
+        $terms = $subscription?->terms;
 
         if (is_array($terms) && isset($terms['modules']) && is_array($terms['modules'])) {
             $keys = $usableOnly
@@ -226,6 +232,19 @@ class ModuleAccess
     public function forScope(?Workspace $target, Workspace $active): array
     {
         return $this->keys($target ?? $active);
+    }
+
+    /**
+     * The modules of `$workspace` for a page of this request: the request's own memo when it is the Workspace the request runs in (so resolving it again costs
+     * nothing), otherwise a fresh lookup. The memo lives on the request object only: it is never shared between requests, users or Workspaces.
+     *
+     * @return list<string>
+     */
+    public function forWorkspaceInRequest(Request $request, Workspace $workspace): array
+    {
+        $current = $request->attributes->get('workspace');
+
+        return $current instanceof Workspace && $current->is($workspace) ? $this->forRequest($request) : $this->keys($workspace);
     }
 
     /** @return list<string> the modules of the request's Workspace, computed once per request */
