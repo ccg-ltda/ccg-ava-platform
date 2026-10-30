@@ -18,7 +18,8 @@ class KnowledgeDocument extends Model
 
     public const ERROR = 'error';
 
-    protected $guarded = [];
+    /** What KnowledgeBase::store() writes; status, counters and errors change only through its own queries, never through request data. */
+    protected $fillable = ['workspace_id', 'title', 'original_name', 'extension', 'mime', 'size_bytes', 'sha256', 'storage_path', 'status', 'uploaded_by'];
 
     protected function casts(): array
     {

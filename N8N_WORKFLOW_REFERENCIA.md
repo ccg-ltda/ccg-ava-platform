@@ -102,6 +102,12 @@ Las solicitudes de soporte de los clientes son conversaciones `web` normales de 
 
 Cada Workspace ejecuta sus conversaciones en **su propio n8n**, configurado en Integraciones → n8n: URL de la instancia, API Key (solo para verificar la API) y **secreto de ejecución** (solo escritura, mínimo 16 caracteres). Ava llama a `{URL}/webhook/{webhook_path}` y firma con ese secreto: el workflow debe verificar `X-Ava-Signature` con **el mismo** secreto y existir con ese `webhook_path` en esa instancia. Un Workspace nunca usa el secreto de otro. Las variables `N8N_EXECUTION_URL/SECRET` son solo una transición para `DESARROLLO_DEV` (`config('n8n.legacy_environment')`) y nunca sirven a un Workspace con conexión propia. Cada entrada del catálogo (`config/n8n.php`) declara a qué Workspaces se publica (`workspaces`); sin ese dato es exclusiva del administrativo. El contrato de los apartados 2 a 5 no cambió.
 
-## 9. Qué no cubre este documento
+## 9. Token de acceso del chatbot a `/api/agent/*`: vigencia y renovación (§75 de `RECOMENDACIONES.md`)
+
+El token `ava_…` con el que n8n llama a Ava (`GET /api/agent/config`, `POST /api/agent/messages`, `authorize`, `handoff`, herramientas) **vence a los 90 días**. Los tokens anteriores a esta regla se adoptaron con un margen mínimo de 30 días. Un token vencido o revocado recibe `401` con `{"message": …, "reason": "token_expired" | "token_revoked"}`: el workflow debe tratar ese `reason` como un fallo visible (no reintentar en bucle) y avisar a la persona responsable. Ava avisa en la campanita del Workspace a los 30, 14, 7, 3 y 1 día antes.
+
+**Renovar sin interrumpir** (Asistentes → IA y comportamiento → «Rotar token»): Ava emite un token de reemplazo y **el actual sigue funcionando**. Pega el nuevo en la credencial «Header Auth» de n8n (`Authorization: Bearer <token>`); en cuanto n8n lo use con éxito, Ava retira el anterior sola. **La actualización de la credencial dentro de n8n es manual**: Ava no tiene (ni se ha verificado que la API de n8n de cada cliente ofrezca) un mecanismo para cambiarla. «Generar nuevo token (reemplaza ya)» corta el anterior al instante y sirve para un token comprometido.
+
+## 10. Qué no cubre este documento
 
 La elección de workflow por clientes (autoservicio) y su propuesta de entidades están en `RECOMENDACIONES.md` §63.

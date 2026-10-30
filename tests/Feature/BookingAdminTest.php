@@ -256,6 +256,7 @@ class BookingAdminTest extends TestCase
 
         $this->post("/bookings/{$appointment->id}/status", ['status' => 'completed'])->assertSessionHas('error'); // has not started
         $this->travelTo(CarbonImmutable::parse('2026-10-14 13:00:00', 'UTC'));
+        $this->renewAbsoluteSession();
         $this->post("/bookings/{$appointment->id}/status", ['status' => 'completed'])->assertSessionHas('success');
         $this->assertSame('completed', $appointment->fresh()->status);
 

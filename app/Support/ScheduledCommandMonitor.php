@@ -26,7 +26,7 @@ class ScheduledCommandMonitor
     private const MAX_LOG_BYTES = 1_000_000;
 
     /** The commands that are watched and how often each must run (minutes): the single list the schedule and the diagnosis share. */
-    public const WATCHED = ['executions-recover' => 1, 'appointments-notify' => 1, 'catalog-reminders' => 1, 'agent-tools-reconcile' => 5, 'signup-reconcile' => 15, 'trials-expire' => 10, 'conversations-maintain' => 1];
+    public const WATCHED = ['executions-recover' => 1, 'appointments-notify' => 1, 'catalog-reminders' => 1, 'agent-tokens-notify' => 60, 'agent-tools-reconcile' => 5, 'signup-reconcile' => 15, 'trials-expire' => 10, 'conversations-maintain' => 1];
 
     public static function watch(Event $event, string $name): Event
     {

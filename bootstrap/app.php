@@ -1,12 +1,14 @@
 <?php
 
 use App\Http\Middleware\AuthenticateAgent;
+use App\Http\Middleware\EnforceAbsoluteSession;
 use App\Http\Middleware\EnsureLegalAcceptance;
 use App\Http\Middleware\EnsurePlatformAdministration;
 use App\Http\Middleware\EnsureWorkspaceContext;
 use App\Http\Middleware\EnsureWorkspaceModule;
 use App\Http\Middleware\EnsureWorkspacePermission;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\TraceAgentTool;
 use Illuminate\Auth\Middleware\Authorize;
 use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
@@ -37,10 +39,15 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(append: [
+            // First: an expired session is signed out BEFORE anything else (the legal check, Inertia's shared props) looks at the user.
+            EnforceAbsoluteSession::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
             EnsureLegalAcceptance::class,
         ]);
+
+        // Security headers (config/security.php) on every response, web and api; the CORS headers come from Laravel's own HandleCors (config/cors.php).
+        $middleware->append(SecurityHeaders::class);
 
         // A session opened before a password change or reset is closed on its next request (the guard compares the password hash).
         $middleware->authenticateSessions();
@@ -60,6 +67,7 @@ return Application::configure(basePath: dirname(__DIR__))
             AddQueuedCookiesToResponse::class,
             StartSession::class,
             ShareErrorsFromSession::class,
+            EnforceAbsoluteSession::class, // before the route's `auth`: an expired session must already be a guest when `auth` looks at it
             AuthenticatesRequests::class,
             ThrottleRequests::class,
             ThrottleRequestsWithRedis::class,

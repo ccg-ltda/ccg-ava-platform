@@ -97,6 +97,9 @@ return [
 
     'cipher' => 'AES-256-CBC',
 
+    // Read by bootstrap/app.php (trustProxies) and by `integrations:diagnose`, which warns about `*`.
+    'trusted_proxies' => env('TRUSTED_PROXIES'),
+
     'key' => env('APP_KEY'),
 
     'previous_keys' => [

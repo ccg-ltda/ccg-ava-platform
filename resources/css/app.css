@@ -1,4 +1,6 @@
 @import 'tailwindcss';
+/* Inter, self-hosted (npm @fontsource-variable/inter, SIL OFL 1.1): the browser never contacts a font provider. Only the subsets a page uses are downloaded (unicode-range). */
+@import '@fontsource-variable/inter/wght.css';
 @import './ava.css';
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
@@ -13,7 +15,7 @@
  * The access screens (login) keep their own tokens in ava.css.
  */
 @theme {
-    --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+    --font-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
 
     /* Brand blues */

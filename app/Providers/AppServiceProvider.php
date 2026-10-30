@@ -16,10 +16,14 @@ use App\Payments\PaymentGateway;
 use App\Payments\UnconfiguredPaymentGateway;
 use App\Payments\WompiConfig;
 use App\Payments\WompiPaymentGateway;
+use App\Services\AbsoluteSession;
 use App\Services\AgentToolTrace;
+use Illuminate\Auth\Events\Login;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Foundation\DevCommands;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Vite;
@@ -104,6 +108,18 @@ class AppServiceProvider extends ServiceProvider
         ]);
         RateLimiter::for('signup-step', fn (Request $request) => Limit::perMinute(60)->by('ip:'.$request->ip()));
         RateLimiter::for('signup-availability', fn (Request $request) => Limit::perMinute(30)->by('ip:'.$request->ip()));
+
+        // The absolute session clock starts at every FRESH login (the remember-cookie restoration fires the same event and is reconciled by EnforceAbsoluteSession).
+        Event::listen(Login::class, function (Login $event) {
+            $guard = Auth::guard($event->guard);
+
+            if (! (method_exists($guard, 'viaRemember') && $guard->viaRemember()) && app()->bound('session.store')) {
+                app(AbsoluteSession::class)->start(app('session.store'), $event->user, $event->remember);
+            }
+        });
+
+        // Everything behind the sign-in (routes/web.php): one generous bucket per person, so a stolen session or a script cannot hammer the application. Polling screens stay far below it.
+        RateLimiter::for('authenticated', fn (Request $request) => Limit::perMinute((int) config('auth.authenticated_per_minute'))->by($request->user() ? 'user:'.$request->user()->getAuthIdentifier() : 'ip:'.$request->ip()));
 
         // The automation of a chatbot reads its configuration on every conversation.
         RateLimiter::for('agent', fn (Request $request) => Limit::perMinute((int) config('chatbots.agent_per_minute'))->by(sha1((string) $request->bearerToken()).'|'.$request->ip()));

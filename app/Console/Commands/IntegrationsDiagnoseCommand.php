@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Booking\AppointmentNotifier;
 use App\Legal\LegalDocuments;
+use App\Models\AgentToken;
 use App\Models\AppointmentNotification;
 use App\Models\BookingSetting;
 use App\Models\Chatbot;
@@ -14,6 +15,7 @@ use App\Models\Message;
 use App\Models\Plan;
 use App\Models\Workspace;
 use App\Payments\PaymentGateway;
+use App\Services\AgentAccess;
 use App\Services\ModuleAccess;
 use App\Services\ModuleCatalog;
 use App\Services\SignupCatalog;
@@ -73,6 +75,9 @@ class IntegrationsDiagnoseCommand extends Command
         $this->components->info('Módulos y permisos (lo que hace visible un módulo)');
         $this->modulesAndPermissions();
 
+        $this->components->info('Tokens de acceso de los agentes (n8n)');
+        $this->agentTokens($workspaceId);
+
         $this->components->info('Chat público de CCG (soporte en el Workspace administrativo)');
         $this->supportChat();
 
@@ -87,6 +92,29 @@ class IntegrationsDiagnoseCommand extends Command
         $this->line('Esto solo revisa la configuración y el estado interno: no llama a Meta ni a n8n. La conexión real se prueba con «Probar conexión» y un mensaje de prueba.');
 
         return $this->failures > 0 ? self::FAILURE : self::SUCCESS;
+    }
+
+    /** Tokens that expired or are about to: an expired token is an integration that has stopped (never silent). Counts only, never a token. */
+    private function agentTokens(?int $workspaceId): void
+    {
+        if (! AgentAccess::ready()) {
+            $this->caution('Falta la migración de la vigencia de tokens (agent_tokens): los tokens no caducan hasta aplicarla.');
+
+            return;
+        }
+
+        $current = AgentToken::query()->whereNull('revoked_at')->whereNull('superseded_at')
+            ->whereHas('chatbot', fn ($q) => $q->where('is_active', true)->when($workspaceId, fn ($w) => $w->where('workspace_id', $workspaceId)))->get();
+        $expired = $current->filter->isExpired();
+        $window = max((array) config('chatbots.agent_token.notify_days', [14]));
+        $expiring = $current->reject->isExpired()->filter(fn ($t) => $t->daysLeft() <= $window);
+
+        $expired->isNotEmpty()
+            ? $this->caution("{$expired->count()} token(s) vencido(s) en chatbots activos: sus automatizaciones están siendo rechazadas (Asistentes > IA y comportamiento > Generar o Rotar).")
+            : $this->good('Ningún token vigente de un chatbot activo ha vencido.');
+        $expiring->isNotEmpty()
+            ? $this->caution("{$expiring->count()} token(s) vencen en {$window} días o menos: ya se avisó a cada Workspace con una notificación (rotar el token no interrumpe n8n).")
+            : $this->good("Ningún token vence en los próximos {$window} días.");
     }
 
     private function good(string $text): void
@@ -113,6 +141,9 @@ class IntegrationsDiagnoseCommand extends Command
         if (app()->isProduction()) {
             str_starts_with((string) config('app.url'), 'https://') ? $this->good('APP_URL usa https.') : $this->blocker('APP_URL no usa https: Meta y n8n exigen TLS en producción.');
             config('app.debug') ? $this->blocker('APP_DEBUG está activo en producción.') : $this->good('APP_DEBUG apagado.');
+            config('app.trusted_proxies') === '*'
+                ? $this->caution('TRUSTED_PROXIES=* confía en X-Forwarded-For de cualquiera: un visitante puede falsear su IP y escapar de los límites por IP. Usa la lista de IP o rangos de tu balanceador.')
+                : $this->good('TRUSTED_PROXIES no es un comodín.');
             config('integrations.allow_private_hosts') ? $this->blocker('INTEGRATIONS_ALLOW_PRIVATE_HOSTS está activo en producción (permite llamar a la red interna).') : $this->good('Las conexiones salientes no pueden alcanzar la red interna.');
         } elseif (config('integrations.allow_private_hosts')) {
             $this->caution('INTEGRATIONS_ALLOW_PRIVATE_HOSTS activo (solo para pruebas locales contra una API simulada).');

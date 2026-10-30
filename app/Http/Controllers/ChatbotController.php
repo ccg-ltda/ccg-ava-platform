@@ -119,15 +119,34 @@ class ChatbotController extends Controller
     /** Generates (or replaces) the token the automation uses to read this chatbot. It is shown once, on the next page. */
     public function generateAgentToken(Request $request, int $chatbot, AgentAccess $access): RedirectResponse
     {
-        $request->session()->flash('agent_token', $access->generate($this->find($request, $chatbot)));
+        $request->session()->flash('agent_token', $access->generate($this->find($request, $chatbot), $request->user()));
         $request->session()->flash('agent_token_chatbot', $chatbot);
 
         return $this->back($chatbot, 'Token generado. Cópialo ahora: no se volverá a mostrar.');
     }
 
+    /** Issues a replacement token WITHOUT cutting the current one off: it keeps working until n8n uses the new one. Shown once, like any new token. */
+    public function rotateAgentToken(Request $request, int $chatbot, AgentAccess $access): RedirectResponse
+    {
+        $request->session()->flash('agent_token', $access->rotate($this->find($request, $chatbot), $request->user()));
+        $request->session()->flash('agent_token_chatbot', $chatbot);
+
+        return $this->back($chatbot, 'Token de reemplazo creado. Cópialo, actualízalo en n8n y el anterior se retirará solo cuando n8n use el nuevo.');
+    }
+
+    /** Revokes ONE token (an older one still valid, or a compromised one) immediately. */
+    public function revokeOneAgentToken(Request $request, int $chatbot, int $token, AgentAccess $access): RedirectResponse
+    {
+        $revoked = $access->revokeToken($this->find($request, $chatbot), $token, $request->user());
+
+        return $revoked
+            ? $this->back($chatbot, 'Token revocado: quien lo use dejará de poder leer este chatbot.')
+            : $this->back($chatbot, 'Ese token ya no está activo.', 'error');
+    }
+
     public function revokeAgentToken(Request $request, int $chatbot, AgentAccess $access): RedirectResponse
     {
-        $access->revoke($this->find($request, $chatbot));
+        $access->revoke($this->find($request, $chatbot), $request->user());
 
         return $this->back($chatbot, 'Token revocado: la automatización ya no puede leer este chatbot.');
     }

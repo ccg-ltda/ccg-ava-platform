@@ -33,7 +33,8 @@ return [
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
-            'serve' => true,
+            // No `storage/{path}` routes: files are served only by the application's own authenticated controllers (nothing uses temporary URLs).
+            'serve' => false,
             'throw' => false,
             'report' => false,
         ],

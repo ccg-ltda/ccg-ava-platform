@@ -8,6 +8,7 @@ use App\Observability\ApiCallRecorder;
 use App\Services\OperationalAlert;
 use App\Services\SignupService;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\ValidationException;
 use Throwable;
@@ -60,7 +61,10 @@ class WompiEvents
     public function handle(array $payload, ?string $headerChecksum = null): string
     {
         if (! $this->verify($payload, $headerChecksum)) {
-            $this->alerts->raise('wompi_event_invalid_signature');
+            // Anyone can post a bad signature: one alert per five minutes is enough to notice it and cannot be flooded.
+            if (Cache::add('alert:wompi_event_invalid_signature', true, now()->addMinutes(5))) {
+                $this->alerts->raise('wompi_event_invalid_signature');
+            }
 
             return self::INVALID;
         }

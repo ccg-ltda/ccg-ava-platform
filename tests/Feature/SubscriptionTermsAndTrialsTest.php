@@ -315,6 +315,7 @@ class SubscriptionTermsAndTrialsTest extends TestCase
         $organizations = Organization::count();
 
         $this->travel(5)->days();
+        $this->renewAbsoluteSession();
 
         // The server decides on every request: no waiting for the scheduled command.
         $subscription = Subscription::firstOrFail();
@@ -353,6 +354,7 @@ class SubscriptionTermsAndTrialsTest extends TestCase
         $this->platformAdmin();
         $this->grant($workspace, ['ends_at' => now()->addDays(2)->toDateString()]);
         $this->travel(5)->days();
+        $this->renewAbsoluteSession();
         Artisan::call('subscriptions:expire-trials');
         $this->assertSame([], $this->modules($workspace));
         $workspaces = Workspace::count();
@@ -380,6 +382,7 @@ class SubscriptionTermsAndTrialsTest extends TestCase
         $this->platformAdmin();
         $this->grant($workspace, ['ends_at' => now()->addDays(2)->toDateString()]);
         $this->travel(5)->days();
+        $this->renewAbsoluteSession();
         Artisan::call('subscriptions:expire-trials');
 
         $this->actingAs($member)->withSession(['workspace_id' => $workspace->id]);

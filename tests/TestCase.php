@@ -5,6 +5,7 @@ namespace Tests;
 use App\Models\Organization;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Services\AbsoluteSession;
 use App\Services\PlatformAccess;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
@@ -40,6 +41,15 @@ abstract class TestCase extends BaseTestCase
         parent::setUp();
 
         Storage::fake();
+    }
+
+    /**
+     * A test that jumps days ahead while "signed in" is not a person who stays signed in for days: the absolute session lifetime (12 h, App\Services\AbsoluteSession) would
+     * end that session. Call this right after the time travel to keep the same session valid; tests of the limit itself (AbsoluteSessionTest) do not.
+     */
+    protected function renewAbsoluteSession(): void
+    {
+        $this->withSession([AbsoluteSession::KEY => now()->timestamp]);
     }
 
     /**

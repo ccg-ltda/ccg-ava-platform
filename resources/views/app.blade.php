@@ -7,19 +7,20 @@
         <title inertia>{{ config('branding.name') }}</title>
         <meta name="brand" content="{{ config('branding.name') }}">
         <meta name="csrf-token" content="{{ csrf_token() }}">
+        @if (! empty($cspNonce))
+            {{-- Inertia puts its progress-bar <style> on the page with this nonce (createInertiaApp `nonce`), so the style-src of the CSP needs no 'unsafe-inline'. --}}
+            <meta name="csp-nonce" content="{{ $cspNonce }}">
+        @endif
 
         <!-- Theme before first paint (light by default, choice persisted by the ThemeToggle) -->
-        <script>
+        <script @if (! empty($cspNonce)) nonce="{{ $cspNonce }}" @endif>
             try { document.documentElement.className = localStorage.getItem('ccg-theme') === 'dark' ? 'dark' : 'light'; } catch (e) { document.documentElement.className = 'light'; }
         </script>
 
-        <!-- Fonts -->
-        <link rel="preconnect" href="https://fonts.googleapis.com">
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+        {{-- Fonts: Inter is bundled with the application CSS (resources/css/app.css); no font provider is contacted. --}}
 
         <!-- Scripts -->
-        @routes
+        @routes(null, $cspNonce ?? null)
         @viteReactRefresh
         @vite(['resources/js/app.jsx', "resources/js/Pages/{$page['component']}.jsx"])
         @inertiaHead

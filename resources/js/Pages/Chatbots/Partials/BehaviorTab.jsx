@@ -69,6 +69,24 @@ export default function BehaviorTab({ form, chatbot, feedback = [], knowledge = 
         if (confirmed) router.post(route('chatbots.agent-token.generate', chatbot.id), {}, { preserveScroll: true });
     };
 
+    const rotate = async () => {
+        const confirmed = await confirm({
+            description: 'Se creará un token de reemplazo y el actual seguirá funcionando. Actualiza el nuevo en n8n: el anterior se retirará solo cuando n8n use el nuevo.',
+            confirmLabel: 'Rotar token',
+        });
+
+        if (confirmed) router.post(route('chatbots.agent-token.rotate', chatbot.id), {}, { preserveScroll: true });
+    };
+
+    const revokeOne = async (id) => {
+        const confirmed = await confirm({ description: 'Quien use este token dejará de poder leer este chatbot ahora mismo.', confirmLabel: 'Revocar este token' });
+
+        if (confirmed) router.delete(route('chatbots.agent-token.revoke-one', [chatbot.id, id]), { preserveScroll: true });
+    };
+
+    const lifecycle = agentToken.lifecycle;
+    const current = lifecycle?.current;
+
     const revoke = async () => {
         const confirmed = await confirm({ description: 'n8n dejará de poder leer este chatbot hasta que generes otro token.', confirmLabel: 'Revocar' });
 
@@ -147,7 +165,13 @@ export default function BehaviorTab({ form, chatbot, feedback = [], knowledge = 
                         <p className="text-sm text-ink-muted">
                             {agentToken.configured ? (
                                 <>
-                                    Token activo terminado en <code className="font-mono text-ink">••••{agentToken.hint}</code> · generado {agentToken.createdAt}.
+                                    Token activo terminado en <code className="font-mono text-ink">••••{agentToken.hint}</code> · generado {agentToken.createdAt}
+                                    {current && (
+                                        <>
+                                            {' '}· vence {current.expiresAt} (en {current.daysLeft} {current.daysLeft === 1 ? 'día' : 'días'}) · {current.lastUsedAt ? `último uso ${current.lastUsedAt}` : 'aún sin uso'}.
+                                        </>
+                                    )}
+                                    {!current && '.'}
                                 </>
                             ) : (
                                 'Todavía no hay un token: n8n no puede leer este chatbot.'
@@ -155,11 +179,52 @@ export default function BehaviorTab({ form, chatbot, feedback = [], knowledge = 
                         </p>
                     )}
 
+                    {current?.state === 'expiring' && !lifecycle.pendingRotation && (
+                        <Alert tone="warning">
+                            Este token vence pronto. Usa «Rotar token»: el actual sigue funcionando hasta que n8n use el nuevo, así no se interrumpe nada.
+                        </Alert>
+                    )}
+
+                    {lifecycle?.pendingRotation && (
+                        <Alert tone="info">
+                            Hay un token de reemplazo que n8n todavía no ha usado. Actualízalo en n8n: el anterior se retirará solo cuando el nuevo se use. Si el anterior no se usa, vence en su fecha.
+                        </Alert>
+                    )}
+
+                    {lifecycle?.previous?.length > 0 && (
+                        <ul className="space-y-1 text-sm text-ink-muted" aria-label="Tokens anteriores todavía válidos">
+                            {lifecycle.previous.map((token) => (
+                                <li key={token.id} className="flex flex-wrap items-center gap-2">
+                                    <span>
+                                        Anterior terminado en <code className="font-mono text-ink">••••{token.hint}</code> · vence {token.expiresAt}
+                                        {token.lastUsedAt ? ` · último uso ${token.lastUsedAt}` : ''}
+                                    </span>
+                                    {canTokens && (
+                                        <SecondaryButton type="button" onClick={() => revokeOne(token.id)} className="text-danger">
+                                            Revocar
+                                        </SecondaryButton>
+                                    )}
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+
                     {canTokens && (
                         <div className="flex flex-wrap gap-2">
-                            <PrimaryButton type="button" onClick={generate}>
-                                {agentToken.configured ? 'Generar nuevo token' : 'Generar token'}
-                            </PrimaryButton>
+                            {agentToken.configured && lifecycle && (
+                                <PrimaryButton type="button" onClick={rotate}>
+                                    Rotar token (sin interrupción)
+                                </PrimaryButton>
+                            )}
+                            {agentToken.configured && lifecycle ? (
+                                <SecondaryButton type="button" onClick={generate}>
+                                    Generar nuevo token (reemplaza ya)
+                                </SecondaryButton>
+                            ) : (
+                                <PrimaryButton type="button" onClick={generate}>
+                                    {agentToken.configured ? 'Generar nuevo token' : 'Generar token'}
+                                </PrimaryButton>
+                            )}
                             {agentToken.configured && (
                                 <SecondaryButton type="button" onClick={revoke} className="text-danger">
                                     Revocar

@@ -91,7 +91,7 @@ Route::get('/book/{key}', [PublicBookingController::class, 'page'])->where('key'
 
 // Everything below requires an authenticated user AND a valid Workspace context
 // (re-validated on every request by EnsureWorkspaceContext).
-Route::middleware(['auth', 'verified', 'workspace'])->group(function () {
+Route::middleware(['auth', 'verified', 'workspace', 'throttle:authenticated'])->group(function () {
     // Where the home page lands when the Workspace has no Dashboard to show (no modules, a suspended subscription...). Core: it grants nothing.
     Route::get('/sin-modulos', WorkspaceEmptyController::class)->name('workspace.empty');
 
@@ -100,7 +100,7 @@ Route::middleware(['auth', 'verified', 'workspace'])->group(function () {
     Route::get('/reports', [ReportController::class, 'index'])->middleware(['workspace.module:reports', 'workspace.permission:view-dashboard'])->name('reports.index');
 });
 
-Route::middleware(['auth', 'workspace'])->group(function () {
+Route::middleware(['auth', 'workspace', 'throttle:authenticated'])->group(function () {
     // The bell: always the ACTIVE Workspace and the user's own permissions; an id outside that is a 404.
     Route::get('/notifications', [NotificationController::class, 'index'])->middleware('throttle:120,1')->name('notifications.index');
     Route::post('/notifications/read-all', [NotificationController::class, 'readAll'])->middleware('throttle:60,1')->name('notifications.read-all');
@@ -204,6 +204,8 @@ Route::middleware(['auth', 'workspace'])->group(function () {
             Route::post('/{chatbot}/knowledge/{document}/retry', [KnowledgeController::class, 'retry'])->whereNumber(['chatbot', 'document'])->middleware(['workspace.permission:edit-chatbots', 'throttle:20,1'])->name('knowledge.retry');
             Route::delete('/{chatbot}/knowledge/{document}', [KnowledgeController::class, 'destroy'])->whereNumber(['chatbot', 'document'])->middleware('workspace.permission:edit-chatbots')->name('knowledge.destroy');
             Route::post('/{chatbot}/agent-token', [ChatbotController::class, 'generateAgentToken'])->whereNumber('chatbot')->middleware(['workspace.permission:manage-agent-tokens', 'throttle:10,1'])->name('agent-token.generate');
+            Route::post('/{chatbot}/agent-token/rotate', [ChatbotController::class, 'rotateAgentToken'])->whereNumber('chatbot')->middleware(['workspace.permission:manage-agent-tokens', 'throttle:10,1'])->name('agent-token.rotate');
+            Route::delete('/{chatbot}/agent-token/{token}', [ChatbotController::class, 'revokeOneAgentToken'])->whereNumber(['chatbot', 'token'])->middleware('workspace.permission:manage-agent-tokens')->name('agent-token.revoke-one');
             Route::delete('/{chatbot}/agent-token', [ChatbotController::class, 'revokeAgentToken'])->whereNumber('chatbot')->middleware('workspace.permission:manage-agent-tokens')->name('agent-token.revoke');
             Route::put('/{chatbot}/channels/{channel}', [ChatbotController::class, 'updateChannel'])->whereNumber('chatbot')->where('channel', '[a-z_]+')->middleware('workspace.permission:manage-chatbot-channels')->name('channels.update');
             Route::put('/{chatbot}/channels/{channel}/appearance', [ChannelAppearanceController::class, 'update'])->whereNumber('chatbot')->where('channel', '[a-z_]+')->middleware('workspace.permission:manage-chatbot-channels')->name('channels.appearance.update');

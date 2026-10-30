@@ -113,6 +113,40 @@ x-php: &php
     ADMIN_EMAIL: ${ADMIN_EMAIL:-}
     ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
     ADMIN_NAME: ${ADMIN_NAME:-Administrador}
+    # Application settings Laravel reads from the environment. Each default below is the same value config/*.php uses when the variable is not set, so forwarding
+    # them changes nothing until the env file defines one. (Not forwarded on purpose: CACHE_PREFIX and ALERT_LOG_PATH, whose defaults are computed in code;
+    # LOG_STACK and LOG_DEPRECATIONS_CHANNEL, because LOG_CHANNEL is fixed to stderr; APP_FAKER_LOCALE, which only seeders use. APP_PREVIOUS_KEYS exists for APP_KEY rotation.)
+    APP_LOCALE: ${APP_LOCALE:-es}
+    APP_FALLBACK_LOCALE: ${APP_FALLBACK_LOCALE:-en}
+    APP_PREVIOUS_KEYS: ${APP_PREVIOUS_KEYS:-}
+    SESSION_LIFETIME: ${SESSION_LIFETIME:-120}
+    SESSION_ENCRYPT: ${SESSION_ENCRYPT:-false}
+    SESSION_PATH: ${SESSION_PATH:-/}
+    SESSION_DOMAIN: ${SESSION_DOMAIN:-null}
+    AUTH_REMEMBERED_ACCESS_MINUTES: ${AUTH_REMEMBERED_ACCESS_MINUTES:-43200}
+    MAIL_TIMEOUT: ${MAIL_TIMEOUT:-15}
+    BRAND_NAME: ${BRAND_NAME:-Zonno Platform by CCG}
+    BRAND_SHORT_NAME: ${BRAND_SHORT_NAME:-Zonno by CCG}
+    # The support e-mail falls back to LEGAL_CONTACT_EMAIL, as config/branding.php does.
+    BRAND_SUPPORT_EMAIL: ${BRAND_SUPPORT_EMAIL:-${LEGAL_CONTACT_EMAIL:-}}
+    # Public support chat of CCG and its optional notice to n8n (empty = no chat button / no notice); the key must name a Web channel of the administrative Workspace.
+    CCG_SUPPORT_CHAT_KEY: ${CCG_SUPPORT_CHAT_KEY:-}
+    CCG_SUPPORT_NOTIFY_URL: ${CCG_SUPPORT_NOTIFY_URL:-}
+    CCG_SUPPORT_NOTIFY_SECRET: ${CCG_SUPPORT_NOTIFY_SECRET:-}
+    SUPPORT_INACTIVITY_MINUTES: ${SUPPORT_INACTIVITY_MINUTES:-4}
+    SIGNUP_CODE_TTL_MINUTES: ${SIGNUP_CODE_TTL_MINUTES:-15}
+    SIGNUP_DRAFT_TTL_HOURS: ${SIGNUP_DRAFT_TTL_HOURS:-48}
+    WOMPI_TIMEOUT: ${WOMPI_TIMEOUT:-10}
+    # Security headers and CORS (config/security.php, config/cors.php). Defaults equal the code's. SECURITY_HSTS=null means "decide by environment" (production = on);
+    # an empty value would read as false. Narrowing CORS_ALLOWED_ORIGINS breaks the chat widget on customer sites that are not listed.
+    SECURITY_HEADERS: ${SECURITY_HEADERS:-true}
+    SECURITY_HSTS: ${SECURITY_HSTS:-null}
+    SECURITY_HSTS_MAX_AGE: ${SECURITY_HSTS_MAX_AGE:-15552000}
+    SECURITY_HSTS_INCLUDE_SUBDOMAINS: ${SECURITY_HSTS_INCLUDE_SUBDOMAINS:-false}
+    SECURITY_HSTS_PRELOAD: ${SECURITY_HSTS_PRELOAD:-false}
+    SECURITY_CSP_MODE: ${SECURITY_CSP_MODE:-report-only}
+    SECURITY_CSP_REPORT_URI: ${SECURITY_CSP_REPORT_URI:-}
+    CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-*}
 
 services:
   # Public entry point and load balancer: round-robins the `app` replicas (Docker DNS) and forwards websockets to reverb.

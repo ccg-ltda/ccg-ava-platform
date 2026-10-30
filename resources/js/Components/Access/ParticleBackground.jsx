@@ -1,28 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { useAccess } from './AccessContext';
 
-// three.js is not an npm dependency of the project yet (installing packages needs approval);
-// it is loaded from the same CDN build the approved design used.
-const THREE_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
-
+// three.js 0.128.0 (MIT, the same release the approved design loaded from a CDN) is an npm dependency now, so the browser never contacts a third party.
+// The import is dynamic: Vite splits it into its own chunk, which only the access screens request.
 function loadThree() {
-    if (window.THREE) return Promise.resolve(window.THREE);
-
-    if (!window.__threeLoading) {
-        window.__threeLoading = new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = THREE_SRC;
-            script.async = true;
-            script.onload = () => resolve(window.THREE);
-            script.onerror = () => {
-                window.__threeLoading = null;
-                reject(new Error('three.js could not be loaded'));
-            };
-            document.head.appendChild(script);
-        });
-    }
-
-    return window.__threeLoading;
+    return import('three');
 }
 
 const PARTICLE_COUNT = 2000;

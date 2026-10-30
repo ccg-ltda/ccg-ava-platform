@@ -30,6 +30,9 @@ ScheduledCommandMonitor::watch(Schedule::command('catalog:send-reminders')->ever
 // Settles the traces of assistant tool calls that never recorded an outcome (see AgentToolTrace::reconcile; a no-op until its table exists).
 ScheduledCommandMonitor::watch(Schedule::command('agent:tools:reconcile')->everyFiveMinutes()->withoutOverlapping()->onOneServer(), 'agent-tools-reconcile');
 
+// Warns the team before a chatbot access token expires (idempotent, creates notifications only; it revokes and changes nothing).
+ScheduledCommandMonitor::watch(Schedule::command('agent:tokens:notify')->hourly()->withoutOverlapping()->onOneServer(), 'agent-tokens-notify');
+
 // Moves free trials whose end date passed to `expired` (idempotent; the server already withdraws the access on every request; no data is touched).
 ScheduledCommandMonitor::watch(Schedule::command('subscriptions:expire-trials')->everyTenMinutes()->withoutOverlapping()->onOneServer(), 'trials-expire');
 

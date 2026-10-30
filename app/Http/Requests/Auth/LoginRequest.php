@@ -56,7 +56,8 @@ class LoginRequest extends FormRequest
         ];
 
         if (! $workspace || ! Auth::attempt($credentials, $this->boolean('remember'))) {
-            RateLimiter::hit($this->throttleKey());
+            RateLimiter::hit($this->throttleKey(), (int) config('auth.login_throttle.account_decay_seconds'));
+            RateLimiter::hit($this->ipThrottleKey(), (int) config('auth.login_throttle.ip_decay_seconds'));
 
             throw ValidationException::withMessages([
                 'email' => trans('auth.failed'),
@@ -73,13 +74,16 @@ class LoginRequest extends FormRequest
      */
     public function ensureIsNotRateLimited(): void
     {
-        if (! RateLimiter::tooManyAttempts($this->throttleKey(), 5)) {
+        $account = RateLimiter::tooManyAttempts($this->throttleKey(), (int) config('auth.login_throttle.account_max_attempts'));
+        $ip = RateLimiter::tooManyAttempts($this->ipThrottleKey(), (int) config('auth.login_throttle.ip_max_attempts'));
+
+        if (! $account && ! $ip) {
             return;
         }
 
         event(new Lockout($this));
 
-        $seconds = RateLimiter::availableIn($this->throttleKey());
+        $seconds = max($account ? RateLimiter::availableIn($this->throttleKey()) : 0, $ip ? RateLimiter::availableIn($this->ipThrottleKey()) : 0);
 
         throw ValidationException::withMessages([
             'email' => trans('auth.throttle', [
@@ -87,6 +91,12 @@ class LoginRequest extends FormRequest
                 'minutes' => ceil($seconds / 60),
             ]),
         ]);
+    }
+
+    /** The failures of ALL accounts from one address (a successful login never clears it). */
+    public function ipThrottleKey(): string
+    {
+        return 'login-ip|'.$this->ip();
     }
 
     /**

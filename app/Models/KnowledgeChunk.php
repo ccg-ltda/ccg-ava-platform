@@ -10,7 +10,8 @@ class KnowledgeChunk extends Model
 {
     public $timestamps = false;
 
-    protected $guarded = [];
+    /** The chunks are inserted by KnowledgeBase with the query builder; this list only documents the columns and keeps mass assignment closed otherwise. */
+    protected $fillable = ['workspace_id', 'document_id', 'position', 'content'];
 
     public function document(): BelongsTo
     {

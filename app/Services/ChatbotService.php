@@ -112,12 +112,26 @@ class ChatbotService
         $settings = $chatbot->workspace->settingsOrDefault();
         $created = $chatbot->agent_token_created_at;
 
+        $moment = fn ($at) => $at ? $settings->formatDate($at).' '.$settings->formatTime($at) : null;
+        $status = app(AgentAccess::class)->status($chatbot);
+        $shape = fn (array $t) => [
+            'id' => $t['id'], 'hint' => $t['hint'], 'createdAt' => $moment($t['createdAt']), 'expiresAt' => $moment($t['expiresAt']), 'daysLeft' => $t['daysLeft'],
+            'lastUsedAt' => $moment($t['lastUsedAt']), 'used' => $t['used'], 'state' => $t['state'], 'legacy' => $t['legacy'],
+        ];
+
         return [
             'endpoint' => url('/api/agent/config'),
-            'configured' => $chatbot->agent_token_hash !== null,
-            'hint' => $chatbot->agent_token_hint,
+            'configured' => $status['ledger'] ? $status['configured'] : $chatbot->agent_token_hash !== null,
+            'hint' => $status['current']['hint'] ?? $chatbot->agent_token_hint,
             'createdAt' => $created ? $settings->formatDate($created).' '.$settings->formatTime($created) : null,
             'token' => $newToken,
+            // Lifecycle (null on a database without the ledger): expiry, last use, a rotation waiting for its first use and the older tokens that still work.
+            'lifecycle' => $status['ledger'] ? [
+                'current' => $status['current'] ? $shape($status['current']) : null,
+                'pendingRotation' => $status['pendingRotation'],
+                'previous' => array_map($shape, $status['previous']),
+                'validityDays' => $status['validityDays'],
+            ] : null,
         ];
     }
 
@@ -146,6 +160,7 @@ class ChatbotService
                 'name' => $chatbot->name,
                 'isActive' => $chatbot->is_active,
                 'hasToken' => $chatbot->agent_token_hash !== null,
+                'tokenDaysLeft' => AgentAccess::ready() ? app(AgentAccess::class)->status($chatbot)['current']['daysLeft'] ?? null : null,
                 'hint' => $chatbot->agent_token_hint,
                 'lastSeen' => $moment($chatbot->agent_last_seen_at),
             ])->all(),

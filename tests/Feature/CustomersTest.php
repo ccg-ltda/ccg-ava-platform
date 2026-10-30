@@ -79,6 +79,7 @@ class CustomersTest extends TestCase
         $this->assertSame('Formulario web, 3 de octubre', $customer->consent_note);
 
         $this->travel(2)->days();
+        $this->renewAbsoluteSession();
         $this->put("/customers/{$customer->id}", $this->payload(['marketing_consent' => 'revoked', 'consent_note' => 'Escribió STOP']))->assertSessionHasNoErrors();
         $fresh = $customer->fresh();
         $this->assertSame('revoked', $fresh->marketing_consent);

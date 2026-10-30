@@ -110,6 +110,13 @@ return [
     'agent_per_minute' => 600,
 
     /*
+     * Lifecycle of the chatbot access tokens (App\Services\AgentAccess). `days`: validity of a NEW token. `legacy_grace_days`: the minimum time a token that
+     * existed before the ledger keeps working (it is never cut off by the deployment). `notify_days`: how many days before the expiry the team is told
+     * (one notification per threshold, the smallest one that applies). Not environment variables on purpose: shortening them is a reviewed change.
+     */
+    'agent_token' => ['days' => 90, 'legacy_grace_days' => 30, 'notify_days' => [30, 14, 7, 3, 1]],
+
+    /*
      * D-FALLO: the ONLY text Ava sends to a contact when the AI fails for good and the conversation is handed to a person. It is empty by default
      * (nothing is sent) and must be a text the business has approved: Ava invents none, and it must not promise a time or confirm anything. One message
      * per failure, never repeated by a retry or a recovery.

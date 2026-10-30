@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Services\AgentAccess;
+use App\Services\AgentTokenNotices;
 use App\Services\ExecutionAccess;
 use Closure;
 use Illuminate\Http\Request;
@@ -29,10 +30,28 @@ class AuthenticateAgent
             return $this->handleRun($request, $next, $token);
         }
 
-        $chatbot = $token ? $this->access->find($token) : null;
+        $auth = $token ? $this->access->authenticate($token) : ['status' => 'unknown', 'chatbot' => null, 'token' => null];
+
+        // An expired or revoked token is refused with a reason the automation (and the people reading its log) can act on, and the team is told once a day.
+        if (in_array($auth['status'], ['expired', 'revoked'], true)) {
+            if ($auth['chatbot'] && $auth['token']) {
+                app(AgentTokenNotices::class)->refusedUse($auth['chatbot'], $auth['token'], $auth['status']);
+            }
+
+            return response()->json([
+                'message' => $auth['status'] === 'expired' ? 'Token vencido: genera o rota el token en Asistentes y actualízalo en n8n.' : 'Token revocado.',
+                'reason' => $auth['status'] === 'expired' ? 'token_expired' : 'token_revoked',
+            ], 401);
+        }
+
+        $chatbot = $auth['status'] === 'ok' ? $auth['chatbot'] : null;
 
         abort_unless($chatbot, 401, 'Token inválido.');
         abort_unless($chatbot->is_active && $chatbot->workspace->is_active && $chatbot->workspace->organization->is_active, 403, 'El chatbot, su Workspace o su organización están desactivados.');
+
+        if ($auth['token']) {
+            $this->access->used($auth['token'], $chatbot);
+        }
 
         // The only real evidence that n8n is wired to this chatbot; at most once a minute, with no audit event and
         // without touching `updated_at` (the chatbot did not change).

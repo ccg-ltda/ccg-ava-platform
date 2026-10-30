@@ -194,6 +194,7 @@ class BookingLifecycleTest extends TestCase
         $this->postJson($this->web('/appointments'), ['service_id' => $this->service->id, 'starts_at' => '2026-10-13T11:00:00Z', 'customer' => $this->customer('+573007776655')])->assertCreated();
         $this->post("/bookings/{$web->id}/status", ['status' => 'confirmed'])->assertSessionHas('success');
         $this->travelTo(CarbonImmutable::parse('2026-10-14 12:00:00', 'UTC'));
+        $this->renewAbsoluteSession();
         $this->post("/bookings/{$web->id}/status", ['status' => 'no_show'])->assertSessionHas('success');
         $this->assertSame('no_show', $web->fresh()->status);
 
