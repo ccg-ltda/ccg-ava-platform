@@ -49,6 +49,7 @@ use App\Http\Controllers\SupportAccessController;
 use App\Http\Controllers\SupportDeskController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserLocationScopeController;
+use App\Http\Controllers\WebhookController;
 use App\Http\Controllers\WorkspaceController;
 use App\Http\Controllers\WorkspaceEmptyController;
 use App\Http\Controllers\WorkspaceInvitationController;
@@ -146,6 +147,20 @@ Route::middleware(['auth', 'workspace', 'throttle:authenticated'])->group(functi
         Route::delete('/{integration}', [IntegrationController::class, 'destroy'])->whereNumber('integration')->middleware('workspace.permission:delete-integrations')->name('destroy');
         // Each test is a real outbound request: keep it from being used to hammer a third party.
         // Historial de llamados: redacted record of the Workspace's outbound API calls (read only).
+        // Webhooks de salida (docs: RECOMENDACIONES.md §78). Reading is `view-webhooks`; every change is `manage-webhooks`. The list itself is a prop of the page above.
+        Route::prefix('webhooks')->name('webhooks.')->group(function () {
+            Route::get('/{webhook}/deliveries', [WebhookController::class, 'deliveries'])->whereNumber('webhook')->middleware(['workspace.permission:view-webhooks', 'throttle:webhook-read'])->name('deliveries');
+            Route::middleware('workspace.permission:manage-webhooks')->group(function () {
+                Route::post('/', [WebhookController::class, 'store'])->middleware('throttle:webhook-secret')->name('store');
+                Route::put('/{webhook}', [WebhookController::class, 'update'])->whereNumber('webhook')->name('update');
+                Route::post('/{webhook}/activate', [WebhookController::class, 'activate'])->whereNumber('webhook')->name('activate');
+                Route::post('/{webhook}/deactivate', [WebhookController::class, 'deactivate'])->whereNumber('webhook')->name('deactivate');
+                Route::post('/{webhook}/rotate', [WebhookController::class, 'rotate'])->whereNumber('webhook')->middleware('throttle:webhook-secret')->name('rotate');
+                Route::post('/{webhook}/test', [WebhookController::class, 'test'])->whereNumber('webhook')->middleware('throttle:webhook-test')->name('test');
+                Route::post('/{webhook}/deliveries/{delivery}/retry', [WebhookController::class, 'retry'])->whereNumber(['webhook', 'delivery'])->middleware('throttle:webhook-write')->name('retry');
+                Route::delete('/{webhook}', [WebhookController::class, 'destroy'])->whereNumber('webhook')->name('destroy');
+            });
+        });
         Route::get('/calls', [ApiCallLogController::class, 'index'])->middleware('throttle:60,1')->name('calls.index');
         Route::get('/calls/{call}', [ApiCallLogController::class, 'show'])->whereNumber('call')->middleware('throttle:120,1')->name('calls.show');
         Route::post('/{integration}/test', [IntegrationController::class, 'test'])->whereNumber('integration')->middleware(['workspace.permission:test-integrations', 'throttle:20,1'])->name('test');

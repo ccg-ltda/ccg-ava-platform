@@ -10,6 +10,7 @@ use App\Models\Location;
 use App\Models\Professional;
 use App\Models\Service;
 use App\Models\Workspace;
+use App\Webhooks\Webhooks;
 use Carbon\CarbonImmutable;
 use Closure;
 use Illuminate\Database\QueryException;
@@ -106,6 +107,7 @@ class AppointmentService
             if ($appointment) {
                 $this->auditAutomatic($appointment, 'created', [AuditLogger::change('Estado', null, Appointment::LABELS[$appointment->status])], $channel);
                 $this->safely(fn () => $this->notifier->planEvent($appointment->loadMissing('workspace'), 'created'));
+                $this->publish($appointment, 'appointment.created', ['service_id' => $appointment->service_id, 'professional_id' => $appointment->professional_id, 'location_id' => $appointment->location_id, 'starts_at' => $this->iso($appointment->starts_at), 'ends_at' => $this->iso($appointment->ends_at), 'channel' => $appointment->channel]);
 
                 return ['appointment' => $appointment, 'token' => $token];
             }
@@ -161,6 +163,7 @@ class AppointmentService
             if ($done) {
                 $this->auditAutomatic($appointment, 'updated', [AuditLogger::change('Inicio', $before->toDateTimeString(), $appointment->starts_at->toDateTimeString())], $channel);
                 $this->safely(fn () => $this->notifier->invalidate($appointment, 'rescheduled'));
+                $this->publish($appointment, 'appointment.rescheduled', ['starts_at' => $this->iso($appointment->starts_at), 'ends_at' => $this->iso($appointment->ends_at)]);
 
                 return $appointment;
             }
@@ -176,6 +179,7 @@ class AppointmentService
         $appointment->forceFill(['status' => Appointment::CANCELLED, 'cancelled_at' => now(), 'cancel_reason' => $reason ? Str::limit(trim($reason), 255, '') : null])->save();
         $this->auditAutomatic($appointment, 'updated', [AuditLogger::change('Estado', $before, Appointment::LABELS[Appointment::CANCELLED])], $channel);
         $this->safely(fn () => $this->notifier->invalidate($appointment, 'appointment_closed'));
+        $this->publish($appointment, 'appointment.cancelled');
 
         return $appointment;
     }
@@ -199,6 +203,7 @@ class AppointmentService
 
         $appointment->forceFill(['status' => $to])->save();
         $this->safely(fn () => $to === Appointment::CONFIRMED ? $this->notifier->planEvent($appointment->loadMissing('workspace'), 'confirmed') : $this->notifier->invalidate($appointment, 'appointment_closed'));
+        $this->publish($appointment, 'appointment.status_changed');
 
         return $appointment;
     }
@@ -238,6 +243,17 @@ class AppointmentService
 
             return ['appointment' => $current, 'replayed' => false];
         });
+    }
+
+    /** Outbound webhook (§78): ids, status and dates only; the customer's name, phone, e-mail and notes never leave. @param  array<string, mixed>  $extra */
+    private function publish(Appointment $appointment, string $event, array $extra = []): void
+    {
+        Webhooks::publish($appointment->workspace_id, $event, ['appointment_id' => $appointment->id, 'status' => $appointment->status] + $extra);
+    }
+
+    private function iso(?\DateTimeInterface $moment): ?string
+    {
+        return $moment ? CarbonImmutable::instance($moment)->utc()->format('Y-m-d\TH:i:s\Z') : null;
     }
 
     /** Planning or retiring a notification must never break the booking operation that triggered it: a failure is logged (class only) and the operation stands. */

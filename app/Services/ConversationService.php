@@ -6,6 +6,7 @@ use App\Customers\ContactOptOut;
 use App\Models\Chatbot;
 use App\Models\Conversation;
 use App\Models\Message;
+use App\Webhooks\Webhooks;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -36,12 +37,14 @@ class ConversationService
                 ['channel' => $channel, 'contact_id' => $data['contact_id']],
                 ['workspace_id' => $chatbot->workspace_id],
             );
+            $started = $conversation->wasRecentlyCreated;
             // The same row lock that control changes take, so a message never lands in the middle of one.
             $conversation = Conversation::whereKey($conversation->id)->lockForUpdate()->first();
 
             // A support session closed between the lookup and the lock (its key was archived) takes nothing more: the message starts the person's NEW conversation.
             if ($conversation->closed_at !== null) {
                 $conversation = $chatbot->conversations()->firstOrCreate(['channel' => $channel, 'contact_id' => $data['contact_id']], ['workspace_id' => $chatbot->workspace_id]);
+                $started = $conversation->wasRecentlyCreated;
                 $conversation = Conversation::whereKey($conversation->id)->lockForUpdate()->first();
             }
 
@@ -76,6 +79,15 @@ class ConversationService
 
             if ($incoming) {
                 $this->control->reopen($conversation);
+            }
+
+            // Outbound webhooks (§78): only what a CONTACT did, never the DEMO simulator; queued after this transaction commits and without the text.
+            if ($incoming && ! $message->simulated) {
+                if ($started) {
+                    Webhooks::publish($chatbot->workspace_id, 'conversation.created', ['conversation_id' => $conversation->id, 'channel' => $channel, 'chatbot_id' => $chatbot->id]);
+                }
+
+                Webhooks::publish($chatbot->workspace_id, 'message.received', ['message_id' => $message->id, 'conversation_id' => $conversation->id, 'channel' => $channel, 'type' => $message->type]);
             }
 
             return ['message' => $message, 'created' => true, 'conversation' => $conversation];

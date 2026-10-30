@@ -61,13 +61,13 @@ class ScheduledCommandMonitorTest extends TestCase
 
     public function test_every_watched_command_keeps_its_last_output_and_reports_its_result(): void
     {
-        foreach (['executions:recover' => 'executions-recover', 'appointments:notify' => 'appointments-notify', 'catalog:send-reminders' => 'catalog-reminders', 'agent:tokens:notify' => 'agent-tokens-notify', 'agent:tools:reconcile' => 'agent-tools-reconcile', 'signup:reconcile' => 'signup-reconcile', 'subscriptions:expire-trials' => 'trials-expire', 'conversations:maintain' => 'conversations-maintain'] as $command => $name) {
+        foreach (['executions:recover' => 'executions-recover', 'appointments:notify' => 'appointments-notify', 'catalog:send-reminders' => 'catalog-reminders', 'agent:tokens:notify' => 'agent-tokens-notify', 'webhooks:sweep' => 'webhooks-sweep', 'webhooks:prune' => 'webhooks-prune', 'agent:tools:reconcile' => 'agent-tools-reconcile', 'signup:reconcile' => 'signup-reconcile', 'subscriptions:expire-trials' => 'trials-expire', 'conversations:maintain' => 'conversations-maintain'] as $command => $name) {
             $event = $this->event($command);
 
             $this->assertNotNull($event, "{$command} is scheduled");
             $this->assertStringEndsWith("scheduler-last-{$name}.log", (string) $event->output, 'its output is no longer sent to /dev/null');
         }
-        $this->assertSame(['executions-recover', 'appointments-notify', 'catalog-reminders', 'agent-tokens-notify', 'agent-tools-reconcile', 'signup-reconcile', 'trials-expire', 'conversations-maintain'], array_keys(ScheduledCommandMonitor::WATCHED));
+        $this->assertSame(['executions-recover', 'appointments-notify', 'catalog-reminders', 'agent-tokens-notify', 'webhooks-sweep', 'webhooks-prune', 'agent-tools-reconcile', 'signup-reconcile', 'trials-expire', 'conversations-maintain'], array_keys(ScheduledCommandMonitor::WATCHED));
     }
 
     public function test_a_success_is_timestamped_and_a_failure_is_counted_and_keeps_the_real_cause(): void

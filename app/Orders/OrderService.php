@@ -12,6 +12,7 @@ use App\Models\Product;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\ModuleAccess;
+use App\Webhooks\Webhooks;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -134,6 +135,8 @@ class OrderService
         });
 
         if ($order->wasRecentlyCreated) {
+            // Outbound webhook (§78): a replay of the assistant's idempotent order is not a new order. Number, state and total only: no customer data, no address, no notes.
+            Webhooks::publish($order->workspace_id, 'order.created', ['order_id' => $order->id, 'number' => $order->number, 'status' => $order->status, 'currency' => $order->currency, 'total' => (string) $order->total, 'delivery_method' => $order->delivery_method, 'location_id' => $order->location_id]);
             $this->tell($order, 'received');
         }
 
@@ -192,6 +195,7 @@ class OrderService
             return $current;
         });
 
+        Webhooks::publish($moved->workspace_id, 'order.status_changed', ['order_id' => $moved->id, 'number' => $moved->number, 'status' => $moved->status]);
         $this->tell($moved, 'status_changed');
 
         return $moved;

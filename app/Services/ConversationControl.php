@@ -6,6 +6,7 @@ use App\Audit\AuditLogger;
 use App\Exceptions\ConversationStateException;
 use App\Models\Conversation;
 use App\Models\User;
+use App\Webhooks\Webhooks;
 use Closure;
 use Illuminate\Support\Facades\DB;
 
@@ -340,5 +341,10 @@ class ConversationControl
             'closed_inactivity' => $this->audit->system($action, 'conversation', $conversation->id, $label, $changes, $workspace, 'Sistema (inactividad)'),
             default => $this->audit->record($action, 'conversation', $conversation->id, $label, $changes, $workspace),
         };
+
+        // Outbound webhooks (§78): every change of who handles a conversation passes through here, once, whoever caused it. Ids and states only.
+        Webhooks::publish($workspace, 'conversation.handling_changed', [
+            'conversation_id' => $conversation->id, 'action' => $action, 'handling' => $conversation->handling, 'handling_version' => $conversation->handling_version,
+        ]);
     }
 }

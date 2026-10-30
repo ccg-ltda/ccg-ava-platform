@@ -3806,3 +3806,97 @@ Cierra B1–B3, S1–S13 y la colección Postman antes de la fase de Webhooks (I
 | `npm run test:js` / `npm run build` | 127 de 127 / correcto |
 | `docker compose --env-file <vacío> -f docker-compose.prod.yml config --quiet` (valores ficticios) | correcto |
 `composer validate` solo avisa de una restricción exacta de `inertiajs/inertia-laravel` (anterior a esta fase). Las pruebas con servicios externos reales (Meta, Wompi, Booker, SIGO, n8n, correo) **no se ejecutaron**.
+
+## 78. Webhooks de salida en Integraciones (I8) y migración de tokens aplicada a `ccg_ava` (2026-10-30; sin desplegar; cierre y publicación en §78.9)
+
+### 78.1 Migración de tokens (S8) aplicada a `ccg_ava` con autorización expresa
+- **Copia previa:** `docker/ops/backup.sh` → `C:\Users\Trabajo\ava-backups\ava_20261030_012139.dump` (+ `.sha256`, `backup.log`, `LATEST.txt`); `docker/ops/restore-check.sh` la restauró y verificó antes de tocar nada.
+- **Aplicada solo esa migración:** `migrate --path=database/migrations/2026_11_14_100000_create_agent_tokens_table.php --force`. **No** se aplicó ninguna otra en ese momento (la de webhooks se encontró después ya aplicada: ver §78.9).
+- **Adopción:** 1 token existente adoptado como `legacy`, sin revocar, con **67,8 días** restantes (regla `max(creación + 90 d, ahora + 30 d)` de §75.3); los reflejos `chatbots.agent_token_*` intactos; sin pérdida de datos; los flujos actuales (lectura de configuración con el token, entrada de mensajes, panel) siguieron funcionando.
+- `integrations:diagnose` contra `ccg_ava` sigue señalando un bloqueo **anterior e independiente** (faltan permisos de plataforma: requiere `RolesAndPermissionsSeeder`, que no se ejecutó por no estar autorizado). P19(a) queda **hecho**; P19(b)–(d) siguen pendientes.
+
+### 78.2 Diseño
+Una tarjeta «Webhooks» **dentro** de `/integrations` (sin módulo ni entrada de menú nuevos), bajo el módulo `integrations` del plan y dos permisos nuevos e independientes (`view-webhooks`, `manage-webhooks`; no se otorgan por migración a ningún rol existente: `admin` los tiene, los demás roles solo si se los asignan). Solo existe el sentido **saliente** (Ava llama al sistema del cliente). Lo **entrante** (Meta, Wompi) no cambia: siguen sus rutas, su firma y su idempotencia; la tarjeta solo explica en pantalla que se configuran en sus propias tarjetas.
+
+| Pieza | Archivo |
+|---|---|
+| Catálogo de eventos, límites | `config/webhooks.php` |
+| Tablas `webhook_endpoints`, `webhook_deliveries` (aditiva; **ya aplicada** a `ccg_ava`, ver §78.9) | `database/migrations/2026_11_15_100000_create_webhook_tables.php` |
+| Publicación (tras el commit), firma, envío, mantenimiento | `app/Webhooks/{Webhooks,WebhookSigner,WebhookSender,WebhookService,WebhookMaintenance}.php`, `app/Jobs/DeliverWebhook.php` |
+| Gestión | `WebhookController`, `SaveWebhookRequest`, rutas `integrations/webhooks/*` |
+| Comandos programados | `webhooks:sweep` (cada minuto), `webhooks:prune` (diario 03:20), ambos en `ScheduledCommandMonitor::WATCHED` |
+| Interfaz | `Pages/Integrations/Partials/Webhook{sSection,FormModal,DeliveriesModal,SecretModal}.jsx` |
+
+### 78.3 Catálogo de eventos (solo hechos que el código produce; cada uno con su punto de emisión)
+| Evento | Punto de emisión | Datos (sin nombres, teléfonos, correos, direcciones, notas ni texto) |
+|---|---|---|
+| `conversation.created` | `ConversationService::record` (conversación nueva por un mensaje entrante real) | `conversation_id`, `channel`, `chatbot_id` |
+| `message.received` | `ConversationService::record` (mensaje entrante nuevo; no la simulación DEMO ni los salientes; un mensaje repetido por el proveedor no se publica dos veces) | `message_id`, `conversation_id`, `channel`, `type` |
+| `conversation.handling_changed` | `ConversationControl::record` (pedida, tomada, asignada, devuelta a la IA, resuelta, cerrada por inactividad o por soporte, reabierta) | `conversation_id`, `action`, `handling`, `handling_version` |
+| `appointment.created` / `.rescheduled` / `.cancelled` / `.status_changed` | `AppointmentService::book / reschedule / cancel / transition` | `appointment_id`, `status` y, según el evento, `service_id`, `professional_id`, `location_id`, `starts_at`, `ends_at`, `channel` |
+| `order.created` / `order.status_changed` | `OrderService::create` (no en una repetición idempotente del asistente) / `transition` | `order_id`, `number`, `status` y, al crear, `currency`, `total`, `delivery_method`, `location_id` |
+| `webhook.test` | Botón «Enviar prueba»; no se puede suscribir | mensaje fijo y `webhook_id` |
+
+**No existen** (y no se inventaron): pagos de Wompi, citas sincronizadas desde Booker, cambios de clientes, campañas, ni eventos de la IA. Quedan fuera hasta que exista el hecho en el código y se decida con producto y privacidad qué se expone. Una prueba verifica que cada evento del catálogo tiene su origen y su publicación en el código.
+
+### 78.4 Contrato de entrega
+`POST` JSON `{id, type, api_version, created_at (UTC), workspace_id, data}`. Encabezados: `X-Ava-Event`, `X-Ava-Event-Id` (**igual en cada reintento y en cada destino**: clave de deduplicación del consumidor), `X-Ava-Delivery`, `X-Ava-Delivery-Attempt`, `X-Ava-Timestamp`, `X-Ava-Signature` = `sha256=` + HMAC-SHA256 hex de `"{timestamp}.{cuerpo}"` con el secreto, y, durante 24 h tras rotarlo, `X-Ava-Signature-Previous`. La marca de tiempo cambia en cada intento; el cuerpo no. El receptor debe comparar en tiempo constante y rechazar marcas con más de 5 min (`WebhookSigner::verify` es el mismo código que usan las pruebas).
+- **Semántica:** *al menos una vez*, sin garantía de orden. Un 2xx entrega; cualquier otra respuesta, un tiempo agotado (10 s) o un error de conexión reintenta a los 1, 5, 30, 120 y 360 min (6 intentos); luego queda `abandoned` y una persona puede reintentarla (mismo `event_id`, intentos reiniciados).
+- **Se publica solo tras el commit** (`DB::afterCommit`): una operación revertida no llega al consumidor. Un fallo al publicar o al encolar **nunca** rompe la operación de negocio; si la cola falla, la fila queda y `webhooks:sweep` la reenvía; el `sending` huérfano se libera. El intento se reclama con un `UPDATE` condicional: dos jobs no envían el mismo intento.
+- **Apagado automático:** 10 entregas abandonadas seguidas desactivan el webhook y avisan al equipo (notificación para `manage-webhooks`); cualquier éxito reinicia la cuenta.
+- **Retención:** 14 días (`webhooks:prune`); el historial nunca guarda el cuerpo de respuesta, y la interfaz nunca muestra el cuerpo enviado ni el secreto.
+
+### 78.5 Seguridad y aislamiento
+- Servidor: sesión + `workspace.module:integrations` + permiso por operación; el Workspace sale del contexto de la sesión; un id de otro Workspace es **404** en todas las rutas (probadas las 9); `workspace_id` o `secret` enviados por el navegador se ignoran; la clave foránea compuesta impide emparejar una entrega con un destino de otro Workspace. Quien mira otro Workspace (administración de plataforma) no recibe la sección.
+- **Secreto:** `whsec_` + 40 aleatorios, **cifrado** en la base, oculto en toda serialización, mostrado **una sola vez** (flash de sesión; comprobado que no reaparece), solo la pista de 4 caracteres después. Rotar conserva el anterior 24 h. Auditoría (`webhook_endpoint`: crear, editar, rotar, reintentar, eliminar) sin secretos ni cuerpos; de la URL guarda solo el host.
+- **SSRF (al guardar y antes de cada intento, contra DNS rebinding):** solo `https` (http únicamente si `INTEGRATIONS_ALLOW_PRIVATE_HOSTS`), sin usuario/contraseña ni fragmento; se rechazan `localhost`/`.local`/`.internal`, IPv4 privadas, loopback, enlace local (169.254.169.254), 100.64/10 y rangos de documentación, IPv6 (`::1`, `fe80::`) y **IPv4 mapeada en IPv6** (`::ffff:127.0.0.1`; defecto corregido también en `SafeHttpTarget`, que usan las demás integraciones). La conexión se fija a la IP validada (`CURLOPT_RESOLVE`), **no se siguen redirecciones**, límite de 10 s, y el destino no controla ningún encabezado (solo los de Ava; nunca `Authorization` ni cookies). Los errores se guardan como códigos normalizados (`timeout`, `tls`, `http_500`…), nunca texto del destino.
+- **Límites propios** por persona (el contador numérico de `throttle:N,1` se comparte entre rutas: se vio en el navegador un 429 espurio y se pasó a limitadores con nombre), más el límite general de 600/min.
+
+### 78.6 Compatibilidad
+Meta/WhatsApp, Wompi, los endpoints de n8n (`/api/agent/*`, token del chatbot) y Booker **no cambian**: pruebas de que las rutas entrantes siguen sin sesión de Workspace y responden igual, y de que el token del agente sigue leyendo su configuración. Sin las tablas (un entorno sin migrar), `Webhooks::ready()` es falso: no se publica nada, la operación de negocio sigue igual, la página muestra «no disponible en este entorno» y crear devuelve un mensaje claro; `integrations:diagnose` avisa de la migración pendiente. Colección Postman regenerada: 330 rutas = 330 solicitudes (+9 de gestión de webhooks; contrato de entrega en la carpeta «04»).
+
+### 78.7 Pruebas
+| Comando | Resultado |
+|---|---|
+| `tests/Feature/WebhooksTest.php` (48 pruebas: eventos reales, filtrado y aislamiento, después del commit, firma y rotación, SSRF al guardar y al entregar, redirecciones, reintentos y abandono, apagado automático, barredor, poda, secreto único, permisos, plan, 404 entre Workspaces, validación, auditoría, prueba con límite, historial y reintento, compatibilidad) | SQLite en memoria: pasan todas |
+| Suite completa (SQLite en memoria, variables de §62.1) | 2 401 pruebas, 2 392 aprobadas, 9 omitidas (las que requieren PostgreSQL, §77.3), 0 fallos |
+| `vendor/bin/pint --test` / `composer audit` | correcto / sin avisos |
+| `npm run test:js` / `npm run build` | 127 de 127 / correcto |
+| **Navegador real** (PostgreSQL 16 desechable `ava_webhooks_check`, ya eliminada; receptor local de prueba) | crear (el secreto aparece una vez y no reaparece al recargar), «Enviar prueba» (entrega real firmada, cabeceras y cuerpo verificados), evento real de mensaje con el destino respondiendo 500 (estado «Fallido, se reintentará» con próximo intento) y **Reintentar** desde la interfaz (pasa a «Entregado»), migración completa de 51 en PostgreSQL; móvil de 390 px sin desborde (se corrigió uno en la tarjeta) |
+
+**Lo que NO se probó en esa primera pasada (superado por §78.9):** el **modo oscuro** de la sección (comparte tokens con el resto, pero no se capturó), el envío real a un servicio externo de un cliente, el pinning de IP con cURL en el host (el PHP del host no tiene la extensión; la prueba solo verifica la opción y el contenedor sí la tiene), la cola real con Redis/Horizon (las pruebas usan `sync` y el navegador también; el flujo asíncrono depende de `DeliverWebhook` y `webhooks:sweep`) y la suite completa contra PostgreSQL.
+
+### 78.8 Riesgos residuales y pasos para producción
+1. **Aplicar la migración `2026_11_15_100000_create_webhook_tables`** a cada entorno distinto de `ccg_ava` (allí ya está, §78.9) con copia previa; antes, nada cambia para el cliente.
+2. Reconstruir la imagen y reiniciar workers y `scheduler` (nuevos comandos y job); comprobar que `webhooks:sweep` aparece en `integrations:diagnose` como programado.
+3. Asignar `view-webhooks` / `manage-webhooks` a los roles que correspondan (no se otorgan solos).
+4. Al ser «al menos una vez» y sin orden, documentar al cliente que debe deduplicar por `X-Ava-Event-Id`.
+5. ~~La respuesta del destino se descarta pero cURL la descargaba entera dentro de los 10 s.~~ **Corregido en §78.9:** `SafeHttpTarget::client` corta también por bytes recibidos (respuestas sin `Content-Length`), comprobado en el contenedor con una respuesta *chunked* sin fin.
+6. Un destino público puede ser un puerto distinto de 443 (no se restringe): se acepta por flexibilidad; el SSRF depende de la IP, no del puerto.
+7. Siguen vigentes los pendientes sin cambio: W1–W3 (Wompi), CSP en `enforce`, TLS/HSTS reales, rotación real con n8n, reconstrucción de imagen, Redis y sesiones (§77.6).
+
+### 78.9 Cierre de la fase (2026-10-30): estabilización, validación y publicación
+
+**Estado real encontrado al empezar.** `main` = `origin/main` = `91ff0ef`; todo el trabajo de Webhooks sin confirmar. En `ccg_ava` la migración `2026_11_15_100000_create_webhook_tables` **ya figuraba ejecutada (lote 38)**, sin que esta sesión la aplicara y contra lo que dicen §78.2 y §78.8 de la pasada anterior: las dos tablas existen, **vacías**, con el esquema idéntico al archivo (claves compuestas, únicos e índices comprobados con `\d`), 0 migraciones pendientes y la de tokens S8 (lote 37) intacta. **Esta fase no ejecutó ninguna migración contra `ccg_ava`** (no había nada que aplicar); por eso tampoco se hizo una copia nueva. No se puede atribuir quién ni cuándo la aplicó; sí que no hay datos en esas tablas.
+
+**Correcciones de esta fase** (todas con prueba o comprobación real):
+1. `webhooks:prune` ya **no** borra entregas `pending`, `sending` ni `failed` por antiguas que sean (antes borraba cualquier estado pasados 28 días); solo entregadas y abandonadas de más de 14 días. Prueba actualizada con ese caso.
+2. El reintento diferido se encola con **+1 s**: `next_attempt_at` se guarda con precisión de segundo y el job podía llegar un instante antes de su hora y esperar al barredor.
+3. `SafeHttpTarget::client` corta una respuesta por **bytes recibidos** (callback `progress`), no solo por `Content-Length`: una respuesta *chunked* sin fin se cortaba solo a los 10 s.
+4. Interfaz: el historial mostraba «—» como resultado de una entrega correcta; ahora «Respondió 200». El error del campo de dirección decía «es obligatorio»; ahora «La dirección de destino es obligatoria».
+5. Archivos tocados con fin de línea LF (Pint).
+
+**Fijación de IP comprobada de verdad** (contenedor `app`, PHP con cURL, `SafeHttpTarget::client`, sin red externa): con un nombre **sin DNS** (`pinned.example.test`) fijado a `127.0.0.1`, la petición HTTPS llega (200) y verifica el certificado y el SNI del nombre; **sin** fijar, la misma petición falla (`cURL error 6`); un certificado de otro nombre falla (`cURL error 60`); una redirección 302 no se sigue; una respuesta *chunked* sin fin se corta (`Response too large`). El filtro (`resolve`) y el cliente de producción son el mismo código.
+
+**Cola real (PostgreSQL 16.15 desechable, Redis, workers `queue:work`, receptor controlado que verifica la firma; nada tocó `ccg_ava` ni su Redis):** migración completa de 51 en PostgreSQL y rollback/migrate de solo webhooks en la desechable; evento real de mensaje: **transacción revertida, 0 entregas y 0 jobs**; confirmada, 2 filas y 2 jobs en Redis; destino 500, `failed`, intento 1, próximo en ~52 s; **worker reiniciado** (los jobs diferidos sobrevivieron en Redis) y el intento 2 se entregó con el **mismo** `X-Ava-Event-Id`; firmas válidas en todos los intentos; **job perdido** (clave de la cola borrada), `webhooks:sweep` lo recupera; sweep repetido y 3 workers simultáneos sobre 4 jobs de 2 entregas dieron **exactamente 1 petición por evento**; `sending` huérfano de 10 min, liberado y entregado (intento 2); poda: borró solo la entregada y la abandonada antiguas y conservó la pendiente, la fallida y la `sending`. Ambos comandos aparecen en `schedule:list`.
+
+**Navegador (Playwright, PostgreSQL 16 desechable `ccg_ava_ui`, ya eliminada):** la sección aparece dentro de `/integrations` sin menú propio; validación de campos vacíos; crear (el secreto sale una vez y desaparece de la página); editar el destino; «Enviar prueba» (entregado); destino en 500, «Fallido, se reintentará» con próximo intento; **Reintentar** desde la interfaz, «Entregado»; rotar (con confirmación; secreto nuevo una vez; anterior vigente 24 h); desactivar y activar (con confirmación); eliminar (con confirmación; la auditoría se conserva). **Móvil 390, tablet 820 y escritorio 1440 sin desborde horizontal** (página y modales); **modo oscuro** capturado en móvil. Esa instancia usó `INTEGRATIONS_ALLOW_PRIVATE_HOSTS=true` para alcanzar el receptor local, así que el rechazo SSRF desde la interfaz **no** se probó ahí (lo cubren las pruebas automáticas y la comprobación de cURL). El estado «falta la migración» solo está cubierto por prueba automática, no en navegador.
+
+**Permisos.** En `ccg_ava` **faltan** `view-webhooks`, `manage-webhooks` (y los de pagos de otra fase) en la tabla `permissions`: `integrations:diagnose` lo marca FALLO. Efecto: la administración de plataforma (`Desarrollo_DEV`, superusuario `admin`) **sí** los tiene (se resuelven desde el catálogo: `internalAdministration()` los incluye, 89 permisos) y no pierde nada; los roles de un Workspace cliente no pueden usar Webhooks hasta ejecutar `db:seed --class=RolesAndPermissionsSeeder`, que **no se ejecutó** por no estar autorizado. Ningún permiso nuevo se concede por migración a otros roles (el mapa `legacy` no los nombra).
+
+**S8 (tokens de agente).** `AgentTokenLifecycleTest` 18 pruebas / 127 aserciones y `ScheduledCommandMonitorTest` 7 / 44, verdes (hash, expiración 90 d, adopción, uso, rotación con transición y retiro del anterior, revocación, 401 en vencido y revocado, avisos sin duplicados, `agent:tokens:notify` programado, auditoría sin secretos). En `ccg_ava`: tabla `agent_tokens` con su esquema, **1 token** (`legacy`, sin revocar, sin vencer) para 3 chatbots (1 con hash propio); sin incoherencias. No se rotó ni reinició ningún token real. **La actualización de la credencial en n8n sigue siendo manual**; la rotación autónoma NO está implementada.
+
+**Resultados.** Suite completa PHP (SQLite en memoria, comando de §62.1): **2 401 pruebas, 2 392 aprobadas, 9 omitidas, 0 fallos** (23 573 aserciones; las omitidas son de reservas, inventario y soporte que exigen PostgreSQL, o GD y build: ajenas a esta fase); `WebhooksTest` 48/48 (434 aserciones) y, tras los últimos cambios, `WebhooksTest` + `EnvExampleTest` 52/52; Pint correcto; `composer audit` y `npm audit` sin hallazgos; `npm run test:js` 127/127; `npm run build` correcto.
+
+**Qué está validado dónde.** *SQLite*: las 48 pruebas de Webhooks y la suite. *PostgreSQL 16*: esquema, migración y rollback en desechable, E2E de cola, esquema real de `ccg_ava`. *Redis y workers*: E2E anterior con `queue:work` (no con Horizon: sus workers en Docker leen la base real y no se usaron). *Navegador*: flujo completo arriba. *Servicios externos reales*: **ninguno** (Meta, Wompi, Booker, n8n y un consumidor real de webhooks no se probaron; todo fue contra un receptor local controlado). *Pendiente de despliegue*: reconstruir imagen y reiniciar workers y scheduler, sembrar permisos, TLS/HSTS reales, IP real tras el balanceador, actualizar a mano la credencial de n8n.
+

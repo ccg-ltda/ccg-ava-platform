@@ -110,4 +110,6 @@ El token `ava_…` con el que n8n llama a Ava (`GET /api/agent/config`, `POST /a
 
 ## 10. Qué no cubre este documento
 
+Los **webhooks de salida** de Integraciones (Ava avisa a un sistema externo cuando hay una conversación, cita o pedido; `RECOMENDACIONES.md` §78) son un contrato aparte e independiente de este: no pasan por `/api/agent/*`, no usan el token del chatbot y no cambian nada de lo descrito aquí. Un nodo «Webhook» de n8n puede ser su receptor siempre que verifique `X-Ava-Signature` (HMAC-SHA256 de `"{X-Ava-Timestamp}.{cuerpo}"`) y deduplique por `X-Ava-Event-Id`; la entrega es *al menos una vez*.
+
 La elección de workflow por clientes (autoservicio) y su propuesta de entidades están en `RECOMENDACIONES.md` §63.

@@ -91,6 +91,12 @@ class AppServiceProvider extends ServiceProvider
         ]);
         RateLimiter::for('password-reset-submit', fn (Request $request) => Limit::perMinute(10)->by('ip:'.$request->ip()));
         // Changing one's own password asks for the current one: limit guessing it from a hijacked session.
+        // Webhooks de salida (§78): own buckets per person (a numeric `throttle:N,1` shares one counter across every route of the same person).
+        RateLimiter::for('webhook-test', fn (Request $request) => Limit::perMinute((int) config('webhooks.limits.tests_per_minute'))->by('wh-test|'.$request->user()?->id.'|'.$request->route('webhook')));
+        RateLimiter::for('webhook-secret', fn (Request $request) => Limit::perMinute(30)->by('wh-secret|'.$request->user()?->id));
+        RateLimiter::for('webhook-write', fn (Request $request) => Limit::perMinute(30)->by('wh-write|'.$request->user()?->id));
+        RateLimiter::for('webhook-read', fn (Request $request) => Limit::perMinute(60)->by('wh-read|'.$request->user()?->id));
+
         RateLimiter::for('password-change', fn (Request $request) => Limit::perMinute(6)->by('user:'.$request->user()?->id.'|'.$request->ip()));
 
         // Public sign-up: sending a code reaches a mailbox (limited per IP and per address), checking one is a guessing surface, the other steps and the

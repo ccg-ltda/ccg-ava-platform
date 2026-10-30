@@ -62,6 +62,8 @@ class SafeHttpTarget
 
         if (! config('integrations.allow_private_hosts')) {
             foreach ($ips as $ip) {
+                $ip = $this->unmap($ip);
+
                 if (! filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) || $this->isSpecialUse($ip)) {
                     throw new UnsafeTarget('Por seguridad no se permite conectar con direcciones internas o reservadas.');
                 }
@@ -86,6 +88,12 @@ class SafeHttpTarget
                     throw new RuntimeException('Response too large.');
                 }
             },
+            // A chunked answer announces no length: stop it as soon as it has sent more than allowed.
+            'progress' => function (int $downloadTotal, int $downloaded): void {
+                if ($downloaded > self::MAX_RESPONSE_BYTES) {
+                    throw new RuntimeException('Response too large.');
+                }
+            },
         ];
 
         // Pin the connection to the address that was validated, so DNS cannot send it somewhere internal later.
@@ -98,6 +106,18 @@ class SafeHttpTarget
             ->withoutRedirecting()
             ->withOptions($options)
             ->withHeaders($headers);
+    }
+
+    /** An IPv4-mapped IPv6 address (::ffff:127.0.0.1) is judged as the IPv4 address it carries, so it can not dodge the private-range check. */
+    private function unmap(string $ip): string
+    {
+        $packed = @inet_pton($ip);
+
+        if ($packed !== false && strlen($packed) === 16 && str_starts_with($packed, str_repeat("\0", 10)."\xff\xff")) {
+            return inet_ntop(substr($packed, 12));
+        }
+
+        return $ip;
     }
 
     /** Special-use ranges PHP's reserved filter lets through (shared address space, documentation, benchmarking, NAT64). */

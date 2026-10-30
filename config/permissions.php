@@ -63,6 +63,8 @@ return [
         'test-integrations' => ['group' => 'integrations', 'label' => 'Probar conexiones', 'description' => 'Ejecuta «Probar conexión»: una llamada real al servicio externo.'],
         'activate-integrations' => ['group' => 'integrations', 'label' => 'Activar, desactivar y desconectar', 'description' => 'Enciende o apaga una conexión y desconecta n8n sin borrar su historial.'],
         'delete-integrations' => ['group' => 'integrations', 'label' => 'Retirar conexiones de prueba', 'description' => 'Retira una conexión manual que ya no se necesita. Solo las que no tienen historial que conservar.'],
+        'view-webhooks' => ['group' => 'integrations', 'label' => 'Consultar webhooks', 'description' => 'Ve los webhooks de salida, sus eventos y el historial de entregas. Nunca muestra el secreto de firma ni el contenido de los envíos.'],
+        'manage-webhooks' => ['group' => 'integrations', 'label' => 'Gestionar webhooks', 'description' => 'Crea, edita, activa, prueba y elimina webhooks de salida, rota su secreto de firma y reintenta entregas fallidas. El secreto se muestra una sola vez.'],
 
         // Auditoría
         'view-audit' => ['group' => 'audit', 'label' => 'Consultar la auditoría', 'description' => 'Abre el historial de Auditoría del Workspace con sus filtros.'],

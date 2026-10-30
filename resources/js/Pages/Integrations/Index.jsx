@@ -14,13 +14,14 @@ import ChannelCard from './Partials/ChannelCard';
 import ChannelIntegrationModal from './Partials/ChannelIntegrationModal';
 import IntegrationCard from './Partials/IntegrationCard';
 import IntegrationFormModal from './Partials/IntegrationFormModal';
+import WebhooksSection from './Partials/WebhooksSection';
 
 /**
- * Integraciones. Three parts: n8n (the automation, as the Workspace can verify it), the channels of the global catalog (WhatsApp, Instagram... the same for every Workspace)
+ * Integraciones. Parts: n8n (the automation, as the Workspace can verify it), the channels of the global catalog (WhatsApp, Instagram... the same for every Workspace)
  * with what THIS Workspace has configured for each, and the Workspace's generic connections (HTTP/REST today). An
  * administrator of the platform can look (read only) at one other Workspace. Results arrive as the global toasts.
  */
-export default function Index({ channels, providers = [], integrations, catalog, automation, newToken, scope }) {
+export default function Index({ channels, providers = [], integrations, catalog, automation, newToken, webhooks = null, newWebhookSecret = null, scope }) {
     const confirm = useConfirm();
     const readOnly = scope.readOnly;
     // Each change has its own permission; the server enforces them, this only offers what the role can do.
@@ -31,6 +32,7 @@ export default function Index({ channels, providers = [], integrations, catalog,
         toggle: permissions.includes('activate-integrations'),
         remove: permissions.includes('delete-integrations'),
     };
+    const webhookCan = { manage: permissions.includes('manage-webhooks') };
     const [editing, setEditing] = useState(null); // null = closed, 'new' = creating, otherwise the integration
     const [configuring, setConfiguring] = useState(null); // the channel being configured
     const [configuringProvider, setConfiguringProvider] = useState(null); // the external agenda being configured
@@ -202,6 +204,8 @@ export default function Index({ channels, providers = [], integrations, catalog,
                     </div>
                 )}
             </section>
+
+            {!readOnly && webhooks && <WebhooksSection webhooks={webhooks} newSecret={newWebhookSecret} can={webhookCan} />}
 
             {!readOnly && <ApiCallHistory />}
 

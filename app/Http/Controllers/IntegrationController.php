@@ -13,6 +13,7 @@ use App\Services\ChatbotService;
 use App\Services\IntegrationService;
 use App\Services\ModuleAccess;
 use App\Services\WorkspaceScope;
+use App\Webhooks\WebhookService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -34,12 +35,15 @@ class IntegrationController extends Controller
         private readonly ChatbotService $chatbots,
         private readonly WorkspaceScope $scope,
         private readonly ModuleAccess $modules,
+        private readonly WebhookService $webhooks,
     ) {}
 
     public function index(Request $request): Response
     {
         $active = $request->attributes->get('workspace');
         $viewing = $this->scope->resolveOne($request->user(), $active, $request->query('workspace'));
+        // Webhooks de salida (§78): only the ACTIVE Workspace's own, only for a role that may read them (never while looking at another Workspace).
+        $showWebhooks = $viewing->is($active) && in_array('view-webhooks', $request->attributes->get('workspace_permissions', []), true);
 
         return Inertia::render('Integrations/Index', [
             'channels' => $this->integrations->channels($viewing),
@@ -50,6 +54,9 @@ class IntegrationController extends Controller
             // The token just generated for a chatbot (shown once, only to the Workspace that owns it).
             'newToken' => $viewing->is($active) && $request->session()->has('agent_token') ? ['chatbotId' => $request->session()->get('agent_token_chatbot'), 'token' => $request->session()->get('agent_token')] : null,
             'catalog' => $this->integrations->catalog(),
+            'webhooks' => $showWebhooks ? $this->webhooks->overview($viewing) : null,
+            // The signing secret just created or rotated (shown once, to the person who did it).
+            'newWebhookSecret' => $showWebhooks ? $request->session()->get('webhook_secret') : null,
             'scope' => [
                 'workspace' => ['id' => $viewing->id, 'name' => $viewing->name, 'code' => $viewing->code],
                 'readOnly' => ! $viewing->is($active),

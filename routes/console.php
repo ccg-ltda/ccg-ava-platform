@@ -33,6 +33,10 @@ ScheduledCommandMonitor::watch(Schedule::command('agent:tools:reconcile')->every
 // Warns the team before a chatbot access token expires (idempotent, creates notifications only; it revokes and changes nothing).
 ScheduledCommandMonitor::watch(Schedule::command('agent:tokens:notify')->hourly()->withoutOverlapping()->onOneServer(), 'agent-tokens-notify');
 
+// Webhooks de salida (§78): re-dispatches deliveries whose queue job was lost, and keeps the delivery history bounded. Neither touches business data.
+ScheduledCommandMonitor::watch(Schedule::command('webhooks:sweep')->everyMinute()->withoutOverlapping()->onOneServer(), 'webhooks-sweep');
+ScheduledCommandMonitor::watch(Schedule::command('webhooks:prune')->dailyAt('03:20')->withoutOverlapping()->onOneServer(), 'webhooks-prune');
+
 // Moves free trials whose end date passed to `expired` (idempotent; the server already withdraws the access on every request; no data is touched).
 ScheduledCommandMonitor::watch(Schedule::command('subscriptions:expire-trials')->everyTenMinutes()->withoutOverlapping()->onOneServer(), 'trials-expire');
 

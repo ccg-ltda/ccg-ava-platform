@@ -4574,7 +4574,7 @@
     },
     {
       "name": "04 Webhooks entrantes",
-      "description": "Los llaman Meta y Wompi. Verificación por firma. No hay otros webhooks entrantes (el aviso de soporte a n8n, `CCG_SUPPORT_NOTIFY_*`, es SALIENTE).",
+      "description": "Los llaman Meta y Wompi. Verificación por firma. No hay otros webhooks entrantes. Los webhooks de SALIDA de cada Workspace (Ava llama a su sistema) se gestionan en la carpeta `integrations` de «06 Web autenticada por módulo» (`/integrations/webhooks…`, permisos `view-webhooks` y `manage-webhooks`); el contrato de lo que reciben es: POST JSON con `X-Ava-Event-Id`, `X-Ava-Event`, `X-Ava-Delivery`, `X-Ava-Delivery-Attempt`, `X-Ava-Timestamp` y `X-Ava-Signature` (`sha256=` + HMAC-SHA256 hex de `{timestamp}.{cuerpo}` con el secreto del webhook; durante la rotación también `X-Ava-Signature-Previous`). El aviso de soporte a n8n (`CCG_SUPPORT_NOTIFY_*`) es otra cosa, también SALIENTE.",
       "item": [
         {
           "name": "Meta (plataforma): verificación",
@@ -18103,6 +18103,1075 @@
                       "variable": [
                         {
                           "key": "provider",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Forbidden",
+                  "code": 403,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                }
+              ],
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// Copia la cookie XSRF-TOKEN (si existe) a la variable xsrf_token. Laravel la entrega URL-codificada.",
+                      "const c = pm.cookies.get('XSRF-TOKEN');",
+                      "if (c) { pm.collectionVariables.set('xsrf_token', decodeURIComponent(c)); }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST /integrations/webhooks",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-XSRF-TOKEN",
+                    "value": "{{xsrf_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/integrations/webhooks",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "integrations",
+                    "webhooks"
+                  ]
+                },
+                "description": "Ruta Laravel: `integrations.webhooks.store` → `WebhookController@store`.\n\nAutenticada: sesión web (`auth`) + CSRF (`X-XSRF-TOKEN`) + contexto de Workspace (`EnsureWorkspaceContext`: el Workspace sale de la sesión, nunca de la petición).\n\nMódulo(s) del plan requerido(s) (se comprueba en el servidor, independiente del permiso): `integrations`.\n\nPermiso(s) del rol en el Workspace (todos los listados): `view-integrations`, `manage-webhooks`.\n\nLímite: `authenticated`, `20,1`.\n\nOtros middleware: `EnsureWorkspaceContext`.\n\nCuerpo: formulario de Inertia; las reglas están en el Form Request/controlador indicado (no se transcriben aquí). Envíe `Accept: application/json` y `X-XSRF-TOKEN`.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": [
+                {
+                  "name": "401 Unauthorized",
+                  "originalRequest": {
+                    "method": "POST",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks"
+                      ]
+                    }
+                  },
+                  "status": "Unauthorized",
+                  "code": 401,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                },
+                {
+                  "name": "403 Forbidden",
+                  "originalRequest": {
+                    "method": "POST",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks"
+                      ]
+                    }
+                  },
+                  "status": "Forbidden",
+                  "code": 403,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                }
+              ],
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// Copia la cookie XSRF-TOKEN (si existe) a la variable xsrf_token. Laravel la entrega URL-codificada.",
+                      "const c = pm.cookies.get('XSRF-TOKEN');",
+                      "if (c) { pm.collectionVariables.set('xsrf_token', decodeURIComponent(c)); }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "PUT /integrations/webhooks/{webhook}",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-XSRF-TOKEN",
+                    "value": "{{xsrf_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/integrations/webhooks/:webhook",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "integrations",
+                    "webhooks",
+                    ":webhook"
+                  ],
+                  "variable": [
+                    {
+                      "key": "webhook",
+                      "value": "",
+                      "description": "Identificador (no se incluye ningún valor real)."
+                    }
+                  ]
+                },
+                "description": "Ruta Laravel: `integrations.webhooks.update` → `WebhookController@update`.\n\nAutenticada: sesión web (`auth`) + CSRF (`X-XSRF-TOKEN`) + contexto de Workspace (`EnsureWorkspaceContext`: el Workspace sale de la sesión, nunca de la petición).\n\nMódulo(s) del plan requerido(s) (se comprueba en el servidor, independiente del permiso): `integrations`.\n\nPermiso(s) del rol en el Workspace (todos los listados): `view-integrations`, `manage-webhooks`.\n\nLímite: `authenticated`.\n\nOtros middleware: `EnsureWorkspaceContext`.\n\nCuerpo: formulario de Inertia; las reglas están en el Form Request/controlador indicado (no se transcriben aquí). Envíe `Accept: application/json` y `X-XSRF-TOKEN`.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": [
+                {
+                  "name": "401 Unauthorized",
+                  "originalRequest": {
+                    "method": "PUT",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/:webhook",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        ":webhook"
+                      ],
+                      "variable": [
+                        {
+                          "key": "webhook",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Unauthorized",
+                  "code": 401,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                },
+                {
+                  "name": "403 Forbidden",
+                  "originalRequest": {
+                    "method": "PUT",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/:webhook",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        ":webhook"
+                      ],
+                      "variable": [
+                        {
+                          "key": "webhook",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Forbidden",
+                  "code": 403,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                }
+              ],
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// Copia la cookie XSRF-TOKEN (si existe) a la variable xsrf_token. Laravel la entrega URL-codificada.",
+                      "const c = pm.cookies.get('XSRF-TOKEN');",
+                      "if (c) { pm.collectionVariables.set('xsrf_token', decodeURIComponent(c)); }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DELETE /integrations/webhooks/{webhook}",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-XSRF-TOKEN",
+                    "value": "{{xsrf_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/integrations/webhooks/:webhook",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "integrations",
+                    "webhooks",
+                    ":webhook"
+                  ],
+                  "variable": [
+                    {
+                      "key": "webhook",
+                      "value": "",
+                      "description": "Identificador (no se incluye ningún valor real)."
+                    }
+                  ]
+                },
+                "description": "Ruta Laravel: `integrations.webhooks.destroy` → `WebhookController@destroy`.\n\nAutenticada: sesión web (`auth`) + CSRF (`X-XSRF-TOKEN`) + contexto de Workspace (`EnsureWorkspaceContext`: el Workspace sale de la sesión, nunca de la petición).\n\nMódulo(s) del plan requerido(s) (se comprueba en el servidor, independiente del permiso): `integrations`.\n\nPermiso(s) del rol en el Workspace (todos los listados): `view-integrations`, `manage-webhooks`.\n\nLímite: `authenticated`.\n\nOtros middleware: `EnsureWorkspaceContext`.\n\nCuerpo: formulario de Inertia; las reglas están en el Form Request/controlador indicado (no se transcriben aquí). Envíe `Accept: application/json` y `X-XSRF-TOKEN`.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": [
+                {
+                  "name": "401 Unauthorized",
+                  "originalRequest": {
+                    "method": "DELETE",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/:webhook",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        ":webhook"
+                      ],
+                      "variable": [
+                        {
+                          "key": "webhook",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Unauthorized",
+                  "code": 401,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                },
+                {
+                  "name": "403 Forbidden",
+                  "originalRequest": {
+                    "method": "DELETE",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/:webhook",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        ":webhook"
+                      ],
+                      "variable": [
+                        {
+                          "key": "webhook",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Forbidden",
+                  "code": 403,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                }
+              ],
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// Copia la cookie XSRF-TOKEN (si existe) a la variable xsrf_token. Laravel la entrega URL-codificada.",
+                      "const c = pm.cookies.get('XSRF-TOKEN');",
+                      "if (c) { pm.collectionVariables.set('xsrf_token', decodeURIComponent(c)); }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST /integrations/webhooks/{webhook}/activate",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-XSRF-TOKEN",
+                    "value": "{{xsrf_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/integrations/webhooks/:webhook/activate",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "integrations",
+                    "webhooks",
+                    ":webhook",
+                    "activate"
+                  ],
+                  "variable": [
+                    {
+                      "key": "webhook",
+                      "value": "",
+                      "description": "Identificador (no se incluye ningún valor real)."
+                    }
+                  ]
+                },
+                "description": "Ruta Laravel: `integrations.webhooks.activate` → `WebhookController@activate`.\n\nAutenticada: sesión web (`auth`) + CSRF (`X-XSRF-TOKEN`) + contexto de Workspace (`EnsureWorkspaceContext`: el Workspace sale de la sesión, nunca de la petición).\n\nMódulo(s) del plan requerido(s) (se comprueba en el servidor, independiente del permiso): `integrations`.\n\nPermiso(s) del rol en el Workspace (todos los listados): `view-integrations`, `manage-webhooks`.\n\nLímite: `authenticated`.\n\nOtros middleware: `EnsureWorkspaceContext`.\n\nCuerpo: formulario de Inertia; las reglas están en el Form Request/controlador indicado (no se transcriben aquí). Envíe `Accept: application/json` y `X-XSRF-TOKEN`.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": [
+                {
+                  "name": "401 Unauthorized",
+                  "originalRequest": {
+                    "method": "POST",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/:webhook/activate",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        ":webhook",
+                        "activate"
+                      ],
+                      "variable": [
+                        {
+                          "key": "webhook",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Unauthorized",
+                  "code": 401,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                },
+                {
+                  "name": "403 Forbidden",
+                  "originalRequest": {
+                    "method": "POST",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/:webhook/activate",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        ":webhook",
+                        "activate"
+                      ],
+                      "variable": [
+                        {
+                          "key": "webhook",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Forbidden",
+                  "code": 403,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                }
+              ],
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// Copia la cookie XSRF-TOKEN (si existe) a la variable xsrf_token. Laravel la entrega URL-codificada.",
+                      "const c = pm.cookies.get('XSRF-TOKEN');",
+                      "if (c) { pm.collectionVariables.set('xsrf_token', decodeURIComponent(c)); }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST /integrations/webhooks/{webhook}/deactivate",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-XSRF-TOKEN",
+                    "value": "{{xsrf_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/integrations/webhooks/:webhook/deactivate",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "integrations",
+                    "webhooks",
+                    ":webhook",
+                    "deactivate"
+                  ],
+                  "variable": [
+                    {
+                      "key": "webhook",
+                      "value": "",
+                      "description": "Identificador (no se incluye ningún valor real)."
+                    }
+                  ]
+                },
+                "description": "Ruta Laravel: `integrations.webhooks.deactivate` → `WebhookController@deactivate`.\n\nAutenticada: sesión web (`auth`) + CSRF (`X-XSRF-TOKEN`) + contexto de Workspace (`EnsureWorkspaceContext`: el Workspace sale de la sesión, nunca de la petición).\n\nMódulo(s) del plan requerido(s) (se comprueba en el servidor, independiente del permiso): `integrations`.\n\nPermiso(s) del rol en el Workspace (todos los listados): `view-integrations`, `manage-webhooks`.\n\nLímite: `authenticated`.\n\nOtros middleware: `EnsureWorkspaceContext`.\n\nCuerpo: formulario de Inertia; las reglas están en el Form Request/controlador indicado (no se transcriben aquí). Envíe `Accept: application/json` y `X-XSRF-TOKEN`.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": [
+                {
+                  "name": "401 Unauthorized",
+                  "originalRequest": {
+                    "method": "POST",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/:webhook/deactivate",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        ":webhook",
+                        "deactivate"
+                      ],
+                      "variable": [
+                        {
+                          "key": "webhook",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Unauthorized",
+                  "code": 401,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                },
+                {
+                  "name": "403 Forbidden",
+                  "originalRequest": {
+                    "method": "POST",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/:webhook/deactivate",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        ":webhook",
+                        "deactivate"
+                      ],
+                      "variable": [
+                        {
+                          "key": "webhook",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Forbidden",
+                  "code": 403,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                }
+              ],
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// Copia la cookie XSRF-TOKEN (si existe) a la variable xsrf_token. Laravel la entrega URL-codificada.",
+                      "const c = pm.cookies.get('XSRF-TOKEN');",
+                      "if (c) { pm.collectionVariables.set('xsrf_token', decodeURIComponent(c)); }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "GET /integrations/webhooks/{webhook}/deliveries",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/integrations/webhooks/:webhook/deliveries",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "integrations",
+                    "webhooks",
+                    ":webhook",
+                    "deliveries"
+                  ],
+                  "variable": [
+                    {
+                      "key": "webhook",
+                      "value": "",
+                      "description": "Identificador (no se incluye ningún valor real)."
+                    }
+                  ]
+                },
+                "description": "Ruta Laravel: `integrations.webhooks.deliveries` → `WebhookController@deliveries`.\n\nAutenticada: sesión web (`auth`) + CSRF (`X-XSRF-TOKEN`) + contexto de Workspace (`EnsureWorkspaceContext`: el Workspace sale de la sesión, nunca de la petición).\n\nMódulo(s) del plan requerido(s) (se comprueba en el servidor, independiente del permiso): `integrations`.\n\nPermiso(s) del rol en el Workspace (todos los listados): `view-integrations`, `view-webhooks`.\n\nLímite: `authenticated`, `60,1`.\n\nOtros middleware: `EnsureWorkspaceContext`.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": [
+                {
+                  "name": "401 Unauthorized",
+                  "originalRequest": {
+                    "method": "GET",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/:webhook/deliveries",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        ":webhook",
+                        "deliveries"
+                      ],
+                      "variable": [
+                        {
+                          "key": "webhook",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Unauthorized",
+                  "code": 401,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                },
+                {
+                  "name": "403 Forbidden",
+                  "originalRequest": {
+                    "method": "GET",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/:webhook/deliveries",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        ":webhook",
+                        "deliveries"
+                      ],
+                      "variable": [
+                        {
+                          "key": "webhook",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Forbidden",
+                  "code": 403,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                }
+              ]
+            },
+            {
+              "name": "POST /integrations/webhooks/{webhook}/deliveries/{delivery}/retry",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-XSRF-TOKEN",
+                    "value": "{{xsrf_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/integrations/webhooks/:webhook/deliveries/:delivery/retry",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "integrations",
+                    "webhooks",
+                    ":webhook",
+                    "deliveries",
+                    ":delivery",
+                    "retry"
+                  ],
+                  "variable": [
+                    {
+                      "key": "webhook",
+                      "value": "",
+                      "description": "Identificador (no se incluye ningún valor real)."
+                    },
+                    {
+                      "key": "delivery",
+                      "value": "",
+                      "description": "Identificador (no se incluye ningún valor real)."
+                    }
+                  ]
+                },
+                "description": "Ruta Laravel: `integrations.webhooks.retry` → `WebhookController@retry`.\n\nAutenticada: sesión web (`auth`) + CSRF (`X-XSRF-TOKEN`) + contexto de Workspace (`EnsureWorkspaceContext`: el Workspace sale de la sesión, nunca de la petición).\n\nMódulo(s) del plan requerido(s) (se comprueba en el servidor, independiente del permiso): `integrations`.\n\nPermiso(s) del rol en el Workspace (todos los listados): `view-integrations`, `manage-webhooks`.\n\nLímite: `authenticated`, `30,1`.\n\nOtros middleware: `EnsureWorkspaceContext`.\n\nCuerpo: formulario de Inertia; las reglas están en el Form Request/controlador indicado (no se transcriben aquí). Envíe `Accept: application/json` y `X-XSRF-TOKEN`.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": [
+                {
+                  "name": "401 Unauthorized",
+                  "originalRequest": {
+                    "method": "POST",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/:webhook/deliveries/:delivery/retry",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        ":webhook",
+                        "deliveries",
+                        ":delivery",
+                        "retry"
+                      ],
+                      "variable": [
+                        {
+                          "key": "webhook",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        },
+                        {
+                          "key": "delivery",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Unauthorized",
+                  "code": 401,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                },
+                {
+                  "name": "403 Forbidden",
+                  "originalRequest": {
+                    "method": "POST",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/:webhook/deliveries/:delivery/retry",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        ":webhook",
+                        "deliveries",
+                        ":delivery",
+                        "retry"
+                      ],
+                      "variable": [
+                        {
+                          "key": "webhook",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        },
+                        {
+                          "key": "delivery",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Forbidden",
+                  "code": 403,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                }
+              ],
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// Copia la cookie XSRF-TOKEN (si existe) a la variable xsrf_token. Laravel la entrega URL-codificada.",
+                      "const c = pm.cookies.get('XSRF-TOKEN');",
+                      "if (c) { pm.collectionVariables.set('xsrf_token', decodeURIComponent(c)); }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST /integrations/webhooks/{webhook}/rotate",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-XSRF-TOKEN",
+                    "value": "{{xsrf_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/integrations/webhooks/:webhook/rotate",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "integrations",
+                    "webhooks",
+                    ":webhook",
+                    "rotate"
+                  ],
+                  "variable": [
+                    {
+                      "key": "webhook",
+                      "value": "",
+                      "description": "Identificador (no se incluye ningún valor real)."
+                    }
+                  ]
+                },
+                "description": "Ruta Laravel: `integrations.webhooks.rotate` → `WebhookController@rotate`.\n\nAutenticada: sesión web (`auth`) + CSRF (`X-XSRF-TOKEN`) + contexto de Workspace (`EnsureWorkspaceContext`: el Workspace sale de la sesión, nunca de la petición).\n\nMódulo(s) del plan requerido(s) (se comprueba en el servidor, independiente del permiso): `integrations`.\n\nPermiso(s) del rol en el Workspace (todos los listados): `view-integrations`, `manage-webhooks`.\n\nLímite: `authenticated`, `10,1`.\n\nOtros middleware: `EnsureWorkspaceContext`.\n\nCuerpo: formulario de Inertia; las reglas están en el Form Request/controlador indicado (no se transcriben aquí). Envíe `Accept: application/json` y `X-XSRF-TOKEN`.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": [
+                {
+                  "name": "401 Unauthorized",
+                  "originalRequest": {
+                    "method": "POST",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/:webhook/rotate",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        ":webhook",
+                        "rotate"
+                      ],
+                      "variable": [
+                        {
+                          "key": "webhook",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Unauthorized",
+                  "code": 401,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                },
+                {
+                  "name": "403 Forbidden",
+                  "originalRequest": {
+                    "method": "POST",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/:webhook/rotate",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        ":webhook",
+                        "rotate"
+                      ],
+                      "variable": [
+                        {
+                          "key": "webhook",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Forbidden",
+                  "code": 403,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                }
+              ],
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// Copia la cookie XSRF-TOKEN (si existe) a la variable xsrf_token. Laravel la entrega URL-codificada.",
+                      "const c = pm.cookies.get('XSRF-TOKEN');",
+                      "if (c) { pm.collectionVariables.set('xsrf_token', decodeURIComponent(c)); }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST /integrations/webhooks/{webhook}/test",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-XSRF-TOKEN",
+                    "value": "{{xsrf_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/integrations/webhooks/:webhook/test",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "integrations",
+                    "webhooks",
+                    ":webhook",
+                    "test"
+                  ],
+                  "variable": [
+                    {
+                      "key": "webhook",
+                      "value": "",
+                      "description": "Identificador (no se incluye ningún valor real)."
+                    }
+                  ]
+                },
+                "description": "Ruta Laravel: `integrations.webhooks.test` → `WebhookController@test`.\n\nAutenticada: sesión web (`auth`) + CSRF (`X-XSRF-TOKEN`) + contexto de Workspace (`EnsureWorkspaceContext`: el Workspace sale de la sesión, nunca de la petición).\n\nMódulo(s) del plan requerido(s) (se comprueba en el servidor, independiente del permiso): `integrations`.\n\nPermiso(s) del rol en el Workspace (todos los listados): `view-integrations`, `manage-webhooks`.\n\nLímite: `authenticated`, `6,1`.\n\nOtros middleware: `EnsureWorkspaceContext`.\n\nCuerpo: formulario de Inertia; las reglas están en el Form Request/controlador indicado (no se transcriben aquí). Envíe `Accept: application/json` y `X-XSRF-TOKEN`.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": [
+                {
+                  "name": "401 Unauthorized",
+                  "originalRequest": {
+                    "method": "POST",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/:webhook/test",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        ":webhook",
+                        "test"
+                      ],
+                      "variable": [
+                        {
+                          "key": "webhook",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Unauthorized",
+                  "code": 401,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                },
+                {
+                  "name": "403 Forbidden",
+                  "originalRequest": {
+                    "method": "POST",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/:webhook/test",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        ":webhook",
+                        "test"
+                      ],
+                      "variable": [
+                        {
+                          "key": "webhook",
                           "value": "",
                           "description": "Identificador (no se incluye ningún valor real)."
                         }

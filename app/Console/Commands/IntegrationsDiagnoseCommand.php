@@ -13,6 +13,8 @@ use App\Models\ChatbotExecution;
 use App\Models\Integration;
 use App\Models\Message;
 use App\Models\Plan;
+use App\Models\WebhookDelivery;
+use App\Models\WebhookEndpoint;
 use App\Models\Workspace;
 use App\Payments\PaymentGateway;
 use App\Services\AgentAccess;
@@ -23,6 +25,7 @@ use App\Services\SignupService;
 use App\Services\SupportChannel;
 use App\Support\MailAvailability;
 use App\Support\ScheduledCommandMonitor;
+use App\Webhooks\Webhooks;
 use Illuminate\Console\Command;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Cache;
@@ -77,6 +80,7 @@ class IntegrationsDiagnoseCommand extends Command
 
         $this->components->info('Tokens de acceso de los agentes (n8n)');
         $this->agentTokens($workspaceId);
+        $this->webhooks($workspaceId);
 
         $this->components->info('Chat público de CCG (soporte en el Workspace administrativo)');
         $this->supportChat();
@@ -115,6 +119,33 @@ class IntegrationsDiagnoseCommand extends Command
         $expiring->isNotEmpty()
             ? $this->caution("{$expiring->count()} token(s) vencen en {$window} días o menos: ya se avisó a cada Workspace con una notificación (rotar el token no interrumpe n8n).")
             : $this->good("Ningún token vence en los próximos {$window} días.");
+    }
+
+    /** Outbound webhooks (§78): counts only, never a URL, a secret or a payload. */
+    private function webhooks(?int $workspaceId): void
+    {
+        if (! Webhooks::ready()) {
+            $this->caution('Falta la migración de webhooks (webhook_endpoints, webhook_deliveries): los webhooks de salida no están disponibles hasta aplicarla.');
+
+            return;
+        }
+
+        $endpoints = WebhookEndpoint::query()->when($workspaceId, fn ($q) => $q->where('workspace_id', $workspaceId));
+        $deliveries = WebhookDelivery::query()->when($workspaceId, fn ($q) => $q->where('workspace_id', $workspaceId));
+        $off = (clone $endpoints)->where('is_active', false)->where('disabled_reason', 'failures')->count();
+        $stuck = (clone $deliveries)->whereIn('status', [WebhookDelivery::PENDING, WebhookDelivery::FAILED])->where('next_attempt_at', '<', now()->subMinutes(10))->count();
+        $abandoned = (clone $deliveries)->where('status', WebhookDelivery::ABANDONED)->where('updated_at', '>=', now()->subDay())->count();
+
+        $this->good((clone $endpoints)->where('is_active', true)->count().' webhook(s) de salida activo(s).');
+        $off > 0
+            ? $this->caution("{$off} webhook(s) se desactivaron por fallos seguidos: el destino no responde 2xx (Integraciones > Webhooks).")
+            : $this->good('Ningún webhook está desactivado por fallos.');
+        $stuck > 0
+            ? $this->caution("{$stuck} entrega(s) de webhooks llevan más de 10 min vencidas sin enviarse: revisa el worker de colas y que `webhooks:sweep` corra.")
+            : $this->good('Ninguna entrega de webhooks está atrasada en la cola.');
+        $abandoned > 0
+            ? $this->caution("{$abandoned} entrega(s) de webhooks se abandonaron en las últimas 24 h (agotaron los reintentos).")
+            : $this->good('Ninguna entrega de webhooks se abandonó en las últimas 24 h.');
     }
 
     private function good(string $text): void

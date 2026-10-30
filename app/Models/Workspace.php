@@ -113,6 +113,11 @@ class Workspace extends Model
         return $this->hasMany(Integration::class);
     }
 
+    public function webhookEndpoints(): HasMany
+    {
+        return $this->hasMany(WebhookEndpoint::class);
+    }
+
     public function chatbots(): HasMany
     {
         return $this->hasMany(Chatbot::class);

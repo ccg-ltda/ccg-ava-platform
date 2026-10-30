@@ -21,6 +21,7 @@ return [
         'module_category' => ['label' => 'Categorías de módulos', 'noun' => 'la categoría de módulos'],
         'settings' => ['label' => 'Configuraciones', 'noun' => 'la configuración del Workspace'],
         'integration' => ['label' => 'Integraciones', 'noun' => 'la integración'],
+        'webhook_endpoint' => ['label' => 'Webhooks', 'noun' => 'el webhook'],
         'service' => ['label' => 'Servicios', 'noun' => 'el servicio'],
         'professional' => ['label' => 'Profesionales', 'noun' => 'el profesional'],
         'location' => ['label' => 'Sedes', 'noun' => 'la sede'],
@@ -66,6 +67,8 @@ return [
         'simulated' => ['label' => 'Simulado', 'verb' => 'Simuló'],
         'cancelled' => ['label' => 'Cancelado', 'verb' => 'Canceló'],
         'executed' => ['label' => 'Ejecutado', 'verb' => 'Ejecutó'],
+        'rotated' => ['label' => 'Secreto rotado', 'verb' => 'Rotó el secreto de'],
+        'retried' => ['label' => 'Reintentado', 'verb' => 'Reintentó una entrega de'],
     ],
 
     'pdf_max_events' => 1000,
