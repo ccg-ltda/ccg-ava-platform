@@ -135,6 +135,8 @@ class ConversationInbox
             'operations' => $foreign ? [] : $this->operations->for($conversation, $permissions, $settings),
             // The tools the assistant ran for this conversation, as traced (see AgentToolTrace): operational facts only.
             'tools' => $foreign ? [] : $this->operations->tools($conversation, $settings),
+            // The «Actividad técnica» button: the panel itself is fetched on demand from conversations.activity (which checks the same permission in the server).
+            'activity' => ! $foreign && in_array('view-technical-activity', $permissions, true),
             // «Esta respuesta no me gustó»: only for who may change the assistant, in the Workspace of the session and while its plan includes Asistentes. The blocks give the starting text of the proposal.
             'feedback' => ! $foreign && ChatbotFeedback::ready() && in_array('edit-chatbots', $permissions, true) && app(ModuleAccess::class)->allowsAll($conversation->chatbot->workspace, ['assistants'])
                 ? ['blocks' => collect(app(ChatbotInstructions::class)->blocks($conversation->chatbot))->whereIn('key', ChatbotInstructions::blocksOf(app(ChatbotInstructions::class)->mode($conversation->chatbot)))->map(fn (array $block) => ['key' => $block['key'], 'label' => $block['label'], 'text' => $block['text']])->values()->all()]

@@ -2,14 +2,18 @@
 
 use App\Http\Middleware\AuthenticateAgent;
 use App\Http\Middleware\EnforceAbsoluteSession;
+use App\Http\Middleware\EnforceApiProtection;
 use App\Http\Middleware\EnsureLegalAcceptance;
 use App\Http\Middleware\EnsurePlatformAdministration;
 use App\Http\Middleware\EnsureWorkspaceContext;
 use App\Http\Middleware\EnsureWorkspaceModule;
 use App\Http\Middleware\EnsureWorkspacePermission;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\LimitRequestBody;
+use App\Http\Middleware\SafeThrottleRequests;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\TraceAgentTool;
+use App\Support\ApiProtection;
 use Illuminate\Auth\Middleware\Authorize;
 use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
 use Illuminate\Contracts\Session\Middleware\AuthenticatesSessions;
@@ -19,6 +23,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Foundation\Http\Middleware\HandlePrecognitiveRequests;
+use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Middleware\SubstituteBindings;
@@ -69,11 +74,13 @@ return Application::configure(basePath: dirname(__DIR__))
             ShareErrorsFromSession::class,
             EnforceAbsoluteSession::class, // before the route's `auth`: an expired session must already be a guest when `auth` looks at it
             AuthenticatesRequests::class,
+            SafeThrottleRequests::class,
             ThrottleRequests::class,
             ThrottleRequestsWithRedis::class,
             AuthenticatesSessions::class,
             AuthenticateAgent::class, // sets the Workspace of the agent API that EnsureWorkspaceModule reads
             EnsureWorkspaceContext::class,
+            EnforceApiProtection::class, // after the token (agent API) has named the Workspace: its own buckets and concurrency cap
             EnsurePlatformAdministration::class,
             EnsureWorkspaceModule::class,
             EnsureWorkspacePermission::class,
@@ -84,6 +91,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'agent' => AuthenticateAgent::class,
             'agent.trace' => TraceAgentTool::class,
+            'api.protect' => EnforceApiProtection::class,
+            'throttle.safe' => SafeThrottleRequests::class,
+            'body.limit' => LimitRequestBody::class,
             'workspace' => EnsureWorkspaceContext::class,
             'workspace.permission' => EnsureWorkspacePermission::class,
             'workspace.module' => EnsureWorkspaceModule::class,
@@ -96,6 +106,15 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withExceptions(function (Exceptions $exceptions): void {
         // A failed validation flashes the submitted input into the session: never credentials of an integration nor a recovery token.
         $exceptions->dontFlash(['auth_secret', 'headers', 'query', 'body', 'token']);
+
+        // Every 429 of the application is logged once, whoever produced it (a named limiter, a Workspace bucket or the concurrency cap): fixed facts, never a token or a body.
+        $exceptions->render(function (ThrottleRequestsException $e, Request $request) {
+            if (! $request->attributes->get('api_limit_logged')) {
+                ApiProtection::logExceeded($request, 'rate', isset($e->getHeaders()['Retry-After']) ? (int) $e->getHeaders()['Retry-After'] : null);
+            }
+
+            return null;
+        });
 
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),

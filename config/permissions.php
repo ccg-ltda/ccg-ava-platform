@@ -31,6 +31,7 @@ return [
         'professionals' => ['label' => 'Profesionales y disponibilidad', 'description' => 'Profesionales, recursos, horarios y días no laborables.', 'list' => 'view-professionals', 'module' => 'professionals'],
         'locations' => ['label' => 'Sedes', 'description' => 'Dónde se atiende el negocio.', 'list' => 'view-locations', 'module' => 'locations'],
         'customers' => ['label' => 'Clientes', 'description' => 'Fichas de clientes del Workspace.', 'list' => 'view-customers', 'module' => 'customers'],
+        'reminders' => ['label' => 'Recordatorios', 'description' => 'Recordatorios y seguimientos comerciales a clientes (no son las confirmaciones de Agenda).', 'list' => 'view-reminders', 'module' => 'reminders'],
         'campaigns' => ['label' => 'Campañas', 'description' => 'Campañas y plantillas de mensaje (no envían mensajes).', 'list' => 'view-campaigns', 'module' => 'campaigns'],
         'catalog' => ['label' => 'Catálogo de productos', 'description' => 'Productos, precios, categorías e inventario por sede.', 'list' => 'view-catalog', 'module' => 'product_catalog'],
         'orders' => ['label' => 'Pedidos', 'description' => 'Pedidos, su detalle y su flujo de estados.', 'list' => 'view-orders', 'module' => 'orders'],
@@ -79,6 +80,7 @@ return [
         'manage-agent-tokens' => ['group' => 'assistants', 'label' => 'Generar y revocar el token de acceso', 'description' => 'Genera o revoca el token con el que n8n lee las instrucciones del asistente.'],
 
         // Conversaciones
+        'view-technical-activity' => ['group' => 'conversations', 'label' => 'Ver la actividad técnica', 'description' => 'Abre el panel «Actividad técnica» de una conversación: qué herramientas usó el asistente, con qué resultado y duración. Nunca muestra el texto de los mensajes ni credenciales.'],
         'view-conversations' => ['group' => 'conversations', 'label' => 'Consultar conversaciones', 'description' => 'Lee las conversaciones y los mensajes de los contactos del Workspace.'],
         'take-conversations' => ['group' => 'conversations', 'label' => 'Tomar conversaciones', 'description' => 'Toma una conversación para atenderla. Mientras la atiende, la IA no responde.'],
         'reply-conversations' => ['group' => 'conversations', 'label' => 'Responder conversaciones', 'description' => 'Escribe mensajes al contacto en una conversación que está atendiendo. Quien lo tiene aparece como agente disponible.'],
@@ -122,6 +124,10 @@ return [
         'anonymize-customers' => ['group' => 'customers', 'label' => 'Anonimizar clientes', 'description' => 'Elimina los datos personales de una ficha de forma irreversible (el equivalente a eliminar).'],
 
         // Campañas
+        'view-reminders' => ['group' => 'reminders', 'label' => 'Consultar recordatorios', 'description' => 'Ve la lista de recordatorios programados, su estado y el historial de intentos.'],
+        'create-reminders' => ['group' => 'reminders', 'label' => 'Programar recordatorios', 'description' => 'Programa un recordatorio nuevo para un cliente y busca clientes para elegirlo.'],
+        'edit-reminders' => ['group' => 'reminders', 'label' => 'Editar recordatorios', 'description' => 'Cambia un recordatorio programado que todavía no se envía.'],
+        'cancel-reminders' => ['group' => 'reminders', 'label' => 'Cancelar recordatorios', 'description' => 'Cancela un recordatorio programado que todavía no se envía.'],
         'view-campaigns' => ['group' => 'campaigns', 'label' => 'Consultar campañas', 'description' => 'Ve la lista de campañas y plantillas.'],
         'view-campaign-details' => ['group' => 'campaigns', 'label' => 'Ver el detalle de una campaña', 'description' => 'Abre la campaña con sus destinatarios, exclusiones y resultado de la simulación.'],
         'create-campaigns' => ['group' => 'campaigns', 'label' => 'Crear campañas', 'description' => 'Crea una campaña nueva.'],

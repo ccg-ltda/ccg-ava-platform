@@ -160,6 +160,8 @@ return [
         'orders.products' => ['label' => 'Consulta del catálogo', 'kind' => 'read'],
         'orders.index' => ['label' => 'Consulta de sus pedidos', 'kind' => 'read'],
         'orders.store' => ['label' => 'Creación de un pedido', 'kind' => 'write'],
+        'reminders.store' => ['label' => 'Programación de un recordatorio', 'kind' => 'write'],
+        'reminders.cancel' => ['label' => 'Cancelación de un recordatorio', 'kind' => 'write'],
         'knowledge.search' => ['label' => 'Búsqueda en la base de conocimiento', 'kind' => 'read'],
     ],
 
@@ -179,6 +181,9 @@ return [
     ],
 
     /* How the interface names the status of a traced call. `started` is also what stays when the process ended before the outcome could be written. */
+    // Days the technical trace of the assistant's tool calls (conversation > Actividad técnica) is kept. `agent:tools:prune` deletes finished calls older than this (never below 30).
+    'tool_trace_retention_days' => 180,
+
     'tool_statuses' => ['started' => 'Sin resultado registrado', 'succeeded' => 'Hecho', 'rejected' => 'Rechazado', 'failed' => 'Falló', 'uncertain' => 'Resultado incierto'],
 
     /* Avatar of a chatbot: same formats and weight limit as the Workspace logo (never SVG). */

@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Models\WebhookDelivery;
 use App\Models\WebhookEndpoint;
 use App\Models\Workspace;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -149,28 +150,47 @@ class WebhookService
         return Webhooks::test($endpoint);
     }
 
-    /** The delivery history of one endpoint, newest first. Never the body that was sent and never a secret. @return list<array<string, mixed>> */
-    public function deliveries(WebhookEndpoint $endpoint, int $limit = 50): array
+    /**
+     * The delivery history of the Workspace, newest first, paginated and filtered in the SERVER (the browser never receives more than one page). Never the body that was
+     * sent and never a secret. Every query starts from the Workspace, so a `webhook` id of another one simply matches nothing.
+     *
+     * @param  array{webhook?: ?int, event?: ?string, status?: ?string, from?: ?string, to?: ?string}  $filters
+     * @return array{deliveries: list<array<string, mixed>>, meta: array<string, int>}
+     */
+    public function history(Workspace $workspace, array $filters = [], int $perPage = 15): array
     {
-        $workspace = $endpoint->workspace;
         $settings = $workspace->settingsOrDefault();
         $when = fn ($date) => $date ? $settings->formatDate($date).' '.$settings->formatTime($date) : null;
+        $zone = $settings->timezone ?: 'UTC';
 
-        return $endpoint->deliveries()->latest('id')->limit($limit)->get()->map(fn (WebhookDelivery $delivery) => [
-            'id' => $delivery->id,
-            'deliveryId' => $delivery->public_id,
-            'eventId' => $delivery->event_id,
-            'event' => $delivery->event,
-            'status' => $delivery->status,
-            'attempts' => $delivery->attempts,
-            'responseStatus' => $delivery->response_status,
-            'durationMs' => $delivery->duration_ms,
-            'error' => $delivery->error,
-            'createdAt' => $when($delivery->created_at),
-            'lastAttemptAt' => $when($delivery->last_attempt_at),
-            'nextAttemptAt' => $delivery->status === WebhookDelivery::FAILED ? $when($delivery->next_attempt_at) : null,
-            'canRetry' => in_array($delivery->status, [WebhookDelivery::FAILED, WebhookDelivery::ABANDONED], true),
-        ])->all();
+        $page = WebhookDelivery::query()->with('endpoint:id,name')->where('workspace_id', $workspace->id)
+            ->when($filters['webhook'] ?? null, fn ($query, $id) => $query->where('webhook_endpoint_id', $id))
+            ->when($filters['event'] ?? null, fn ($query, $event) => $query->where('event', $event))
+            ->when($filters['status'] ?? null, fn ($query, $status) => $query->where('status', $status))
+            ->when($filters['from'] ?? null, fn ($query, $from) => $query->where('created_at', '>=', Carbon::parse($from, $zone)->startOfDay()->utc()))
+            ->when($filters['to'] ?? null, fn ($query, $to) => $query->where('created_at', '<=', Carbon::parse($to, $zone)->endOfDay()->utc()))
+            ->latest('id')->paginate($perPage);
+
+        return [
+            'deliveries' => $page->getCollection()->map(fn (WebhookDelivery $delivery) => [
+                'id' => $delivery->id,
+                'webhookId' => $delivery->webhook_endpoint_id,
+                'webhookName' => $delivery->endpoint?->name,
+                'deliveryId' => $delivery->public_id,
+                'eventId' => $delivery->event_id,
+                'event' => $delivery->event,
+                'status' => $delivery->status,
+                'attempts' => $delivery->attempts,
+                'responseStatus' => $delivery->response_status,
+                'durationMs' => $delivery->duration_ms,
+                'error' => $delivery->error,
+                'createdAt' => $when($delivery->created_at),
+                'lastAttemptAt' => $when($delivery->last_attempt_at),
+                'nextAttemptAt' => $delivery->status === WebhookDelivery::FAILED ? $when($delivery->next_attempt_at) : null,
+                'canRetry' => in_array($delivery->status, [WebhookDelivery::FAILED, WebhookDelivery::ABANDONED], true),
+            ])->all(),
+            'meta' => ['current_page' => $page->currentPage(), 'last_page' => $page->lastPage(), 'from' => (int) $page->firstItem(), 'to' => (int) $page->lastItem(), 'total' => $page->total()],
+        ];
     }
 
     /** A failed or abandoned delivery gets a fresh set of attempts with the SAME event id, so the consumer can still deduplicate. */

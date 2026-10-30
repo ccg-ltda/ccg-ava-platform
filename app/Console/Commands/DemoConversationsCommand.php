@@ -14,7 +14,7 @@ use Illuminate\Console\Command;
  * outside the environments of config/demo.php; `reset` and `clean` remove only conversations marked as demo, and only when the person confirms the
  * Workspace by typing its code (`--confirm=DESARROLLO_DEV`).
  */
-#[Signature('demo:conversations {action : generate, reset or clean} {--confirm= : code of the Workspace whose demo conversations may be removed (required by reset and clean)}')]
+#[Signature('demo:conversations {action : generate, reset, clean, activity or activity-clean} {--confirm= : code of the Workspace whose demo conversations may be removed (required by reset and clean)}')]
 #[Description('Generate, reset or clean the demo scenarios of Conversations (administrative Workspace, local only)')]
 class DemoConversationsCommand extends Command
 {
@@ -22,8 +22,8 @@ class DemoConversationsCommand extends Command
     {
         $action = $this->argument('action');
 
-        if (! in_array($action, ['generate', 'reset', 'clean'], true)) {
-            $this->error('La acción debe ser generate, reset o clean.');
+        if (! in_array($action, ['generate', 'reset', 'clean', 'activity', 'activity-clean'], true)) {
+            $this->error('La acción debe ser generate, reset, clean, activity o activity-clean.');
 
             return self::INVALID;
         }
@@ -36,13 +36,25 @@ class DemoConversationsCommand extends Command
             return self::FAILURE;
         }
 
-        if ($action !== 'generate' && Workspace::normalizeCode((string) $this->option('confirm')) !== $workspace->code) {
+        if (! in_array($action, ['generate', 'activity'], true) && Workspace::normalizeCode((string) $this->option('confirm')) !== $workspace->code) {
             $this->error("Para eliminar las conversaciones demo escribe el código del Workspace: --confirm={$workspace->code}. No se eliminó nada.");
 
             return self::FAILURE;
         }
 
         try {
+            if ($action === 'activity') {
+                $this->info($demo->generateActivityDemo($workspace) ? 'Conversación demostrativa de actividad técnica creada: «'.DemoConversations::ACTIVITY_TITLE.'».' : 'La conversación demostrativa de actividad técnica ya existía.');
+
+                return self::SUCCESS;
+            }
+
+            if ($action === 'activity-clean') {
+                $this->info('Conversaciones demostrativas de actividad técnica eliminadas: '.$demo->cleanActivityDemo($workspace).'.');
+
+                return self::SUCCESS;
+            }
+
             if ($action === 'clean') {
                 $this->info("Conversaciones demo eliminadas: {$demo->clean($workspace)}.");
 

@@ -5,6 +5,8 @@ use App\Http\Controllers\AgentController;
 use App\Http\Controllers\AgentKnowledgeController;
 use App\Http\Controllers\AgentMessageController;
 use App\Http\Controllers\AgentOrderController;
+use App\Http\Controllers\AgentReminderController;
+use App\Http\Controllers\InboundWebhookReceiveController;
 use App\Http\Controllers\PublicBookingController;
 use App\Http\Controllers\WhatsAppWebhookController;
 use App\Http\Controllers\WidgetController;
@@ -19,19 +21,21 @@ use Illuminate\Support\Facades\Route;
  *  - /api/webhooks/whatsapp  Meta's webhook (404 until META_APP_SECRET and META_WEBHOOK_VERIFY_TOKEN are set); every event is
  *                   authenticated by its signature, and the Workspace comes from Ava's own records of the number.
  */
-Route::prefix('webhooks')->name('webhooks.')->middleware('throttle:600,1')->group(function () {
+Route::prefix('webhooks')->name('webhooks.')->middleware(['body.limit:provider', 'throttle.safe:600,1'])->group(function () {
     Route::get('/whatsapp', [WhatsAppWebhookController::class, 'verify'])->name('whatsapp.verify');
     Route::post('/whatsapp', [WhatsAppWebhookController::class, 'receive'])->name('whatsapp.receive');
     // Events URL of Wompi (one per environment in the merchant portal): authenticated by checksum, then confirmed against Wompi's API.
     Route::post('/wompi', [WompiWebhookController::class, 'receive'])->name('wompi.receive');
     // The webhook of ONE Workspace's number: the key is the public, non-secret part generated with its WhatsApp integration (the secrets stay in the integration).
-    Route::get('/whatsapp/{key}', [WhatsAppWebhookController::class, 'verifyIntegration'])->where('key', '[a-f0-9]{48}')->middleware('throttle:whatsapp-integration')->name('whatsapp.integration.verify');
-    Route::post('/whatsapp/{key}', [WhatsAppWebhookController::class, 'receiveIntegration'])->where('key', '[a-f0-9]{48}')->middleware('throttle:whatsapp-integration')->name('whatsapp.integration.receive');
+    // INBOUND endpoints of a Workspace (Integraciones > Webhooks): the signature is the credential; it replaces none of the provider webhooks above.
+    Route::post('/in/{key}', [InboundWebhookReceiveController::class, 'receive'])->where('key', '[a-f0-9]{48}')->middleware(['throttle.safe:inbound-webhook-key', 'throttle.safe:inbound-webhook-ip'])->name('inbound.receive');
+    Route::get('/whatsapp/{key}', [WhatsAppWebhookController::class, 'verifyIntegration'])->where('key', '[a-f0-9]{48}')->middleware('throttle.safe:whatsapp-integration')->name('whatsapp.integration.verify');
+    Route::post('/whatsapp/{key}', [WhatsAppWebhookController::class, 'receiveIntegration'])->where('key', '[a-f0-9]{48}')->middleware('throttle.safe:whatsapp-integration')->name('whatsapp.integration.receive');
 });
 
 // The token names a chatbot, so its Workspace's plan must include Asistentes; reporting or authorizing conversation traffic
 // also needs Conversaciones. (The public widget and the Meta webhook check the plan where they resolve the chatbot.)
-Route::middleware(['throttle:agent', 'agent', 'workspace.module:assistants'])->prefix('agent')->name('agent.')->group(function () {
+Route::middleware(['body.limit:agent', 'throttle.safe:agent', 'agent', 'api.protect:agent', 'workspace.module:assistants'])->prefix('agent')->name('agent.')->group(function () {
     Route::get('/config', [AgentController::class, 'config'])->name('config');
     // Search in the knowledge base of THIS assistant (traced like the other tools; it needs only the module Asistentes).
     Route::get('/knowledge/search', [AgentKnowledgeController::class, 'search'])->middleware('agent.trace')->name('knowledge.search');
@@ -54,6 +58,12 @@ Route::middleware(['throttle:agent', 'agent', 'workspace.module:assistants'])->p
             Route::post('/appointments/{appointment}/reschedule', [AgentBookingController::class, 'reschedule'])->whereNumber('appointment')->name('reschedule');
         });
 
+        // Recordatorios: the assistant schedules or cancels a follow-up for the person in THIS conversation (same service and checks as the screen).
+        Route::middleware(['workspace.module:reminders', 'workspace.module:customers', 'agent.trace'])->prefix('reminders')->name('reminders.')->group(function () {
+            Route::post('/', [AgentReminderController::class, 'store'])->name('store');
+            Route::post('/{reminder}/cancel', [AgentReminderController::class, 'cancel'])->whereNumber('reminder')->name('cancel');
+        });
+
         // Order tools of Ava Chat (Delivery and E-commerce): the plan must include the catalog and Pedidos. They read the catalog, place an order and read the
         // orders of THIS conversation; the assistant never moves an order along its flow or cancels it.
         Route::middleware(['workspace.module:product_catalog', 'workspace.module:orders', 'agent.trace'])->prefix('orders')->name('orders.')->group(function () {
@@ -68,20 +78,20 @@ Route::middleware(['throttle:agent', 'agent', 'workspace.module:assistants'])->p
 // The open booking page of a Workspace (Servicios y Reservas): no session, no CSRF. The key names the Workspace; creating, cancelling and
 // moving a booking are rate limited per visitor and key, and a booking is managed only with the link returned when it was made.
 Route::prefix('booking/{key}')->where(['key' => '[A-Za-z0-9]{32}'])->name('public-booking.')->group(function () {
-    Route::get('/config', [PublicBookingController::class, 'config'])->middleware('throttle:booking-config')->name('config');
-    Route::get('/services', [PublicBookingController::class, 'services'])->middleware('throttle:booking-config')->name('services');
-    Route::get('/professionals', [PublicBookingController::class, 'professionals'])->middleware('throttle:booking-config')->name('professionals');
-    Route::get('/availability', [PublicBookingController::class, 'availability'])->middleware('throttle:booking-availability')->name('availability');
-    Route::post('/appointments', [PublicBookingController::class, 'book'])->middleware('throttle:booking-write')->name('book');
-    Route::get('/appointments/{token}', [PublicBookingController::class, 'show'])->where('token', '[A-Za-z0-9]{40}')->middleware('throttle:booking-config')->name('show');
-    Route::post('/appointments/{token}/confirm', [PublicBookingController::class, 'confirm'])->where('token', '[A-Za-z0-9]{40}')->middleware('throttle:booking-write')->name('confirm');
-    Route::post('/appointments/{token}/cancel', [PublicBookingController::class, 'cancel'])->where('token', '[A-Za-z0-9]{40}')->middleware('throttle:booking-write')->name('cancel');
-    Route::post('/appointments/{token}/reschedule', [PublicBookingController::class, 'reschedule'])->where('token', '[A-Za-z0-9]{40}')->middleware('throttle:booking-write')->name('reschedule');
+    Route::get('/config', [PublicBookingController::class, 'config'])->middleware('throttle.safe:booking-config')->name('config');
+    Route::get('/services', [PublicBookingController::class, 'services'])->middleware('throttle.safe:booking-config')->name('services');
+    Route::get('/professionals', [PublicBookingController::class, 'professionals'])->middleware('throttle.safe:booking-config')->name('professionals');
+    Route::get('/availability', [PublicBookingController::class, 'availability'])->middleware('throttle.safe:booking-availability')->name('availability');
+    Route::post('/appointments', [PublicBookingController::class, 'book'])->middleware(['body.limit:booking', 'throttle.safe:booking-write', 'throttle.safe:booking-key'])->name('book');
+    Route::get('/appointments/{token}', [PublicBookingController::class, 'show'])->where('token', '[A-Za-z0-9]{40}')->middleware('throttle.safe:booking-config')->name('show');
+    Route::post('/appointments/{token}/confirm', [PublicBookingController::class, 'confirm'])->where('token', '[A-Za-z0-9]{40}')->middleware('throttle.safe:booking-write')->name('confirm');
+    Route::post('/appointments/{token}/cancel', [PublicBookingController::class, 'cancel'])->where('token', '[A-Za-z0-9]{40}')->middleware('throttle.safe:booking-write')->name('cancel');
+    Route::post('/appointments/{token}/reschedule', [PublicBookingController::class, 'reschedule'])->where('token', '[A-Za-z0-9]{40}')->middleware('throttle.safe:booking-write')->name('reschedule');
 });
 
 Route::prefix('widget/{key}')->where(['key' => '[A-Za-z0-9]{32}'])->name('widget.')->group(function () {
-    Route::get('/config', [WidgetController::class, 'config'])->middleware('throttle:widget-config')->name('config');
-    Route::get('/avatar', [WidgetController::class, 'avatar'])->middleware('throttle:widget-config')->name('avatar');
-    Route::get('/messages', [WidgetController::class, 'poll'])->middleware('throttle:widget-poll')->name('poll');
-    Route::post('/messages', [WidgetController::class, 'message'])->middleware('throttle:widget-messages')->name('message');
+    Route::get('/config', [WidgetController::class, 'config'])->middleware('throttle.safe:widget-config')->name('config');
+    Route::get('/avatar', [WidgetController::class, 'avatar'])->middleware('throttle.safe:widget-config')->name('avatar');
+    Route::get('/messages', [WidgetController::class, 'poll'])->middleware('throttle.safe:widget-poll')->name('poll');
+    Route::post('/messages', [WidgetController::class, 'message'])->middleware(['body.limit:widget', 'throttle.safe:widget-messages', 'throttle.safe:widget-key'])->name('message');
 });

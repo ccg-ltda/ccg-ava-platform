@@ -125,7 +125,24 @@ class AppServiceProvider extends ServiceProvider
         });
 
         // Everything behind the sign-in (routes/web.php): one generous bucket per person, so a stolen session or a script cannot hammer the application. Polling screens stay far below it.
-        RateLimiter::for('authenticated', fn (Request $request) => Limit::perMinute((int) config('auth.authenticated_per_minute'))->by($request->user() ? 'user:'.$request->user()->getAuthIdentifier() : 'ip:'.$request->ip()));
+        // A second bucket for the Workspace of the SESSION (all its people together): one tenant can not take the shared resources, and a person can not change it (it is the server's session).
+        RateLimiter::for('authenticated', fn (Request $request) => array_values(array_filter([
+            Limit::perMinute((int) config('auth.authenticated_per_minute'))->by($request->user() ? 'user:'.$request->user()->getAuthIdentifier() : 'ip:'.$request->ip()),
+            $request->user() && $request->hasSession() && $request->session()->get('workspace_id') ? Limit::perMinute((int) config('api_protection.user.workspace_per_minute'))->by('ws:'.(int) $request->session()->get('workspace_id')) : null,
+        ])));
+
+        // All the visitors of ONE public widget (or booking page) together: the per-IP limits stop one visitor, these stop many IPs against one tenant (and its AI cost).
+        RateLimiter::for('widget-key', fn (Request $request) => Limit::perMinute((int) config('api_protection.widget.key_messages_per_minute'))->by('widget-key:'.sha1((string) $request->route('key'))));
+        RateLimiter::for('booking-key', fn (Request $request) => Limit::perMinute((int) config('api_protection.booking.key_write_per_minute'))->by('booking-key:'.sha1((string) $request->route('key'))));
+
+        // Own buckets per person AND route (a numeric `throttle:N,1` shares one counter across every numeric route of the same person: see the webhook limiters).
+        RateLimiter::for('reminders-read', fn (Request $request) => Limit::perMinute(120)->by('rem-read|'.$request->user()?->id.'|'.$request->route()?->getName()));
+        RateLimiter::for('reminders-write', fn (Request $request) => Limit::perMinute(60)->by('rem-write|'.$request->user()?->id));
+        RateLimiter::for('activity-read', fn (Request $request) => Limit::perMinute(60)->by('activity|'.$request->user()?->id.'|'.$request->route('conversation')));
+
+        // Inbound webhook endpoints (the signature is the credential): one bucket per endpoint key (all senders) and one per IP, so neither a leaked URL nor a single host can flood them.
+        RateLimiter::for('inbound-webhook-key', fn (Request $request) => Limit::perMinute(120)->by('inbound-key:'.sha1((string) $request->route('key'))));
+        RateLimiter::for('inbound-webhook-ip', fn (Request $request) => Limit::perMinute(60)->by('inbound-ip:'.$request->ip()));
 
         // The automation of a chatbot reads its configuration on every conversation.
         RateLimiter::for('agent', fn (Request $request) => Limit::perMinute((int) config('chatbots.agent_per_minute'))->by(sha1((string) $request->bearerToken()).'|'.$request->ip()));

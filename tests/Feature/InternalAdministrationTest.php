@@ -289,7 +289,7 @@ class InternalAdministrationTest extends TestCase
             'orders' => ['view-orders', 'view-order-details', 'create-orders', 'edit-orders', 'cancel-orders', 'process-orders'],
             'catalog' => ['view-catalog', 'create-products', 'edit-products', 'activate-products', 'view-inventory', 'adjust-inventory', 'view-catalog-reminders', 'manage-catalog-reminders'],
             'assistants' => ['view-chatbots', 'create-chatbots', 'edit-chatbots', 'activate-chatbots', 'manage-chatbot-channels', 'manage-agent-tokens'],
-            'conversations' => ['view-conversations', 'take-conversations', 'reply-conversations', 'release-conversations', 'resolve-conversations', 'manage-conversations', 'use-conversation-demo'],
+            'conversations' => ['view-conversations', 'take-conversations', 'reply-conversations', 'release-conversations', 'resolve-conversations', 'manage-conversations', 'use-conversation-demo', 'view-technical-activity'],
             'plans' => ['view-plans', 'create-plans', 'edit-plans', 'activate-plans', 'assign-plans'],
             'modules' => ['view-modules', 'create-modules', 'edit-modules', 'activate-modules'],
         ];

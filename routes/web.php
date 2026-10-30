@@ -11,6 +11,7 @@ use App\Http\Controllers\ChatbotController;
 use App\Http\Controllers\ChatbotFeedbackController;
 use App\Http\Controllers\ChatbotInstructionController;
 use App\Http\Controllers\ConversationActionController;
+use App\Http\Controllers\ConversationActivityController;
 use App\Http\Controllers\ConversationAlertsController;
 use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\CustomerController;
@@ -19,6 +20,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DemoConversationController;
 use App\Http\Controllers\EmailTemplateController;
 use App\Http\Controllers\HelpController;
+use App\Http\Controllers\InboundWebhookController;
 use App\Http\Controllers\IntegrationController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\KnowledgeController;
@@ -37,6 +39,7 @@ use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProfessionalController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicBookingController;
+use App\Http\Controllers\ReminderController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SavedFilterController;
@@ -149,6 +152,19 @@ Route::middleware(['auth', 'workspace', 'throttle:authenticated'])->group(functi
         // Historial de llamados: redacted record of the Workspace's outbound API calls (read only).
         // Webhooks de salida (docs: RECOMENDACIONES.md §78). Reading is `view-webhooks`; every change is `manage-webhooks`. The list itself is a prop of the page above.
         Route::prefix('webhooks')->name('webhooks.')->group(function () {
+            // Inbound endpoints (the URLs the customer's system calls): the same two permissions.
+            Route::prefix('inbound')->name('inbound.')->group(function () {
+                Route::get('/{inbound}/events', [InboundWebhookController::class, 'events'])->whereNumber('inbound')->middleware(['workspace.permission:view-webhooks', 'throttle:webhook-read'])->name('events');
+                Route::middleware('workspace.permission:manage-webhooks')->group(function () {
+                    Route::post('/', [InboundWebhookController::class, 'store'])->middleware('throttle:webhook-secret')->name('store');
+                    Route::put('/{inbound}', [InboundWebhookController::class, 'update'])->whereNumber('inbound')->middleware('throttle:webhook-write')->name('update');
+                    Route::post('/{inbound}/activate', [InboundWebhookController::class, 'activate'])->whereNumber('inbound')->middleware('throttle:webhook-write')->name('activate');
+                    Route::post('/{inbound}/deactivate', [InboundWebhookController::class, 'deactivate'])->whereNumber('inbound')->middleware('throttle:webhook-write')->name('deactivate');
+                    Route::post('/{inbound}/rotate', [InboundWebhookController::class, 'rotate'])->whereNumber('inbound')->middleware('throttle:webhook-secret')->name('rotate');
+                    Route::delete('/{inbound}', [InboundWebhookController::class, 'destroy'])->whereNumber('inbound')->middleware('throttle:webhook-write')->name('destroy');
+                });
+            });
+            Route::get('/deliveries', [WebhookController::class, 'history'])->middleware(['workspace.permission:view-webhooks', 'throttle:webhook-read'])->name('history');
             Route::get('/{webhook}/deliveries', [WebhookController::class, 'deliveries'])->whereNumber('webhook')->middleware(['workspace.permission:view-webhooks', 'throttle:webhook-read'])->name('deliveries');
             Route::middleware('workspace.permission:manage-webhooks')->group(function () {
                 Route::post('/', [WebhookController::class, 'store'])->middleware('throttle:webhook-secret')->name('store');
@@ -172,6 +188,7 @@ Route::middleware(['auth', 'workspace', 'throttle:authenticated'])->group(functi
         Route::get('/', [ConversationController::class, 'index'])->name('index');
         // «Anything new?» for the notification of the team (ids and kinds only, never content); asked every few seconds with a cursor.
         Route::get('/alerts', ConversationAlertsController::class)->middleware('throttle:60,1')->name('alerts');
+        Route::get('/{conversation}/activity', [ConversationActivityController::class, 'show'])->whereNumber('conversation')->middleware(['workspace.permission:view-technical-activity', 'throttle:activity-read'])->name('activity');
         Route::get('/{conversation}/attachments/{attachment}', [ConversationController::class, 'attachment'])->whereNumber(['conversation', 'attachment'])->middleware('throttle:240,1')->name('attachments');
         Route::post('/{conversation}/take', [ConversationActionController::class, 'take'])->whereNumber('conversation')->middleware('workspace.permission:take-conversations')->name('take');
         Route::post('/{conversation}/release', [ConversationActionController::class, 'release'])->whereNumber('conversation')->middleware('workspace.permission:release-conversations')->name('release');
@@ -344,6 +361,16 @@ Route::middleware(['auth', 'workspace', 'throttle:authenticated'])->group(functi
         Route::post('/{customer}/activate', [CustomerController::class, 'activate'])->whereNumber('customer')->middleware('workspace.permission:activate-customers')->name('activate');
         Route::post('/{customer}/deactivate', [CustomerController::class, 'deactivate'])->whereNumber('customer')->middleware('workspace.permission:activate-customers')->name('deactivate');
         Route::post('/{customer}/anonymize', [CustomerController::class, 'anonymize'])->whereNumber('customer')->middleware(['workspace.permission:anonymize-customers', 'throttle:20,1'])->name('anonymize');
+    });
+
+    // Recordatorios: commercial follow-ups to customers (independent of Agenda). The list is `view-reminders`; scheduling, editing and cancelling each have their own permission.
+    Route::middleware(['workspace.module:reminders', 'workspace.permission:view-reminders'])->prefix('reminders')->name('reminders.')->group(function () {
+        Route::get('/', [ReminderController::class, 'index'])->name('index');
+        Route::get('/customers', [ReminderController::class, 'customers'])->middleware(['workspace.permission:create-reminders', 'throttle:reminders-read'])->name('customers');
+        Route::get('/{reminder}/attempts', [ReminderController::class, 'attempts'])->whereNumber('reminder')->middleware('throttle:reminders-read')->name('attempts');
+        Route::post('/', [ReminderController::class, 'store'])->middleware(['workspace.permission:create-reminders', 'throttle:reminders-write'])->name('store');
+        Route::put('/{reminder}', [ReminderController::class, 'update'])->whereNumber('reminder')->middleware('workspace.permission:edit-reminders')->name('update');
+        Route::post('/{reminder}/cancel', [ReminderController::class, 'cancel'])->whereNumber('reminder')->middleware('workspace.permission:cancel-reminders')->name('cancel');
     });
 
     // Campañas: templates and campaigns. The list is `view-campaigns`, a campaign's detail `view-campaign-details`; every change has its own permission. Nothing here sends a message.

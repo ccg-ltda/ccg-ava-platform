@@ -1,4 +1,4 @@
-import { BarChart3, Bot, CalendarDays, Contact, History, Layers, LayoutDashboard, MapPin, Megaphone, MessagesSquare, Package, Plug, Scissors, ShoppingCart, Settings, UserRound, Users } from 'lucide-react';
+import { BarChart3, Bot, CalendarDays, Contact, History, Layers, LayoutDashboard, MapPin, BellRing, Megaphone, MessagesSquare, Package, Plug, Scissors, ShoppingCart, Settings, UserRound, Users } from 'lucide-react';
 
 /**
  * Single definition of the sidebar menu. EVERY section has a heading and folds in the sidebar (see Components/NavSection). A section is
@@ -34,6 +34,7 @@ export const navigation = [
             { label: 'Agenda', route: 'bookings.index', icon: CalendarDays, permission: 'view-bookings', module: 'bookings' },
             { label: 'Clientes', route: 'customers.index', icon: Contact, permission: 'view-customers', module: 'customers' },
             { label: 'Campañas', route: 'campaigns.index', icon: Megaphone, permission: 'view-campaigns', module: 'campaigns' },
+            { label: 'Recordatorios', route: 'reminders.index', icon: BellRing, permission: 'view-reminders', module: 'reminders' },
         ],
     },
     {

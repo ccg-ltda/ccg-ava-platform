@@ -8,6 +8,7 @@ use App\Webhooks\WebhookService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 /**
  * Webhooks de salida, dentro de Integraciones. Everything belongs to the ACTIVE Workspace taken from the request context: an endpoint or a delivery id of another Workspace is a
@@ -72,9 +73,27 @@ class WebhookController extends Controller
         return $this->back("El webhook «{$name}» se eliminó junto con su historial de entregas.");
     }
 
+    /** One page of the delivery history of the Workspace (all its webhooks, or the one in `webhook`). Filters are validated and applied in the server. */
+    public function history(Request $request): JsonResponse
+    {
+        $filters = $request->validate([
+            'webhook' => ['nullable', 'integer', 'min:1'],
+            'event' => ['nullable', 'string', Rule::in([...array_keys(config('webhooks.events')), config('webhooks.test_event')])],
+            'status' => ['nullable', 'string', Rule::in(['pending', 'sending', 'delivered', 'failed', 'abandoned'])],
+            'from' => ['nullable', 'date_format:Y-m-d'],
+            'to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:from'],
+            'page' => ['nullable', 'integer', 'min:1', 'max:100000'],
+        ]);
+
+        return response()->json($this->webhooks->history($request->attributes->get('workspace'), $filters));
+    }
+
     public function deliveries(Request $request, int $webhook): JsonResponse
     {
-        return response()->json(['deliveries' => $this->webhooks->deliveries($this->find($request, $webhook))]);
+        $this->find($request, $webhook);
+        $request->merge(['webhook' => $webhook]);
+
+        return $this->history($request);
     }
 
     public function retry(Request $request, int $webhook, int $delivery): RedirectResponse

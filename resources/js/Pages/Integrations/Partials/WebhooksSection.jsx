@@ -1,5 +1,5 @@
 import { router } from '@inertiajs/react';
-import { History, KeyRound, Pencil, Plus, Power, Send, Trash2, Webhook } from 'lucide-react';
+import { Copy, History, KeyRound, Pencil, Plus, Power, Send, Trash2, Webhook } from 'lucide-react';
 import { useState } from 'react';
 import Alert from '@/Components/Alert';
 import Badge from '@/Components/Badge';
@@ -8,7 +8,7 @@ import { useConfirm } from '@/Components/ConfirmDialog';
 import EmptyState from '@/Components/EmptyState';
 import IconButton from '@/Components/IconButton';
 import PrimaryButton from '@/Components/PrimaryButton';
-import WebhookDeliveriesModal from './WebhookDeliveriesModal';
+import WebhookHistory, { EMPTY_FILTERS } from './WebhookHistory';
 import WebhookFormModal from './WebhookFormModal';
 import WebhookSecretModal from './WebhookSecretModal';
 
@@ -59,9 +59,14 @@ if (!comparacionSegura(esperado, cabeceraSignature)) rechazar();`}</pre>
 export default function WebhooksSection({ webhooks, newSecret, can }) {
     const confirm = useConfirm();
     const [editing, setEditing] = useState(null); // null = closed, 'new' = creating, otherwise the webhook
-    const [history, setHistory] = useState(null);
+    const [filters, setFilters] = useState(EMPTY_FILTERS);
     const [dismissed, setDismissed] = useState(null);
     const secret = newSecret && dismissed !== newSecret.secret ? newSecret : null;
+    const showDeliveries = (webhook) => {
+        setFilters({ ...EMPTY_FILTERS, webhook: String(webhook.id) });
+        document.getElementById('webhook-history')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    const copyUrl = (webhook) => navigator.clipboard?.writeText(webhook.url);
     const post = (name, id) => router.post(route(name, id), {}, { preserveScroll: true });
 
     const toggle = async (webhook) => {
@@ -107,25 +112,26 @@ export default function WebhooksSection({ webhooks, newSecret, can }) {
         <section aria-labelledby="webhooks-heading" className="space-y-4">
             <div className="flex flex-wrap items-end justify-between gap-3">
                 <div className="min-w-0">
-                    <h2 id="webhooks-heading" className="text-lg font-bold text-ink">Webhooks</h2>
-                    <p className="text-sm text-ink-muted">Avisos firmados que Ava envía a tu sistema cuando ocurre algo: conversaciones, reservas y pedidos.</p>
+                    <h2 id="webhooks-heading" className="text-lg font-bold text-ink">Webhooks configurados</h2>
+                    <p className="text-sm text-ink-muted">Avisos firmados que Ava ENVÍA a la dirección de tu sistema cuando ocurre algo: conversaciones, reservas y pedidos.</p>
                 </div>
                 {can.manage && webhooks.endpoints.length < webhooks.limits.maxEndpoints && (
                     <PrimaryButton type="button" onClick={() => setEditing('new')} className="gap-2">
                         <Plus className="size-4" aria-hidden="true" />
-                        Nuevo webhook
+                        Crear webhook
                     </PrimaryButton>
                 )}
             </div>
 
             <HowItWorks limits={webhooks.limits} />
 
+            <h3 className="text-base font-bold text-ink">Destinos</h3>
             {webhooks.endpoints.length === 0 ? (
                 <EmptyState icon={Webhook} title="Todavía no hay webhooks" description="Crea el primero para que tu sistema se entere en el momento en que llega un mensaje, se agenda una cita o entra un pedido.">
                     {can.manage && (
                         <PrimaryButton type="button" onClick={() => setEditing('new')} className="gap-2">
                             <Plus className="size-4" aria-hidden="true" />
-                            Nuevo webhook
+                            Crear webhook
                         </PrimaryButton>
                     )}
                 </EmptyState>
@@ -184,7 +190,8 @@ export default function WebhooksSection({ webhooks, newSecret, can }) {
                                 <div className="mt-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-line pt-3">
                                     <p className="min-w-0 truncate text-xs text-ink-muted">Creado {webhook.createdAt}</p>
                                     <div className="flex flex-wrap items-center gap-1">
-                                        <IconButton icon={History} label="Ver entregas" context={webhook.name} onClick={() => setHistory(webhook)} />
+                                        <IconButton icon={History} label="Ver entregas" context={webhook.name} onClick={() => showDeliveries(webhook)} />
+                                        <IconButton icon={Copy} label="Copiar dirección" context={webhook.name} onClick={() => copyUrl(webhook)} />
                                         {can.manage && (
                                             <>
                                                 <IconButton icon={Send} label="Enviar prueba" context={webhook.name} onClick={() => post('integrations.webhooks.test', webhook.id)} disabled={!webhook.isActive} />
@@ -202,8 +209,9 @@ export default function WebhooksSection({ webhooks, newSecret, can }) {
                 </div>
             )}
 
+            <WebhookHistory webhooks={webhooks} filters={filters} onFilters={setFilters} canRetry={can.manage} />
+
             {editing && <WebhookFormModal key={editing === 'new' ? 'new' : editing.id} webhook={editing === 'new' ? null : editing} events={webhooks.events} onClose={() => setEditing(null)} />}
-            {history && <WebhookDeliveriesModal webhook={history} canRetry={can.manage} onClose={() => setHistory(null)} />}
             {secret && <WebhookSecretModal secret={secret} graceHours={webhooks.limits.graceHours} onClose={() => setDismissed(secret.secret)} />}
         </section>
     );

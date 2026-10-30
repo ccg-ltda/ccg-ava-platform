@@ -183,6 +183,16 @@ class Workspace extends Model
         return $this->hasMany(Campaign::class);
     }
 
+    public function inboundEndpoints(): HasMany
+    {
+        return $this->hasMany(InboundEndpoint::class);
+    }
+
+    public function reminders(): HasMany
+    {
+        return $this->hasMany(Reminder::class);
+    }
+
     public function bookingCustomers(): HasMany
     {
         return $this->hasMany(BookingCustomer::class);

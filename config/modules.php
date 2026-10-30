@@ -76,6 +76,7 @@ return [
         'bookings' => 'operation',
         'customers' => 'operation',
         'campaigns' => 'operation',
+        'reminders' => 'operation',
         'users_roles' => 'administration',
         'audit' => 'administration',
         'settings' => 'administration',
@@ -92,7 +93,7 @@ return [
     'labels' => [
         'dashboard' => 'Dashboard', 'assistants' => 'Asistentes', 'conversations' => 'Conversaciones', 'reports' => 'Reportes', 'product_catalog' => 'Catálogo',
         'orders' => 'Pedidos', 'service_catalog' => 'Servicios', 'locations' => 'Sedes', 'professionals' => 'Profesionales', 'bookings' => 'Agenda',
-        'customers' => 'Clientes', 'campaigns' => 'Campañas', 'users_roles' => 'Usuarios y Roles', 'audit' => 'Auditoría', 'settings' => 'Configuraciones',
+        'customers' => 'Clientes', 'campaigns' => 'Campañas', 'reminders' => 'Recordatorios', 'users_roles' => 'Usuarios y Roles', 'audit' => 'Auditoría', 'settings' => 'Configuraciones',
         'integrations' => 'Integraciones',
     ],
 
@@ -138,6 +139,7 @@ return [
         'calendar_providers' => ['bookings', 'integrations'],
         // A campaign is addressed to customers of the Workspace: it cannot exist without the customer records.
         'campaigns' => ['customers'],
+        'reminders' => ['customers'],
         // An order is made of products of the catalog: without it there is nothing to order.
         'orders' => ['product_catalog'],
     ],
@@ -177,5 +179,6 @@ return [
         'calendar_providers' => ['name' => 'Proveedores de agenda', 'description' => 'Conecta una agenda externa (Booker) como fuente de verdad en lugar de la agenda de Ava.', 'group' => 'solutions', 'category' => 'services_bookings', 'route' => 'integrations.index', 'permission' => 'manage-integrations'],
         'customers' => ['name' => 'Clientes', 'description' => 'Ficha de cliente por Workspace: contacto, canales, origen, etiquetas, consentimiento y relación con conversaciones y reservas.', 'group' => 'shared', 'category' => 'communication', 'route' => 'customers.index', 'permission' => 'view-customers'],
         'campaigns' => ['name' => 'Campañas', 'description' => 'Plantillas de mensaje y campañas con selección de destinatarios, exclusiones por consentimiento y trazabilidad (sin envío real todavía).', 'group' => 'shared', 'category' => 'communication', 'route' => 'campaigns.index', 'permission' => 'view-campaigns'],
+        'reminders' => ['name' => 'Recordatorios', 'description' => 'Recordatorios y seguimientos comerciales a clientes, programados para una fecha y hora (por correo o WhatsApp con plantilla). Independiente de Agenda: no confirma ni recuerda citas.', 'group' => 'shared', 'category' => 'communication', 'route' => 'reminders.index', 'permission' => 'view-reminders'],
     ],
 ];

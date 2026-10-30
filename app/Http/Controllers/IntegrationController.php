@@ -13,6 +13,7 @@ use App\Services\ChatbotService;
 use App\Services\IntegrationService;
 use App\Services\ModuleAccess;
 use App\Services\WorkspaceScope;
+use App\Webhooks\InboundWebhookService;
 use App\Webhooks\WebhookService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -36,6 +37,7 @@ class IntegrationController extends Controller
         private readonly WorkspaceScope $scope,
         private readonly ModuleAccess $modules,
         private readonly WebhookService $webhooks,
+        private readonly InboundWebhookService $inbound,
     ) {}
 
     public function index(Request $request): Response
@@ -57,6 +59,9 @@ class IntegrationController extends Controller
             'webhooks' => $showWebhooks ? $this->webhooks->overview($viewing) : null,
             // The signing secret just created or rotated (shown once, to the person who did it).
             'newWebhookSecret' => $showWebhooks ? $request->session()->get('webhook_secret') : null,
+            // Inbound endpoints (the URLs the customer's system calls) and the secret just created or rotated, once. Same visibility as the outbound webhooks.
+            'inboundWebhooks' => $showWebhooks ? $this->inbound->overview($viewing) : null,
+            'newInboundSecret' => $showWebhooks ? $request->session()->get('inbound_secret') : null,
             'scope' => [
                 'workspace' => ['id' => $viewing->id, 'name' => $viewing->name, 'code' => $viewing->code],
                 'readOnly' => ! $viewing->is($active),

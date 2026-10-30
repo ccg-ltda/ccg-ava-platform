@@ -33,6 +33,12 @@ ScheduledCommandMonitor::watch(Schedule::command('agent:tools:reconcile')->every
 // Warns the team before a chatbot access token expires (idempotent, creates notifications only; it revokes and changes nothing).
 ScheduledCommandMonitor::watch(Schedule::command('agent:tokens:notify')->hourly()->withoutOverlapping()->onOneServer(), 'agent-tokens-notify');
 
+// Recordatorios (module): queues the commercial reminders whose time came and closes the ones a dead worker left half sent. Independent of the Agenda notifications.
+ScheduledCommandMonitor::watch(Schedule::command('reminders:dispatch')->everyMinute()->withoutOverlapping()->onOneServer(), 'reminders-dispatch');
+
+// Technical trace of the assistant's tools: keeps it to the retention window (finished calls only; never business data).
+ScheduledCommandMonitor::watch(Schedule::command('agent:tools:prune')->dailyAt('03:40')->withoutOverlapping()->onOneServer(), 'agent-tools-prune');
+
 // Webhooks de salida (§78): re-dispatches deliveries whose queue job was lost, and keeps the delivery history bounded. Neither touches business data.
 ScheduledCommandMonitor::watch(Schedule::command('webhooks:sweep')->everyMinute()->withoutOverlapping()->onOneServer(), 'webhooks-sweep');
 ScheduledCommandMonitor::watch(Schedule::command('webhooks:prune')->dailyAt('03:20')->withoutOverlapping()->onOneServer(), 'webhooks-prune');

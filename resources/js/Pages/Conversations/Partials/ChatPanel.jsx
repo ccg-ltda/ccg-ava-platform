@@ -1,6 +1,7 @@
 import { Link } from '@inertiajs/react';
-import { AudioLines, ArrowLeft, File, Image, MapPin, MessageSquareText, Sticker, ThumbsDown, Video } from 'lucide-react';
+import { Activity, AudioLines, ArrowLeft, File, Image, MapPin, MessageSquareText, Sticker, ThumbsDown, Video } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import ActivityPanel from './ActivityPanel';
 import Badge from '@/Components/Badge';
 import { channelIcon } from '@/config/chatbots';
 import { handlingStates, messageStatuses } from '@/config/conversations';
@@ -123,6 +124,9 @@ export default function ChatPanel({ selected, backHref, agents }) {
     const ChannelIcon = channelIcon(selected.channel.key);
     const state = handlingStates[selected.handling];
     const [flagged, setFlagged] = useState(null);
+    const [activityOpen, setActivityOpen] = useState(false);
+
+    useEffect(() => setActivityOpen(false), [selected.id]);
 
     // Opening a conversation, or a new message arriving, shows the newest message.
     useEffect(() => {
@@ -158,6 +162,12 @@ export default function ChatPanel({ selected, backHref, agents }) {
                     <Badge tone={state.tone}>{selected.closed ? selected.closed.label : state.label}</Badge>
                     {selected.support && <Badge tone="blue">Soporte Zonno</Badge>}
                     {selected.demo && <Badge tone="violet">Demo</Badge>}
+                    {selected.activity && (
+                        <button type="button" onClick={() => setActivityOpen((open) => !open)} aria-expanded={activityOpen} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-ink-muted hover:bg-canvas hover:text-ink focus-visible:outline-2 focus-visible:outline-primary">
+                            <Activity className="size-3.5" aria-hidden="true" />
+                            Actividad técnica
+                        </button>
+                    )}
                 </div>
             </header>
 
@@ -187,6 +197,7 @@ export default function ChatPanel({ selected, backHref, agents }) {
             </div>
 
             <Composer key={selected.id} selected={selected} />
+            {activityOpen && selected.activity && <ActivityPanel key={`activity-${selected.id}`} conversationId={selected.id} onClose={() => setActivityOpen(false)} />}
             {flagged && selected.feedback && <FeedbackDialog conversation={selected} message={flagged} feedback={selected.feedback} onClose={() => setFlagged(null)} />}
         </div>
     );

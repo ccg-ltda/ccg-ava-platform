@@ -3,6 +3,7 @@
 namespace App\Webhooks;
 
 use App\Jobs\DeliverWebhook;
+use App\Models\InboundEvent;
 use App\Models\WebhookDelivery;
 use Throwable;
 
@@ -53,6 +54,9 @@ class WebhookMaintenance
 
         $days = (int) config('webhooks.limits.retention_days');
 
-        return WebhookDelivery::query()->whereIn('status', [WebhookDelivery::DELIVERED, WebhookDelivery::ABANDONED])->where('created_at', '<', now()->subDays($days))->delete();
+        // The history of what the inbound endpoints accepted (metadata only) is kept for the same time.
+        $inbound = InboundWebhooks::ready() ? InboundEvent::query()->where('created_at', '<', now()->subDays($days))->delete() : 0;
+
+        return $inbound + WebhookDelivery::query()->whereIn('status', [WebhookDelivery::DELIVERED, WebhookDelivery::ABANDONED])->where('created_at', '<', now()->subDays($days))->delete();
     }
 }

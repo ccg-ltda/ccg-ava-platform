@@ -2741,6 +2741,418 @@
               "body": "{\n  \"message\": \"Mensaje de validación del servidor.\",\n  \"errors\": {\n    \"campo\": [\n      \"Detalle.\"\n    ]\n  }\n}"
             }
           ]
+        },
+        {
+          "name": "POST /api/agent/reminders",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/agent/reminders",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agent",
+                "reminders"
+              ]
+            },
+            "description": "Autenticación: `Authorization: Bearer ava_…` (token del chatbot). El Workspace sale SIEMPRE del token, nunca del cuerpo. Ruta Laravel: `agent.reminders.store` → `AgentReminderController@store`.\n\nMódulos del plan requeridos: `assistants`, `conversations`, `reminders`, `customers`. Límites: `throttle:agent`, cubo del Workspace, cubo de escrituras y tope de simultáneas (`config/api_protection.php`); cuerpo máximo 256 KB.\n\nPrograma un recordatorio para la persona de la conversación (`contact_channel` + `contact_id` identifican al cliente vinculado; el asistente no puede nombrar otro). Exige `Idempotency-Key`. `send_at` en ISO 8601 con zona.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel\": \"whatsapp\",\n  \"contact_id\": \"contacto-001\",\n  \"contact_name\": \"Nombre de prueba\",\n  \"direction\": \"in\",\n  \"type\": \"text\",\n  \"body\": \"Hola\",\n  \"external_id\": \"wamid.EJEMPLO\",\n  \"status\": \"sent\",\n  \"timestamp\": \"2026-01-01T12:00:00Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "originalRequest": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{base_url}}/api/agent/reminders",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "agent",
+                    "reminders"
+                  ]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": 1,\n  \"created\": true,\n  \"control\": {}\n}"
+            },
+            {
+              "name": "200 OK (duplicado)",
+              "originalRequest": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{base_url}}/api/agent/reminders",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "agent",
+                    "reminders"
+                  ]
+                }
+              },
+              "status": "OK (duplicado)",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": 1,\n  \"created\": false,\n  \"control\": {}\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "originalRequest": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{base_url}}/api/agent/reminders",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "agent",
+                    "reminders"
+                  ]
+                }
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Mensaje de validación del servidor.\",\n  \"errors\": {\n    \"campo\": [\n      \"Detalle.\"\n    ]\n  }\n}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "originalRequest": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{base_url}}/api/agent/reminders",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "agent",
+                    "reminders"
+                  ]
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": ""
+            },
+            {
+              "name": "429 Too Many Requests",
+              "originalRequest": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{base_url}}/api/agent/reminders",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "agent",
+                    "reminders"
+                  ]
+                }
+              },
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": ""
+            }
+          ]
+        },
+        {
+          "name": "POST /api/agent/reminders/{reminder}/cancel",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/agent/reminders/:reminder/cancel",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agent",
+                "reminders",
+                ":reminder",
+                "cancel"
+              ],
+              "variable": [
+                {
+                  "key": "reminder",
+                  "value": "",
+                  "description": "Identificador (no se incluye ningún valor real)."
+                }
+              ]
+            },
+            "description": "Autenticación: `Authorization: Bearer ava_…` (token del chatbot). El Workspace sale SIEMPRE del token, nunca del cuerpo. Ruta Laravel: `agent.reminders.cancel` → `AgentReminderController@cancel`.\n\nMódulos del plan requeridos: `assistants`, `conversations`, `reminders`, `customers`. Límites: `throttle:agent`, cubo del Workspace, cubo de escrituras y tope de simultáneas (`config/api_protection.php`); cuerpo máximo 256 KB.\n\nCancela un recordatorio creado por la API (no uno programado por una persona).",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel\": \"whatsapp\",\n  \"contact_id\": \"contacto-001\",\n  \"contact_name\": \"Nombre de prueba\",\n  \"direction\": \"in\",\n  \"type\": \"text\",\n  \"body\": \"Hola\",\n  \"external_id\": \"wamid.EJEMPLO\",\n  \"status\": \"sent\",\n  \"timestamp\": \"2026-01-01T12:00:00Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "originalRequest": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{base_url}}/api/agent/reminders/:reminder/cancel",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "agent",
+                    "reminders",
+                    ":reminder",
+                    "cancel"
+                  ],
+                  "variable": [
+                    {
+                      "key": "reminder",
+                      "value": "",
+                      "description": "Identificador (no se incluye ningún valor real)."
+                    }
+                  ]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": 1,\n  \"created\": true,\n  \"control\": {}\n}"
+            },
+            {
+              "name": "200 OK (duplicado)",
+              "originalRequest": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{base_url}}/api/agent/reminders/:reminder/cancel",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "agent",
+                    "reminders",
+                    ":reminder",
+                    "cancel"
+                  ],
+                  "variable": [
+                    {
+                      "key": "reminder",
+                      "value": "",
+                      "description": "Identificador (no se incluye ningún valor real)."
+                    }
+                  ]
+                }
+              },
+              "status": "OK (duplicado)",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": 1,\n  \"created\": false,\n  \"control\": {}\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "originalRequest": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{base_url}}/api/agent/reminders/:reminder/cancel",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "agent",
+                    "reminders",
+                    ":reminder",
+                    "cancel"
+                  ],
+                  "variable": [
+                    {
+                      "key": "reminder",
+                      "value": "",
+                      "description": "Identificador (no se incluye ningún valor real)."
+                    }
+                  ]
+                }
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Mensaje de validación del servidor.\",\n  \"errors\": {\n    \"campo\": [\n      \"Detalle.\"\n    ]\n  }\n}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "originalRequest": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{base_url}}/api/agent/reminders/:reminder/cancel",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "agent",
+                    "reminders",
+                    ":reminder",
+                    "cancel"
+                  ],
+                  "variable": [
+                    {
+                      "key": "reminder",
+                      "value": "",
+                      "description": "Identificador (no se incluye ningún valor real)."
+                    }
+                  ]
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": ""
+            },
+            {
+              "name": "429 Too Many Requests",
+              "originalRequest": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{base_url}}/api/agent/reminders/:reminder/cancel",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "agent",
+                    "reminders",
+                    ":reminder",
+                    "cancel"
+                  ],
+                  "variable": [
+                    {
+                      "key": "reminder",
+                      "value": "",
+                      "description": "Identificador (no se incluye ningún valor real)."
+                    }
+                  ]
+                }
+              },
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": ""
+            }
+          ]
         }
       ]
     },
@@ -5423,6 +5835,160 @@
                   "if (secret) { const sum = CryptoJS.SHA256(s + b.timestamp + secret).toString(CryptoJS.enc.Hex); b.signature.checksum = sum; pm.request.body.raw = JSON.stringify(b); pm.request.headers.upsert({ key: 'X-Event-Checksum', value: sum }); }"
                 ]
               }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/webhooks/in/{key}",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Ava-Event-Id",
+                "value": "{{event_id}}",
+                "description": "Único por endpoint (8 a 64 caracteres). Repetido = 200 duplicate."
+              },
+              {
+                "key": "X-Ava-Timestamp",
+                "value": "{{timestamp}}",
+                "description": "Segundos Unix; ventana de 5 min."
+              },
+              {
+                "key": "X-Ava-Signature",
+                "value": "sha256={{hmac}}",
+                "description": "HMAC-SHA256 hex de \"timestamp.cuerpo\" con el secreto `whin_…` del endpoint."
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/webhooks/in/:key",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "webhooks",
+                "in",
+                ":key"
+              ],
+              "variable": [
+                {
+                  "key": "key",
+                  "value": "",
+                  "description": "Clave pública de 48 caracteres hexadecimales del endpoint (va en la dirección que muestra Ava; no es el secreto)."
+                }
+              ]
+            },
+            "description": "Ruta Laravel: `webhooks.inbound.receive` → `InboundWebhookReceiveController@receive`.\n\nEndpoint ENTRANTE de un Workspace (Integraciones > Webhooks > Endpoints entrantes): la dirección la genera Ava; el cliente envía eventos firmados. Sin sesión ni CSRF: la firma es la credencial. Respuestas: 202 aceptado, 200 duplicado, 401 firma inválida o vencida, 404 endpoint inexistente/desactivado/sin plan, 413 cuerpo mayor de 1 MB, 422 cuerpo o identificador inválidos, 429 límite (`inbound-webhook-key` 120/min, `inbound-webhook-ip` 60/min). Hoy el evento se REGISTRA (tipo, tamaño, hora); su contenido no se guarda ni se ejecuta. No reemplaza los webhooks de Meta ni de Wompi.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK (devuelve hub_challenge)",
+              "originalRequest": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{base_url}}/api/webhooks/in/:key",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "webhooks",
+                    "in",
+                    ":key"
+                  ],
+                  "variable": [
+                    {
+                      "key": "key",
+                      "value": "",
+                      "description": "Clave pública de 48 caracteres hexadecimales del endpoint (va en la dirección que muestra Ava; no es el secreto)."
+                    }
+                  ]
+                }
+              },
+              "status": "OK (devuelve hub_challenge)",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": ""
+            },
+            {
+              "name": "403 Forbidden",
+              "originalRequest": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{base_url}}/api/webhooks/in/:key",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "webhooks",
+                    "in",
+                    ":key"
+                  ],
+                  "variable": [
+                    {
+                      "key": "key",
+                      "value": "",
+                      "description": "Clave pública de 48 caracteres hexadecimales del endpoint (va en la dirección que muestra Ava; no es el secreto)."
+                    }
+                  ]
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": ""
+            },
+            {
+              "name": "404 Not Found",
+              "originalRequest": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{base_url}}/api/webhooks/in/:key",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "webhooks",
+                    "in",
+                    ":key"
+                  ],
+                  "variable": [
+                    {
+                      "key": "key",
+                      "value": "",
+                      "description": "Clave pública de 48 caracteres hexadecimales del endpoint (va en la dirección que muestra Ava; no es el secreto)."
+                    }
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": ""
             }
           ]
         }
@@ -15740,6 +16306,108 @@
                   }
                 }
               ]
+            },
+            {
+              "name": "GET /conversations/{conversation}/activity",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/conversations/:conversation/activity",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "conversations",
+                    ":conversation",
+                    "activity"
+                  ],
+                  "variable": [
+                    {
+                      "key": "conversation",
+                      "value": "",
+                      "description": "Identificador (no se incluye ningún valor real)."
+                    }
+                  ]
+                },
+                "description": "Ruta Laravel: `conversations.activity` → `ConversationActivityController@show`.\n\nAutenticada: sesión web (`auth`) + CSRF (`X-XSRF-TOKEN`) + contexto de Workspace (`EnsureWorkspaceContext`: el Workspace sale de la sesión, nunca de la petición).\n\nMódulo(s) del plan requerido(s) (se comprueba en el servidor, independiente del permiso): `conversations`.\n\nPermiso(s) del rol en el Workspace (todos los listados): `view-conversations`, `view-technical-activity`.\n\nLímite: `authenticated`, `60,1`.\n\nActividad técnica de UNA conversación (herramientas del asistente y ejecuciones del flujo), paginada. Parámetros: `page`, `status`. Solo lectura; nunca texto de mensajes ni credenciales.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": [
+                {
+                  "name": "401 Unauthorized",
+                  "originalRequest": {
+                    "method": "GET",
+                    "url": {
+                      "raw": "{{base_url}}/conversations/:conversation/activity",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "conversations",
+                        ":conversation",
+                        "activity"
+                      ],
+                      "variable": [
+                        {
+                          "key": "conversation",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Unauthorized",
+                  "code": 401,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                },
+                {
+                  "name": "403 Forbidden",
+                  "originalRequest": {
+                    "method": "GET",
+                    "url": {
+                      "raw": "{{base_url}}/conversations/:conversation/activity",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "conversations",
+                        ":conversation",
+                        "activity"
+                      ],
+                      "variable": [
+                        {
+                          "key": "conversation",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Forbidden",
+                  "code": 403,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                }
+              ]
             }
           ]
         },
@@ -19761,6 +20429,912 @@
                       "variable": [
                         {
                           "key": "integration",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Forbidden",
+                  "code": 403,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                }
+              ],
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// Copia la cookie XSRF-TOKEN (si existe) a la variable xsrf_token. Laravel la entrega URL-codificada.",
+                      "const c = pm.cookies.get('XSRF-TOKEN');",
+                      "if (c) { pm.collectionVariables.set('xsrf_token', decodeURIComponent(c)); }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "GET /integrations/webhooks/deliveries",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/integrations/webhooks/deliveries",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "integrations",
+                    "webhooks",
+                    "deliveries"
+                  ]
+                },
+                "description": "Ruta Laravel: `integrations.webhooks.history` → `WebhookController@history`.\n\nAutenticada: sesión web (`auth`) + CSRF (`X-XSRF-TOKEN`) + contexto de Workspace (`EnsureWorkspaceContext`: el Workspace sale de la sesión, nunca de la petición).\n\nMódulo(s) del plan requerido(s) (se comprueba en el servidor, independiente del permiso): `integrations`.\n\nPermiso(s) del rol en el Workspace (todos los listados): `view-integrations`, `view-webhooks`.\n\nLímite: `authenticated`, `webhook-read`.\n\nHistorial de entregas del Workspace, paginado y filtrado en el servidor. Parámetros: `page`, `webhook`, `event`, `status`, `from`, `to` (Y-m-d). Respuesta: `{deliveries, meta}`. Nunca el cuerpo enviado ni el secreto.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": [
+                {
+                  "name": "401 Unauthorized",
+                  "originalRequest": {
+                    "method": "GET",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/deliveries",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        "deliveries"
+                      ]
+                    }
+                  },
+                  "status": "Unauthorized",
+                  "code": 401,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                },
+                {
+                  "name": "403 Forbidden",
+                  "originalRequest": {
+                    "method": "GET",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/deliveries",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        "deliveries"
+                      ]
+                    }
+                  },
+                  "status": "Forbidden",
+                  "code": 403,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                }
+              ]
+            },
+            {
+              "name": "GET /integrations/webhooks/inbound/{inbound}/events",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/integrations/webhooks/inbound/:inbound/events",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "integrations",
+                    "webhooks",
+                    "inbound",
+                    ":inbound",
+                    "events"
+                  ],
+                  "variable": [
+                    {
+                      "key": "inbound",
+                      "value": "",
+                      "description": "Identificador (no se incluye ningún valor real)."
+                    }
+                  ]
+                },
+                "description": "Ruta Laravel: `integrations.webhooks.inbound.events` → `InboundWebhookController`.\n\nAutenticada: sesión web (`auth`) + CSRF (`X-XSRF-TOKEN`) + contexto de Workspace (`EnsureWorkspaceContext`: el Workspace sale de la sesión, nunca de la petición).\n\nMódulo(s) del plan requerido(s) (se comprueba en el servidor, independiente del permiso): `integrations`.\n\nPermiso(s) del rol en el Workspace (todos los listados): `view-integrations`, `view-webhooks`.\n\nLímite: `authenticated`, `webhook-*`.\n\nRecepciones aceptadas del endpoint entrante (id, tipo, tamaño, hora; nunca el cuerpo), paginadas: `page`.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": [
+                {
+                  "name": "401 Unauthorized",
+                  "originalRequest": {
+                    "method": "GET",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/inbound/:inbound/events",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        "inbound",
+                        ":inbound",
+                        "events"
+                      ],
+                      "variable": [
+                        {
+                          "key": "inbound",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Unauthorized",
+                  "code": 401,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                },
+                {
+                  "name": "403 Forbidden",
+                  "originalRequest": {
+                    "method": "GET",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/inbound/:inbound/events",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        "inbound",
+                        ":inbound",
+                        "events"
+                      ],
+                      "variable": [
+                        {
+                          "key": "inbound",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Forbidden",
+                  "code": 403,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                }
+              ]
+            },
+            {
+              "name": "POST /integrations/webhooks/inbound",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-XSRF-TOKEN",
+                    "value": "{{xsrf_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/integrations/webhooks/inbound",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "integrations",
+                    "webhooks",
+                    "inbound"
+                  ]
+                },
+                "description": "Ruta Laravel: `integrations.webhooks.inbound.store` → `InboundWebhookController`.\n\nAutenticada: sesión web (`auth`) + CSRF (`X-XSRF-TOKEN`) + contexto de Workspace (`EnsureWorkspaceContext`: el Workspace sale de la sesión, nunca de la petición).\n\nMódulo(s) del plan requerido(s) (se comprueba en el servidor, independiente del permiso): `integrations`.\n\nPermiso(s) del rol en el Workspace (todos los listados): `view-integrations`, `view-webhooks`, `manage-webhooks`.\n\nLímite: `authenticated`, `webhook-*`.\n\nCrea un endpoint entrante: `name`. El secreto `whin_…` se muestra UNA vez (flash de sesión).",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": [
+                {
+                  "name": "401 Unauthorized",
+                  "originalRequest": {
+                    "method": "POST",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/inbound",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        "inbound"
+                      ]
+                    }
+                  },
+                  "status": "Unauthorized",
+                  "code": 401,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                },
+                {
+                  "name": "403 Forbidden",
+                  "originalRequest": {
+                    "method": "POST",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/inbound",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        "inbound"
+                      ]
+                    }
+                  },
+                  "status": "Forbidden",
+                  "code": 403,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                }
+              ],
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// Copia la cookie XSRF-TOKEN (si existe) a la variable xsrf_token. Laravel la entrega URL-codificada.",
+                      "const c = pm.cookies.get('XSRF-TOKEN');",
+                      "if (c) { pm.collectionVariables.set('xsrf_token', decodeURIComponent(c)); }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "PUT /integrations/webhooks/inbound/{inbound}",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-XSRF-TOKEN",
+                    "value": "{{xsrf_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/integrations/webhooks/inbound/:inbound",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "integrations",
+                    "webhooks",
+                    "inbound",
+                    ":inbound"
+                  ],
+                  "variable": [
+                    {
+                      "key": "inbound",
+                      "value": "",
+                      "description": "Identificador (no se incluye ningún valor real)."
+                    }
+                  ]
+                },
+                "description": "Ruta Laravel: `integrations.webhooks.inbound.update` → `InboundWebhookController`.\n\nAutenticada: sesión web (`auth`) + CSRF (`X-XSRF-TOKEN`) + contexto de Workspace (`EnsureWorkspaceContext`: el Workspace sale de la sesión, nunca de la petición).\n\nMódulo(s) del plan requerido(s) (se comprueba en el servidor, independiente del permiso): `integrations`.\n\nPermiso(s) del rol en el Workspace (todos los listados): `view-integrations`, `view-webhooks`, `manage-webhooks`.\n\nLímite: `authenticated`, `webhook-*`.\n\nRenombra el endpoint.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": [
+                {
+                  "name": "401 Unauthorized",
+                  "originalRequest": {
+                    "method": "PUT",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/inbound/:inbound",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        "inbound",
+                        ":inbound"
+                      ],
+                      "variable": [
+                        {
+                          "key": "inbound",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Unauthorized",
+                  "code": 401,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                },
+                {
+                  "name": "403 Forbidden",
+                  "originalRequest": {
+                    "method": "PUT",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/inbound/:inbound",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        "inbound",
+                        ":inbound"
+                      ],
+                      "variable": [
+                        {
+                          "key": "inbound",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Forbidden",
+                  "code": 403,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                }
+              ],
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// Copia la cookie XSRF-TOKEN (si existe) a la variable xsrf_token. Laravel la entrega URL-codificada.",
+                      "const c = pm.cookies.get('XSRF-TOKEN');",
+                      "if (c) { pm.collectionVariables.set('xsrf_token', decodeURIComponent(c)); }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST /integrations/webhooks/inbound/{inbound}/activate",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-XSRF-TOKEN",
+                    "value": "{{xsrf_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/integrations/webhooks/inbound/:inbound/activate",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "integrations",
+                    "webhooks",
+                    "inbound",
+                    ":inbound",
+                    "activate"
+                  ],
+                  "variable": [
+                    {
+                      "key": "inbound",
+                      "value": "",
+                      "description": "Identificador (no se incluye ningún valor real)."
+                    }
+                  ]
+                },
+                "description": "Ruta Laravel: `integrations.webhooks.inbound.activate` → `InboundWebhookController`.\n\nAutenticada: sesión web (`auth`) + CSRF (`X-XSRF-TOKEN`) + contexto de Workspace (`EnsureWorkspaceContext`: el Workspace sale de la sesión, nunca de la petición).\n\nMódulo(s) del plan requerido(s) (se comprueba en el servidor, independiente del permiso): `integrations`.\n\nPermiso(s) del rol en el Workspace (todos los listados): `view-integrations`, `view-webhooks`, `manage-webhooks`.\n\nLímite: `authenticated`, `webhook-*`.\n\n",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": [
+                {
+                  "name": "401 Unauthorized",
+                  "originalRequest": {
+                    "method": "POST",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/inbound/:inbound/activate",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        "inbound",
+                        ":inbound",
+                        "activate"
+                      ],
+                      "variable": [
+                        {
+                          "key": "inbound",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Unauthorized",
+                  "code": 401,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                },
+                {
+                  "name": "403 Forbidden",
+                  "originalRequest": {
+                    "method": "POST",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/inbound/:inbound/activate",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        "inbound",
+                        ":inbound",
+                        "activate"
+                      ],
+                      "variable": [
+                        {
+                          "key": "inbound",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Forbidden",
+                  "code": 403,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                }
+              ],
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// Copia la cookie XSRF-TOKEN (si existe) a la variable xsrf_token. Laravel la entrega URL-codificada.",
+                      "const c = pm.cookies.get('XSRF-TOKEN');",
+                      "if (c) { pm.collectionVariables.set('xsrf_token', decodeURIComponent(c)); }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST /integrations/webhooks/inbound/{inbound}/deactivate",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-XSRF-TOKEN",
+                    "value": "{{xsrf_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/integrations/webhooks/inbound/:inbound/deactivate",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "integrations",
+                    "webhooks",
+                    "inbound",
+                    ":inbound",
+                    "deactivate"
+                  ],
+                  "variable": [
+                    {
+                      "key": "inbound",
+                      "value": "",
+                      "description": "Identificador (no se incluye ningún valor real)."
+                    }
+                  ]
+                },
+                "description": "Ruta Laravel: `integrations.webhooks.inbound.deactivate` → `InboundWebhookController`.\n\nAutenticada: sesión web (`auth`) + CSRF (`X-XSRF-TOKEN`) + contexto de Workspace (`EnsureWorkspaceContext`: el Workspace sale de la sesión, nunca de la petición).\n\nMódulo(s) del plan requerido(s) (se comprueba en el servidor, independiente del permiso): `integrations`.\n\nPermiso(s) del rol en el Workspace (todos los listados): `view-integrations`, `view-webhooks`, `manage-webhooks`.\n\nLímite: `authenticated`, `webhook-*`.\n\nLa dirección responde 404 mientras esté desactivado.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": [
+                {
+                  "name": "401 Unauthorized",
+                  "originalRequest": {
+                    "method": "POST",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/inbound/:inbound/deactivate",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        "inbound",
+                        ":inbound",
+                        "deactivate"
+                      ],
+                      "variable": [
+                        {
+                          "key": "inbound",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Unauthorized",
+                  "code": 401,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                },
+                {
+                  "name": "403 Forbidden",
+                  "originalRequest": {
+                    "method": "POST",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/inbound/:inbound/deactivate",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        "inbound",
+                        ":inbound",
+                        "deactivate"
+                      ],
+                      "variable": [
+                        {
+                          "key": "inbound",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Forbidden",
+                  "code": 403,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                }
+              ],
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// Copia la cookie XSRF-TOKEN (si existe) a la variable xsrf_token. Laravel la entrega URL-codificada.",
+                      "const c = pm.cookies.get('XSRF-TOKEN');",
+                      "if (c) { pm.collectionVariables.set('xsrf_token', decodeURIComponent(c)); }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST /integrations/webhooks/inbound/{inbound}/rotate",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-XSRF-TOKEN",
+                    "value": "{{xsrf_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/integrations/webhooks/inbound/:inbound/rotate",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "integrations",
+                    "webhooks",
+                    "inbound",
+                    ":inbound",
+                    "rotate"
+                  ],
+                  "variable": [
+                    {
+                      "key": "inbound",
+                      "value": "",
+                      "description": "Identificador (no se incluye ningún valor real)."
+                    }
+                  ]
+                },
+                "description": "Ruta Laravel: `integrations.webhooks.inbound.rotate` → `InboundWebhookController`.\n\nAutenticada: sesión web (`auth`) + CSRF (`X-XSRF-TOKEN`) + contexto de Workspace (`EnsureWorkspaceContext`: el Workspace sale de la sesión, nunca de la petición).\n\nMódulo(s) del plan requerido(s) (se comprueba en el servidor, independiente del permiso): `integrations`.\n\nPermiso(s) del rol en el Workspace (todos los listados): `view-integrations`, `view-webhooks`, `manage-webhooks`.\n\nLímite: `authenticated`, `webhook-*`.\n\nSecreto nuevo (una vez); el anterior se sigue aceptando 24 h.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": [
+                {
+                  "name": "401 Unauthorized",
+                  "originalRequest": {
+                    "method": "POST",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/inbound/:inbound/rotate",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        "inbound",
+                        ":inbound",
+                        "rotate"
+                      ],
+                      "variable": [
+                        {
+                          "key": "inbound",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Unauthorized",
+                  "code": 401,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                },
+                {
+                  "name": "403 Forbidden",
+                  "originalRequest": {
+                    "method": "POST",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/inbound/:inbound/rotate",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        "inbound",
+                        ":inbound",
+                        "rotate"
+                      ],
+                      "variable": [
+                        {
+                          "key": "inbound",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Forbidden",
+                  "code": 403,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                }
+              ],
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// Copia la cookie XSRF-TOKEN (si existe) a la variable xsrf_token. Laravel la entrega URL-codificada.",
+                      "const c = pm.cookies.get('XSRF-TOKEN');",
+                      "if (c) { pm.collectionVariables.set('xsrf_token', decodeURIComponent(c)); }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DELETE /integrations/webhooks/inbound/{inbound}",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-XSRF-TOKEN",
+                    "value": "{{xsrf_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/integrations/webhooks/inbound/:inbound",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "integrations",
+                    "webhooks",
+                    "inbound",
+                    ":inbound"
+                  ],
+                  "variable": [
+                    {
+                      "key": "inbound",
+                      "value": "",
+                      "description": "Identificador (no se incluye ningún valor real)."
+                    }
+                  ]
+                },
+                "description": "Ruta Laravel: `integrations.webhooks.inbound.destroy` → `InboundWebhookController`.\n\nAutenticada: sesión web (`auth`) + CSRF (`X-XSRF-TOKEN`) + contexto de Workspace (`EnsureWorkspaceContext`: el Workspace sale de la sesión, nunca de la petición).\n\nMódulo(s) del plan requerido(s) (se comprueba en el servidor, independiente del permiso): `integrations`.\n\nPermiso(s) del rol en el Workspace (todos los listados): `view-integrations`, `view-webhooks`, `manage-webhooks`.\n\nLímite: `authenticated`, `webhook-*`.\n\nElimina el endpoint y su historial; su dirección deja de existir.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": [
+                {
+                  "name": "401 Unauthorized",
+                  "originalRequest": {
+                    "method": "DELETE",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/inbound/:inbound",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        "inbound",
+                        ":inbound"
+                      ],
+                      "variable": [
+                        {
+                          "key": "inbound",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Unauthorized",
+                  "code": 401,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                },
+                {
+                  "name": "403 Forbidden",
+                  "originalRequest": {
+                    "method": "DELETE",
+                    "url": {
+                      "raw": "{{base_url}}/integrations/webhooks/inbound/:inbound",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "integrations",
+                        "webhooks",
+                        "inbound",
+                        ":inbound"
+                      ],
+                      "variable": [
+                        {
+                          "key": "inbound",
                           "value": "",
                           "description": "Identificador (no se incluye ningún valor real)."
                         }
@@ -28727,6 +30301,593 @@
                         },
                         {
                           "key": "user",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Forbidden",
+                  "code": 403,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                }
+              ],
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// Copia la cookie XSRF-TOKEN (si existe) a la variable xsrf_token. Laravel la entrega URL-codificada.",
+                      "const c = pm.cookies.get('XSRF-TOKEN');",
+                      "if (c) { pm.collectionVariables.set('xsrf_token', decodeURIComponent(c)); }"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "reminders",
+          "item": [
+            {
+              "name": "GET /reminders",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/reminders",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "reminders"
+                  ]
+                },
+                "description": "Ruta Laravel: `reminders.index` → `ReminderController@index`.\n\nAutenticada: sesión web (`auth`) + CSRF (`X-XSRF-TOKEN`) + contexto de Workspace (`EnsureWorkspaceContext`: el Workspace sale de la sesión, nunca de la petición).\n\nMódulo(s) del plan requerido(s) (se comprueba en el servidor, independiente del permiso): `reminders`.\n\nPermiso(s) del rol en el Workspace (todos los listados): `view-reminders`.\n\nLímite: `authenticated`.\n\nLista paginada y filtrada (Inertia). Filtros: `q`, `status`, `channel`, `from`, `to`, `reminders_page`, `reminders_per_page`.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": [
+                {
+                  "name": "401 Unauthorized",
+                  "originalRequest": {
+                    "method": "GET",
+                    "url": {
+                      "raw": "{{base_url}}/reminders",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "reminders"
+                      ]
+                    }
+                  },
+                  "status": "Unauthorized",
+                  "code": 401,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                },
+                {
+                  "name": "403 Forbidden",
+                  "originalRequest": {
+                    "method": "GET",
+                    "url": {
+                      "raw": "{{base_url}}/reminders",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "reminders"
+                      ]
+                    }
+                  },
+                  "status": "Forbidden",
+                  "code": 403,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                }
+              ]
+            },
+            {
+              "name": "GET /reminders/customers",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/reminders/customers",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "reminders",
+                    "customers"
+                  ]
+                },
+                "description": "Ruta Laravel: `reminders.customers` → `ReminderController@customers`.\n\nAutenticada: sesión web (`auth`) + CSRF (`X-XSRF-TOKEN`) + contexto de Workspace (`EnsureWorkspaceContext`: el Workspace sale de la sesión, nunca de la petición).\n\nMódulo(s) del plan requerido(s) (se comprueba en el servidor, independiente del permiso): `reminders`.\n\nPermiso(s) del rol en el Workspace (todos los listados): `view-reminders`, `create-reminders`.\n\nLímite: `authenticated`, `60,1`.\n\nBusca clientes del Workspace para elegir destinatario (sin teléfono ni correo). Parámetro `q`.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": [
+                {
+                  "name": "401 Unauthorized",
+                  "originalRequest": {
+                    "method": "GET",
+                    "url": {
+                      "raw": "{{base_url}}/reminders/customers",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "reminders",
+                        "customers"
+                      ]
+                    }
+                  },
+                  "status": "Unauthorized",
+                  "code": 401,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                },
+                {
+                  "name": "403 Forbidden",
+                  "originalRequest": {
+                    "method": "GET",
+                    "url": {
+                      "raw": "{{base_url}}/reminders/customers",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "reminders",
+                        "customers"
+                      ]
+                    }
+                  },
+                  "status": "Forbidden",
+                  "code": 403,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                }
+              ]
+            },
+            {
+              "name": "GET /reminders/{reminder}/attempts",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/reminders/:reminder/attempts",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "reminders",
+                    ":reminder",
+                    "attempts"
+                  ],
+                  "variable": [
+                    {
+                      "key": "reminder",
+                      "value": "",
+                      "description": "Identificador (no se incluye ningún valor real)."
+                    }
+                  ]
+                },
+                "description": "Ruta Laravel: `reminders.attempts` → `ReminderController@attempts`.\n\nAutenticada: sesión web (`auth`) + CSRF (`X-XSRF-TOKEN`) + contexto de Workspace (`EnsureWorkspaceContext`: el Workspace sale de la sesión, nunca de la petición).\n\nMódulo(s) del plan requerido(s) (se comprueba en el servidor, independiente del permiso): `reminders`.\n\nPermiso(s) del rol en el Workspace (todos los listados): `view-reminders`.\n\nLímite: `authenticated`, `120,1`.\n\nIntentos de envío de un recordatorio (motivos fijos).",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": [
+                {
+                  "name": "401 Unauthorized",
+                  "originalRequest": {
+                    "method": "GET",
+                    "url": {
+                      "raw": "{{base_url}}/reminders/:reminder/attempts",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "reminders",
+                        ":reminder",
+                        "attempts"
+                      ],
+                      "variable": [
+                        {
+                          "key": "reminder",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Unauthorized",
+                  "code": 401,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                },
+                {
+                  "name": "403 Forbidden",
+                  "originalRequest": {
+                    "method": "GET",
+                    "url": {
+                      "raw": "{{base_url}}/reminders/:reminder/attempts",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "reminders",
+                        ":reminder",
+                        "attempts"
+                      ],
+                      "variable": [
+                        {
+                          "key": "reminder",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Forbidden",
+                  "code": 403,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                }
+              ]
+            },
+            {
+              "name": "POST /reminders",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-XSRF-TOKEN",
+                    "value": "{{xsrf_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/reminders",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "reminders"
+                  ]
+                },
+                "description": "Ruta Laravel: `reminders.store` → `ReminderController@store`.\n\nAutenticada: sesión web (`auth`) + CSRF (`X-XSRF-TOKEN`) + contexto de Workspace (`EnsureWorkspaceContext`: el Workspace sale de la sesión, nunca de la petición).\n\nMódulo(s) del plan requerido(s) (se comprueba en el servidor, independiente del permiso): `reminders`.\n\nPermiso(s) del rol en el Workspace (todos los listados): `view-reminders`, `create-reminders`.\n\nLímite: `authenticated`, `60,1`.\n\nCuerpo: `SaveReminderRequest` (cliente, nombre, canal, asunto, mensaje, `send_at` Y-m-d\\TH:i en la zona del Workspace, `idempotency_key`).",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": [
+                {
+                  "name": "401 Unauthorized",
+                  "originalRequest": {
+                    "method": "POST",
+                    "url": {
+                      "raw": "{{base_url}}/reminders",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "reminders"
+                      ]
+                    }
+                  },
+                  "status": "Unauthorized",
+                  "code": 401,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                },
+                {
+                  "name": "403 Forbidden",
+                  "originalRequest": {
+                    "method": "POST",
+                    "url": {
+                      "raw": "{{base_url}}/reminders",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "reminders"
+                      ]
+                    }
+                  },
+                  "status": "Forbidden",
+                  "code": 403,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                }
+              ],
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// Copia la cookie XSRF-TOKEN (si existe) a la variable xsrf_token. Laravel la entrega URL-codificada.",
+                      "const c = pm.cookies.get('XSRF-TOKEN');",
+                      "if (c) { pm.collectionVariables.set('xsrf_token', decodeURIComponent(c)); }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "PUT /reminders/{reminder}",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-XSRF-TOKEN",
+                    "value": "{{xsrf_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/reminders/:reminder",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "reminders",
+                    ":reminder"
+                  ],
+                  "variable": [
+                    {
+                      "key": "reminder",
+                      "value": "",
+                      "description": "Identificador (no se incluye ningún valor real)."
+                    }
+                  ]
+                },
+                "description": "Ruta Laravel: `reminders.update` → `ReminderController@update`.\n\nAutenticada: sesión web (`auth`) + CSRF (`X-XSRF-TOKEN`) + contexto de Workspace (`EnsureWorkspaceContext`: el Workspace sale de la sesión, nunca de la petición).\n\nMódulo(s) del plan requerido(s) (se comprueba en el servidor, independiente del permiso): `reminders`.\n\nPermiso(s) del rol en el Workspace (todos los listados): `view-reminders`, `edit-reminders`.\n\nLímite: `authenticated`.\n\nSolo un recordatorio programado que aún no se envía.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": [
+                {
+                  "name": "401 Unauthorized",
+                  "originalRequest": {
+                    "method": "PUT",
+                    "url": {
+                      "raw": "{{base_url}}/reminders/:reminder",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "reminders",
+                        ":reminder"
+                      ],
+                      "variable": [
+                        {
+                          "key": "reminder",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Unauthorized",
+                  "code": 401,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                },
+                {
+                  "name": "403 Forbidden",
+                  "originalRequest": {
+                    "method": "PUT",
+                    "url": {
+                      "raw": "{{base_url}}/reminders/:reminder",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "reminders",
+                        ":reminder"
+                      ],
+                      "variable": [
+                        {
+                          "key": "reminder",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Forbidden",
+                  "code": 403,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                }
+              ],
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// Copia la cookie XSRF-TOKEN (si existe) a la variable xsrf_token. Laravel la entrega URL-codificada.",
+                      "const c = pm.cookies.get('XSRF-TOKEN');",
+                      "if (c) { pm.collectionVariables.set('xsrf_token', decodeURIComponent(c)); }"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST /reminders/{reminder}/cancel",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-XSRF-TOKEN",
+                    "value": "{{xsrf_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/reminders/:reminder/cancel",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "reminders",
+                    ":reminder",
+                    "cancel"
+                  ],
+                  "variable": [
+                    {
+                      "key": "reminder",
+                      "value": "",
+                      "description": "Identificador (no se incluye ningún valor real)."
+                    }
+                  ]
+                },
+                "description": "Ruta Laravel: `reminders.cancel` → `ReminderController@cancel`.\n\nAutenticada: sesión web (`auth`) + CSRF (`X-XSRF-TOKEN`) + contexto de Workspace (`EnsureWorkspaceContext`: el Workspace sale de la sesión, nunca de la petición).\n\nMódulo(s) del plan requerido(s) (se comprueba en el servidor, independiente del permiso): `reminders`.\n\nPermiso(s) del rol en el Workspace (todos los listados): `view-reminders`, `cancel-reminders`.\n\nLímite: `authenticated`.\n\nSolo un recordatorio programado que aún no se envía.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": [
+                {
+                  "name": "401 Unauthorized",
+                  "originalRequest": {
+                    "method": "POST",
+                    "url": {
+                      "raw": "{{base_url}}/reminders/:reminder/cancel",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "reminders",
+                        ":reminder",
+                        "cancel"
+                      ],
+                      "variable": [
+                        {
+                          "key": "reminder",
+                          "value": "",
+                          "description": "Identificador (no se incluye ningún valor real)."
+                        }
+                      ]
+                    }
+                  },
+                  "status": "Unauthorized",
+                  "code": 401,
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json"
+                    }
+                  ],
+                  "body": ""
+                },
+                {
+                  "name": "403 Forbidden",
+                  "originalRequest": {
+                    "method": "POST",
+                    "url": {
+                      "raw": "{{base_url}}/reminders/:reminder/cancel",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "reminders",
+                        ":reminder",
+                        "cancel"
+                      ],
+                      "variable": [
+                        {
+                          "key": "reminder",
                           "value": "",
                           "description": "Identificador (no se incluye ningún valor real)."
                         }

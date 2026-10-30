@@ -1,11 +1,13 @@
 import { Head, router } from '@inertiajs/react';
-import { Plug, Plus } from 'lucide-react';
+import { Cable, Plug, Plus, Radio, Webhook, Workflow } from 'lucide-react';
 import { useState } from 'react';
+import Alert from '@/Components/Alert';
 import { useConfirm } from '@/Components/ConfirmDialog';
 import useAccess from '@/Hooks/useAccess';
 import EmptyState from '@/Components/EmptyState';
 import PageHeader from '@/Components/PageHeader';
 import PrimaryButton from '@/Components/PrimaryButton';
+import Tabs from '@/Components/Tabs';
 import { ReadOnlyWorkspaceNotice, WorkspaceViewSelector } from '@/Components/WorkspaceViewSelector';
 import AppLayout from '@/Layouts/AppLayout';
 import ApiCallHistory from './Partials/ApiCallHistory';
@@ -14,6 +16,7 @@ import ChannelCard from './Partials/ChannelCard';
 import ChannelIntegrationModal from './Partials/ChannelIntegrationModal';
 import IntegrationCard from './Partials/IntegrationCard';
 import IntegrationFormModal from './Partials/IntegrationFormModal';
+import InboundEndpointsSection from './Partials/InboundEndpointsSection';
 import WebhooksSection from './Partials/WebhooksSection';
 
 /**
@@ -21,7 +24,15 @@ import WebhooksSection from './Partials/WebhooksSection';
  * with what THIS Workspace has configured for each, and the Workspace's generic connections (HTTP/REST today). An
  * administrator of the platform can look (read only) at one other Workspace. Results arrive as the global toasts.
  */
-export default function Index({ channels, providers = [], integrations, catalog, automation, newToken, webhooks = null, newWebhookSecret = null, scope }) {
+const TABS = ['canales', 'automatizaciones', 'conexiones', 'webhooks'];
+
+const initialTab = () => {
+    const requested = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('tab');
+
+    return Math.max(0, TABS.indexOf(requested));
+};
+
+export default function Index({ channels, providers = [], integrations, catalog, automation, newToken, webhooks = null, newWebhookSecret = null, inboundWebhooks = null, newInboundSecret = null, scope }) {
     const confirm = useConfirm();
     const readOnly = scope.readOnly;
     // Each change has its own permission; the server enforces them, this only offers what the role can do.
@@ -37,6 +48,13 @@ export default function Index({ channels, providers = [], integrations, catalog,
     const [configuring, setConfiguring] = useState(null); // the channel being configured
     const [configuringProvider, setConfiguringProvider] = useState(null); // the external agenda being configured
     const [testingId, setTestingId] = useState(null);
+    const [tab, setTab] = useState(initialTab);
+    const selectTab = (index) => {
+        setTab(index);
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', TABS[index]);
+        window.history.replaceState(window.history.state, '', url);
+    };
 
     const toggle = async (integration) => {
         const deactivating = integration.isActive;
@@ -106,18 +124,17 @@ export default function Index({ channels, providers = [], integrations, catalog,
 
             <ReadOnlyWorkspaceNotice scope={scope} what="las integraciones" />
 
-            <section aria-labelledby="automation-heading" className="space-y-4">
-                <div>
-                    <h2 id="automation-heading" className="text-lg font-bold text-ink">
-                        Automatización
-                    </h2>
-                    <p className="text-sm text-ink-muted">Quién ejecuta el flujo de cada chatbot.</p>
-                </div>
-                <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-                    <AutomationCard automation={automation} newToken={newToken} readOnly={readOnly} workspaceId={readOnly ? scope.workspace.id : undefined} />
-                </div>
-            </section>
-
+            <Tabs
+                tabs={[
+                    { id: 'canales', label: 'Canales', icon: Radio },
+                    { id: 'automatizaciones', label: 'Automatizaciones', icon: Workflow },
+                    { id: 'conexiones', label: 'Conexiones API', icon: Cable },
+                    { id: 'webhooks', label: 'Webhooks', icon: Webhook },
+                ]}
+                selectedIndex={tab}
+                onChange={selectTab}
+            >
+                <>
             <section aria-labelledby="channels-heading" className="space-y-4">
                 <div>
                     <h2 id="channels-heading" className="text-lg font-bold text-ink">
@@ -142,6 +159,22 @@ export default function Index({ channels, providers = [], integrations, catalog,
                 </div>
             </section>
 
+                </>
+                <>
+            <section aria-labelledby="automation-heading" className="space-y-4">
+                <div>
+                    <h2 id="automation-heading" className="text-lg font-bold text-ink">
+                        Automatización
+                    </h2>
+                    <p className="text-sm text-ink-muted">Quién ejecuta el flujo de cada chatbot.</p>
+                </div>
+                <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                    <AutomationCard automation={automation} newToken={newToken} readOnly={readOnly} workspaceId={readOnly ? scope.workspace.id : undefined} />
+                </div>
+            </section>
+
+                </>
+                <>
             {providers.length > 0 && (
                 <section aria-labelledby="agendas-heading" className="space-y-4">
                     <div>
@@ -205,9 +238,19 @@ export default function Index({ channels, providers = [], integrations, catalog,
                 )}
             </section>
 
-            {!readOnly && webhooks && <WebhooksSection webhooks={webhooks} newSecret={newWebhookSecret} can={webhookCan} />}
-
             {!readOnly && <ApiCallHistory />}
+                </>
+                <>
+            {!readOnly && webhooks ? (
+                <div className="space-y-10">
+                    {inboundWebhooks && <InboundEndpointsSection inbound={inboundWebhooks} newSecret={newInboundSecret} can={webhookCan} />}
+                    <WebhooksSection webhooks={webhooks} newSecret={newWebhookSecret} can={webhookCan} />
+                </div>
+            ) : (
+                <Alert tone="info">Los webhooks no están disponibles para tu rol, o este Workspace está en modo consulta.</Alert>
+            )}
+                </>
+            </Tabs>
 
             {configuring && <ChannelIntegrationModal key={configuring.key} channel={configuring} onClose={() => setConfiguring(null)} />}
             {configuringProvider && <ChannelIntegrationModal key={configuringProvider.key} channel={configuringProvider} routeName="integrations.providers.update" onClose={() => setConfiguringProvider(null)} />}

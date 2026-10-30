@@ -81,7 +81,7 @@ class ModuleRegistrationTest extends TestCase
         // Start from a catalog that lacks the newest modules (what a database migrated before them looks like).
         DB::table('module_plan')->whereIn('module_id', Module::whereIn('key', ['locations', 'product_catalog', 'orders'])->pluck('id'))->delete();
         Module::whereIn('key', ['locations', 'product_catalog', 'orders'])->delete();
-        $this->assertSame(14, Module::count());
+        $this->assertSame(15, Module::count());
         $this->seed(ModuleCatalogSeeder::class);
         $first = Module::orderBy('key')->get(['key', 'name', 'module_category_id'])->toArray();
 

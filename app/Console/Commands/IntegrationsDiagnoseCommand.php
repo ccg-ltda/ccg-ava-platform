@@ -229,6 +229,24 @@ class IntegrationsDiagnoseCommand extends Command
         } catch (Throwable) {
             $this->blocker('La caché ('.config('cache.default').') no responde.');
         }
+
+        $this->rateLimiterStore();
+    }
+
+    /** The rate-limit counters live in the cache: a store that is not shared between processes (array, file, null) silently multiplies every limit by the number of instances. */
+    private function rateLimiterStore(): void
+    {
+        $store = config('cache.limiter') ?? config('cache.default');
+        $driver = config("cache.stores.{$store}.driver");
+
+        if (in_array($driver, ['redis', 'database', 'memcached', 'dynamodb'], true)) {
+            $this->good("Límites de tasa: contadores compartidos en la caché «{$store}» ({$driver}).");
+
+            return;
+        }
+
+        $message = "Límites de tasa: la caché «{$store}» ({$driver}) no se comparte entre procesos o instancias; cada una cuenta por separado y el límite real se multiplica. Usa redis o database.";
+        app()->environment('production') ? $this->blocker($message) : $this->caution($message);
     }
 
     /**

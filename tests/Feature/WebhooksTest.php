@@ -326,6 +326,8 @@ class WebhooksTest extends TestCase
     {
         [$endpoint] = $this->endpoint();
         $endpoint->forceFill(['events' => 'not-a-list'])->save();
+        // PostgreSQL refuses invalid JSON in a json column, so the corrupt row can only exist on SQLite: there the guarantee is the one under test.
+        DB::connection()->getDriverName() === 'pgsql' && $this->markTestSkipped('PostgreSQL does not accept an invalid json value: the corrupt endpoint can not exist.');
         DB::table('webhook_endpoints')->where('id', $endpoint->id)->update(['events' => '{broken']);
 
         $result = $this->inbound($this->bot());
@@ -1023,5 +1025,50 @@ class WebhooksTest extends TestCase
         $this->assertInstanceOf(User::class, $this->member($this->workspace));
         $this->assertNull(app(WebhookService::class)->create($this->workspace, ['name' => 'Sin actor', 'url' => self::URL, 'events' => ['order.created']], null)['endpoint']->created_by_user_id);
         $this->assertSame([], Conversation::all()->all());
+    }
+
+    // --- history: pagination and filters in the server, one Workspace ----------------------------------------------------------------
+
+    public function test_the_workspace_history_is_paginated_filtered_and_isolated_in_the_server(): void
+    {
+        [$a] = $this->endpoint(null, ['message.received'], self::URL, 'A');
+        [$b] = $this->endpoint(null, ['message.received'], self::URL, 'B');
+        [$foreign] = $this->endpoint($this->other, ['message.received'], self::URL, 'Ajeno');
+
+        foreach (range(1, 17) as $i) {
+            $this->delivery($a, ['status' => $i % 2 ? 'delivered' : 'failed', 'event' => 'message.received', 'created_at' => now()->subDays(3)]);
+        }
+        $this->delivery($b, ['status' => 'abandoned', 'event' => 'appointment.created', 'created_at' => now()]);
+        $this->delivery($foreign, ['status' => 'delivered', 'event' => 'message.received']);
+        $this->actAsMember($this->workspace);
+
+        $first = $this->getJson('/integrations/webhooks/deliveries')->assertOk();
+        $this->assertSame([18, 15, 2], [$first->json('meta.total'), count($first->json('deliveries')), $first->json('meta.last_page')]);
+        $this->assertSame(['B'], array_values(array_unique(array_column(array_slice($first->json('deliveries'), 0, 1), 'webhookName'))));
+        $this->assertCount(3, $this->getJson('/integrations/webhooks/deliveries?page=2')->json('deliveries'));
+        $this->assertSame(1, $this->getJson('/integrations/webhooks/deliveries?status=abandoned')->json('meta.total'));
+        $this->assertSame(1, $this->getJson('/integrations/webhooks/deliveries?event=appointment.created')->json('meta.total'));
+        $this->assertSame(17, $this->getJson("/integrations/webhooks/deliveries?webhook={$a->id}")->json('meta.total'));
+        $this->assertSame(1, $this->getJson('/integrations/webhooks/deliveries?from='.now()->format('Y-m-d'))->json('meta.total'));
+        $this->assertSame(17, $this->getJson('/integrations/webhooks/deliveries?to='.now()->subDay()->format('Y-m-d'))->json('meta.total'));
+
+        // Another Workspace's endpoint id matches nothing; nobody can read its deliveries from here.
+        $this->assertSame(0, $this->getJson("/integrations/webhooks/deliveries?webhook={$foreign->id}")->json('meta.total'));
+        $this->getJson("/integrations/webhooks/{$foreign->id}/deliveries")->assertNotFound();
+
+        // Filters are validated, not trusted.
+        $this->getJson('/integrations/webhooks/deliveries?status=hacked')->assertUnprocessable();
+        $this->getJson('/integrations/webhooks/deliveries?event=drop.table')->assertUnprocessable();
+        $this->getJson('/integrations/webhooks/deliveries?from=2026-02-30')->assertUnprocessable();
+        $this->getJson('/integrations/webhooks/deliveries?page=-1')->assertUnprocessable();
+    }
+
+    public function test_the_workspace_history_needs_view_webhooks(): void
+    {
+        $this->endpoint();
+        $blind = $this->member($this->workspace, 'sin_hooks');
+        $this->actingAs($blind)->withSession(['workspace_id' => $this->workspace->id]);
+
+        $this->getJson('/integrations/webhooks/deliveries')->assertForbidden();
     }
 }

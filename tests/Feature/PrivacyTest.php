@@ -406,7 +406,7 @@ class PrivacyTest extends TestCase
 
         $this->assertSame('solutions', app(ModuleAccess::class)->groupOf('unknown_module', 'a_category_created_in_the_ui'));
         $this->assertEqualsCanonicalizing(['users_roles', 'audit', 'settings', 'integrations'], collect(config('modules.implemented'))->filter(fn ($m) => $m['group'] === 'platform')->keys()->all());
-        $this->assertEqualsCanonicalizing(['assistants', 'conversations', 'customers', 'campaigns', 'dashboard', 'reports'], collect(config('modules.implemented'))->filter(fn ($m) => $m['group'] === 'shared')->keys()->all());
+        $this->assertEqualsCanonicalizing(['assistants', 'conversations', 'customers', 'campaigns', 'reminders', 'dashboard', 'reports'], collect(config('modules.implemented'))->filter(fn ($m) => $m['group'] === 'shared')->keys()->all());
 
         $platform = $this->signInDev('plataforma', false);
         $this->assertNotNull($platform);

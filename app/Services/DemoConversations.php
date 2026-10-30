@@ -24,6 +24,11 @@ class DemoConversations
 {
     public const CHATBOT = 'Demo · Asistente (simulado)';
 
+    /** The one demo conversation whose «Actividad técnica» is the simulated script of DemoTechnicalActivity (nothing of it is stored as real activity). */
+    public const ACTIVITY_KEY = 'technical-activity-demo';
+
+    public const ACTIVITY_TITLE = 'DEMOSTRACIÓN — Actividad técnica simulada';
+
     public function __construct(private readonly ConversationAgents $agents, private readonly AuditLogger $audit) {}
 
     /** Whether the demo tools exist in this environment at all. */
@@ -129,6 +134,53 @@ class DemoConversations
         }
 
         $this->audit->recordForActor($action, 'conversation', null, 'Entorno demo', [AuditLogger::change('Conversaciones demo', $before, $after)], $workspace, 'Consola de la plataforma');
+    }
+
+    /** Creates (once) the demonstration conversation for the technical-activity panel. Only this one: it never generates the other scenarios. @return bool whether it was created now */
+    public function generateActivityDemo(Workspace $workspace): bool
+    {
+        $this->assertAllowed($workspace);
+
+        $created = DB::transaction(function () use ($workspace) {
+            $bot = $workspace->chatbots()->where('is_demo', true)->first()
+                ?? $workspace->chatbots()->create(['name' => self::CHATBOT, 'description' => 'Chatbot ficticio para probar Conversaciones. No usa ningún canal ni modelo real.', 'is_active' => true]);
+            $bot->forceFill(['is_demo' => true])->save();
+
+            if ($bot->conversations()->where('demo_key', self::ACTIVITY_KEY)->exists()) {
+                return false;
+            }
+
+            $this->build($bot, [
+                'key' => self::ACTIVITY_KEY, 'channel' => 'web', 'contact' => 'demo-activity-0001', 'name' => self::ACTIVITY_TITLE, 'handling' => 'ai', 'ago' => 5, 'gap' => 1,
+                'messages' => [
+                    ['contact', 'Hola, ¿tienen disponibilidad mañana para una limpieza dental?', null],
+                    ['ai', 'Respuesta simulada: mañana hay 4 horarios libres: 09:00, 10:30, 15:00 y 16:30. ¿Cuál prefieres?', 'sent'],
+                ],
+            ], Conversation::AI, null);
+
+            return true;
+        });
+
+        $created && $this->audit($workspace, 'created', null, '1');
+
+        return $created;
+    }
+
+    /** Removes ONLY the activity demonstration conversation (and its messages); any other demo conversation stays. @return int how many were removed (0 or 1) */
+    public function cleanActivityDemo(Workspace $workspace): int
+    {
+        $this->assertAllowed($workspace);
+
+        $removed = DB::transaction(function () use ($workspace) {
+            $removed = Conversation::where('workspace_id', $workspace->id)->where('demo_key', self::ACTIVITY_KEY)->delete();
+            $workspace->chatbots()->where('is_demo', true)->whereDoesntHave('conversations')->delete();
+
+            return $removed;
+        });
+
+        $this->audit($workspace, 'deleted', (string) $removed, null);
+
+        return $removed;
     }
 
     /** Clean and generate again. */
