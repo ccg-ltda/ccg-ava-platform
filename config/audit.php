@@ -40,6 +40,7 @@ return [
         'message_template' => ['label' => 'Plantillas de mensaje', 'noun' => 'la plantilla'],
         'campaign' => ['label' => 'Campañas', 'noun' => 'la campaña'],
         'reminder' => ['label' => 'Recordatorios', 'noun' => 'el recordatorio'],
+        'reminder_rule' => ['label' => 'Reglas de recordatorio', 'noun' => 'la regla de recordatorio'],
         'chatbot' => ['label' => 'Chatbots', 'noun' => 'el chatbot'],
         'knowledge_document' => ['label' => 'Base de conocimiento', 'noun' => 'el documento'],
         'chatbot_channel' => ['label' => 'Canales de chatbots', 'noun' => 'el canal'],

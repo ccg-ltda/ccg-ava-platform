@@ -23,6 +23,9 @@ use Illuminate\Support\Facades\DB;
 class OperationsMetrics
 {
     /**
+     * Every period boundary is converted to UTC (what the tables store) and applied as a half-open interval [start, end): the period is whole local days of the Workspace's
+     * time zone, so a record exactly at midnight belongs to the day that starts there and to no other.
+     *
      * Appointments whose start falls inside the period, by state, service, professional and way in, plus what is still ahead. `recordedValue` is the sum of
      * the price recorded on the appointments that were carried out; appointments of a service without price add nothing (and are counted separately).
      *
@@ -30,7 +33,7 @@ class OperationsMetrics
      */
     public function bookings(Workspace $workspace, ReportPeriod $period, ?array $locationIds = null): array
     {
-        $inPeriod = fn () => Appointment::query()->where('workspace_id', $workspace->id)->whereBetween('starts_at', [$period->from, $period->to])->when($locationIds !== null, fn ($q) => $q->whereIn('location_id', $locationIds));
+        $inPeriod = fn () => Appointment::query()->where('workspace_id', $workspace->id)->where('starts_at', '>=', $period->startUtc())->where('starts_at', '<', $period->endExclusiveUtc())->when($locationIds !== null, fn ($q) => $q->whereIn('location_id', $locationIds));
         $byStatus = $inPeriod()->selectRaw('status, count(*) as total')->groupBy('status')->pluck('total', 'status');
         $completed = $inPeriod()->where('status', Appointment::COMPLETED);
         $priced = (clone $completed)->whereNotNull('price_amount');
@@ -41,7 +44,7 @@ class OperationsMetrics
                 'completed' => (int) ($byStatus[Appointment::COMPLETED] ?? 0),
                 'cancelled' => (int) ($byStatus[Appointment::CANCELLED] ?? 0),
                 'noShow' => (int) ($byStatus[Appointment::NO_SHOW] ?? 0),
-                'upcoming' => Appointment::query()->where('workspace_id', $workspace->id)->where('starts_at', '>', $period->to)->whereIn('status', Appointment::BLOCKING)->when($locationIds !== null, fn ($q) => $q->whereIn('location_id', $locationIds))->count(),
+                'upcoming' => Appointment::query()->where('workspace_id', $workspace->id)->where('starts_at', '>=', $period->endExclusiveUtc())->whereIn('status', Appointment::BLOCKING)->when($locationIds !== null, fn ($q) => $q->whereIn('location_id', $locationIds))->count(),
                 'recordedValue' => round((float) (clone $priced)->sum('price_amount'), 2),
                 'withoutPrice' => (clone $completed)->whereNull('price_amount')->count(),
                 'currency' => (clone $priced)->value('price_currency') ?? $workspace->settingsOrDefault()->currency,
@@ -62,7 +65,7 @@ class OperationsMetrics
      */
     public function orders(Workspace $workspace, ReportPeriod $period, ?array $locationIds = null): array
     {
-        $inPeriod = fn () => Order::query()->where('workspace_id', $workspace->id)->whereBetween('created_at', [$period->from, $period->to])->when($locationIds !== null, fn ($q) => $q->whereIn('location_id', $locationIds));
+        $inPeriod = fn () => Order::query()->where('workspace_id', $workspace->id)->where('created_at', '>=', $period->startUtc())->where('created_at', '<', $period->endExclusiveUtc())->when($locationIds !== null, fn ($q) => $q->whereIn('location_id', $locationIds));
         $byStatus = $inPeriod()->selectRaw('status, count(*) as total')->groupBy('status')->pluck('total', 'status');
         $sold = fn () => $inPeriod()->where('status', '!=', 'cancelled');
         $currencies = $sold()->distinct()->pluck('currency');
@@ -86,7 +89,7 @@ class OperationsMetrics
             // Units sold of each product (what the order kept: its name at that moment), over the orders that were not cancelled.
             'topProducts' => DB::table('order_lines')
                 ->join('orders', fn ($join) => $join->on('orders.id', '=', 'order_lines.order_id')->on('orders.workspace_id', '=', 'order_lines.workspace_id'))
-                ->where('orders.workspace_id', $workspace->id)->where('orders.status', '!=', 'cancelled')->whereBetween('orders.created_at', [$period->from, $period->to])->when($locationIds !== null, fn ($q) => $q->whereIn('orders.location_id', $locationIds))
+                ->where('orders.workspace_id', $workspace->id)->where('orders.status', '!=', 'cancelled')->where('orders.created_at', '>=', $period->startUtc())->where('orders.created_at', '<', $period->endExclusiveUtc())->when($locationIds !== null, fn ($q) => $q->whereIn('orders.location_id', $locationIds))
                 ->selectRaw('order_lines.product_name as name, sum(order_lines.quantity) as units')->groupBy('order_lines.product_name')->orderByDesc('units')->orderBy('name')->limit(6)->get()
                 ->map(fn ($row) => ['key' => $row->name, 'label' => $row->name, 'value' => (int) $row->units])->all(),
         ];
@@ -106,7 +109,7 @@ class OperationsMetrics
             'kpis' => [
                 'total' => $all()->count(),
                 'active' => $all()->where('is_active', true)->count(),
-                'new' => $all()->whereBetween('created_at', [$period->from, $period->to])->count(),
+                'new' => $all()->where('created_at', '>=', $period->startUtc())->where('created_at', '<', $period->endExclusiveUtc())->count(),
                 'reachable' => $all()->where('is_active', true)->where('marketing_consent', Customer::CONSENT_GRANTED)->count(),
             ],
             'byConsent' => collect(config('customers.consents'))->map(fn (string $label, string $key) => ['key' => $key, 'label' => $label, 'value' => (int) ($consent[$key] ?? 0)])->values()->all(),

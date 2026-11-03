@@ -40,6 +40,7 @@ use App\Http\Controllers\ProfessionalController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicBookingController;
 use App\Http\Controllers\ReminderController;
+use App\Http\Controllers\ReminderRuleController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SavedFilterController;
@@ -371,6 +372,15 @@ Route::middleware(['auth', 'workspace', 'throttle:authenticated'])->group(functi
         Route::post('/', [ReminderController::class, 'store'])->middleware(['workspace.permission:create-reminders', 'throttle:reminders-write'])->name('store');
         Route::put('/{reminder}', [ReminderController::class, 'update'])->whereNumber('reminder')->middleware('workspace.permission:edit-reminders')->name('update');
         Route::post('/{reminder}/cancel', [ReminderController::class, 'cancel'])->whereNumber('reminder')->middleware('workspace.permission:cancel-reminders')->name('cancel');
+
+        // Automatic rules by service: they need Agenda too (a service done is an appointment marked as completed).
+        Route::prefix('rules')->name('rules.')->middleware('workspace.module:bookings')->group(function () {
+            Route::post('/', [ReminderRuleController::class, 'store'])->middleware(['workspace.permission:create-reminder-rules', 'throttle:reminders-write'])->name('store');
+            Route::get('/{rule}/events', [ReminderRuleController::class, 'events'])->whereNumber('rule')->middleware('throttle:reminders-read')->name('events');
+            Route::put('/{rule}', [ReminderRuleController::class, 'update'])->whereNumber('rule')->middleware(['workspace.permission:edit-reminder-rules', 'throttle:reminders-write'])->name('update');
+            Route::post('/{rule}/activate', [ReminderRuleController::class, 'activate'])->whereNumber('rule')->middleware(['workspace.permission:activate-reminder-rules', 'throttle:reminders-write'])->name('activate');
+            Route::post('/{rule}/deactivate', [ReminderRuleController::class, 'deactivate'])->whereNumber('rule')->middleware(['workspace.permission:activate-reminder-rules', 'throttle:reminders-write'])->name('deactivate');
+        });
     });
 
     // Campañas: templates and campaigns. The list is `view-campaigns`, a campaign's detail `view-campaign-details`; every change has its own permission. Nothing here sends a message.

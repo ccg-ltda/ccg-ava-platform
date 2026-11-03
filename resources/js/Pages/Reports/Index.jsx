@@ -20,6 +20,7 @@ import { stateTones } from '@/config/dashboard';
 import { metricStyles, reportSections, seriesLabels } from '@/config/reports';
 import useUrlTab from '@/Hooks/useUrlTab';
 import AppLayout from '@/Layouts/AppLayout';
+import EconomicsPanel from './Partials/EconomicsPanel';
 import OperationsPanel from './Partials/OperationsPanel';
 import SectionPreview from './Partials/SectionPreview';
 import TeamPanel from './Partials/TeamPanel';
@@ -50,7 +51,7 @@ function Variation({ change, previous }) {
  * server data. Every section arrives on its own: one that could not be read shows an error and never a zero, and a real
  * zero shows an explicit empty state. Questions and surveys have no data source and say so.
  */
-export default function Index({ stats, roleBreakdown, recentUsers, sources, filters, range, options, metrics, teamGrowth, figures, activity, channels, states, chatHours, messageHours, scope, operations, locations }) {
+export default function Index({ stats, roleBreakdown, recentUsers, sources, filters, range, options, metrics, teamGrowth, figures, activity, channels, states, chatHours, messageHours, scope, operations, economics, locations }) {
     const { workspace, errors } = usePage().props;
     // Only the sections whose data the plan of the Workspace includes; the server sends nothing for the rest.
     const sections = reportSections.filter((section) => section.needs.some((source) => sources[source]));
@@ -240,6 +241,8 @@ export default function Index({ stats, roleBreakdown, recentUsers, sources, filt
                         </div>
                     </div>
                 );
+            case 'economics':
+                return <EconomicsPanel economics={economics} range={range} granularity={granularity} loading={loading} onRetry={retry} />;
             case 'bookings':
             case 'orders':
             case 'customers':

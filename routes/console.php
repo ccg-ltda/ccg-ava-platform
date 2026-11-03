@@ -36,6 +36,9 @@ ScheduledCommandMonitor::watch(Schedule::command('agent:tokens:notify')->hourly(
 // Recordatorios (module): queues the commercial reminders whose time came and closes the ones a dead worker left half sent. Independent of the Agenda notifications.
 ScheduledCommandMonitor::watch(Schedule::command('reminders:dispatch')->everyMinute()->withoutOverlapping()->onOneServer(), 'reminders-dispatch');
 
+// Recordatorios by service: schedules one reminder per customer for every service that Agenda marked as done and an active rule covers (idempotent; Agenda is only read).
+ScheduledCommandMonitor::watch(Schedule::command('reminders:schedule-rules')->everyFiveMinutes()->withoutOverlapping()->onOneServer(), 'reminder-rules');
+
 // Technical trace of the assistant's tools: keeps it to the retention window (finished calls only; never business data).
 ScheduledCommandMonitor::watch(Schedule::command('agent:tools:prune')->dailyAt('03:40')->withoutOverlapping()->onOneServer(), 'agent-tools-prune');
 

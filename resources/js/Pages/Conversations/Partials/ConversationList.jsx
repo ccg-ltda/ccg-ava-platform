@@ -59,8 +59,11 @@ export default function ConversationList({ conversations, selectedId, search, hr
                                     aria-current={active ? 'true' : undefined}
                                     className={`flex items-start gap-3 px-4 py-3 outline-none transition-colors focus-visible:bg-primary/15 ${active ? 'bg-primary/15' : 'hover:bg-canvas'}`}
                                 >
-                                    <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary/15 text-sm font-bold text-accent-blue" aria-hidden="true">
-                                        {initial(conversation)}
+                                    <span className="relative shrink-0" aria-hidden="true">
+                                        <span className="grid size-10 place-items-center rounded-full bg-primary/15 text-sm font-bold text-accent-blue">{initial(conversation)}</span>
+                                        <span className="absolute -right-1 -bottom-1 grid size-[18px] place-items-center rounded-full bg-card text-ink-muted ring-1 ring-line" title={conversation.channel.label}>
+                                            <ChannelIcon className="size-3" />
+                                        </span>
                                     </span>
                                     <span className="min-w-0 flex-1">
                                         <span className="flex items-baseline justify-between gap-2">
@@ -68,20 +71,16 @@ export default function ConversationList({ conversations, selectedId, search, hr
                                             <span className="shrink-0 text-[11px] text-ink-muted">{conversation.lastAt}</span>
                                         </span>
                                         <span className="mt-0.5 block truncate text-sm text-ink-muted">{conversation.preview ?? 'Sin mensajes'}</span>
-                                        <span className="mt-1.5 flex items-center gap-1.5 overflow-hidden">
+                                        <span className="mt-1.5 flex items-center gap-x-2 overflow-hidden text-[11px] text-ink-muted">
                                             <Badge tone={state.tone} className="shrink-0 px-2! py-0.5 text-[10px]! tracking-wide! whitespace-nowrap">
                                                 {state.label}
                                             </Badge>
                                             {(showChannel || conversation.channel.key === 'support') && (
-                                                <span
-                                                    className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap ring-1 ${conversation.channel.key === 'support' ? 'bg-primary/15 text-accent-blue ring-primary/40' : 'bg-canvas text-ink-muted ring-line'}`}
-                                                    title={conversation.support ? `Solicitud de soporte de ${conversation.support.workspaceName ?? 'un cliente'}` : undefined}
-                                                >
-                                                    <ChannelIcon className="size-3" aria-hidden="true" />
+                                                <span className="min-w-0 truncate font-medium" title={conversation.support ? `Solicitud de soporte de ${conversation.support.workspaceName ?? 'un cliente'}` : undefined}>
                                                     {conversation.channel.label}
                                                 </span>
                                             )}
-                                            {conversation.handling === 'human' && conversation.assignedName && <span className="min-w-0 truncate text-[11px] text-ink-muted">{conversation.assignedName}</span>}
+                                            {conversation.handling === 'human' && conversation.assignedName && <span className="min-w-0 truncate">· {conversation.assignedName}</span>}
                                             {conversation.demo && (
                                                 <span className="ml-auto shrink-0 rounded px-1 text-[9px] font-bold tracking-wider text-accent-violet uppercase ring-1 ring-accent-violet/40" title="Conversación simulada de la demo">
                                                     Demo

@@ -27,6 +27,21 @@ final class ReportPeriod
         return new self($key, $granularity, $to->subDays($definition['days'] - 1)->startOfDay(), $to, $timezone);
     }
 
+    /**
+     * The first instant of the period as it is STORED: timestamps live in UTC, while the period is whole days of the Workspace's time zone. Use with `endExclusiveUtc()`
+     * as a half-open interval (`>= start`, `< end`) so a record exactly on a boundary belongs to one period only.
+     */
+    public function startUtc(): CarbonImmutable
+    {
+        return $this->from->utc();
+    }
+
+    /** The first instant AFTER the period (the start of the next local day), in UTC. */
+    public function endExclusiveUtc(): CarbonImmutable
+    {
+        return $this->to->addSecond()->startOfSecond()->utc();
+    }
+
     /** @return list<string> */
     public function granularities(): array
     {

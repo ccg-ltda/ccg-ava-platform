@@ -27,15 +27,14 @@ export default function ChatActions({ selected, agents }) {
     const confirm = useConfirm();
     const [busy, setBusy] = useState(false);
     const [agent, setAgent] = useState(null);
-    const [continueNow, setContinueNow] = useState(false);
     const { can } = selected;
     const banner = describe(selected);
 
     const post = (name, data = {}) => router.post(route(name, { conversation: selected.id }), data, { preserveScroll: true, onStart: () => setBusy(true), onFinish: () => setBusy(false) });
 
     const release = async () => {
-        if (await confirm({ title: 'Devolver a la IA', description: continueNow ? 'La IA retomará la conversación ahora, con los datos recogidos y el historial completo.' : 'La IA volverá a responder a este contacto cuando escriba (o ahora mismo si dejó un mensaje sin responder).', confirmLabel: 'Devolver a la IA' })) {
-            post('conversations.release', { continue: continueNow });
+        if (await confirm({ title: 'Devolver a la IA', description: 'La IA retoma esta misma conversación con su historial y los datos ya recogidos. Responde ahora si el contacto dejó un mensaje sin contestar; si no, en cuanto escriba.', confirmLabel: 'Devolver a la IA' })) {
+            post('conversations.release');
         }
     };
 
@@ -58,12 +57,6 @@ export default function ChatActions({ selected, agents }) {
                             <UserRoundCheck className="size-4" aria-hidden="true" />
                             Tomar conversación
                         </PrimaryButton>
-                    )}
-                    {can.release && (
-                        <label className="flex items-center gap-1.5 text-xs text-ink-muted">
-                            <input type="checkbox" checked={continueNow} onChange={(e) => setContinueNow(e.target.checked)} className="size-4 rounded border-field text-primary focus-visible:outline-2" />
-                            Que la IA continúe ahora
-                        </label>
                     )}
                     {can.release && (
                         <SecondaryButton disabled={busy} onClick={release} className="gap-1.5 py-1.5!">

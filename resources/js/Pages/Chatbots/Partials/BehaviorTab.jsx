@@ -1,4 +1,4 @@
-import { router } from '@inertiajs/react';
+import { Link, router } from '@inertiajs/react';
 import { KeyRound, Pencil } from 'lucide-react';
 import Alert from '@/Components/Alert';
 import Card from '@/Components/Card';
@@ -27,30 +27,9 @@ function SectionTitle({ icon: Icon, title, children }) {
     );
 }
 
-/** How an n8n workflow uses Ava as the single source of the chatbot's behavior. */
-function Guide() {
-    return (
-        <ol className="list-decimal space-y-1.5 pl-5 text-sm text-ink-muted">
-            <li>
-                En n8n crea una credencial <strong className="text-ink">Header Auth</strong> con nombre <code className="font-mono text-ink">Authorization</code> y valor <code className="font-mono text-ink">Bearer &lt;token&gt;</code>.
-            </li>
-            <li>Al inicio del workflow, un nodo HTTP Request (GET) a la dirección de arriba con esa credencial.</li>
-            <li>
-                Usa <code className="font-mono text-ink">chatbot.instructions</code> como mensaje del sistema del agente de IA. No escribas otro prompt en n8n.
-            </li>
-            <li>
-                WhatsApp: el WhatsApp Trigger y el envío usan las credenciales de WhatsApp de n8n. Compara el número que recibe el mensaje con <code className="font-mono text-ink">channels.whatsapp.phone_number_id</code>. Para ver la conversación en Ava, reporta cada mensaje con <code className="font-mono text-ink">POST /api/agent/messages</code> (ver la pestaña Conexión del canal).
-            </li>
-            <li>
-                Web: un nodo Webhook (POST) que recibe <code className="font-mono text-ink">message</code> y <code className="font-mono text-ink">session_id</code> y responde con <code className="font-mono text-ink">{'{"reply": "..."}'}</code>.
-            </li>
-        </ol>
-    );
-}
-
 /**
  * IA y comportamiento: where the chatbot is maintained. One form edits its identity and its instructions (Ava is the
- * only place the instructions live; n8n reads them from here), and below it the access token the automation uses.
+ * only place the instructions live; n8n reads them from here), and below it the token that identifies this chatbot to n8n (the n8n connection itself lives in Integraciones).
  * The form belongs to the page; the server validates and stores it for the active Workspace.
  */
 export default function BehaviorTab({ form, chatbot, feedback = [], knowledge = null, canManage, canTokens, instructionsMax, avatarMaxKb, onSubmit, agentToken }) {
@@ -143,13 +122,8 @@ export default function BehaviorTab({ form, chatbot, feedback = [], knowledge = 
 
             <Card className="space-y-5 p-5 sm:p-6">
                 <SectionTitle icon={KeyRound} title="Acceso para n8n">
-                    Ava no ejecuta ningún modelo: n8n lee de aquí las instrucciones y responde por los canales activos.
+                    Este token identifica a este chatbot cuando n8n lee su configuración o reporta mensajes. No es la API Key de tu instancia de n8n.
                 </SectionTitle>
-
-                <div className="space-y-2">
-                    <p className="text-sm font-semibold text-ink">Dirección de la configuración (GET)</p>
-                    <CopyBlock value={agentToken.endpoint} label="Dirección de la configuración del chatbot" />
-                </div>
 
                 <div className="space-y-3">
                     <p className="text-sm font-semibold text-ink">Token de acceso</p>
@@ -234,10 +208,13 @@ export default function BehaviorTab({ form, chatbot, feedback = [], knowledge = 
                     )}
                 </div>
 
-                <div className="space-y-2 border-t border-line pt-4">
-                    <p className="text-sm font-semibold text-ink">Cómo conectarlo en n8n</p>
-                    <Guide />
-                </div>
+                <p className="border-t border-line pt-4 text-sm text-ink-muted">
+                    Las direcciones de Ava, los ejemplos y cómo usar este token en n8n están en{' '}
+                    <Link href={route('integrations.index')} className="font-semibold text-primary underline-offset-2 hover:underline">
+                        Integraciones &gt; n8n
+                    </Link>
+                    , junto con la conexión general de tu instancia.
+                </p>
             </Card>
         </>
     );

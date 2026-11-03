@@ -1,4 +1,4 @@
-import { Link, router, usePage } from '@inertiajs/react';
+import { Link, router } from '@inertiajs/react';
 import { PlugZap, Settings2, Unplug, Workflow, X } from 'lucide-react';
 import { useState } from 'react';
 import Alert from '@/Components/Alert';
@@ -122,21 +122,8 @@ function Connection({ connection, readOnly, onConfigure }) {
 }
 
 /** n8n -> Ava: where the workflow sends things and the token of each chatbot (shown once, when generated). */
-function Workflow_({ automation, newToken, readOnly, workspaceId }) {
-    const confirm = useConfirm();
-    const { auth } = usePage().props;
-    const canGenerate = !readOnly && auth.user.permissions.includes('manage-agent-tokens');
+function Workflow_({ automation, workspaceId }) {
     const state = WORKFLOW[automation.state];
-
-    const generate = async (chatbot) => {
-        const replacing = chatbot.hasToken;
-        const confirmed = await confirm({
-            description: replacing ? `El token actual de ${chatbot.name} dejará de funcionar: tendrás que actualizarlo en n8n.` : `Se generará el token de ${chatbot.name}. Solo se mostrará una vez, en cuanto lo generes.`,
-            confirmLabel: replacing ? 'Generar nuevo token' : 'Generar token',
-        });
-
-        if (confirmed) router.post(route('chatbots.agent-token.generate', chatbot.id), {}, { preserveScroll: true });
-    };
 
     return (
         <div className="space-y-4">
@@ -177,7 +164,7 @@ function Workflow_({ automation, newToken, readOnly, workspaceId }) {
                 <Badge tone={state.tone}>{state.label}</Badge>
                 {automation.lastSeen && <span className="text-xs text-ink-muted">Última actividad con el token: {automation.lastSeen}</span>}
             </div>
-            <Alert tone="info">Este token identifica a cada chatbot cuando n8n envía información a Ava. No es la API Key de n8n. Por seguridad, Ava solo lo muestra en el momento de generarlo.</Alert>
+            <Alert tone="info">Este token identifica a cada chatbot cuando n8n envía información a Ava. No es la API Key de n8n. Se genera, rota y revoca en «IA y comportamiento» de cada chatbot; Ava solo lo muestra en el momento de generarlo.</Alert>
 
             {automation.chatbots.length === 0 ? (
                 <p className="text-sm text-ink-muted">Este Workspace no tiene chatbots todavía.</p>
@@ -194,23 +181,11 @@ function Workflow_({ automation, newToken, readOnly, workspaceId }) {
                                     {chatbot.hasToken ? <>Token ••••{chatbot.hint}</> : 'Sin token'} · {chatbot.lastSeen ? `usado ${chatbot.lastSeen}` : 'sin uso'}
                                 </span>
                                 <span className="flex flex-wrap gap-2">
-                                    {canGenerate && (
-                                        <SecondaryButton type="button" onClick={() => generate(chatbot)}>
-                                            {chatbot.hasToken ? 'Generar nuevo token' : 'Generar token'}
-                                        </SecondaryButton>
-                                    )}
                                     <Link href={route('chatbots.show', { chatbot: chatbot.id, tab: 'ia', ...(workspaceId ? { workspace: workspaceId } : {}) })} className="inline-flex items-center px-2 font-semibold text-primary underline-offset-2 hover:underline">
-                                        Gestionar
+                                        Administrar token
                                     </Link>
                                 </span>
                             </div>
-
-                            {newToken?.chatbotId === chatbot.id && (
-                                <div className="space-y-2">
-                                    <Alert tone="warning">Copia el token ahora: por seguridad no se volverá a mostrar.</Alert>
-                                    <CopyBlock value={newToken.token} label={`Token del chatbot ${chatbot.name}`} />
-                                </div>
-                            )}
                         </li>
                     ))}
                 </ul>
@@ -223,6 +198,9 @@ function Workflow_({ automation, newToken, readOnly, workspaceId }) {
                         En n8n crea una credencial <strong className="text-ink">Header Auth</strong> con nombre <code className="font-mono text-ink">Authorization</code> y valor <code className="font-mono text-ink">Bearer &lt;token del chatbot&gt;</code>.
                     </li>
                     <li>Úsala en un nodo HTTP Request que lea la dirección de configuración y en los que envíen mensajes a Ava.</li>
+                    <li>
+                        Usa <code className="font-mono text-ink">chatbot.instructions</code> como mensaje del sistema del agente de IA. No escribas otro prompt en n8n.
+                    </li>
                 </ol>
             </div>
         </div>
@@ -230,7 +208,7 @@ function Workflow_({ automation, newToken, readOnly, workspaceId }) {
 }
 
 /** The detail of n8n: the three steps (connect, configure the workflow, where the conversations appear), in a wide dialog with its own scroll. */
-function N8nPanel({ automation, newToken, readOnly, workspaceId, onClose, onConfigure }) {
+function N8nPanel({ automation, readOnly, workspaceId, onClose, onConfigure }) {
     const { connection } = automation;
     const state = CONNECTION[connection.state];
 
@@ -270,7 +248,7 @@ function N8nPanel({ automation, newToken, readOnly, workspaceId, onClose, onConf
                         </div>
 
                         <Step number="2" title="Configura tu workflow de n8n">
-                            <Workflow_ automation={automation} newToken={newToken} readOnly={readOnly} workspaceId={workspaceId} />
+                            <Workflow_ automation={automation} workspaceId={workspaceId} />
                         </Step>
                     </div>
                 </div>
@@ -291,10 +269,9 @@ function N8nPanel({ automation, newToken, readOnly, workspaceId, onClose, onConf
  * workflow uses. The badge says what Ava can really show: nothing saved, saved but untested, tested, or the last test failed. Neither says anything
  * about WhatsApp, which is configured on its own.
  */
-export default function AutomationCard({ automation, newToken, readOnly, workspaceId }) {
+export default function AutomationCard({ automation, readOnly, workspaceId }) {
     const [configuring, setConfiguring] = useState(false);
-    // A token just generated is shown once: the panel opens on its own so it is not lost behind the card.
-    const [open, setOpen] = useState(Boolean(newToken));
+    const [open, setOpen] = useState(false);
     const { connection } = automation;
     const state = CONNECTION[connection.state];
     const configured = connection.state !== 'not_configured';
@@ -323,7 +300,7 @@ export default function AutomationCard({ automation, newToken, readOnly, workspa
                 </SecondaryButton>
             </div>
 
-            {open && <N8nPanel automation={automation} newToken={newToken} readOnly={readOnly} workspaceId={workspaceId} onClose={() => setOpen(false)} onConfigure={() => setConfiguring(true)} />}
+            {open && <N8nPanel automation={automation} readOnly={readOnly} workspaceId={workspaceId} onClose={() => setOpen(false)} onConfigure={() => setConfiguring(true)} />}
             {configuring && <N8nConfigModal connection={connection} onClose={() => setConfiguring(false)} />}
         </Card>
     );

@@ -1,4 +1,4 @@
-import { CalendarDays, ClipboardList, Contact, HelpCircle, LayoutDashboard, LineChart, MessageSquare, MessagesSquare, MousePointerClick, ShoppingCart } from 'lucide-react';
+import { CalendarDays, ClipboardList, Coins, Contact, HelpCircle, LayoutDashboard, LineChart, MessageSquare, MessagesSquare, MousePointerClick, ShoppingCart } from 'lucide-react';
 
 /** Look of each metric the server defines in config/reports.php (the server owns the data, this owns the icon and tone). */
 export const metricStyles = {
@@ -21,7 +21,7 @@ export const seriesLabels = {
  * survey answers): they say so (`reason`) and draw nothing.
  *
  * `needs` lists the sources a section is built from (any one is enough): `conversations` (conversations and messages, module
- * Conversaciones), `team` (the people of the Workspace, module Usuarios y roles) and `bookings`, `orders` and `customers` (the figures of Agenda,
+ * Conversaciones), `team` (the people of the Workspace, module Usuarios y roles) and `bookings`, `orders`, `economics` (the money of Agenda and Pedidos) and `customers` (the figures of Agenda,
  * Pedidos and Clientes, only when the plan includes the module and the role may read it). The server sends `sources` with the ones
  * the plan includes, and a section none of whose sources exists is not offered.
  */
@@ -58,5 +58,6 @@ export const reportSections = [
     { id: 'trends', label: 'Tendencias', icon: LineChart, needs: ['conversations'] },
     { id: 'bookings', label: 'Reservas', icon: CalendarDays, needs: ['bookings'] },
     { id: 'orders', label: 'Pedidos', icon: ShoppingCart, needs: ['orders'] },
+    { id: 'economics', label: 'Economía', icon: Coins, needs: ['economics'] },
     { id: 'customers', label: 'Clientes', icon: Contact, needs: ['customers'] },
 ];

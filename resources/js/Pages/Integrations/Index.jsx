@@ -32,7 +32,7 @@ const initialTab = () => {
     return Math.max(0, TABS.indexOf(requested));
 };
 
-export default function Index({ channels, providers = [], integrations, catalog, automation, newToken, webhooks = null, newWebhookSecret = null, inboundWebhooks = null, newInboundSecret = null, scope }) {
+export default function Index({ channels, providers = [], integrations, catalog, automation, webhooks = null, newWebhookSecret = null, inboundWebhooks = null, newInboundSecret = null, scope }) {
     const confirm = useConfirm();
     const readOnly = scope.readOnly;
     // Each change has its own permission; the server enforces them, this only offers what the role can do.
@@ -169,7 +169,7 @@ export default function Index({ channels, providers = [], integrations, catalog,
                     <p className="text-sm text-ink-muted">Quién ejecuta el flujo de cada chatbot.</p>
                 </div>
                 <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-                    <AutomationCard automation={automation} newToken={newToken} readOnly={readOnly} workspaceId={readOnly ? scope.workspace.id : undefined} />
+                    <AutomationCard automation={automation} readOnly={readOnly} workspaceId={readOnly ? scope.workspace.id : undefined} />
                 </div>
             </section>
 

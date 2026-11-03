@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import useElementWidth from '@/Hooks/useElementWidth';
 import ChartTooltip from './ChartTooltip';
-import { MARGIN, niceScale, spreadIndexes } from './chartUtils';
+import { axisMargin, labelIndexes, niceScale } from './chartUtils';
 
 /**
  * Time series drawn as an area line (`variant="line"`) or as bars (`variant="bars"`), in plain SVG: no chart library.
@@ -13,8 +13,9 @@ export default function TimeChart({ points, variant = 'line', height = 240, form
     const [ref, width] = useElementWidth();
     const [active, setActive] = useState(null);
 
-    const inner = { w: width - MARGIN.left - MARGIN.right, h: height - MARGIN.top - MARGIN.bottom };
     const { top, ticks } = niceScale(Math.max(...points.map((point) => point.value)));
+    const MARGIN = axisMargin(ticks.map(formatValue));
+    const inner = { w: width - MARGIN.left - MARGIN.right, h: height - MARGIN.top - MARGIN.bottom };
     const slot = inner.w / points.length;
     const x = (index) => MARGIN.left + (variant === 'bars' ? slot * index + slot / 2 : points.length === 1 ? inner.w / 2 : (inner.w * index) / (points.length - 1));
     const y = (value) => MARGIN.top + inner.h - (value / top) * inner.h;
@@ -44,7 +45,7 @@ export default function TimeChart({ points, variant = 'line', height = 240, form
     const line = points.map((point, index) => `${index === 0 ? 'M' : 'L'}${x(index).toFixed(1)},${y(point.value).toFixed(1)}`).join(' ');
     const area = `${line} L${x(points.length - 1).toFixed(1)},${y(0)} L${x(0).toFixed(1)},${y(0)} Z`;
     const barWidth = Math.min(Math.max(slot * 0.6, 3), 36);
-    const labels = spreadIndexes(points.length, Math.max(Math.floor(inner.w / 64), 2));
+    const { indexes: labels } = labelIndexes(points.length, Math.max(Math.floor(inner.w / 56), 2));
     const current = active === null ? null : points[active];
 
     return (

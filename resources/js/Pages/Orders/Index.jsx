@@ -23,6 +23,19 @@ import AppLayout from '@/Layouts/AppLayout';
 import { shouldOpenRow } from '@/lib/rowLink';
 import OrderStatusBadge from './Partials/OrderStatusBadge';
 
+/** One block of the new-order form: every block shares the same frame, heading and spacing so the form reads as one balanced layout. */
+function Section({ title, description, children }) {
+    return (
+        <section className="min-w-0 space-y-3 rounded-xl border border-line p-4 sm:p-5">
+            <div>
+                <h3 className="text-sm font-bold text-ink">{title}</h3>
+                {description && <p className="mt-0.5 text-xs text-ink-muted">{description}</p>}
+            </div>
+            {children}
+        </section>
+    );
+}
+
 function NewOrderModal({ form: options, methods, currency, onClose }) {
     const form = useForm({
         customer_id: '',
@@ -78,37 +91,35 @@ function NewOrderModal({ form: options, methods, currency, onClose }) {
                     <h2 className="text-lg font-bold text-ink">Nuevo pedido</h2>
                     <p className="mt-1 text-sm text-ink-muted">Los precios y el total los calcula Ava con el catálogo de este momento. El pedido queda registrado; Ava no gestiona el pago.</p>
                 </header>
-                <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5 sm:px-8">
-                    <fieldset className="min-w-0 space-y-3 rounded-xl border border-line p-4">
-                        <legend className="px-1 text-sm font-medium text-ink">Quién hace el pedido</legend>
-                        {options.customers.length > 0 && (
-                            <div>
-                                <InputLabel htmlFor="order_customer" value="Cliente registrado (opcional)" />
-                                <Select id="order_customer" className="mt-1" value={data.customer_id} onChange={pickCustomer} placeholder="Sin vincular a un cliente" options={[{ value: '', label: 'Sin vincular a un cliente' }, ...options.customers.map((customer) => ({ value: customer.id, label: customer.name }))]} />
-                                <InputError message={errors.customer_id} className="mt-1" />
-                            </div>
-                        )}
-                        <div className="grid gap-3 sm:grid-cols-2">
-                            <div className="sm:col-span-2">
+                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5 sm:px-8">
+                    <Section title="Quién hace el pedido" description="Vincúlalo a un cliente registrado o escribe sus datos.">
+                        <div className="grid gap-x-4 gap-y-3 md:grid-cols-2">
+                            {options.customers.length > 0 && (
+                                <div className="min-w-0">
+                                    <InputLabel htmlFor="order_customer" value="Cliente registrado (opcional)" />
+                                    <Select id="order_customer" className="mt-1" value={data.customer_id} onChange={pickCustomer} placeholder="Sin vincular a un cliente" options={[{ value: '', label: 'Sin vincular a un cliente' }, ...options.customers.map((customer) => ({ value: customer.id, label: customer.name }))]} />
+                                    <InputError message={errors.customer_id} className="mt-1" />
+                                </div>
+                            )}
+                            <div className="min-w-0">
                                 <InputLabel htmlFor="order_name" value="Nombre" />
                                 <TextInput id="order_name" className="mt-1" value={data.customer_name} maxLength={120} onChange={(e) => setData('customer_name', e.target.value)} invalid={Boolean(errors.customer_name)} />
                                 <InputError message={errors.customer_name} className="mt-1" />
                             </div>
-                            <div>
+                            <div className="min-w-0">
                                 <InputLabel htmlFor="order_phone" value="Teléfono (opcional)" />
                                 <TextInput id="order_phone" type="tel" placeholder="+573001112233" className="mt-1" value={data.customer_phone} maxLength={32} onChange={(e) => setData('customer_phone', e.target.value)} invalid={Boolean(errors.customer_phone)} />
                                 <InputError message={errors.customer_phone} className="mt-1" />
                             </div>
-                            <div>
+                            <div className="min-w-0">
                                 <InputLabel htmlFor="order_email" value="Correo (opcional)" />
                                 <TextInput id="order_email" type="email" className="mt-1" value={data.customer_email} maxLength={160} onChange={(e) => setData('customer_email', e.target.value)} invalid={Boolean(errors.customer_email)} />
                                 <InputError message={errors.customer_email} className="mt-1" />
                             </div>
                         </div>
-                    </fieldset>
+                    </Section>
 
-                    <fieldset className="min-w-0 space-y-3">
-                        <legend className="text-sm font-medium text-ink">Productos</legend>
+                    <Section title="Productos" description="Elige qué se pide y cuántas unidades. Ava calcula el total con los precios del catálogo.">
                         {options.locations.length > 0 && (
                             <div className="max-w-sm">
                                 <InputLabel htmlFor="order_location" value="Sede (opcional)" />
@@ -116,74 +127,76 @@ function NewOrderModal({ form: options, methods, currency, onClose }) {
                                 <InputError message={errors.location_id} className="mt-1" />
                             </div>
                         )}
-                        {data.lines.map((line, index) => (
-                            <div key={index} className="grid grid-cols-[minmax(0,1fr)_5rem_auto] items-start gap-2">
-                                <div>
-                                    <Select aria-label={`Producto ${index + 1}`} value={line.product_id} onChange={(value) => setLine(index, { product_id: value })} placeholder="Elige un producto" options={products.map((product) => ({ value: product.id, label: `${product.name} · ${money(product.price, currency)}${availability(product)}` }))} invalid={Boolean(lineError(index, 'product_id'))} />
-                                    <InputError message={lineError(index, 'product_id')} className="mt-1" />
-                                </div>
-                                <div>
-                                    <TextInput type="number" min={1} max={9999} aria-label={`Cantidad ${index + 1}`} value={line.quantity} onChange={(e) => setLine(index, { quantity: e.target.value })} invalid={Boolean(lineError(index, 'quantity'))} />
-                                    <InputError message={lineError(index, 'quantity')} className="mt-1" />
-                                </div>
-                                {data.lines.length > 1 ? <IconButton icon={Trash2} label="Quitar producto" context={`${index + 1}`} tone="danger" onClick={() => setData('lines', data.lines.filter((_, i) => i !== index))} /> : <span className="size-9" />}
+                        <div className="space-y-2">
+                            <div className="hidden grid-cols-[minmax(0,1fr)_6rem_2.25rem] gap-2 text-xs font-semibold tracking-wide text-ink-muted uppercase sm:grid" aria-hidden="true">
+                                <span>Producto</span>
+                                <span>Cantidad</span>
+                                <span />
                             </div>
-                        ))}
+                            {data.lines.map((line, index) => (
+                                <div key={index} className="grid grid-cols-[minmax(0,1fr)_5rem_2.25rem] items-start gap-2 sm:grid-cols-[minmax(0,1fr)_6rem_2.25rem]">
+                                    <div className="min-w-0">
+                                        <Select aria-label={`Producto ${index + 1}`} value={line.product_id} onChange={(value) => setLine(index, { product_id: value })} placeholder="Elige un producto" options={products.map((product) => ({ value: product.id, label: `${product.name} · ${money(product.price, currency)}${availability(product)}` }))} invalid={Boolean(lineError(index, 'product_id'))} />
+                                        <InputError message={lineError(index, 'product_id')} className="mt-1" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <TextInput type="number" min={1} max={9999} aria-label={`Cantidad ${index + 1}`} value={line.quantity} onChange={(e) => setLine(index, { quantity: e.target.value })} invalid={Boolean(lineError(index, 'quantity'))} />
+                                        <InputError message={lineError(index, 'quantity')} className="mt-1" />
+                                    </div>
+                                    {data.lines.length > 1 ? <IconButton icon={Trash2} label="Quitar producto" context={`${index + 1}`} tone="danger" onClick={() => setData('lines', data.lines.filter((_, i) => i !== index))} /> : <span className="size-9" />}
+                                </div>
+                            ))}
+                        </div>
                         <InputError message={errors.lines} />
-                        <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3">
                             <SecondaryButton type="button" className="gap-2" onClick={() => setData('lines', [...data.lines, { product_id: '', quantity: 1 }])}>
                                 <Plus className="size-4" aria-hidden="true" />
                                 Añadir producto
                             </SecondaryButton>
-                            <p className="text-sm text-ink-muted">Total estimado: <span className="font-semibold text-ink">{money(estimate, currency)}</span></p>
+                            <p className="text-sm text-ink-muted">Total estimado: <span className="text-base font-bold text-ink">{money(estimate, currency)}</span></p>
                         </div>
-                    </fieldset>
+                    </Section>
 
-                    <fieldset className="min-w-0 space-y-3 rounded-xl border border-line p-4">
-                        <legend className="px-1 text-sm font-medium text-ink">Entrega</legend>
-                        <div className="max-w-sm">
-                            <InputLabel htmlFor="order_method" value="Forma de entrega" />
-                            <Select id="order_method" className="mt-1" value={data.delivery_method} onChange={(value) => setData('delivery_method', value)} options={Object.entries(methods).map(([value, label]) => ({ value, label }))} />
-                            <InputError message={errors.delivery_method} className="mt-1" />
-                        </div>
-                        {data.delivery_method === 'delivery' && (
-                            <div className="grid gap-3 sm:grid-cols-2">
-                                <div className="sm:col-span-2">
-                                    <InputLabel htmlFor="order_address" value="Dirección de entrega" />
-                                    <TextInput id="order_address" className="mt-1" value={data.delivery_address} maxLength={255} onChange={(e) => setData('delivery_address', e.target.value)} invalid={Boolean(errors.delivery_address)} />
-                                    <InputError message={errors.delivery_address} className="mt-1" />
-                                </div>
-                                <div>
-                                    <InputLabel htmlFor="order_city" value="Ciudad (opcional)" />
-                                    <TextInput id="order_city" className="mt-1" value={data.delivery_city} maxLength={120} onChange={(e) => setData('delivery_city', e.target.value)} />
-                                </div>
-                                <div>
-                                    <InputLabel htmlFor="order_reference" value="Referencias (opcional)" />
-                                    <TextInput id="order_reference" className="mt-1" value={data.delivery_reference} maxLength={255} onChange={(e) => setData('delivery_reference', e.target.value)} />
-                                </div>
-                                <div className="space-y-3 rounded-lg border border-line bg-canvas/40 p-3 sm:col-span-2 sm:p-4">
-                                    <p className="text-xs font-semibold tracking-wide text-ink-muted uppercase">Si recibe otra persona</p>
-                                    <div className="grid gap-3 md:grid-cols-2">
-                                        <div>
-                                            <InputLabel htmlFor="order_recipient" value="Quién recibe, si es otra persona (opcional)" />
-                                            <TextInput id="order_recipient" className="mt-1" value={data.recipient_name} maxLength={120} onChange={(e) => setData('recipient_name', e.target.value)} />
-                                        </div>
-                                        <div>
-                                            <InputLabel htmlFor="order_recipient_phone" value="Teléfono de quien recibe (opcional)" />
-                                            <TextInput id="order_recipient_phone" type="tel" placeholder="+573001112233" className="mt-1" value={data.recipient_phone} maxLength={32} onChange={(e) => setData('recipient_phone', e.target.value)} invalid={Boolean(errors.recipient_phone)} />
-                                            <InputError message={errors.recipient_phone} className="mt-1" />
-                                        </div>
-                                    </div>
-                                </div>
+                    <Section title="Entrega" description={data.delivery_method === 'delivery' ? 'Dónde y a quién se entrega.' : 'El cliente recoge el pedido: no hace falta dirección.'}>
+                        <div className="grid gap-x-4 gap-y-3 md:grid-cols-2">
+                            <div className="min-w-0">
+                                <InputLabel htmlFor="order_method" value="Forma de entrega" />
+                                <Select id="order_method" className="mt-1" value={data.delivery_method} onChange={(value) => setData('delivery_method', value)} options={Object.entries(methods).map(([value, label]) => ({ value, label }))} />
+                                <InputError message={errors.delivery_method} className="mt-1" />
                             </div>
-                        )}
-                    </fieldset>
+                            {data.delivery_method === 'delivery' && (
+                                <>
+                                    <div className="min-w-0 md:col-span-2">
+                                        <InputLabel htmlFor="order_address" value="Dirección de entrega" />
+                                        <TextInput id="order_address" className="mt-1" value={data.delivery_address} maxLength={255} onChange={(e) => setData('delivery_address', e.target.value)} invalid={Boolean(errors.delivery_address)} />
+                                        <InputError message={errors.delivery_address} className="mt-1" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <InputLabel htmlFor="order_city" value="Ciudad (opcional)" />
+                                        <TextInput id="order_city" className="mt-1" value={data.delivery_city} maxLength={120} onChange={(e) => setData('delivery_city', e.target.value)} />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <InputLabel htmlFor="order_reference" value="Referencias (opcional)" />
+                                        <TextInput id="order_reference" className="mt-1" value={data.delivery_reference} maxLength={255} onChange={(e) => setData('delivery_reference', e.target.value)} />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <InputLabel htmlFor="order_recipient" value="Quién recibe (opcional)" />
+                                        <TextInput id="order_recipient" className="mt-1" placeholder="Si es otra persona" value={data.recipient_name} maxLength={120} onChange={(e) => setData('recipient_name', e.target.value)} />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <InputLabel htmlFor="order_recipient_phone" value="Teléfono de quien recibe (opcional)" />
+                                        <TextInput id="order_recipient_phone" type="tel" placeholder="+573001112233" className="mt-1" value={data.recipient_phone} maxLength={32} onChange={(e) => setData('recipient_phone', e.target.value)} invalid={Boolean(errors.recipient_phone)} />
+                                        <InputError message={errors.recipient_phone} className="mt-1" />
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </Section>
 
-                    <div>
-                        <InputLabel htmlFor="order_notes" value="Notas operativas (opcional)" />
-                        <Textarea id="order_notes" rows={2} className="mt-1" value={data.notes} maxLength={500} onChange={(e) => setData('notes', e.target.value)} />
-                        <InputError message={errors.notes} className="mt-1" />
-                    </div>
+                    <Section title="Notas operativas" description="Indicaciones internas para quien prepara o entrega el pedido (opcional).">
+                        <Textarea id="order_notes" aria-label="Notas operativas" rows={2} value={data.notes} maxLength={500} onChange={(e) => setData('notes', e.target.value)} />
+                        <InputError message={errors.notes} />
+                    </Section>
                 </div>
                 <div className="flex justify-end gap-3 border-t border-line bg-card px-5 py-4 sm:px-8">
                     <SecondaryButton type="button" onClick={onClose}>

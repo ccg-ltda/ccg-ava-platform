@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { Activity, AudioLines, ArrowLeft, File, Image, MapPin, MessageSquareText, Sticker, ThumbsDown, Video } from 'lucide-react';
+import { Activity, AlertCircle, ArrowLeft, AudioLines, Check, CheckCheck, Clock, File, Image, MapPin, MessageSquareText, Sticker, ThumbsDown, Video } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import ActivityPanel from './ActivityPanel';
 import Badge from '@/Components/Badge';
@@ -23,11 +23,37 @@ const TYPES = {
     other: { label: 'Mensaje', icon: MessageSquareText },
 };
 
+/** Delivery ticks of an outgoing message: one tick sent, two delivered, two highlighted read. Each state has its own icon, never only a colour. */
+const TICKS = { pending: Clock, sent: Check, delivered: CheckCheck, read: CheckCheck, failed: AlertCircle, unconfirmed: AlertCircle };
+
+/** The time of a message and, for an outgoing one, its delivery state, on one line at the end of the bubble (floats right, or drops under a long text). */
+function Meta({ message, mine, failed }) {
+    const Tick = mine ? TICKS[message.status] : null;
+    const detail = [messageStatuses[message.status], message.status === 'delivered' && message.deliveredTime, message.status === 'read' && message.readTime, message.simulated && 'simulado'].filter(Boolean).join(' · ');
+
+    return (
+        <span className={`float-right -mb-0.5 ml-3 mt-1.5 inline-flex items-center gap-1 text-[11px] leading-none text-ink-muted`}>
+            {message.simulated && (
+                <span className="rounded bg-primary/10 px-1 py-0.5 text-[10px] font-bold uppercase ring-1 ring-current" title="Mensaje ficticio de la demo: no pasó por ningún proveedor real">
+                    Simulado
+                </span>
+            )}
+            <time>{message.time}</time>
+            {Tick && (
+                <span title={detail} className={`inline-flex items-center gap-1 ${failed ? 'font-semibold' : ''}`}>
+                    <Tick className={`size-3.5 ${message.status === 'read' ? 'text-primary' : ''}`} aria-hidden="true" />
+                    {failed ? <span>{messageStatuses[message.status]}</span> : <span className="sr-only">{detail}</span>}
+                </span>
+            )}
+        </span>
+    );
+}
+
 /** Who wrote an outgoing message: the AI, or the agent by name. */
 const author = (message) => (message.sender === 'agent' ? (message.senderName ?? 'Agente') : 'IA');
 
 /** Files sent with a message (support requests): a thumbnail for an image, a player that loads only when played for a video, a link for a PDF. Each url authorizes every read. */
-function Attachments({ items, mine }) {
+function Attachments({ items }) {
     if (!items?.length) return null;
 
     const size = (bytes) => (bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`);
@@ -42,7 +68,7 @@ function Attachments({ items, mine }) {
                         </a>
                     )}
                     {item.kind === 'video' && <video src={item.url} controls preload="none" className="max-h-60 w-full rounded-lg bg-black" aria-label={item.name} />}
-                    <a href={item.url} target="_blank" rel="noreferrer" className={`mt-1 flex items-center gap-2 rounded-lg px-2 py-1 text-xs font-medium underline-offset-2 hover:underline ${mine ? 'bg-white/15' : 'bg-canvas'}`}>
+                    <a href={item.url} target="_blank" rel="noreferrer" className={`mt-1 flex items-center gap-2 rounded-lg px-2 py-1 text-xs font-medium underline-offset-2 hover:underline bg-canvas/70 ring-1 ring-line`}>
                         <File className="size-4 shrink-0" aria-hidden="true" />
                         <span className="min-w-0 truncate">{item.name}</span>
                         <span className="shrink-0 opacity-75">{size(item.size)}</span>
@@ -71,42 +97,33 @@ function Bubble({ message, simulate, conversationId, onFeedback }) {
     const Icon = type?.icon;
     // A message Meta may or may not have delivered is flagged like a failed one: someone must look before sending it again.
     const failed = message.status === 'failed' || message.status === 'unconfirmed';
+    const hasAttachments = Boolean(message.attachments?.length);
+    // The meta floats after the last word of the text so a short message stays on one line; with files or no text it sits under the content.
+    const meta = <Meta message={message} mine={mine} failed={failed} />;
 
     return (
         <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm shadow-sm sm:max-w-[75%] ${mine ? `rounded-br-md bg-primary text-white ${failed ? 'ring-2 ring-danger' : ''}` : 'rounded-bl-md border border-line bg-card text-ink'}`}>
-                {mine && <p className="mb-0.5 text-[11px] font-bold text-white/85">{author(message)}</p>}
+            <div className={`flow-root w-fit min-w-[5.5rem] max-w-[88%] rounded-2xl px-3 py-1.5 text-sm shadow-sm sm:max-w-[78%] ${mine ? `rounded-br-md bubble-out text-ink ${failed ? 'ring-2 ring-danger' : ''}` : 'rounded-bl-md border border-line bg-card text-ink'}`}>
+                {mine && <p className="mb-0.5 text-[11px] font-bold text-ink-muted">{author(message)}</p>}
                 {type && (
-                    <p className={`mb-1 flex items-center gap-1.5 text-xs font-semibold ${mine ? 'text-white/85' : 'text-accent-blue'}`}>
+                    <p className={`mb-1 flex items-center gap-1.5 text-xs font-semibold text-accent-blue`}>
                         <Icon className="size-3.5" aria-hidden="true" />
                         {type.label}
                         {message.mediaMime && <span className="font-normal opacity-80">· {message.mediaMime}</span>}
                     </p>
                 )}
-                {message.body ? <p className="break-words whitespace-pre-wrap">{message.body}</p> : type && !message.attachments?.length && <p className="italic opacity-80">El contenido multimedia no se guarda en Ava.</p>}
-                <Attachments items={message.attachments} mine={mine} />
-                {failed && message.failureReason && <p className="mt-1 rounded bg-white/15 px-2 py-1 text-xs">{message.failureReason}</p>}
-                <div className={`mt-1 flex flex-col items-end text-[11px] leading-tight ${mine ? 'text-white/80' : 'text-ink-muted'}`}>
-                    <p className="flex items-center gap-2">
-                        {message.simulated && (
-                            <span className="rounded bg-white/20 px-1.5 py-0.5 font-bold uppercase ring-1 ring-current" title="Mensaje ficticio de la demo: no pasó por ningún proveedor real">
-                                Simulado
-                            </span>
-                        )}
-                        <time>{message.time}</time>
+                {message.body ? (
+                    <p className="break-words whitespace-pre-wrap">
+                        {message.body}
+                        {!hasAttachments && meta}
                     </p>
-                    {mine && message.status && (
-                        <p className={failed ? 'font-semibold' : ''}>
-                            {messageStatuses[message.status]}
-                            {message.status === 'delivered' && message.deliveredTime && ` · ${message.deliveredTime}`}
-                            {message.status === 'read' && message.readTime && ` · ${message.readTime}`}
-                            {message.simulated && ' (simulado)'}
-                        </p>
-                    )}
-                </div>
+                ) : type && !message.attachments?.length && <p className="italic opacity-80">El contenido multimedia no se guarda en Ava.</p>}
+                <Attachments items={message.attachments} />
+                {failed && message.failureReason && <p className="mt-1 rounded bg-danger/10 px-2 py-1 text-xs text-danger">{message.failureReason}</p>}
+                {(!message.body || hasAttachments) && <div className="flow-root">{meta}</div>}
                 {simulate && mine && message.simulated && <StatusSimulator conversationId={conversationId} messageId={message.id} />}
                 {onFeedback && mine && message.sender === 'ai' && message.body && (
-                    <button type="button" onClick={onFeedback} className="mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold text-white/85 underline-offset-2 hover:bg-white/15 hover:underline focus-visible:outline-2 focus-visible:outline-white">
+                    <button type="button" onClick={onFeedback} className="mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold text-ink-muted underline-offset-2 hover:bg-primary/10 hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-primary">
                         <ThumbsDown className="size-3" aria-hidden="true" />
                         No me gustó
                     </button>
@@ -163,7 +180,12 @@ export default function ChatPanel({ selected, backHref, agents }) {
                     {selected.support && <Badge tone="blue">Soporte Zonno</Badge>}
                     {selected.demo && <Badge tone="violet">Demo</Badge>}
                     {selected.activity && (
-                        <button type="button" onClick={() => setActivityOpen((open) => !open)} aria-expanded={activityOpen} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-ink-muted hover:bg-canvas hover:text-ink focus-visible:outline-2 focus-visible:outline-primary">
+                        <button
+                            type="button"
+                            onClick={() => setActivityOpen((open) => !open)}
+                            aria-expanded={activityOpen}
+                            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold outline-none transition-colors focus-visible:outline-2 focus-visible:outline-primary ${activityOpen ? 'border-primary bg-primary/15 text-accent-blue' : 'border-line bg-card text-ink hover:border-primary hover:bg-canvas'}`}
+                        >
                             <Activity className="size-3.5" aria-hidden="true" />
                             Actividad técnica
                         </button>

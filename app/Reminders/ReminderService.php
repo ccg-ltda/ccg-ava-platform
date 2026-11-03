@@ -17,6 +17,7 @@ use Illuminate\Validation\ValidationException;
  * Every change a person (or an automation through the agent API) makes to a reminder, validated in the SERVER against the Workspace: the customer, the optional related record
  * and the channel must all belong to / be usable by THIS Workspace, whatever ids the client sends. It is the only writer of the scheduling fields; the lifecycle of sending is
  * ReminderDispatcher's. Every change is audited without the customer's contact data. Creation is idempotent per Workspace: the same key returns the same reminder.
+ * The same writer serves the reminders an automatic rule schedules (`source` = `rule`, see ReminderRuleScheduler): one set of checks for every way a reminder is born.
  */
 class ReminderService
 {
@@ -28,9 +29,10 @@ class ReminderService
 
     /**
      * @param  array<string, mixed>  $data  validated by SaveReminderRequest or by the agent request
+     * @param  array<string, mixed>  $extra  columns only the code that calls sets (the rule that scheduled it), never a request field
      * @return array{reminder: Reminder, replayed: bool}
      */
-    public function create(Workspace $workspace, array $data, ?User $by, string $source = 'user'): array
+    public function create(Workspace $workspace, array $data, ?User $by, string $source = 'user', array $extra = []): array
     {
         $key = (string) ($data['idempotency_key'] ?? Str::uuid());
 
@@ -46,8 +48,8 @@ class ReminderService
 
         $attributes = $this->attributes($workspace, $data);
 
-        $reminder = DB::transaction(function () use ($workspace, $attributes, $key, $by, $source) {
-            $reminder = $workspace->reminders()->make($attributes + ['idempotency_key' => $key, 'source' => $source, 'created_by_user_id' => $by?->id]);
+        $reminder = DB::transaction(function () use ($workspace, $attributes, $key, $by, $source, $extra) {
+            $reminder = $workspace->reminders()->make($attributes + $extra + ['idempotency_key' => $key, 'source' => $source, 'created_by_user_id' => $by?->id]);
             $reminder->forceFill(['status' => Reminder::SCHEDULED, 'next_attempt_at' => $attributes['send_at']])->save();
 
             return $reminder;
@@ -81,12 +83,12 @@ class ReminderService
     }
 
     /** Cancels a reminder that has not been sent. A conditional UPDATE: a reminder that a worker already claimed can not be cancelled behind its back. */
-    public function cancel(Reminder $reminder, string $source = 'user'): Reminder
+    public function cancel(Reminder $reminder, string $source = 'user', string $reason = 'cancelled_by_user'): Reminder
     {
         $workspace = $reminder->workspace;
 
         $cancelled = Reminder::query()->whereKey($reminder->id)->where('workspace_id', $workspace->id)->where('status', Reminder::SCHEDULED)
-            ->update(['status' => Reminder::CANCELLED, 'cancelled_at' => now(), 'next_attempt_at' => null, 'reason' => 'cancelled_by_user', 'updated_at' => now()]);
+            ->update(['status' => Reminder::CANCELLED, 'cancelled_at' => now(), 'next_attempt_at' => null, 'reason' => $reason, 'updated_at' => now()]);
 
         if ($cancelled !== 1) {
             throw ValidationException::withMessages(['reminder' => 'Solo se cancelan los recordatorios programados que todavía no se envían.']);
@@ -110,15 +112,41 @@ class ReminderService
             throw ValidationException::withMessages(['customer_id' => 'Elige un cliente activo de este Workspace.']);
         }
 
+        $message = $this->message($workspace, $data);
+        $channel = $message['channel'];
+
+        $this->assertContact($customer, $channel);
+        $this->assertRelated($workspace, $data['related_type'] ?? null, $data['related_id'] ?? null);
+
+        $zone = $this->zone($workspace, $data['timezone'] ?? null);
+
+        return [
+            'customer_id' => $customer->id,
+            'name' => trim((string) $data['name']),
+            'purpose' => filled($data['purpose'] ?? null) ? trim((string) $data['purpose']) : null,
+            'related_type' => filled($data['related_type'] ?? null) ? $data['related_type'] : null,
+            'related_id' => filled($data['related_type'] ?? null) ? (int) $data['related_id'] : null,
+            ...$message,
+            'send_at' => $this->moment($data['send_at'], $zone),
+            'timezone' => $zone,
+        ];
+    }
+
+    /**
+     * The channel and the message of a reminder (or of a rule), checked in the server: the channel must be REALLY available in this Workspace, the variables must exist and
+     * WhatsApp needs an approved template. Shared by a single reminder and by an automatic rule, so both obey the same rules.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array{channel: string, subject: ?string, body: string, template_name: ?string, template_language: ?string, template_params: ?array<int, string>}
+     */
+    public function message(Workspace $workspace, array $data): array
+    {
         $channel = (string) ($data['channel'] ?? '');
         $availability = $this->channels->check($workspace, $channel);
 
         if (! $availability['ok']) {
             throw ValidationException::withMessages(['channel' => $availability['reason']]);
         }
-
-        $this->assertContact($customer, $channel);
-        $this->assertRelated($workspace, $data['related_type'] ?? null, $data['related_id'] ?? null);
 
         $body = $this->templates->normalize((string) ($data['body'] ?? ''));
 
@@ -146,22 +174,13 @@ class ReminderService
             throw ValidationException::withMessages(['subject' => 'El correo necesita un asunto.']);
         }
 
-        $zone = $this->zone($workspace, $data['timezone'] ?? null);
-
         return [
-            'customer_id' => $customer->id,
-            'name' => trim((string) $data['name']),
-            'purpose' => filled($data['purpose'] ?? null) ? trim((string) $data['purpose']) : null,
-            'related_type' => filled($data['related_type'] ?? null) ? $data['related_type'] : null,
-            'related_id' => filled($data['related_type'] ?? null) ? (int) $data['related_id'] : null,
             'channel' => $channel,
             'subject' => $channel === 'email' ? trim((string) $data['subject']) : null,
             'body' => $body,
             'template_name' => $channel === 'whatsapp' ? trim((string) $data['template_name']) : null,
             'template_language' => $channel === 'whatsapp' ? trim((string) $data['template_language']) : null,
             'template_params' => $channel === 'whatsapp' ? $params : null,
-            'send_at' => $this->moment($data['send_at'], $zone),
-            'timezone' => $zone,
         ];
     }
 
@@ -230,8 +249,10 @@ class ReminderService
     /** @param  list<mixed>  $changes */
     private function record(string $action, Reminder $reminder, Workspace $workspace, array $changes, string $source): void
     {
-        $source === 'api'
-            ? $this->audit->system($action, 'reminder', $reminder->id, $reminder->name, $changes, $workspace, 'Asistente (automático)')
-            : $this->audit->record($action, 'reminder', $reminder->id, $reminder->name, $changes, $workspace);
+        match ($source) {
+            'api' => $this->audit->system($action, 'reminder', $reminder->id, $reminder->name, $changes, $workspace, 'Asistente (automático)'),
+            'rule' => $this->audit->system($action, 'reminder', $reminder->id, $reminder->name, $changes, $workspace, 'Regla de recordatorio (automático)'),
+            default => $this->audit->record($action, 'reminder', $reminder->id, $reminder->name, $changes, $workspace),
+        };
     }
 }

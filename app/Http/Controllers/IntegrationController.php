@@ -53,8 +53,6 @@ class IntegrationController extends Controller
             // External agendas: only for a Workspace whose plan includes them (the routes enforce it too).
             'providers' => $this->modules->allows($viewing, 'calendar_providers') ? $this->integrations->providers($viewing) : [],
             'automation' => $this->chatbots->automation($viewing) + ['connection' => $this->integrations->n8n($viewing)],
-            // The token just generated for a chatbot (shown once, only to the Workspace that owns it).
-            'newToken' => $viewing->is($active) && $request->session()->has('agent_token') ? ['chatbotId' => $request->session()->get('agent_token_chatbot'), 'token' => $request->session()->get('agent_token')] : null,
             'catalog' => $this->integrations->catalog(),
             'webhooks' => $showWebhooks ? $this->webhooks->overview($viewing) : null,
             // The signing secret just created or rotated (shown once, to the person who did it).

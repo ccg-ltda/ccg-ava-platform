@@ -1,7 +1,6 @@
 import axios from 'axios';
 import { useForm } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
-import Checkbox from '@/Components/Checkbox';
 import DateField from '@/Components/DateField';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
@@ -9,15 +8,16 @@ import Modal from '@/Components/Modal';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import Select from '@/Components/Select';
-import Textarea from '@/Components/Textarea';
 import TextInput from '@/Components/TextInput';
 import TimeField from '@/Components/TimeField';
+import MessageFields from './MessageFields';
 
 const newKey = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `ui-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
 /**
  * Create / edit a reminder. The channels come from the server with what is really available in this Workspace (an unavailable one is shown with its reason and can not be
  * chosen); the server validates everything again, including that the customer and the related record belong to the Workspace. The date and time are in the Workspace's timezone.
+ * Every row is a two-column grid of [label above control] cells so the fields line up; the message and channel are the shared MessageFields.
  */
 export default function ReminderFormModal({ reminder, channels, variables, relatedTypes, limits, timezone, onClose }) {
     const editing = Boolean(reminder);
@@ -50,8 +50,6 @@ export default function ReminderFormModal({ reminder, channels, variables, relat
     }, [query, editing]);
 
     const customer = found.find((item) => item.id === data.customer_id);
-    const whatsapp = data.channel === 'whatsapp';
-    const toggleParam = (key) => setData('template_params', data.template_params.includes(key) ? data.template_params.filter((item) => item !== key) : [...data.template_params, key]);
 
     const submit = (event) => {
         event.preventDefault();
@@ -66,127 +64,70 @@ export default function ReminderFormModal({ reminder, channels, variables, relat
             <form onSubmit={submit} noValidate className="flex min-h-0 flex-1 flex-col">
                 <header className="border-b border-line px-5 py-4 sm:px-8 sm:py-5">
                     <h2 className="text-lg font-bold text-ink">{editing ? 'Editar recordatorio' : 'Nuevo recordatorio'}</h2>
-                    <p className="mt-1 text-sm text-ink-muted">Un seguimiento comercial a un cliente. Solo se envía a quien dio su consentimiento, y se vuelve a comprobar en el momento del envío.</p>
+                    <p className="mt-1 text-sm text-ink-muted">Un seguimiento comercial a un cliente. Solo se envía a quien dio su consentimiento, y se vuelve a comprobar en el momento del envío. La fecha y la hora son de {timezone}.</p>
                 </header>
 
                 <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-6 sm:px-8">
-                    <div>
-                        <InputLabel htmlFor="rem_customer" value="Cliente" />
+                    <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
                         {editing ? (
-                            <p className="mt-1 text-sm text-ink">{reminder.customer.name}</p>
+                            <div className="min-w-0 sm:col-span-2">
+                                <p className="text-sm font-medium text-ink">Cliente</p>
+                                <p className="mt-1 text-sm text-ink">{reminder.customer.name}</p>
+                            </div>
                         ) : (
                             <>
-                                <TextInput id="rem_customer_q" className="mt-1" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar cliente por nombre" autoComplete="off" aria-label="Buscar cliente" />
-                                <Select
-                                    id="rem_customer"
-                                    className="mt-2"
-                                    value={data.customer_id}
-                                    onChange={(id) => setData('customer_id', id)}
-                                    invalid={Boolean(errors.customer_id)}
-                                    placeholder={found.length === 0 ? 'Ningún cliente coincide' : 'Elige un cliente'}
-                                    options={found.map((item) => ({ value: item.id, label: `${item.name}${item.consent ? '' : ' (sin consentimiento)'}` }))}
-                                />
+                                <div className="min-w-0">
+                                    <InputLabel htmlFor="rem_customer_q" value="Buscar cliente" />
+                                    <TextInput id="rem_customer_q" className="mt-1" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Nombre del cliente" autoComplete="off" />
+                                </div>
+                                <div className="min-w-0">
+                                    <InputLabel htmlFor="rem_customer" value="Cliente" />
+                                    <Select
+                                        id="rem_customer"
+                                        className="mt-1"
+                                        value={data.customer_id}
+                                        onChange={(id) => setData('customer_id', id)}
+                                        invalid={Boolean(errors.customer_id)}
+                                        placeholder={found.length === 0 ? 'Ningún cliente coincide' : 'Elige un cliente'}
+                                        options={found.map((item) => ({ value: item.id, label: `${item.name}${item.consent ? '' : ' (sin consentimiento)'}` }))}
+                                    />
+                                    <InputError message={errors.customer_id} className="mt-1" />
+                                </div>
                             </>
                         )}
-                        {customer && !customer.consent && <p className="mt-1 text-xs text-warning">Este cliente no ha dado su consentimiento: el servidor rechazará el recordatorio.</p>}
-                        <InputError message={errors.customer_id} className="mt-1" />
                     </div>
+                    {customer && !customer.consent && <p className="-mt-2 text-xs text-warning">Este cliente no ha dado su consentimiento: el servidor rechazará el recordatorio.</p>}
+                    {editing && <InputError message={errors.customer_id} className="-mt-2" />}
 
-                    <div className="grid gap-5 sm:grid-cols-2">
-                        <div>
+                    <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
+                        <div className="min-w-0">
                             <InputLabel htmlFor="rem_name" value="Nombre" />
                             <TextInput id="rem_name" className="mt-1" value={data.name} onChange={(event) => setData('name', event.target.value)} invalid={Boolean(errors.name)} maxLength={limits.name} autoComplete="off" />
                             <InputError message={errors.name} className="mt-1" />
                         </div>
-                        <div>
+                        <div className="min-w-0">
                             <InputLabel htmlFor="rem_purpose" value="Finalidad (opcional)" />
                             <TextInput id="rem_purpose" className="mt-1" value={data.purpose} onChange={(event) => setData('purpose', event.target.value)} maxLength={limits.purpose} placeholder="Invitar a reservar de nuevo" autoComplete="off" />
                             <InputError message={errors.purpose} className="mt-1" />
                         </div>
+                        <DateField id="rem_date" label="Fecha de envío" clearable={false} value={data.date} onChange={(value) => setData('date', value)} error={errors.send_at} />
+                        <TimeField id="rem_time" label="Hora de envío" value={data.time} onChange={(value) => setData('time', value)} />
                     </div>
 
-                    <div className="grid gap-5 sm:grid-cols-2">
-                        <div>
-                            <InputLabel htmlFor="rem_channel" value="Canal" />
-                            <Select
-                                id="rem_channel"
-                                className="mt-1"
-                                value={data.channel}
-                                onChange={(channel) => setData('channel', channel)}
-                                invalid={Boolean(errors.channel)}
-                                options={channels.map((channel) => ({ value: channel.key, label: channel.available ? channel.label : `${channel.label} (no disponible)`, disabled: !channel.available }))}
-                            />
-                            {channels.filter((channel) => !channel.available).map((channel) => <p key={channel.key} className="mt-1 text-xs text-ink-muted">{channel.label}: {channel.reason}</p>)}
-                            <InputError message={errors.channel} className="mt-1" />
-                        </div>
-                        <div>
-                            <p className="text-sm font-medium text-ink">Envío (hora de {timezone})</p>
-                            <div className="mt-1 grid gap-3 sm:grid-cols-2">
-                                <DateField id="rem_date" label="Fecha" clearable={false} value={data.date} onChange={(value) => setData('date', value)} error={errors.send_at} />
-                                <TimeField id="rem_time" label="Hora" value={data.time} onChange={(value) => setData('time', value)} />
-                            </div>
-                        </div>
-                    </div>
+                    <MessageFields data={data} setData={setData} errors={errors} channels={channels} variables={variables} limits={limits} idPrefix="rem" />
 
-                    {!whatsapp && (
-                        <div>
-                            <InputLabel htmlFor="rem_subject" value="Asunto del correo" />
-                            <TextInput id="rem_subject" className="mt-1" value={data.subject} onChange={(event) => setData('subject', event.target.value)} invalid={Boolean(errors.subject)} maxLength={limits.subject} autoComplete="off" />
-                            <InputError message={errors.subject} className="mt-1" />
-                        </div>
-                    )}
-
-                    <div>
-                        <InputLabel htmlFor="rem_body" value={whatsapp ? 'Mensaje (referencia interna)' : 'Mensaje'} />
-                        <Textarea id="rem_body" className="mt-1" rows={5} value={data.body} onChange={(event) => setData('body', event.target.value)} invalid={Boolean(errors.body)} maxLength={limits.body} />
-                        <p className="mt-1 text-xs text-ink-muted">Variables: {variables.map((variable) => `{{${variable.key}}}`).join(' ')} · {data.body.length}/{limits.body}</p>
-                        <InputError message={errors.body} className="mt-1" />
-                    </div>
-
-                    {whatsapp && (
-                        <fieldset className="space-y-3 rounded-xl border border-line bg-canvas/40 p-4">
-                            <legend className="px-1 text-sm font-semibold text-ink">Plantilla aprobada de WhatsApp</legend>
-                            <p className="text-xs text-ink-muted">Un seguimiento siempre cae fuera de las 24 h de conversación: WhatsApp solo lo entrega con una plantilla aprobada por Meta. Escribe su nombre e idioma tal como están en Meta y marca, en orden, qué dato de la persona llena cada variable.</p>
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                <div>
-                                    <InputLabel htmlFor="rem_tpl" value="Nombre de la plantilla" />
-                                    <TextInput id="rem_tpl" className="mt-1" value={data.template_name} onChange={(event) => setData('template_name', event.target.value)} invalid={Boolean(errors.template_name)} autoComplete="off" />
-                                    <InputError message={errors.template_name} className="mt-1" />
-                                </div>
-                                <div>
-                                    <InputLabel htmlFor="rem_lang" value="Idioma" />
-                                    <TextInput id="rem_lang" className="mt-1" value={data.template_language} onChange={(event) => setData('template_language', event.target.value)} maxLength={12} autoComplete="off" />
-                                </div>
-                            </div>
-                            <div>
-                                <p className="text-sm font-medium text-ink">Variables, en orden: {data.template_params.length ? data.template_params.map((key) => `{{${key}}}`).join(' → ') : 'ninguna'}</p>
-                                <div className="mt-2 flex flex-wrap gap-3">
-                                    {variables.map((variable) => (
-                                        <label key={variable.key} className="flex items-center gap-2 text-sm text-ink">
-                                            <Checkbox checked={data.template_params.includes(variable.key)} onChange={() => toggleParam(variable.key)} />
-                                            {variable.label}
-                                        </label>
-                                    ))}
-                                </div>
-                                <InputError message={errors.template_params} className="mt-1" />
-                            </div>
-                        </fieldset>
-                    )}
-
-                    <div className="grid gap-5 sm:grid-cols-2">
-                        <div>
+                    <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
+                        <div className="min-w-0">
                             <InputLabel htmlFor="rem_related_type" value="Relacionado con (opcional)" />
                             <Select id="rem_related_type" className="mt-1" value={data.related_type} onChange={(type) => setData((current) => ({ ...current, related_type: type, related_id: type ? current.related_id : '' }))} options={[{ value: '', label: 'Nada' }, ...Object.entries(relatedTypes).map(([value, label]) => ({ value, label }))]} />
                         </div>
-                        {data.related_type && (
-                            <div>
-                                <InputLabel htmlFor="rem_related_id" value="Número del registro" />
-                                <TextInput id="rem_related_id" type="number" min="1" className="mt-1" value={data.related_id} onChange={(event) => setData('related_id', event.target.value)} invalid={Boolean(errors.related_id)} />
-                                <InputError message={errors.related_id} className="mt-1" />
-                                <p className="mt-1 text-xs text-ink-muted">Si es una cita o un pedido y se cancela antes del envío, el recordatorio no sale.</p>
-                            </div>
-                        )}
+                        <div className="min-w-0">
+                            <InputLabel htmlFor="rem_related_id" value="Número del registro" />
+                            <TextInput id="rem_related_id" type="number" min="1" className="mt-1" value={data.related_id} onChange={(event) => setData('related_id', event.target.value)} invalid={Boolean(errors.related_id)} disabled={!data.related_type} />
+                            <InputError message={errors.related_id} className="mt-1" />
+                        </div>
                     </div>
+                    <p className="-mt-2 text-xs text-ink-muted">Si es una cita o un pedido y se cancela antes del envío, el recordatorio no sale.</p>
                 </div>
 
                 <div className="flex flex-wrap justify-end gap-3 border-t border-line bg-card px-5 py-4 sm:px-8">

@@ -7,6 +7,7 @@ use App\Http\Controllers\Concerns\ReadsSections;
 use App\Http\Requests\ReportFilterRequest;
 use App\Models\Workspace;
 use App\Services\DashboardMetrics;
+use App\Services\EconomicMetrics;
 use App\Services\LocationScope;
 use App\Services\ModuleAccess;
 use App\Services\OperationsMetrics;
@@ -32,7 +33,7 @@ class ReportController extends Controller
      * What the Workspace's plan does not include is neither computed nor sent: the conversation and message figures need
      * `conversations`, the team figures `users_roles` (the page hides the sections that have no source).
      */
-    public function index(ReportFilterRequest $request, WorkspaceReport $report, DashboardMetrics $metrics, OperationsMetrics $operations, WorkspaceScope $scope, ModuleAccess $access): Response
+    public function index(ReportFilterRequest $request, WorkspaceReport $report, DashboardMetrics $metrics, OperationsMetrics $operations, EconomicMetrics $economics, WorkspaceScope $scope, ModuleAccess $access): Response
     {
         $active = $request->attributes->get('workspace');
         $role = $request->attributes->get('workspace_role');
@@ -60,12 +61,17 @@ class ReportController extends Controller
         return Inertia::render('Reports/Index', ($team ? $report->for($active, $role, $target, $global, in_array('view-users', $permissions, true)) : ['stats' => null, 'roleBreakdown' => null, 'recentUsers' => null])
             + array_merge($analytics, ['metrics' => $conversations ? $analytics['metrics'] : []])
             + [
-                'sources' => ['conversations' => $conversations, 'team' => $team] + $ops,
+                'sources' => ['conversations' => $conversations, 'team' => $team, 'economics' => $ops['bookings'] || $ops['orders']] + $ops,
                 'locations' => $where['view'],
                 'operations' => [
                     'bookings' => $ops['bookings'] ? $this->section('bookings', fn () => $operations->bookings($active, $period, $where['ids'])) : null,
                     'orders' => $ops['orders'] ? $this->section('orders', fn () => $operations->orders($active, $period, $where['ids'])) : null,
                     'customers' => $ops['customers'] ? $this->section('customers', fn () => $operations->customers($active, $period)) : null,
+                ],
+                // The money of the two modules that generate it, only for who may read them (the same modules and permissions as the operational figures above).
+                'economics' => [
+                    'bookings' => $ops['bookings'] ? $this->section('economics.bookings', fn () => $economics->bookings($active, $period, $settings, $where['ids'])) : null,
+                    'orders' => $ops['orders'] ? $this->section('economics.orders', fn () => $economics->orders($active, $period, $settings, $where['ids'])) : null,
                 ],
                 'figures' => $conversations ? $this->section('figures', fn () => $metrics->comparison($target, $period)) : null,
                 'activity' => $conversations ? $this->section('activity', fn () => $metrics->series($target, $period, $settings)) : null,

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import useElementWidth from '@/Hooks/useElementWidth';
-import { MARGIN, niceScale, spreadIndexes } from './chartUtils';
+import { axisMargin, labelIndexes, niceScale } from './chartUtils';
 
 /**
  * Several time series on one line chart, in plain SVG: no chart library. `points`: [{ key, label, short?, values: { [series]: n } }]
@@ -8,17 +8,19 @@ import { MARGIN, niceScale, spreadIndexes } from './chartUtils';
  * is made of buttons that show or hide each series (the scale follows what is visible, and one series always stays). Hover, touch
  * and the arrow keys move a tooltip that lists every visible series at that point. It draws only what it receives.
  */
-export default function SeriesChart({ points, series, height = 260, formatValue = (value) => value.toLocaleString('es'), ariaLabel }) {
+export default function SeriesChart({ points, series, height = 260, formatValue = (value) => value.toLocaleString('es'), formatAxis = formatValue, ariaLabel }) {
     const [ref, width] = useElementWidth();
     const [hidden, setHidden] = useState([]);
     const [active, setActive] = useState(null);
 
     const visible = series.filter((item) => !hidden.includes(item.key));
-    const inner = { w: width - MARGIN.left - MARGIN.right, h: height - MARGIN.top - MARGIN.bottom };
     const { top, ticks } = niceScale(Math.max(0, ...points.flatMap((point) => visible.map((item) => point.values[item.key] ?? 0))));
+    // The left margin follows the widest value label, so the numbers keep their distance from the edge whatever the currency or the size of the figures.
+    const MARGIN = axisMargin(ticks.map(formatAxis));
+    const inner = { w: width - MARGIN.left - MARGIN.right, h: height - MARGIN.top - MARGIN.bottom };
     const x = (index) => MARGIN.left + (points.length === 1 ? inner.w / 2 : (inner.w * index) / (points.length - 1));
     const y = (value) => MARGIN.top + inner.h - (value / top) * inner.h;
-    const labels = spreadIndexes(points.length, Math.max(Math.floor(inner.w / 64), 2));
+    const { indexes: labels } = labelIndexes(points.length, Math.max(Math.floor(inner.w / 56), 2));
     const current = active === null ? null : points[active];
 
     const toggle = (key) => setHidden((now) => (now.includes(key) ? now.filter((item) => item !== key) : visible.length > 1 ? [...now, key] : now));
@@ -83,10 +85,12 @@ export default function SeriesChart({ points, series, height = 260, formatValue 
                         <g key={tick}>
                             <line x1={MARGIN.left} x2={width - MARGIN.right} y1={y(tick)} y2={y(tick)} className="stroke-line" strokeWidth="1" strokeDasharray={tick === 0 ? undefined : '3 4'} />
                             <text x={MARGIN.left - 8} y={y(tick)} textAnchor="end" dominantBaseline="middle" className="fill-ink-muted text-[11px]">
-                                {formatValue(tick)}
+                                {formatAxis(tick)}
                             </text>
                         </g>
                     ))}
+
+                    {points.length <= 120 && points.map((point, index) => <line key={`tick-${point.key}`} x1={x(index)} x2={x(index)} y1={y(0)} y2={y(0) + 4} className="stroke-ink-muted/50" strokeWidth="1" />)}
 
                     {labels.map((index) => (
                         <text key={points[index].key} x={x(index)} y={height - 8} textAnchor={index === 0 ? 'start' : index === points.length - 1 ? 'end' : 'middle'} className="fill-ink-muted text-[11px]">

@@ -58,7 +58,7 @@ class ConversationActionController extends Controller
             $returned = $this->control->returnToAi($c, $request->user(), $this->manages($request));
             // The AI picks up an unanswered message of the contact right away (the persisted state and the wider history go with it); a failure here never undoes the return.
             try {
-                app(ChatbotExecutions::class)->resumeAfterReturn($returned, $request->boolean('continue'));
+                app(ChatbotExecutions::class)->resumeAfterReturn($returned);
             } catch (Throwable $e) {
                 Log::error('resume_after_return_failed', ['conversation' => $returned->id, 'exception' => $e::class]);
             }

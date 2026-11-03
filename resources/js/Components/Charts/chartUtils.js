@@ -20,3 +20,20 @@ export function spreadIndexes(count, limit) {
 }
 
 export const MARGIN = { top: 12, right: 12, bottom: 28, left: 40 };
+
+/**
+ * Indexes of the labels of a time axis: ONE label every `step` points, always from the first, so the spacing is even and a skipped label never looks like a missing day
+ * (every point still gets its own tick mark). `limit` is how many labels fit.
+ */
+export function labelIndexes(count, limit) {
+    const step = Math.max(1, Math.ceil(count / Math.max(limit, 1)));
+
+    return { step, indexes: Array.from({ length: Math.ceil(count / step) }, (_, i) => i * step) };
+}
+
+/** Margins with the left one sized to the widest value label of the vertical axis (11px text), so the numbers never touch the edge or get cut. */
+export function axisMargin(tickLabels) {
+    const widest = Math.max(0, ...tickLabels.map((label) => String(label).length));
+
+    return { ...MARGIN, left: Math.max(MARGIN.left, Math.ceil(widest * 6.6) + 20) };
+}

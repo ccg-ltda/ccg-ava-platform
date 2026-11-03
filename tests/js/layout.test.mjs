@@ -30,10 +30,12 @@ test('the sidebar collapses to icons on large screens and every label stays avai
     assert.match(sidebar, /<Menu className/, 'the toggle is only the three-line icon, in the header');
     assert.match(sidebar, /<Tooltip content=/, 'its name is a tooltip, not permanent text');
     assert.doesNotMatch(sidebar, /Contraer menú<\/span>/, 'no permanent text beside the icon');
-    assert.match(sidebar, /lg:data-\[collapsed=true\]:w-16/);
-    assert.match(sidebar, /lg:w-64 shrink-0/, 'it never squeezes');
+    assert.match(sidebar, /md:data-\[collapsed=true\]:w-16/, 'collapsing works from md up, not only from lg');
+    assert.match(sidebar, /shrink-0 group\/side/, 'it never squeezes');
+    assert.match(sidebar, /className="hidden md:inline-flex"/, 'the toggle is available at every desktop width, a half-screen window included');
+    assert.doesNotMatch(sidebar, /md:w-16/, 'a medium window is not forced to icons: the user decides');
     const item = source('Components/NavItem.jsx');
-    assert.match(item, /lg:group-data-\[collapsed=true\]\/side:sr-only/, 'collapsed: the label is read, not removed');
+    assert.match(item, /md:group-data-\[collapsed=true\]\/side:sr-only/, 'collapsed: the label is read, not removed');
     assert.match(item, /title=\{item\.label\}/, 'and shown as a tooltip');
     assert.match(source('Layouts/AppLayout.jsx'), /useSidebarCollapsed\(\)/);
     assert.match(source('Hooks/useSidebarCollapsed.js'), /try \{[\s\S]*localStorage[\s\S]*catch/, 'the stored choice is optional');

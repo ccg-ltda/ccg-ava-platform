@@ -7,13 +7,16 @@ use App\Models\Customer;
 use App\Models\Reminder;
 use App\Models\ReminderAttempt;
 use App\Reminders\ReminderChannels;
+use App\Reminders\ReminderRulePresenter;
 use App\Reminders\ReminderService;
 use App\Services\ListPagination;
+use App\Services\ModuleAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -24,7 +27,12 @@ use Inertia\Response;
  */
 class ReminderController extends Controller
 {
-    public function __construct(private readonly ReminderService $reminders, private readonly ReminderChannels $channels) {}
+    public function __construct(
+        private readonly ReminderService $reminders,
+        private readonly ReminderChannels $channels,
+        private readonly ReminderRulePresenter $rulePresenter,
+        private readonly ModuleAccess $modules,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -38,6 +46,7 @@ class ReminderController extends Controller
         ]);
         $settings = $workspace->settingsOrDefault();
         $zone = $settings->timezone ?: 'UTC';
+        $rules = $this->modules->allows($workspace, 'bookings');
         $like = filled($filters['q'] ?? null) ? '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower(trim($filters['q']))).'%' : null;
 
         $query = $workspace->reminders()->with('customer:id,first_name,last_name')
@@ -64,6 +73,8 @@ class ReminderController extends Controller
             'variables' => collect(config('campaigns.variables'))->map(fn (array $variable, string $key) => ['key' => $key, 'label' => $variable['label']])->values()->all(),
             'limits' => ['name' => config('reminders.limits.name_max'), 'purpose' => config('reminders.limits.purpose_max'), 'subject' => config('reminders.limits.subject_max'), 'body' => config('reminders.limits.body_max'), 'minLeadMinutes' => config('reminders.limits.min_lead_minutes')],
             'timezone' => $zone,
+            // The automatic rules need Agenda too (the services done are its appointments): without it the tab does not exist, and the routes refuse as well.
+            'rules' => $rules ? ['data' => $this->rulePresenter->list($workspace), 'services' => $this->rulePresenter->services($workspace), 'delayUnits' => config('reminders.rules.delay_units'), 'defaultSendTime' => config('reminders.rules.default_send_time'), 'graceHours' => config('reminders.rules.grace_hours')] : null,
         ]);
     }
 
@@ -76,7 +87,14 @@ class ReminderController extends Controller
 
     public function update(SaveReminderRequest $request, int $reminder): RedirectResponse
     {
-        $this->reminders->update($this->find($request, $reminder), $request->validated());
+        $found = $this->find($request, $reminder);
+
+        // A reminder an automatic rule scheduled follows its rule: edit the rule instead (otherwise the next refresh would undo the change).
+        if ($found->reminder_rule_id !== null) {
+            throw ValidationException::withMessages(['name' => 'Este recordatorio lo programa una regla automática: edita la regla.']);
+        }
+
+        $this->reminders->update($found, $request->validated());
 
         return back()->with('success', 'Recordatorio actualizado.');
     }
@@ -146,7 +164,10 @@ class ReminderController extends Controller
             'templateName' => $reminder->template_name,
             'templateLanguage' => $reminder->template_language,
             'templateParams' => $reminder->template_params ?? [],
-            'canEdit' => $reminder->isPending(),
+            // A reminder a rule scheduled follows its rule: it can be cancelled, not edited by hand.
+            'canEdit' => $reminder->isPending() && $reminder->reminder_rule_id === null,
+            'canCancel' => $reminder->isPending(),
+            'ruleId' => $reminder->reminder_rule_id,
         ];
     }
 }

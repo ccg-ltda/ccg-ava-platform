@@ -31,6 +31,31 @@ return [
         'interrupted' => 'Se interrumpió mientras se enviaba: pudo haberse enviado. No se reintenta solo.',
         'send_failed' => 'No se pudo enviar.',
         'template_missing' => 'Falta la plantilla aprobada de WhatsApp.',
+        // Rules (automatic reminders by service): why a reminder was cancelled or an appointment was not scheduled.
+        'rule_inactive' => 'La regla que lo programó está desactivada.',
+        'appointment_changed' => 'La cita ya no figura como realizada.',
+        'rule_changed' => 'La regla cambió y esta cita ya no le corresponde.',
+        'no_customer' => 'La persona de la cita no tiene una ficha en Clientes.',
+        'ambiguous_customer' => 'El teléfono y el correo de la cita pertenecen a fichas distintas de Clientes.',
+        'too_late' => 'Llegó tarde: la fecha de envío ya había pasado por más tiempo del permitido.',
+        'invalid' => 'No se pudo programar con los datos actuales.',
+    ],
+
+    // Automatic reminders by service (`reminder_rules`): «N days after a customer had service X, remind them».
+    'rules' => [
+        'delay_units' => ['hours' => 'Horas', 'days' => 'Días', 'weeks' => 'Semanas'],
+        // Longest wait a rule can ask for, in days (a reminder can not be scheduled further ahead than `limits.max_days_ahead`).
+        'max_delay_days' => 360,
+        // Hour of the day a reminder in days or weeks goes out (Workspace time zone) when the rule does not choose one.
+        'default_send_time' => '10:00',
+        // How long after its intended moment a reminder may still go out (the scheduler was off, the Workspace had no channel). Later than this it is skipped, never sent out of context.
+        'grace_hours' => 48,
+        // Appointments a single scan evaluates per rule (the rest wait for the next run).
+        'scan_batch' => 500,
+        'max_per_workspace' => 50,
+        'name_max' => 120,
+        // A skipped appointment is evaluated again while one of these reasons holds (consent can be granted, a card can be created, a channel connected).
+        'retry_reasons' => ['no_customer', 'ambiguous_customer', 'no_consent', 'channel_unavailable', 'no_email', 'no_valid_phone'],
     ],
 
     'channels' => [

@@ -8,6 +8,7 @@ use App\Integrations\SendResult;
 use App\Integrations\SendsTemplates;
 use App\Jobs\SendReminder;
 use App\Mail\ReminderMail;
+use App\Models\Appointment;
 use App\Models\Customer;
 use App\Models\Reminder;
 use App\Models\ReminderAttempt;
@@ -70,7 +71,7 @@ class ReminderDispatcher
             return;
         }
 
-        $reminder = Reminder::query()->with(['customer', 'workspace.organization'])->findOrFail($id);
+        $reminder = Reminder::query()->with(['customer', 'workspace.organization', 'rule'])->findOrFail($id);
 
         if ($verdict = $this->obsolete($reminder)) {
             $this->settle($reminder, $verdict[0], $verdict[1], $verdict[0]);
@@ -110,8 +111,26 @@ class ReminderDispatcher
             $reminder->channel === 'email' && blank($customer->email) => [Reminder::SKIPPED, 'no_email'],
             $reminder->channel === 'whatsapp' && $this->digits($customer) === null => [Reminder::SKIPPED, 'no_valid_phone'],
             $reminder->channel === 'whatsapp' && blank($reminder->template_name) => [Reminder::SKIPPED, 'template_missing'],
-            $this->relatedClosed($reminder, 'appointment') => [Reminder::CANCELLED, 'appointment_closed'],
+            $reminder->reminder_rule_id !== null && ($reason = $this->ruleClosed($reminder)) !== null => [Reminder::CANCELLED, $reason],
+            $reminder->reminder_rule_id === null && $this->relatedClosed($reminder, 'appointment') => [Reminder::CANCELLED, 'appointment_closed'],
             $this->relatedClosed($reminder, 'order') => [Reminder::CANCELLED, 'order_closed'],
+            default => null,
+        };
+    }
+
+    /**
+     * A reminder scheduled by an automatic rule is only valid while the rule is switched on, the appointment it came from is still a COMPLETED service and that service is still one
+     * of the rule's (Agenda or the rule may have changed since it was scheduled). The usual «appointment still open» test does not apply: a completed appointment is closed by nature.
+     */
+    private function ruleClosed(Reminder $reminder): ?string
+    {
+        $rule = $reminder->rule;
+        $appointment = $reminder->related_type === 'appointment' ? $reminder->workspace->appointments()->find($reminder->related_id) : null;
+
+        return match (true) {
+            $rule === null || ! $rule->is_active => 'rule_inactive',
+            $appointment === null || $appointment->status !== Appointment::COMPLETED => 'appointment_changed',
+            ! $rule->services()->whereKey($appointment->service_id)->exists() => 'rule_changed',
             default => null,
         };
     }

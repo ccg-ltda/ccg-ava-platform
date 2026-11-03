@@ -85,14 +85,14 @@ export function SimulationBar({ conversationId }) {
 export function StatusSimulator({ conversationId, messageId }) {
     return (
         <p className="mt-1 flex flex-wrap justify-end gap-x-3 text-[11px]">
-            <span className="text-white/75">Simular estado:</span>
+            <span className="text-ink-muted">Simular estado:</span>
             {[
                 ['sent', 'Enviado'],
                 ['delivered', 'Entregado'],
                 ['read', 'Leído'],
                 ['failed', 'Falló'],
             ].map(([status, label]) => (
-                <button key={status} type="button" onClick={() => router.post(route('conversations.simulate.status', { conversation: conversationId, message: messageId }), { status }, { preserveScroll: true })} className="font-semibold text-white underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-white">
+                <button key={status} type="button" onClick={() => router.post(route('conversations.simulate.status', { conversation: conversationId, message: messageId }), { status }, { preserveScroll: true })} className="font-semibold text-primary underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-primary">
                     {label}
                 </button>
             ))}

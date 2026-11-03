@@ -193,6 +193,11 @@ class Workspace extends Model
         return $this->hasMany(Reminder::class);
     }
 
+    public function reminderRules(): HasMany
+    {
+        return $this->hasMany(ReminderRule::class);
+    }
+
     public function bookingCustomers(): HasMany
     {
         return $this->hasMany(BookingCustomer::class);

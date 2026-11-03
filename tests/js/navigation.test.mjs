@@ -58,7 +58,7 @@ test('the heading never wraps and the sidebar keeps its width', () => {
     assert.match(section, /h-8/, 'a heading has a fixed height');
     assert.match(section, /ChevronDown className=\{`size-3\.5 shrink-0/, 'the chevron keeps its size');
     assert.match(section, /aria-expanded=\{open\}/);
-    assert.match(sidebar, /lg:w-64 shrink-0/, 'the flex row can not squeeze the sidebar when the content is wide');
+    assert.match(sidebar, /shrink-0 group\/side/, 'the flex row can not squeeze the sidebar when the content is wide');
     assert.match(sidebar, /sidebar-scroll/, 'the menu uses the slim overlay scrollbar, which reserves no gutter and shifts nothing while unfolding');
     assert.doesNotMatch(sidebar, /scrollbar-gutter/, 'no space is reserved for the scrollbar');
     assert.match(readFileSync(new URL('../../resources/css/app.css', import.meta.url), 'utf8'), /\.sidebar-scroll::-webkit-scrollbar\s*\{\s*width: 5px/, 'a slim 5px scrollbar');

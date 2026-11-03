@@ -381,7 +381,7 @@ class N8nIntegrationTest extends TestCase
 
     // --- n8n -> Ava keeps working and stays separate ---------------------------------------------------------
 
-    public function test_the_token_of_a_chatbot_is_shown_once_on_the_integrations_page_and_is_not_the_api_key(): void
+    public function test_the_token_of_a_chatbot_is_shown_once_on_the_assistant_page_and_is_not_the_api_key(): void
     {
         $this->actAs();
         $this->save();
@@ -390,10 +390,10 @@ class N8nIntegrationTest extends TestCase
         $this->post("/chatbots/{$bot->id}/agent-token")->assertSessionHas('agent_token');
         $token = session('agent_token');
 
+        $this->get("/chatbots/{$bot->id}?tab=ia")->assertInertia(fn (AssertableInertia $page) => $page->where('agentToken.token', $token));
+        $this->get("/chatbots/{$bot->id}?tab=ia")->assertInertia(fn (AssertableInertia $page) => $page->where('agentToken.token', null));
         $this->get('/integrations')->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('newToken.token', $token)->where('newToken.chatbotId', $bot->id)
-            ->where('automation.state', 'configured')->where('automation.connection.state', 'configured'));
-        $this->get('/integrations')->assertInertia(fn (AssertableInertia $page) => $page->where('newToken', null));
+            ->missing('newToken')->where('automation.state', 'configured')->where('automation.connection.state', 'configured'));
         $this->assertNotSame(self::KEY, $token);
         $this->assertStringNotContainsString($token, $this->get('/integrations')->getContent());
 
@@ -409,6 +409,6 @@ class N8nIntegrationTest extends TestCase
         $bot = $this->workspace('WS_B')->chatbots()->create(['name' => 'Ajeno']);
 
         $this->post("/chatbots/{$bot->id}/agent-token")->assertNotFound();
-        $this->get('/integrations')->assertInertia(fn (AssertableInertia $page) => $page->where('newToken', null));
+        $this->get('/integrations')->assertInertia(fn (AssertableInertia $page) => $page->missing('newToken'));
     }
 }
