@@ -7,6 +7,7 @@ use App\Models\Chatbot;
 use App\Models\ChatbotExecution;
 use App\Models\Conversation;
 use App\Observability\ApiRedactor;
+use Illuminate\Database\UniqueConstraintViolationException;
 
 /**
  * Records the steps an automation engine (n8n, later Lava Studio) REPORTS about the API calls it makes by itself, so the technical activity of a conversation
@@ -40,15 +41,19 @@ class ActivityStepReporter
         $attributes = $this->attributes($chatbot, $conversation, $data);
 
         if (! $existing) {
-            return ['call' => AgentToolCall::create($attributes), 'created' => true];
+            try {
+                return ['call' => AgentToolCall::create($attributes), 'created' => true];
+            } catch (UniqueConstraintViolationException) {
+                // A parallel retry of the same step created it first: this one continues as an update of that row.
+                $existing = AgentToolCall::where('workspace_id', $chatbot->workspace_id)->where('external_ref', $data['step_ref'])->firstOrFail();
+            }
         }
 
-        // A finished step is final: a replay of its start (or of the same finish) changes nothing.
-        if ($existing->status !== AgentToolCall::STARTED) {
-            return ['call' => $existing, 'created' => false];
+        // A finished step is final: a replay of its start (or of the same finish) changes nothing. The condition is part of the UPDATE, so a start that arrives while a finish
+        // is being written can not reopen the step.
+        if ($existing->status === AgentToolCall::STARTED) {
+            AgentToolCall::whereKey($existing->id)->where('status', AgentToolCall::STARTED)->update(array_filter($attributes, fn ($value) => $value !== null));
         }
-
-        $existing->update(array_filter($attributes, fn ($value) => $value !== null));
 
         return ['call' => $existing->refresh(), 'created' => false];
     }
@@ -56,7 +61,8 @@ class ActivityStepReporter
     /** @return array<string, mixed> */
     private function attributes(Chatbot $chatbot, Conversation $conversation, array $data): array
     {
-        $r = $this->redactor;
+        $r = $this->redactor->forActivity();
+        $bodies = app(ActivityPrivacy::class)->storesBodies($chatbot->workspace_id);
         $method = strtoupper((string) ($data['method'] ?? '')) ?: null;
         $startedAt = isset($data['started_at']) ? now()->parse($data['started_at']) : null;
         $finishedAt = isset($data['finished_at']) ? now()->parse($data['finished_at']) : null;
@@ -64,8 +70,8 @@ class ActivityStepReporter
         $http = $data['http_status'] ?? null;
         $duration = $data['duration_ms'] ?? ($startedAt && $finishedAt ? (int) $startedAt->diffInMilliseconds($finishedAt) : null);
 
-        $request = array_key_exists('request_body', $data) ? $this->payload($data['request_body']) : null;
-        $response = array_key_exists('response_body', $data) ? $this->payload($data['response_body']) : null;
+        $request = $bodies && array_key_exists('request_body', $data) ? $this->payload($data['request_body']) : null;
+        $response = $bodies && array_key_exists('response_body', $data) ? $this->payload($data['response_body']) : null;
 
         return array_filter([
             'workspace_id' => $chatbot->workspace_id,
@@ -86,10 +92,10 @@ class ActivityStepReporter
             'trigger_message_id' => $this->triggerMessage($conversation, $data['trigger_message_external_id'] ?? null),
             'method' => $method,
             'endpoint' => isset($data['endpoint']) ? $this->endpoint($data['endpoint']) : null,
-            'request_headers' => isset($data['request_headers']) ? json_encode($r->headers($data['request_headers'])) : null,
-            'request_query' => isset($data['request_query']) ? json_encode($r->data($data['request_query']), JSON_UNESCAPED_UNICODE) : null,
+            'request_headers' => $bodies && isset($data['request_headers']) ? json_encode($r->headers($data['request_headers'])) : null,
+            'request_query' => $bodies && isset($data['request_query']) ? json_encode($r->data($data['request_query']), JSON_UNESCAPED_UNICODE) : null,
             'request_body' => $request[0] ?? null,
-            'response_headers' => isset($data['response_headers']) ? json_encode($r->headers($data['response_headers'])) : null,
+            'response_headers' => $bodies && isset($data['response_headers']) ? json_encode($r->headers($data['response_headers'])) : null,
             'response_body' => $response[0] ?? null,
             'truncated' => ($request[1] ?? false) || ($response[1] ?? false),
             'error_class' => isset($data['error_class']) ? substr($data['error_class'], 0, 120) : null,
@@ -109,13 +115,13 @@ class ActivityStepReporter
     {
         $raw = is_string($value) ? $value : json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
-        return $this->redactor->body($raw === false ? null : $raw, ApiRedactor::STEP_BYTES);
+        return $this->redactor->forActivity()->body($raw === false ? null : $raw, ApiRedactor::STEP_BYTES);
     }
 
     /** Scheme, host and path of the URL the engine called; the values of sensitive query parameters are masked. */
     private function endpoint(string $url): string
     {
-        $parts = $this->redactor->url($url);
+        $parts = $this->redactor->forActivity()->url($url);
         $scheme = parse_url($url, PHP_URL_SCHEME);
 
         return substr(($scheme && $parts['host'] !== '' ? $scheme.'://' : '').$parts['host'].$parts['path'], 0, 512);

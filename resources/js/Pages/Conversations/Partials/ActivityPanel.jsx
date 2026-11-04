@@ -46,9 +46,12 @@ function StepDetail({ conversationId, call, simulated }) {
     if (!detail) return <p className="mt-3 text-xs text-ink-muted">Cargando detalle…</p>;
 
     const { request, response } = detail;
+    // Why a body may be empty: no permission, removed by retention, or simply not reported. They are different facts and the screen says which one it is.
+    const gone = detail.bodiesRestricted ? 'Tu rol no puede ver este contenido.' : detail.bodiesPurgedAt ? `Eliminado por retención el ${detail.bodiesPurgedAt}.` : null;
 
     return (
         <div className="mt-3 space-y-4 border-t border-line pt-3">
+            {gone && <p role="note" className="rounded-lg border border-line bg-canvas px-3 py-2 text-xs text-ink-muted">{gone} Quedan los datos técnicos del paso (herramienta, método, endpoint, estado y duración).</p>}
             {detail.truncated && <p className="text-xs text-accent-amber">Algún contenido era demasiado grande y se guardó recortado.</p>}
 
             <section aria-label="Solicitud" className="space-y-2">
@@ -62,11 +65,11 @@ function StepDetail({ conversationId, call, simulated }) {
                 </dl>
                 <div className="rounded-lg border border-line bg-canvas px-3 py-2">
                     <h4 className="text-xs font-semibold text-ink-muted">Mensaje que activó la API</h4>
-                    <p className="mt-0.5 text-sm break-words text-ink">{request.message ? (request.message.text ?? `(mensaje de tipo ${request.message.type})`) : NOT_REPORTED}</p>
+                    <p className="mt-0.5 text-sm break-words text-ink">{request.message ? (request.message.text ?? `(mensaje de tipo ${request.message.type})`) : (gone ?? NOT_REPORTED)}</p>
                 </div>
-                <JsonBlock label="Headers" value={request.headers} />
-                <JsonBlock label="Parámetros" value={request.query} emptyText="Sin parámetros" />
-                <JsonBlock label="Body enviado" value={request.body} emptyText="Sin body enviado o no reportado" />
+                <JsonBlock label="Headers" value={request.headers} emptyText={gone ?? undefined} />
+                <JsonBlock label="Parámetros" value={request.query} emptyText={gone ?? "Sin parámetros"} />
+                <JsonBlock label="Body enviado" value={request.body} emptyText={gone ?? "Sin body enviado o no reportado"} />
             </section>
 
             <section aria-label="Respuesta" className="space-y-2">
@@ -83,8 +86,8 @@ function StepDetail({ conversationId, call, simulated }) {
                         {response.errorMessage}
                     </p>
                 )}
-                <JsonBlock label="Headers de la respuesta" value={response.headers} />
-                <JsonBlock label="Body de la respuesta" value={response.body} emptyText="Sin body de respuesta o no reportado" />
+                <JsonBlock label="Headers de la respuesta" value={response.headers} emptyText={gone ?? undefined} />
+                <JsonBlock label="Body de la respuesta" value={response.body} emptyText={gone ?? "Sin body de respuesta o no reportado"} />
             </section>
         </div>
     );

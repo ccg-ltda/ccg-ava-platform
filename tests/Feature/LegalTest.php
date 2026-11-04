@@ -18,11 +18,11 @@ class LegalTest extends TestCase
 {
     use RefreshDatabase;
 
-    private array $slugs = ['terminos-y-condiciones', 'aviso-de-privacidad', 'politica-de-tratamiento-de-datos'];
+    private array $slugs = ['terminos-y-condiciones', 'aviso-de-privacidad', 'politica-de-tratamiento-de-datos', 'politica-de-cookies', 'condiciones-de-uso-de-ia'];
 
     public function test_the_legal_pages_are_public_and_marked_as_draft(): void
     {
-        $this->get('/legal')->assertOk()->assertInertia(fn ($p) => $p->component('Legal/Index')->where('draft', true)->has('documents', 3));
+        $this->get('/legal')->assertOk()->assertInertia(fn ($p) => $p->component('Legal/Index')->where('draft', true)->has('documents', 5));
 
         foreach ($this->slugs as $slug) {
             $this->get("/legal/{$slug}")->assertOk()->assertInertia(fn ($p) => $p->component('Legal/Show')->where('draft', true)->has('document.sections'));

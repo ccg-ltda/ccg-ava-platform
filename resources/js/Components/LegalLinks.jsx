@@ -5,6 +5,8 @@ export const LEGAL_LINKS = [
     { slug: 'terminos-y-condiciones', label: 'Términos y condiciones' },
     { slug: 'aviso-de-privacidad', label: 'Aviso de privacidad' },
     { slug: 'politica-de-tratamiento-de-datos', label: 'Política de datos personales' },
+    { slug: 'politica-de-cookies', label: 'Cookies' },
+    { slug: 'condiciones-de-uso-de-ia', label: 'Uso de IA' },
 ];
 
 /** Visible links to the legal texts, for the footer of the access screens and the account-recovery forms. */

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Conversation;
 use App\Models\Message;
 use App\Services\ChannelCatalog;
 use App\Services\ConversationControl;
@@ -99,7 +100,13 @@ class AgentMessageController extends Controller
             ['workspace_id' => $chatbot->workspace_id, 'contact_name' => $data['contact_name'] ?? null],
         );
 
-        return response()->json(['control' => $this->conversations->control($this->control->requestHuman($conversation, $data['reason'] ?? null))])
+        $before = $conversation->handling;
+        $after = $this->control->requestHuman($conversation, $data['reason'] ?? null);
+
+        // An unambiguous answer for the workflow: it was moved NOW, or a person had already been asked for / had the conversation (a retry), so it can tell the two apart.
+        $outcome = in_array($before, [Conversation::PENDING, Conversation::HUMAN], true) ? ($before === Conversation::HUMAN ? 'already_human' : 'already_pending') : 'requested';
+
+        return response()->json(['control' => $this->conversations->control($after), 'handoff' => ['outcome' => $outcome, 'executed' => $outcome === 'requested']])
             ->header('Cache-Control', 'no-store');
     }
 

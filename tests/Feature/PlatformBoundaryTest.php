@@ -487,6 +487,7 @@ class PlatformBoundaryTest extends TestCase
         '2026_10_09_140000_add_chatbot_executions.php', // only creates `chatbot_executions`
         '2026_11_09_110000_add_offers_all_services_to_locations.php', // already ran in development
         '2026_11_10_110000_add_offers_all_locations_to_products.php', // already ran in development
+        '2026_11_23_100000_add_technical_activity_privacy.php', // already applied to `ccg_ava` (two columns on tables that were created earlier)
     ];
 
     /**

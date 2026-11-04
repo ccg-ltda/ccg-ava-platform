@@ -82,6 +82,7 @@ return [
 
         // Conversaciones
         'view-technical-activity' => ['group' => 'conversations', 'label' => 'Ver la actividad técnica', 'description' => 'Abre el panel «Actividad técnica» de una conversación: qué APIs usó el asistente, con su solicitud y respuesta completas (pueden incluir datos personales del cliente, como nombre o teléfono, y el mensaje que activó la llamada), resultado y duración. Nunca muestra credenciales: se ocultan antes de guardarse.'],
+        'view-technical-activity-bodies' => ['group' => 'conversations', 'label' => 'Ver el contenido completo de la actividad técnica', 'description' => 'Además de la lista de pasos, muestra la solicitud y la respuesta completas de cada llamada (cuerpos, parámetros, encabezados) y el mensaje que la activó. Pueden contener datos personales del cliente, con correos y teléfonos enmascarados; nunca credenciales. Sin este permiso solo se ven los metadatos.'],
         'view-conversations' => ['group' => 'conversations', 'label' => 'Consultar conversaciones', 'description' => 'Lee las conversaciones y los mensajes de los contactos del Workspace.'],
         'take-conversations' => ['group' => 'conversations', 'label' => 'Tomar conversaciones', 'description' => 'Toma una conversación para atenderla. Mientras la atiende, la IA no responde.'],
         'reply-conversations' => ['group' => 'conversations', 'label' => 'Responder conversaciones', 'description' => 'Escribe mensajes al contacto en una conversación que está atendiendo. Quien lo tiene aparece como agente disponible.'],
@@ -195,6 +196,7 @@ return [
      * (the role would receive it by migration): a superuser of the administrative Workspace assigns those explicitly.
      */
     'legacy' => [
+        'view-technical-activity' => ['grants' => ['view-technical-activity-bodies'], 'retire' => false],
         'reply-conversations' => ['grants' => ['take-conversations', 'release-conversations', 'resolve-conversations'], 'retire' => false],
         'manage-plans' => ['grants' => ['view-plans', 'create-plans', 'edit-plans', 'activate-plans', 'assign-plans'], 'retire' => true],
         'manage-modules' => ['grants' => ['view-modules', 'create-modules', 'edit-modules', 'activate-modules'], 'retire' => true],

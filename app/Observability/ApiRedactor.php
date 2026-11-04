@@ -6,9 +6,14 @@ namespace App\Observability;
  * The single redaction policy for stored API calls. It runs BEFORE anything is persisted, on headers, nested bodies, JSON, forms and query strings, and it is
  * deliberately blunt: a key whose name suggests a secret is replaced whatever its value, and strings that look like provider keys, bearer tokens or card
  * numbers are masked wherever they appear.
+ *
+ * `forActivity()` returns the stricter variant used by the technical activity of the assistants: besides the credentials it also masks the e-mails and phone numbers
+ * found in what it stores (the technical log needs the shape of a call, not the identity of the customer; the conversation keeps the real message).
  */
 class ApiRedactor
 {
+    private bool $maskPersonal = false;
+
     public const MASK = '[REDACTED]';
 
     public const MAX_BYTES = 4096;
@@ -16,9 +21,27 @@ class ApiRedactor
     /** Cap of the bodies of a technical-activity step, where the full request and answer are meant to be read. */
     public const STEP_BYTES = 65536;
 
-    private const SENSITIVE_KEY = '/(authorization|cookie|token|secret|password|passwd|pwd|api[-_]?key|apikey|private|signature|checksum|credential|bearer|card|cvv|cvc|session|x-ava)/i';
+    private const SENSITIVE_KEY = '/(authorization|cookie|token|secret|password|passwd|pwd|passphrase|api[-_]?key|apikey|access[-_]?key|private|signature|checksum|credential|bearer|card|cvv|cvc|session|jwt|otp|x-ava|consumer[-_]?(key|secret)|(^|[-_])(auth|key|pin)($|[-_])|[-_]key$)/i';
 
-    private const SENSITIVE_VALUE = '/\b(?:pub|prv)_(?:test|prod)_[A-Za-z0-9]+|\b(?:test|prod)_(?:events|integrity)_[A-Za-z0-9]+|\bBearer\s+[A-Za-z0-9._~+\/=-]+|\b(?:\d[ -]?){13,19}\b/';
+    /** Keys whose value is a person's contact data: masked in the activity variant whatever the value looks like. */
+    private const PERSONAL_PHONE_KEY = '/(phone|tel[eé]fono|celular|mobile|whatsapp|msisdn|contact[-_]?id)/i';
+
+    private const PERSONAL_EMAIL_KEY = '/(e[-_]?mail|correo)/i';
+
+    private const EMAIL_VALUE = '/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/';
+
+    private const PHONE_VALUE = '/\+\d{8,15}\b|\b57\d{10}\b/';
+
+    private const SENSITIVE_VALUE = '/\b(?:pub|prv)_(?:test|prod)_[A-Za-z0-9]+|\b(?:test|prod)_(?:events|integrity)_[A-Za-z0-9]+|\bBearer\s+[A-Za-z0-9._~+\/=-]+|\b(?:\d[ -]?){13,19}\b|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|\b(?:ck|cs)_[A-Fa-f0-9]{32,}|\bAKIA[0-9A-Z]{16}\b|\bsk-[A-Za-z0-9_-]{16,}|\bgh[pousr]_[A-Za-z0-9]{20,}|\bxox[abprs]-[A-Za-z0-9-]{10,}|\bBasic\s+[A-Za-z0-9+\/=]{8,}|\bav[ax]_[A-Za-z0-9]{16,}|\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{40,}\b/';
+
+    /** The stricter variant of the technical activity (credentials plus e-mails and phone numbers). */
+    public function forActivity(): static
+    {
+        $copy = clone $this;
+        $copy->maskPersonal = true;
+
+        return $copy;
+    }
 
     /**
      * @param  array<string, mixed>  $headers
@@ -41,6 +64,16 @@ class ApiRedactor
     {
         if ($key !== null && preg_match(self::SENSITIVE_KEY, $key)) {
             return self::MASK;
+        }
+
+        if ($this->maskPersonal && $key !== null && is_scalar($value) && $value !== '') {
+            if (preg_match(self::PERSONAL_PHONE_KEY, $key)) {
+                return $this->phone((string) $value);
+            }
+
+            if (preg_match(self::PERSONAL_EMAIL_KEY, $key)) {
+                return $this->email((string) $value);
+            }
         }
 
         if (is_array($value)) {
@@ -115,6 +148,34 @@ class ApiRedactor
 
     private function scrub(string $value): string
     {
-        return (string) preg_replace(self::SENSITIVE_VALUE, self::MASK, $value);
+        $value = (string) preg_replace(self::SENSITIVE_VALUE, self::MASK, $value);
+
+        if ($this->maskPersonal) {
+            $value = (string) preg_replace_callback(self::EMAIL_VALUE, fn (array $m) => $this->email($m[0]), $value);
+            $value = (string) preg_replace_callback(self::PHONE_VALUE, fn (array $m) => $this->phone($m[0]), $value);
+        }
+
+        return $value;
+    }
+
+    /** `ana@example.com` becomes `a***@e***.com`: enough to tell two customers apart while debugging, not enough to contact one. */
+    public function email(string $value): string
+    {
+        if (! str_contains($value, '@')) {
+            return '***';
+        }
+
+        [$local, $domain] = explode('@', $value, 2);
+        $tld = str_contains($domain, '.') ? substr($domain, (int) strrpos($domain, '.')) : '';
+
+        return mb_substr($local, 0, 1).'***@'.mb_substr($domain, 0, 1).'***'.$tld;
+    }
+
+    /** Only the last four digits stay. */
+    public function phone(string $value): string
+    {
+        $digits = preg_replace('/\D/', '', $value) ?? '';
+
+        return $digits === '' ? '***' : '••••'.substr($digits, -4);
     }
 }

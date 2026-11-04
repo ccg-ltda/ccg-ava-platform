@@ -26,7 +26,7 @@ class ConversationActivityController extends Controller
         $workspace = $request->attributes->get('workspace');
         $found = $this->inbox->find($this->inbox->scope($workspace), $conversation);
 
-        return response()->json($this->activity->page($found, $workspace->settingsOrDefault(), $filters, (int) ($filters['page'] ?? 1)));
+        return response()->json($this->activity->page($found, $workspace->settingsOrDefault(), $filters, (int) ($filters['page'] ?? 1), $this->canSeeBodies($request)));
     }
 
     /** The request and the answer of ONE step, for the detail view of the panel. */
@@ -35,6 +35,12 @@ class ConversationActivityController extends Controller
         $workspace = $request->attributes->get('workspace');
         $found = $this->inbox->find($this->inbox->scope($workspace), $conversation);
 
-        return response()->json($this->activity->detail($found, $call, $workspace->settingsOrDefault()))->header('Cache-Control', 'no-store');
+        return response()->json($this->activity->detail($found, $call, $workspace->settingsOrDefault(), $this->canSeeBodies($request)))->header('Cache-Control', 'no-store');
+    }
+
+    /** The full request / answer (and the message that started the call) need their own permission: it is where customer data can appear. */
+    private function canSeeBodies(Request $request): bool
+    {
+        return in_array('view-technical-activity-bodies', $request->attributes->get('workspace_permissions', []), true);
     }
 }

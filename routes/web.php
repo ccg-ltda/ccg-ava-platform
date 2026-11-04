@@ -72,6 +72,9 @@ use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/pre-login');
 
+// Browsers ask for /favicon.ico on their own: it is served from the single brand folder (docs/favicon.md). Without the file there is nothing to serve.
+Route::get('/favicon.ico', fn () => is_file(public_path('brand/favicon.ico')) && filesize(public_path('brand/favicon.ico')) > 0 ? redirect('/brand/favicon.ico', 301) : abort(404))->name('favicon');
+
 // Public legal texts (no session): linked from the access screens and the account-recovery forms.
 Route::get('/legal', [LegalController::class, 'index'])->name('legal.index');
 Route::get('/legal/{slug}', [LegalController::class, 'show'])->where('slug', '[a-z-]+')->name('legal.show');
@@ -132,6 +135,8 @@ Route::middleware(['auth', 'workspace', 'throttle:authenticated'])->group(functi
     Route::get('/settings', [SettingsController::class, 'index'])
         ->middleware(['workspace.module:settings', 'workspace.permission:view-settings'])->name('settings.index');
     // Cierre automático por inactividad (Configuraciones > Conversaciones): only the active Workspace, needs the conversations module and edit-settings.
+    Route::put('/settings/activity-privacy', [SettingsController::class, 'updateActivityPrivacy'])
+        ->middleware(['workspace.module:settings', 'workspace.module:assistants', 'workspace.permission:view-settings', 'workspace.permission:edit-settings'])->name('settings.activity-privacy');
     Route::put('/settings/conversations', [SettingsController::class, 'updateConversations'])
         ->middleware(['workspace.module:settings', 'workspace.module:conversations', 'workspace.permission:view-settings', 'workspace.permission:edit-settings'])->name('settings.conversations');
     Route::post('/settings', [SettingsController::class, 'update'])

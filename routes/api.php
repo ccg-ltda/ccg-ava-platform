@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AgentActivityController;
 use App\Http\Controllers\AgentBookingController;
+use App\Http\Controllers\AgentContextController;
 use App\Http\Controllers\AgentController;
 use App\Http\Controllers\AgentKnowledgeController;
 use App\Http\Controllers\AgentMessageController;
@@ -58,6 +59,9 @@ Route::middleware(['body.limit:agent', 'throttle.safe:agent', 'agent', 'api.prot
         Route::post('/messages/status', [AgentMessageController::class, 'status'])->name('messages.status');
         Route::post('/conversations/authorize', [AgentMessageController::class, 'authorizeReply'])->name('conversations.authorize');
         Route::post('/conversations/handoff', [AgentMessageController::class, 'handoff'])->name('conversations.handoff');
+        // Shared conversational state for an automation that runs on its own: read the context and the recent history, and write back what it learned.
+        Route::get('/conversations/context', [AgentContextController::class, 'show'])->name('conversations.context');
+        Route::post('/conversations/context', [AgentContextController::class, 'update'])->name('conversations.context.update');
         // The engine reports the API calls it made by itself (one step per call; idempotent by `step_ref`) for the technical activity of the conversation.
         Route::post('/activity/steps', [AgentActivityController::class, 'store'])->name('activity.steps');
 

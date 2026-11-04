@@ -8,6 +8,7 @@ use App\Http\Requests\UpdateWorkspaceSettingsRequest;
 use App\Models\Workspace;
 use App\Payments\PaymentSettings;
 use App\Payments\WompiConfig;
+use App\Services\ActivityPrivacy;
 use App\Services\ConversationAutoClose;
 use App\Services\EmailTemplates;
 use App\Services\ModuleAccess;
@@ -41,6 +42,12 @@ class SettingsController extends Controller
             ] : null,
             // Cierre automático: only for a Workspace whose plan has Conversaciones.
             'autoClose' => ConversationAutoClose::ready() && app(ModuleAccess::class)->allows($request->attributes->get('workspace'), 'conversations') ? $this->autoClose($request->attributes->get('workspace')) : null,
+            // Privacidad de la actividad técnica: only for a Workspace whose plan has Asistentes.
+            'activityPrivacy' => ActivityPrivacy::ready() && app(ModuleAccess::class)->allows($request->attributes->get('workspace'), 'assistants') ? [
+                'storeBodies' => app(ActivityPrivacy::class)->storesBodies($request->attributes->get('workspace')),
+                'bodyDays' => (int) config('chatbots.tool_trace_body_retention_days'),
+                'metadataDays' => (int) config('chatbots.tool_trace_retention_days'),
+            ] : null,
             // Wompi: only the platform administration inside the administrative Workspace gets this (the routes re-check it). Never a secret: only "is it set" and its last characters.
             'wompi' => EnsurePlatformAdministration::allows($request, 'view-payment-settings') ? $this->wompi($request) : null,
         ]);
@@ -76,6 +83,22 @@ class SettingsController extends Controller
         ])));
 
         return back()->with('success', 'Cierre automático guardado');
+    }
+
+    public function updateActivityPrivacy(Request $request): RedirectResponse
+    {
+        $data = $request->validate(['store_bodies' => ['required', 'boolean']]);
+        $workspace = $request->attributes->get('workspace');
+        $before = app(ActivityPrivacy::class)->storesBodies($workspace);
+        app(ActivityPrivacy::class)->save($workspace, (bool) $data['store_bodies']);
+
+        if ($before !== (bool) $data['store_bodies']) {
+            app(AuditLogger::class)->record('updated', 'settings', $workspace->id, $workspace->name, [
+                AuditLogger::change('Guardar el contenido de la actividad técnica', $before ? 'sí' : 'no', $data['store_bodies'] ? 'sí' : 'no'),
+            ]);
+        }
+
+        return back()->with('success', 'Privacidad de la actividad técnica guardada');
     }
 
     /** @return array<string, mixed> */

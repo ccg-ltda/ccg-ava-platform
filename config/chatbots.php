@@ -190,6 +190,8 @@ return [
     /* How the interface names the status of a traced call. `started` is also what stays when the process ended before the outcome could be written. */
     // Days the technical trace of the assistant's tool calls (conversation > Actividad técnica) is kept. `agent:tools:prune` deletes finished calls older than this (never below 30).
     'tool_trace_retention_days' => 180,
+    // Days the request / response BODIES (and headers, query, error text) of a call are kept; after that only the metadata remains until `tool_trace_retention_days`. Never below 7.
+    'tool_trace_body_retention_days' => 30,
 
     /* Automation engines that run an assistant's workflow. `X-Ava-Engine` and the activity report accept only these keys. */
     'engines' => ['n8n' => 'n8n', 'lava' => 'Lava Studio'],

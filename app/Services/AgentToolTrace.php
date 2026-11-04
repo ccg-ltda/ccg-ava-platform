@@ -81,18 +81,19 @@ class AgentToolTrace
      */
     private function requestFacts(Request $request, bool $startedByAva): array
     {
-        $redactor = app(ApiRedactor::class);
+        $redactor = app(ApiRedactor::class)->forActivity();
+        $bodies = app(ActivityPrivacy::class)->storesBodies($request->attributes->get('workspace'));
         $declared = strtolower((string) $request->header('X-Ava-Engine'));
         $engine = $startedByAva ? 'n8n' : (array_key_exists($declared, (array) config('chatbots.engines')) ? $declared : null);
-        [$body, $cut] = $redactor->body($request->getContent() ?: null, ApiRedactor::STEP_BYTES);
-        $query = $request->query();
+        [$body, $cut] = $bodies ? $redactor->body($request->getContent() ?: null, ApiRedactor::STEP_BYTES) : [null, false];
+        $query = $bodies ? $request->query() : [];
 
         return [
             'source' => 'ava',
             'engine' => $engine,
             'method' => $request->getMethod(),
             'endpoint' => '/'.ltrim($request->path(), '/'),
-            'request_headers' => json_encode($redactor->headers(array_replace($request->headers->all(), array_fill_keys(array_intersect(['idempotency-key'], array_keys($request->headers->all())), ApiRedactor::MASK)))),
+            'request_headers' => ! $bodies ? null : json_encode($redactor->headers(array_replace($request->headers->all(), array_fill_keys(array_intersect(['idempotency-key'], array_keys($request->headers->all())), ApiRedactor::MASK)))),
             'request_query' => $query === [] ? null : json_encode($redactor->data($query), JSON_UNESCAPED_UNICODE),
             'request_body' => $body,
             'truncated' => $cut,
@@ -163,7 +164,7 @@ class AgentToolTrace
                 'notification' => $facts['notification'] ?? 'none',
                 'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
                 'finished_at' => now(),
-            ] + $this->responseFacts($response, $exception));
+            ] + $this->responseFacts($response, $exception, app(ActivityPrivacy::class)->storesBodies($call->workspace_id)));
         } catch (Throwable $e) {
             $this->unavailable($e);
         } finally {
@@ -206,12 +207,12 @@ class AgentToolTrace
     }
 
     /** @return array<string, mixed> the redacted answer of the tool (or the exception it threw) */
-    private function responseFacts(?Response $response, ?Throwable $exception): array
+    private function responseFacts(?Response $response, ?Throwable $exception, bool $bodies): array
     {
-        $redactor = app(ApiRedactor::class);
+        $redactor = app(ApiRedactor::class)->forActivity();
         $facts = [];
 
-        if ($response) {
+        if ($response && $bodies) {
             [$text, $cut] = $redactor->body($response->getContent() ?: null, ApiRedactor::STEP_BYTES);
             $facts = ['response_body' => $text, 'response_headers' => json_encode($redactor->headers($response->headers->all())), 'truncated' => $cut];
         }

@@ -1,0 +1,479 @@
+{
+  "name": "Ava — referencia (handoff humano/IA) — PLANTILLA SIN PROBAR",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ava-referencia",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Mensaje entrante (trigger de ejemplo)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": ""
+    },
+    {
+      "parameters": {
+        "jsCode": "// Cambia esta lectura por el formato real de tu trigger (WhatsApp Trigger, chat, etc.).\nconst b = $json.body ?? $json;\nreturn [{ json: { channel: b.channel ?? 'whatsapp', contact_id: String(b.contact_id), text: b.text, external_id: String(b.message_id), execution: $execution.id } }];"
+      },
+      "name": "Normalizar evento",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.AVA_URL }}/api/agent/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "options": {
+          "timeout": 15000
+        },
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $json.channel, contact_id: $json.contact_id, direction: \"in\", type: \"text\", body: $json.text, external_id: $json.external_id }) }}"
+      },
+      "name": "1. Reportar mensaje a Ava",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Ava Agent Token (Bearer)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.control.ai_allowed }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "2. ¿La IA puede responder?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.AVA_URL }}/api/agent/conversations/context?channel={{ $(\"Normalizar evento\").item.json.channel }}&contact_id={{ $(\"Normalizar evento\").item.json.contact_id }}&limit=20",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": false,
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "name": "3. Contexto e historial",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        220
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Ava Agent Token (Bearer)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "jsCode": "// SUSTITUYE este nodo por tu nodo de IA (AI Agent / OpenAI / etc.) con las instrucciones de Ava (GET /api/agent/config → instructions).\n// Devuelve: { reply, escalate, reason, learned }. La regla de escalamiento vive AQUÍ y en las instrucciones, NO en Ava.\nconst text = ($('Normalizar evento').item.json.text || '').toLowerCase();\nconst escalate = /(queja|problema|reclamo|hablar con (una )?persona|asesor|humano)/.test(text);\nreturn [{ json: { escalate, reason: escalate ? 'El cliente pidió ayuda de una persona o reportó un problema' : null, reply: escalate ? 'Te comunico con una persona del equipo.' : 'Gracias por escribirnos, ¿en qué te ayudo?', learned: {} } }];"
+      },
+      "name": "4. IA (reemplazar por el nodo de IA)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.escalate }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "5. ¿Escalar a una persona?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.AVA_URL }}/api/agent/conversations/handoff",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "options": {
+          "timeout": 15000
+        },
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $(\"Normalizar evento\").item.json.channel, contact_id: $(\"Normalizar evento\").item.json.contact_id, reason: $json.reason }) }}"
+      },
+      "name": "6a. Pedir una persona (handoff)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        120
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Ava Agent Token (Bearer)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Resultado inequívoco: outcome = requested | already_pending | already_human; executed = true solo si se movió ahora.\nif (!['pending','human'].includes($json.control.mode)) throw new Error('Ava no confirmó el handoff');\nreturn [{ json: { handoff: $json.handoff, control: $json.control } }];"
+      },
+      "name": "6b. Confirmar handoff",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.AVA_URL }}/api/agent/conversations/authorize",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "options": {
+          "timeout": 15000
+        },
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $(\"Normalizar evento\").item.json.channel, contact_id: $(\"Normalizar evento\").item.json.contact_id, version: $(\"2. ¿La IA puede responder?\").item.json.control.version }) }}"
+      },
+      "name": "7. ¿Puedo responder? (authorize)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        340
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Ava Agent Token (Bearer)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.control.ai_allowed }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "8. ¿Sigue autorizada la IA?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aquí va el envío real al cliente (nodo de WhatsApp, etc.). Esta plantilla NO envía nada.\nreturn [{ json: { sent: true, text: $('4. IA (reemplazar por el nodo de IA)').item.json.reply } }];"
+      },
+      "name": "9. Enviar la respuesta por tu canal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.AVA_URL }}/api/agent/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "options": {
+          "timeout": 15000
+        },
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $(\"Normalizar evento\").item.json.channel, contact_id: $(\"Normalizar evento\").item.json.contact_id, direction: \"out\", type: \"text\", body: $json.text, external_id: \"out-\" + $(\"Normalizar evento\").item.json.external_id }) }}"
+      },
+      "name": "10. Reportar la respuesta enviada",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Ava Agent Token (Bearer)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.AVA_URL }}/api/agent/activity/steps",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "options": {
+          "timeout": 15000
+        },
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $(\"Normalizar evento\").item.json.channel, contact_id: $(\"Normalizar evento\").item.json.contact_id, engine: \"n8n\", step_ref: $execution.id + \":ia:0\", execution_id: String($execution.id), tool: \"llm.reply\", tool_label: \"Respuesta de la IA\", status: \"succeeded\", http_status: 200 }) }}"
+      },
+      "name": "11. Registrar paso técnico",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2420,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Ava Agent Token (Bearer)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { skipped: true, reason: 'Una persona tiene la conversación o la versión cambió' } }];"
+      },
+      "name": "Fin: no responder (humano al mando)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        420
+      ]
+    }
+  ],
+  "connections": {
+    "Mensaje entrante (trigger de ejemplo)": {
+      "main": [
+        [
+          {
+            "node": "Normalizar evento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar evento": {
+      "main": [
+        [
+          {
+            "node": "1. Reportar mensaje a Ava",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Reportar mensaje a Ava": {
+      "main": [
+        [
+          {
+            "node": "2. ¿La IA puede responder?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Contexto e historial": {
+      "main": [
+        [
+          {
+            "node": "4. IA (reemplazar por el nodo de IA)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. IA (reemplazar por el nodo de IA)": {
+      "main": [
+        [
+          {
+            "node": "5. ¿Escalar a una persona?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6a. Pedir una persona (handoff)": {
+      "main": [
+        [
+          {
+            "node": "6b. Confirmar handoff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. ¿Puedo responder? (authorize)": {
+      "main": [
+        [
+          {
+            "node": "8. ¿Sigue autorizada la IA?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9. Enviar la respuesta por tu canal": {
+      "main": [
+        [
+          {
+            "node": "10. Reportar la respuesta enviada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10. Reportar la respuesta enviada": {
+      "main": [
+        [
+          {
+            "node": "11. Registrar paso técnico",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. ¿La IA puede responder?": {
+      "main": [
+        [
+          {
+            "node": "3. Contexto e historial",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fin: no responder (humano al mando)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. ¿Escalar a una persona?": {
+      "main": [
+        [
+          {
+            "node": "6a. Pedir una persona (handoff)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "7. ¿Puedo responder? (authorize)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8. ¿Sigue autorizada la IA?": {
+      "main": [
+        [
+          {
+            "node": "9. Enviar la respuesta por tu canal",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fin: no responder (humano al mando)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "note": "Plantilla de referencia. Sin credenciales ni ids. NO probada en una instancia real de n8n: importar solo en una instancia de PRUEBAS, crear la credencial \"Ava Agent Token (Bearer)\" (Header Auth: Authorization = Bearer <token>) y la variable AVA_URL. Ver docs/n8n-workflow-guia.md."
+  },
+  "tags": []
+}

@@ -7,6 +7,8 @@
 
         <title>@yield('title')</title>
 
+        @include('partials.favicon')
+
         <!-- Styles -->
         <style @if (! empty($cspNonce)) nonce="{{ $cspNonce }}" @endif>
             html, body {

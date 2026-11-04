@@ -27,7 +27,7 @@ class ConversationActivity
      * @param  array{status?: ?string}  $filters
      * @return array{ready: bool, runs: list<array<string, mixed>>, calls: list<array<string, mixed>>, meta: array<string, int>}
      */
-    public function page(Conversation $conversation, WorkspaceSetting $settings, array $filters = [], int $page = 1): array
+    public function page(Conversation $conversation, WorkspaceSetting $settings, array $filters = [], int $page = 1, bool $withBodies = false): array
     {
         $when = fn ($date) => $date ? $settings->formatDate($date).' '.$settings->formatTime($date) : null;
 
@@ -50,7 +50,7 @@ class ConversationActivity
         $runs = ChatbotExecution::query()->where('workspace_id', $conversation->workspace_id)->where('conversation_id', $conversation->id)
             ->whereIn('correlation_id', $page->pluck('execution_ref')->filter()->unique()->all())->get()->keyBy('correlation_id');
         $steps = $this->stepNumbers($conversation, $page);
-        $triggers = $this->triggerMessages($conversation, $page, $runs);
+        $triggers = $withBodies ? $this->triggerMessages($conversation, $page, $runs) : [];
 
         $calls = $page->map(function (AgentToolCall $call) use ($when, $runs, $labels, $steps, $triggers) {
             $run = $call->execution_ref ? $runs->get($call->execution_ref) : null;
@@ -112,13 +112,14 @@ class ConversationActivity
      *
      * @return array<string, mixed>
      */
-    public function detail(Conversation $conversation, int $callId, WorkspaceSetting $settings): array
+    public function detail(Conversation $conversation, int $callId, WorkspaceSetting $settings, bool $withBodies = false): array
     {
         $call = AgentToolCall::query()->where('workspace_id', $conversation->workspace_id)->where('conversation_id', $conversation->id)->findOrFail($callId);
         $at = fn ($date) => $date ? $settings->formatDate($date).' '.$settings->formatTime($date) : null;
         $decode = fn (?string $json) => $json === null ? null : (json_decode($json, true) ?? $json);
         $run = $call->execution_ref ? ChatbotExecution::where('workspace_id', $call->workspace_id)->where('correlation_id', $call->execution_ref)->first() : null;
-        $trigger = $this->triggerMessages($conversation, collect([$call]), $run ? collect([$run->correlation_id => $run]) : collect())[$call->id] ?? null;
+        $trigger = $withBodies ? ($this->triggerMessages($conversation, collect([$call]), $run ? collect([$run->correlation_id => $run]) : collect())[$call->id] ?? null) : null;
+        $hide = fn ($value) => $withBodies ? $value : null;
 
         return [
             'id' => $call->id,
@@ -130,22 +131,24 @@ class ConversationActivity
             'status' => $call->status,
             'statusLabel' => $call->source === 'reported' && $call->status === AgentToolCall::STARTED ? 'Pendiente' : config("chatbots.tool_statuses.{$call->status}"),
             'truncated' => $call->truncated,
+            'bodiesRestricted' => ! $withBodies,
+            'bodiesPurgedAt' => $at($call->bodies_purged_at),
             'request' => [
                 'message' => $trigger ? ['id' => $trigger->id, 'text' => $trigger->body, 'type' => $trigger->type] : null,
                 'method' => $call->method,
                 'endpoint' => $call->endpoint,
-                'headers' => $decode($call->request_headers),
-                'query' => $decode($call->request_query),
-                'body' => $decode($call->request_body),
+                'headers' => $hide($decode($call->request_headers)),
+                'query' => $hide($decode($call->request_query)),
+                'body' => $hide($decode($call->request_body)),
                 'at' => $at($call->started_at ?? $call->created_at),
             ],
             'response' => [
                 'httpStatus' => $call->http_status,
                 'durationMs' => $call->duration_ms,
-                'headers' => $decode($call->response_headers),
-                'body' => $decode($call->response_body),
+                'headers' => $hide($decode($call->response_headers)),
+                'body' => $hide($decode($call->response_body)),
                 'errorClass' => $call->error_class,
-                'errorMessage' => $call->error_message,
+                'errorMessage' => $hide($call->error_message),
                 'reason' => $call->reason,
                 'at' => $at($call->finished_at),
             ],

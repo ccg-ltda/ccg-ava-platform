@@ -25,6 +25,8 @@ return [
         'terms' => ['slug' => 'terminos-y-condiciones', 'title' => 'Términos y condiciones de uso', 'version' => '0.1', 'required' => true],
         'privacy_notice' => ['slug' => 'aviso-de-privacidad', 'title' => 'Aviso de privacidad', 'version' => '0.1', 'required' => true],
         'data_policy' => ['slug' => 'politica-de-tratamiento-de-datos', 'title' => 'Política de tratamiento de datos personales', 'version' => '0.1', 'required' => false],
+        'cookies' => ['slug' => 'politica-de-cookies', 'title' => 'Política de cookies', 'version' => '0.1', 'required' => false],
+        'ai_use' => ['slug' => 'condiciones-de-uso-de-ia', 'title' => 'Condiciones de uso de la inteligencia artificial', 'version' => '0.1', 'required' => false],
     ],
 
     // Who is responsible for the data of the platform's own accounts. Every value is confirmed by CCG; none is assumed.

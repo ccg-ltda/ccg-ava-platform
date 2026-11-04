@@ -2,7 +2,7 @@
   "info": {
     "name": "Ava Platform — API y webhooks (inventario de solo lectura)",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Generada a partir del código (`php artisan route:list` y los controladores) el 2026-10-29. NO contiene credenciales, tokens ni datos reales.\n\n**Qué es Ava.** Una aplicación web con sesión (cookies + CSRF) renderizada con Inertia. Solo hay 3 superficies JSON pensadas para integración: `/api/agent/*` (Bearer del chatbot), `/api/widget/*` y `/api/booking/*` (públicas por clave) y `/api/webhooks/*` (entrantes de proveedores). El resto (carpetas «Web autenticada», «Plataforma» y «Horizon») son rutas del navegador: se documentan por transparencia, no son una API estable.\n\n**Cómo usarla.** Defina las variables de un entorno de Postman (valores secretos como «secret»). Pruebe solo contra un entorno de desarrollo o de pruebas. No dispare webhooks contra proveedores reales ni cree pagos o mensajes reales.\n\n**Verificado:** método, URI, middleware, permisos/módulos/plataforma por ruta (de `route:list`), límites y validaciones de las rutas JSON curadas. **Cuerpos de respuesta:** los ejemplos de éxito muestran solo las claves de primer nivel que devuelve el controlador (`{}`, `[]` y `…` son marcadores); los errores 401, 403, 404 y 429 se listan como código sin cuerpo porque su texto no se verificó, y los 422 siguen el formato estándar de Laravel. Los errores de reservas y pedidos del agente devuelven `message` y `reason`.\n\n**No verificado:** las reglas de validación de cada formulario Inertia, las respuestas reales de cada ruta web, y ninguna ejecución contra un servidor."
+    "description": "Colección PRINCIPAL de Ava Platform (no hay otra). Actualizada el 2026-11-04 contra `php artisan route:list`. NO contiene credenciales, tokens ni datos reales: todas las variables secretas están vacías y los datos de ejemplo son FICTICIOS.\n\n**Autenticación por grupo (real):** `01` = Bearer con el token del chatbot (`agent_token`); el Workspace y el chatbot salen del token, no se envían. `02` y `03` = públicas por clave en la URL. `04` = firma del proveedor (Meta `X-Hub-Signature-256`, Wompi, o `X-Ava-Signature` de un endpoint entrante). `05` = invitados (sin sesión). `06` y `07` = sesión web (cookies + CSRF), con permiso y módulo. `08` = sesión + lista `HORIZON_ALLOWED_EMAILS`. `10` = API externa de WooCommerce (Basic).\n\n**Cómo ejecutarla:** ver `docs/postman-guia.md`. Orden recomendado del grupo 01: Configuración → Mensaje entrante → Reintento → Contexto → Guardar contexto → Handoff → Reintento de handoff → Paso técnico inicio/fin → Encuestas/Reservas → errores esperados. Cada solicitud trae scripts de prueba (código HTTP, estructura, idempotencia) y guarda en variables los identificadores que devuelve.\n\nBooker no tiene solicitudes aquí a propósito: Ava solo lo consume internamente (API Merchant, sin endpoints confirmados para consumidores externos); las reservas externas llegan por `POST /api/agent/booking-records`."
   },
   "variable": [
     {
@@ -11,14 +11,64 @@
       "description": "URL base. En despliegue, la HTTPS pública (APP_URL)."
     },
     {
-      "key": "token",
+      "key": "agent_token",
       "value": "",
-      "description": "Token del chatbot (`ava_…`). Variable secreta."
+      "description": "Token del chatbot (`ava_…`), generado en Asistentes → IA y comportamiento. Variable SECRETA: déjala vacía en la colección y complétala en tu entorno."
+    },
+    {
+      "key": "workspace_id",
+      "value": "",
+      "description": "Solo informativa. Las APIs del agente NO la envían: el Workspace sale del token y ningún cuerpo puede cambiarlo."
+    },
+    {
+      "key": "channel",
+      "value": "whatsapp",
+      "description": "Canal con conversaciones (`whatsapp` o `web`)."
+    },
+    {
+      "key": "contact_id",
+      "value": "573000000001",
+      "description": "Identificador FICTICIO del contacto (3 a 64 caracteres `[A-Za-z0-9._-]`)."
+    },
+    {
+      "key": "conversation_id",
+      "value": "",
+      "description": "Se guarda sola desde las respuestas que la devuelven."
+    },
+    {
+      "key": "message_id",
+      "value": "",
+      "description": "Se guarda solo desde `POST /messages`."
+    },
+    {
+      "key": "last_message_id",
+      "value": "",
+      "description": "Último mensaje procesado; se usa como `after_id`."
+    },
+    {
+      "key": "control_version",
+      "value": "",
+      "description": "Versión de control devuelta por Ava; se envía a `authorize`."
+    },
+    {
+      "key": "step_ref",
+      "value": "postman-demo:paso:0",
+      "description": "Clave de idempotencia del paso técnico (estable entre reintentos)."
+    },
+    {
+      "key": "booking_external_id",
+      "value": "POSTMAN-BK-1",
+      "description": "Id externo FICTICIO de una reserva."
+    },
+    {
+      "key": "survey_key",
+      "value": "postman-encuesta",
+      "description": "Clave de la encuesta de prueba."
     },
     {
       "key": "workspace_code",
       "value": "",
-      "description": "Código del Workspace para el acceso (p. ej. el de su cuenta)."
+      "description": "Código del Workspace (login web)."
     },
     {
       "key": "widget_key",
@@ -28,47 +78,67 @@
     {
       "key": "booking_key",
       "value": "",
-      "description": "Clave de la página de reserva pública."
+      "description": "Clave pública de la página de reservas."
     },
     {
       "key": "appointment_token",
       "value": "",
-      "description": "Token de gestión de una cita (40 caracteres)."
+      "description": "Enlace de gestión de una reserva (40 caracteres)."
     },
     {
       "key": "whatsapp_integration_key",
       "value": "",
-      "description": "Clave de 48 hex del webhook de la integración WhatsApp del Workspace."
+      "description": "Clave de la integración de WhatsApp en la URL del webhook."
     },
     {
       "key": "meta_app_secret",
       "value": "",
-      "description": "SECRETO. App Secret de Meta para firmar webhooks de prueba."
+      "description": "Secreto de la app de Meta (firma). SECRETA."
     },
     {
       "key": "meta_verify_token",
       "value": "",
-      "description": "SECRETO. Verify token del webhook."
+      "description": "Token de verificación del webhook de Meta."
     },
     {
       "key": "wompi_events_secret",
       "value": "",
-      "description": "SECRETO. Secreto de eventos de Wompi (Sandbox) para el checksum de prueba."
+      "description": "Secreto de eventos de Wompi. SECRETA."
     },
     {
       "key": "user_email",
       "value": "",
-      "description": "SECRETO. Correo de la cuenta de prueba."
+      "description": "Correo de una cuenta de PRUEBA."
     },
     {
       "key": "user_password",
       "value": "",
-      "description": "SECRETO. Contraseña de la cuenta de prueba."
+      "description": "Contraseña de una cuenta de PRUEBA. SECRETA."
     },
     {
       "key": "xsrf_token",
       "value": "",
-      "description": "Se rellena solo desde la cookie XSRF-TOKEN."
+      "description": "Token CSRF de la sesión web."
+    },
+    {
+      "key": "woo_url",
+      "value": "https://tienda-de-pruebas.example",
+      "description": "URL de la tienda WooCommerce de PRUEBAS (HTTPS)."
+    },
+    {
+      "key": "woo_consumer_key",
+      "value": "",
+      "description": "Clave de cliente `ck_…` (solo lectura). SECRETA."
+    },
+    {
+      "key": "woo_consumer_secret",
+      "value": "",
+      "description": "Secreto de cliente `cs_…`. SECRETA."
+    },
+    {
+      "key": "woo_webhook_secret",
+      "value": "",
+      "description": "Secreto del webhook de WooCommerce. SECRETA."
     }
   ],
   "item": [
@@ -494,7 +564,7 @@
       ]
     },
     {
-      "name": "01 API del agente (n8n) — Bearer",
+      "name": "01 API del agente (n8n) — Bearer del chatbot",
       "description": "Superficie JSON para automatizaciones. Autenticación: token del chatbot. Aislamiento: el Workspace sale del token.",
       "item": [
         {
@@ -528,7 +598,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{token}}",
+                  "value": "{{agent_token}}",
                   "type": "string"
                 }
               ]
@@ -613,184 +683,18 @@
               ],
               "body": ""
             }
-          ]
-        },
-        {
-          "name": "Reportar mensaje",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('trae el chatbot', () => pm.expect(body).to.be.an('object'));"
+                ]
               }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/agent/messages",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "agent",
-                "messages"
-              ]
-            },
-            "description": "Autenticación: `Authorization: Bearer ava_…` (token del chatbot, generado en Asistentes → IA y comportamiento; Ava guarda solo su SHA-256). El token vence a los 90 días (se renueva con «Rotar token» sin interrumpir la integración, §75); un token vencido o revocado recibe `401` con `reason`: `token_expired` o `token_revoked`. El token de ejecución de vida corta que Ava envía a n8n en `ava.token` solo sirve para las herramientas de reservas y pedidos de esa conversación (403 en las demás rutas).  Middleware verificado: `throttle:agent` (600/min por token+IP), `AuthenticateAgent`, `EnsureWorkspaceModule:assistants` y, cuando se indica, `conversations`. El Workspace sale SIEMPRE del token, nunca del cuerpo. Módulos: `assistants`, `conversations`. Idempotente por `external_id`: un reintento responde 200 (`created:false`) en lugar de 201.",
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{token}}",
-                  "type": "string"
-                }
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"channel\": \"whatsapp\",\n  \"contact_id\": \"contacto-001\",\n  \"contact_name\": \"Nombre de prueba\",\n  \"direction\": \"in\",\n  \"type\": \"text\",\n  \"body\": \"Hola\",\n  \"external_id\": \"wamid.EJEMPLO\",\n  \"status\": \"sent\",\n  \"timestamp\": \"2026-01-01T12:00:00Z\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": [
-            {
-              "name": "201 Created",
-              "originalRequest": {
-                "method": "POST",
-                "url": {
-                  "raw": "{{base_url}}/api/agent/messages",
-                  "host": [
-                    "{{base_url}}"
-                  ],
-                  "path": [
-                    "api",
-                    "agent",
-                    "messages"
-                  ]
-                }
-              },
-              "status": "Created",
-              "code": 201,
-              "header": [
-                {
-                  "key": "Content-Type",
-                  "value": "application/json"
-                }
-              ],
-              "body": "{\n  \"id\": 1,\n  \"created\": true,\n  \"control\": {}\n}"
-            },
-            {
-              "name": "200 OK (duplicado)",
-              "originalRequest": {
-                "method": "POST",
-                "url": {
-                  "raw": "{{base_url}}/api/agent/messages",
-                  "host": [
-                    "{{base_url}}"
-                  ],
-                  "path": [
-                    "api",
-                    "agent",
-                    "messages"
-                  ]
-                }
-              },
-              "status": "OK (duplicado)",
-              "code": 200,
-              "header": [
-                {
-                  "key": "Content-Type",
-                  "value": "application/json"
-                }
-              ],
-              "body": "{\n  \"id\": 1,\n  \"created\": false,\n  \"control\": {}\n}"
-            },
-            {
-              "name": "422 Unprocessable Entity",
-              "originalRequest": {
-                "method": "POST",
-                "url": {
-                  "raw": "{{base_url}}/api/agent/messages",
-                  "host": [
-                    "{{base_url}}"
-                  ],
-                  "path": [
-                    "api",
-                    "agent",
-                    "messages"
-                  ]
-                }
-              },
-              "status": "Unprocessable Entity",
-              "code": 422,
-              "header": [
-                {
-                  "key": "Content-Type",
-                  "value": "application/json"
-                }
-              ],
-              "body": "{\n  \"message\": \"Mensaje de validación del servidor.\",\n  \"errors\": {\n    \"campo\": [\n      \"Detalle.\"\n    ]\n  }\n}"
-            },
-            {
-              "name": "401 Unauthorized",
-              "originalRequest": {
-                "method": "POST",
-                "url": {
-                  "raw": "{{base_url}}/api/agent/messages",
-                  "host": [
-                    "{{base_url}}"
-                  ],
-                  "path": [
-                    "api",
-                    "agent",
-                    "messages"
-                  ]
-                }
-              },
-              "status": "Unauthorized",
-              "code": 401,
-              "header": [
-                {
-                  "key": "Content-Type",
-                  "value": "application/json"
-                }
-              ],
-              "body": ""
-            },
-            {
-              "name": "429 Too Many Requests",
-              "originalRequest": {
-                "method": "POST",
-                "url": {
-                  "raw": "{{base_url}}/api/agent/messages",
-                  "host": [
-                    "{{base_url}}"
-                  ],
-                  "path": [
-                    "api",
-                    "agent",
-                    "messages"
-                  ]
-                }
-              },
-              "status": "Too Many Requests",
-              "code": 429,
-              "header": [
-                {
-                  "key": "Content-Type",
-                  "value": "application/json"
-                }
-              ],
-              "body": ""
             }
           ]
         },
@@ -826,7 +730,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{token}}",
+                  "value": "{{agent_token}}",
                   "type": "string"
                 }
               ]
@@ -923,213 +827,16 @@
               ],
               "body": "{\n  \"message\": \"Mensaje de validación del servidor.\",\n  \"errors\": {\n    \"campo\": [\n      \"Detalle.\"\n    ]\n  }\n}"
             }
-          ]
-        },
-        {
-          "name": "Autorizar respuesta (¿responde la IA?)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/agent/conversations/authorize",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "agent",
-                "conversations",
-                "authorize"
-              ]
-            },
-            "description": "Autenticación: `Authorization: Bearer ava_…` (token del chatbot, generado en Asistentes → IA y comportamiento; Ava guarda solo su SHA-256). El token vence a los 90 días (se renueva con «Rotar token» sin interrumpir la integración, §75); un token vencido o revocado recibe `401` con `reason`: `token_expired` o `token_revoked`. El token de ejecución de vida corta que Ava envía a n8n en `ava.token` solo sirve para las herramientas de reservas y pedidos de esa conversación (403 en las demás rutas).  Middleware verificado: `throttle:agent` (600/min por token+IP), `AuthenticateAgent`, `EnsureWorkspaceModule:assistants` y, cuando se indica, `conversations`. El Workspace sale SIEMPRE del token, nunca del cuerpo. n8n debe consultarlo antes de enviar; si una persona tiene la conversación, `control.handling` != `ai`.",
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{token}}",
-                  "type": "string"
-                }
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"channel\": \"whatsapp\",\n  \"contact_id\": \"contacto-001\",\n  \"version\": 0\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": [
+          ],
+          "event": [
             {
-              "name": "200 OK",
-              "originalRequest": {
-                "method": "POST",
-                "url": {
-                  "raw": "{{base_url}}/api/agent/conversations/authorize",
-                  "host": [
-                    "{{base_url}}"
-                  ],
-                  "path": [
-                    "api",
-                    "agent",
-                    "conversations",
-                    "authorize"
-                  ]
-                }
-              },
-              "status": "OK",
-              "code": 200,
-              "header": [
-                {
-                  "key": "Content-Type",
-                  "value": "application/json"
-                }
-              ],
-              "body": "{\n  \"control\": {}\n}"
-            },
-            {
-              "name": "422 Unprocessable Entity",
-              "originalRequest": {
-                "method": "POST",
-                "url": {
-                  "raw": "{{base_url}}/api/agent/conversations/authorize",
-                  "host": [
-                    "{{base_url}}"
-                  ],
-                  "path": [
-                    "api",
-                    "agent",
-                    "conversations",
-                    "authorize"
-                  ]
-                }
-              },
-              "status": "Unprocessable Entity",
-              "code": 422,
-              "header": [
-                {
-                  "key": "Content-Type",
-                  "value": "application/json"
-                }
-              ],
-              "body": "{\n  \"message\": \"Mensaje de validación del servidor.\",\n  \"errors\": {\n    \"campo\": [\n      \"Detalle.\"\n    ]\n  }\n}"
-            }
-          ]
-        },
-        {
-          "name": "Pedir una persona (handoff)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('respuesta esperada (200/201/403 si el plan no incluye el módulo/404 sin datos de ejemplo/409/422)', () => pm.expect([200, 201, 202, 403, 404, 409, 422]).to.include(pm.response.code));"
+                ]
               }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/agent/conversations/handoff",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "agent",
-                "conversations",
-                "handoff"
-              ]
-            },
-            "description": "Autenticación: `Authorization: Bearer ava_…` (token del chatbot, generado en Asistentes → IA y comportamiento; Ava guarda solo su SHA-256). El token vence a los 90 días (se renueva con «Rotar token» sin interrumpir la integración, §75); un token vencido o revocado recibe `401` con `reason`: `token_expired` o `token_revoked`. El token de ejecución de vida corta que Ava envía a n8n en `ava.token` solo sirve para las herramientas de reservas y pedidos de esa conversación (403 en las demás rutas).  Middleware verificado: `throttle:agent` (600/min por token+IP), `AuthenticateAgent`, `EnsureWorkspaceModule:assistants` y, cuando se indica, `conversations`. El Workspace sale SIEMPRE del token, nunca del cuerpo. Pasa la conversación a «Pendiente de agente».",
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{token}}",
-                  "type": "string"
-                }
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"channel\": \"whatsapp\",\n  \"contact_id\": \"contacto-001\",\n  \"contact_name\": \"Nombre de prueba\",\n  \"reason\": \"El cliente pidió una persona\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": [
-            {
-              "name": "200 OK",
-              "originalRequest": {
-                "method": "POST",
-                "url": {
-                  "raw": "{{base_url}}/api/agent/conversations/handoff",
-                  "host": [
-                    "{{base_url}}"
-                  ],
-                  "path": [
-                    "api",
-                    "agent",
-                    "conversations",
-                    "handoff"
-                  ]
-                }
-              },
-              "status": "OK",
-              "code": 200,
-              "header": [
-                {
-                  "key": "Content-Type",
-                  "value": "application/json"
-                }
-              ],
-              "body": "{\n  \"control\": {}\n}"
-            },
-            {
-              "name": "422 Unprocessable Entity",
-              "originalRequest": {
-                "method": "POST",
-                "url": {
-                  "raw": "{{base_url}}/api/agent/conversations/handoff",
-                  "host": [
-                    "{{base_url}}"
-                  ],
-                  "path": [
-                    "api",
-                    "agent",
-                    "conversations",
-                    "handoff"
-                  ]
-                }
-              },
-              "status": "Unprocessable Entity",
-              "code": 422,
-              "header": [
-                {
-                  "key": "Content-Type",
-                  "value": "application/json"
-                }
-              ],
-              "body": "{\n  \"message\": \"Mensaje de validación del servidor.\",\n  \"errors\": {\n    \"campo\": [\n      \"Detalle.\"\n    ]\n  }\n}"
             }
           ]
         },
@@ -1173,7 +880,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{token}}",
+                  "value": "{{agent_token}}",
                   "type": "string"
                 }
               ]
@@ -1285,6 +992,17 @@
               ],
               "body": "{\n  \"message\": \"Mensaje de validación del servidor.\",\n  \"errors\": {\n    \"campo\": [\n      \"Detalle.\"\n    ]\n  }\n}"
             }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('respuesta esperada (200/201/403 si el plan no incluye el módulo/404 sin datos de ejemplo/409/422)', () => pm.expect([200, 201, 202, 403, 404, 409, 422]).to.include(pm.response.code));"
+                ]
+              }
+            }
           ]
         },
         {
@@ -1319,7 +1037,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{token}}",
+                  "value": "{{agent_token}}",
                   "type": "string"
                 }
               ]
@@ -1380,6 +1098,17 @@
               ],
               "body": ""
             }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('respuesta esperada (200/201/403 si el plan no incluye el módulo/404 sin datos de ejemplo/409/422)', () => pm.expect([200, 201, 202, 403, 404, 409, 422]).to.include(pm.response.code));"
+                ]
+              }
+            }
           ]
         },
         {
@@ -1414,7 +1143,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{token}}",
+                  "value": "{{agent_token}}",
                   "type": "string"
                 }
               ]
@@ -1475,6 +1204,17 @@
               ],
               "body": ""
             }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('respuesta esperada (200/201/403 si el plan no incluye el módulo/404 sin datos de ejemplo/409/422)', () => pm.expect([200, 201, 202, 403, 404, 409, 422]).to.include(pm.response.code));"
+                ]
+              }
+            }
           ]
         },
         {
@@ -1509,7 +1249,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{token}}",
+                  "value": "{{agent_token}}",
                   "type": "string"
                 }
               ]
@@ -1569,6 +1309,17 @@
                 }
               ],
               "body": ""
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('respuesta esperada (200/201/403 si el plan no incluye el módulo/404 sin datos de ejemplo/409/422)', () => pm.expect([200, 201, 202, 403, 404, 409, 422]).to.include(pm.response.code));"
+                ]
+              }
             }
           ]
         },
@@ -1636,7 +1387,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{token}}",
+                  "value": "{{agent_token}}",
                   "type": "string"
                 }
               ]
@@ -1761,6 +1512,17 @@
               ],
               "body": "{\n  \"message\": \"Mensaje de validación del servidor.\",\n  \"errors\": {\n    \"campo\": [\n      \"Detalle.\"\n    ]\n  }\n}"
             }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('respuesta esperada (200/201/403 si el plan no incluye el módulo/404 sin datos de ejemplo/409/422)', () => pm.expect([200, 201, 202, 403, 404, 409, 422]).to.include(pm.response.code));"
+                ]
+              }
+            }
           ]
         },
         {
@@ -1795,7 +1557,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{token}}",
+                  "value": "{{agent_token}}",
                   "type": "string"
                 }
               ]
@@ -1892,6 +1654,17 @@
               ],
               "body": "{\n  \"message\": \"Mensaje de validación del servidor.\",\n  \"errors\": {\n    \"campo\": [\n      \"Detalle.\"\n    ]\n  }\n}"
             }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('respuesta esperada (200/201/403 si el plan no incluye el módulo/404 sin datos de ejemplo/409/422)', () => pm.expect([200, 201, 202, 403, 404, 409, 422]).to.include(pm.response.code));"
+                ]
+              }
+            }
           ]
         },
         {
@@ -1926,7 +1699,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{token}}",
+                  "value": "{{agent_token}}",
                   "type": "string"
                 }
               ]
@@ -1959,6 +1732,17 @@
                 }
               ],
               "body": "{\n  \"appointments\": []\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('respuesta esperada (200/201/403 si el plan no incluye el módulo/404 sin datos de ejemplo/409/422)', () => pm.expect([200, 201, 202, 403, 404, 409, 422]).to.include(pm.response.code));"
+                ]
+              }
             }
           ]
         },
@@ -2003,7 +1787,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{token}}",
+                  "value": "{{agent_token}}",
                   "type": "string"
                 }
               ]
@@ -2082,6 +1866,17 @@
               ],
               "body": ""
             }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('respuesta esperada (200/201/403 si el plan no incluye el módulo/404 sin datos de ejemplo/409/422)', () => pm.expect([200, 201, 202, 403, 404, 409, 422]).to.include(pm.response.code));"
+                ]
+              }
+            }
           ]
         },
         {
@@ -2125,7 +1920,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{token}}",
+                  "value": "{{agent_token}}",
                   "type": "string"
                 }
               ]
@@ -2204,6 +1999,17 @@
               ],
               "body": ""
             }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('respuesta esperada (200/201/403 si el plan no incluye el módulo/404 sin datos de ejemplo/409/422)', () => pm.expect([200, 201, 202, 403, 404, 409, 422]).to.include(pm.response.code));"
+                ]
+              }
+            }
           ]
         },
         {
@@ -2247,7 +2053,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{token}}",
+                  "value": "{{agent_token}}",
                   "type": "string"
                 }
               ]
@@ -2371,6 +2177,17 @@
               ],
               "body": ""
             }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('respuesta esperada (200/201/403 si el plan no incluye el módulo/404 sin datos de ejemplo/409/422)', () => pm.expect([200, 201, 202, 403, 404, 409, 422]).to.include(pm.response.code));"
+                ]
+              }
+            }
           ]
         },
         {
@@ -2405,7 +2222,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{token}}",
+                  "value": "{{agent_token}}",
                   "type": "string"
                 }
               ]
@@ -2438,6 +2255,17 @@
                 }
               ],
               "body": "{\n  \"currency\": \"…\",\n  \"methods\": {},\n  \"locations\": [],\n  \"customerNotified\": false,\n  \"delivery\": {\n    \"addressRequired\": true,\n    \"coverageChecked\": false,\n    \"shippingCost\": null\n  }\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('respuesta esperada (200/201/403 si el plan no incluye el módulo/404 sin datos de ejemplo/409/422)', () => pm.expect([200, 201, 202, 403, 404, 409, 422]).to.include(pm.response.code));"
+                ]
+              }
             }
           ]
         },
@@ -2493,7 +2321,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{token}}",
+                  "value": "{{agent_token}}",
                   "type": "string"
                 }
               ]
@@ -2547,6 +2375,17 @@
               ],
               "body": "{\n  \"products\": [],\n  \"truncated\": false,\n  \"stockTracked\": false\n}"
             }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('respuesta esperada (200/201/403 si el plan no incluye el módulo/404 sin datos de ejemplo/409/422)', () => pm.expect([200, 201, 202, 403, 404, 409, 422]).to.include(pm.response.code));"
+                ]
+              }
+            }
           ]
         },
         {
@@ -2580,7 +2419,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{token}}",
+                  "value": "{{agent_token}}",
                   "type": "string"
                 }
               ]
@@ -2612,6 +2451,17 @@
                 }
               ],
               "body": "{\n  \"orders\": []\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('respuesta esperada (200/201/403 si el plan no incluye el módulo/404 sin datos de ejemplo/409/422)', () => pm.expect([200, 201, 202, 403, 404, 409, 422]).to.include(pm.response.code));"
+                ]
+              }
             }
           ]
         },
@@ -2646,7 +2496,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{token}}",
+                  "value": "{{agent_token}}",
                   "type": "string"
                 }
               ]
@@ -2740,6 +2590,17 @@
               ],
               "body": "{\n  \"message\": \"Mensaje de validación del servidor.\",\n  \"errors\": {\n    \"campo\": [\n      \"Detalle.\"\n    ]\n  }\n}"
             }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('respuesta esperada (200/201/403 si el plan no incluye el módulo/404 sin datos de ejemplo/409/422)', () => pm.expect([200, 201, 202, 403, 404, 409, 422]).to.include(pm.response.code));"
+                ]
+              }
+            }
           ]
         },
         {
@@ -2773,7 +2634,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{token}}",
+                  "value": "{{agent_token}}",
                   "type": "string"
                 }
               ]
@@ -2918,6 +2779,17 @@
                 }
               ],
               "body": ""
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('respuesta esperada (200/201/403 si el plan no incluye el módulo/404 sin datos de ejemplo/409/422)', () => pm.expect([200, 201, 202, 403, 404, 409, 422]).to.include(pm.response.code));"
+                ]
+              }
             }
           ]
         },
@@ -2961,7 +2833,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{token}}",
+                  "value": "{{agent_token}}",
                   "type": "string"
                 }
               ]
@@ -3152,10 +3024,21 @@
               ],
               "body": ""
             }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('respuesta esperada (200/201/403 si el plan no incluye el módulo/404 sin datos de ejemplo/409/422)', () => pm.expect([200, 201, 202, 403, 404, 409, 422]).to.include(pm.response.code));"
+                ]
+              }
+            }
           ]
         },
         {
-          "name": "Actividad técnica: reportar un paso",
+          "name": "Mensaje entrante (crea la conversación)",
           "request": {
             "method": "POST",
             "header": [
@@ -3166,22 +3049,511 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
-              },
-              {
-                "key": "X-Ava-Engine",
-                "value": "n8n",
-                "description": "n8n | lava. Opcional; solo esos valores."
               }
             ],
+            "url": {
+              "raw": "{{base_url}}/api/agent/messages",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agent",
+                "messages"
+              ]
+            },
+            "description": "Reporta un mensaje. **Idempotente por `external_id`**: la primera vez responde 201 `created:true`; repetirla responde 200 `created:false` y `control.ai_allowed:false` (la IA no debe responder dos veces).",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{agent_token}}",
+                  "type": "string"
+                }
+              ]
+            },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"channel\": \"whatsapp\",\n  \"contact_id\": \"573001112233\",\n  \"engine\": \"n8n\",\n  \"step_ref\": \"{{$randomUUID}}:booker_availability:0\",\n  \"execution_id\": \"4821\",\n  \"tool\": \"booker.availability\",\n  \"tool_label\": \"Disponibilidad en Booker\",\n  \"trigger_message_external_id\": \"wamid.XYZ\",\n  \"method\": \"POST\",\n  \"endpoint\": \"https://api.booker.com/v4.1/merchant/availability/1day\",\n  \"request_headers\": {\n    \"Content-Type\": \"application/json\"\n  },\n  \"request_body\": {\n    \"service\": 5,\n    \"date\": \"2026-11-05\"\n  },\n  \"status\": \"succeeded\",\n  \"http_status\": 200,\n  \"duration_ms\": 321,\n  \"response_body\": {\n    \"slots\": [\n      \"09:00\",\n      \"10:30\"\n    ]\n  },\n  \"started_at\": \"2026-11-04T15:00:00Z\",\n  \"finished_at\": \"2026-11-04T15:00:01Z\"\n}",
+              "raw": "{\n  \"channel\": \"{{channel}}\",\n  \"contact_id\": \"{{contact_id}}\",\n  \"direction\": \"in\",\n  \"type\": \"text\",\n  \"body\": \"Hola, quiero una cita\",\n  \"external_id\": \"postman-msg-1\",\n  \"contact_name\": \"Contacto de prueba\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200/201', () => pm.expect([200, 201]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('trae control', () => pm.expect(body.control).to.have.property('mode'));",
+                  "pm.collectionVariables.set('message_id', String(body.id));",
+                  "pm.collectionVariables.set('control_version', String(body.control.version));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mensaje entrante — REINTENTO (idempotencia)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/agent/messages",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agent",
+                "messages"
+              ]
             },
+            "description": "Mismo `external_id`: no duplica. Debe responder 200 con `created:false` y `control.ai_allowed:false`.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{agent_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel\": \"{{channel}}\",\n  \"contact_id\": \"{{contact_id}}\",\n  \"direction\": \"in\",\n  \"type\": \"text\",\n  \"body\": \"Hola, quiero una cita\",\n  \"external_id\": \"postman-msg-1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('no se creó otro', () => pm.expect(body.created).to.eql(false));",
+                  "pm.test('la IA no responde de nuevo', () => pm.expect(body.control.ai_allowed).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Contexto e historial",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/agent/conversations/context?channel={{channel}}&contact_id={{contact_id}}&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agent",
+                "conversations",
+                "context"
+              ],
+              "query": [
+                {
+                  "key": "channel",
+                  "value": "{{channel}}"
+                },
+                {
+                  "key": "contact_id",
+                  "value": "{{contact_id}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Control de atención, contexto estructurado (`facts`, `steps`, `next_step`, `operations`, `handoff`, `resume`) e historial. Lectura. 404 si la conversación no es de este Workspace.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{agent_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('estructura', () => { pm.expect(body).to.have.keys(['control','context','history','last_message_id']); });",
+                  "if (body.last_message_id) pm.collectionVariables.set('last_message_id', String(body.last_message_id));",
+                  "pm.collectionVariables.set('control_version', String(body.control.version));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Contexto: solo mensajes nuevos (after_id)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/agent/conversations/context?channel={{channel}}&contact_id={{contact_id}}&after_id={{last_message_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agent",
+                "conversations",
+                "context"
+              ],
+              "query": [
+                {
+                  "key": "channel",
+                  "value": "{{channel}}"
+                },
+                {
+                  "key": "contact_id",
+                  "value": "{{contact_id}}"
+                },
+                {
+                  "key": "after_id",
+                  "value": "{{last_message_id}}"
+                }
+              ]
+            },
+            "description": "Devuelve únicamente lo posterior al último mensaje que el workflow procesó (de más antiguo a más nuevo).",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{agent_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('history es lista', () => pm.expect(body.history).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Guardar contexto (lo que se aprendió)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/agent/conversations/context",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agent",
+                "conversations",
+                "context"
+              ]
+            },
+            "description": "Las partes mal formadas se ignoran; una operación ya registrada no se reemplaza.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{agent_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel\": \"{{channel}}\",\n  \"contact_id\": \"{{contact_id}}\",\n  \"facts\": {\n    \"name\": {\n      \"value\": \"Ana (ficticia)\",\n      \"confirmed\": true\n    }\n  },\n  \"steps\": [\n    \"intake_done\"\n  ],\n  \"next_step\": \"ask_email\",\n  \"summary\": \"Quiere una cita.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('guardó el dato', () => pm.expect(body.context.facts).to.have.property('name'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "¿Puedo responder? (authorize)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/agent/conversations/authorize",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agent",
+                "conversations",
+                "authorize"
+              ]
+            },
+            "description": "Se llama justo antes de enviar una respuesta automática. `ai_allowed:false` si una persona tiene la conversación o la versión cambió.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{agent_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel\": \"{{channel}}\",\n  \"contact_id\": \"{{contact_id}}\",\n  \"version\": \"{{control_version}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('trae control', () => pm.expect(body.control).to.have.property('ai_allowed'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pedir una persona (handoff)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/agent/conversations/handoff",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agent",
+                "conversations",
+                "handoff"
+              ]
+            },
+            "description": "Idempotente. `handoff.outcome`: `requested` (se movió ahora, `executed:true`), `already_pending` o `already_human` (reintento, `executed:false`). A partir de aquí la IA no debe responder.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{agent_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel\": \"{{channel}}\",\n  \"contact_id\": \"{{contact_id}}\",\n  \"reason\": \"El cliente pidió hablar con una persona\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('resultado inequívoco', () => pm.expect(['requested','already_pending','already_human']).to.include(body.handoff.outcome));",
+                  "pm.test('modo humano o pendiente', () => pm.expect(['pending','human']).to.include(body.control.mode));",
+                  "pm.collectionVariables.set('control_version', String(body.control.version));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pedir una persona — REINTENTO (idempotencia)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/agent/conversations/handoff",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agent",
+                "conversations",
+                "handoff"
+              ]
+            },
+            "description": "Segundo llamado seguido: no cambia nada.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{agent_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel\": \"{{channel}}\",\n  \"contact_id\": \"{{contact_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('no se ejecutó de nuevo', () => pm.expect(body.handoff.executed).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Paso técnico: inicio",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": {
               "raw": "{{base_url}}/api/agent/activity/steps",
               "host": [
@@ -3194,11 +3566,52 @@
                 "steps"
               ]
             },
-            "description": "Auth: Bearer del chatbot. Idempotente por `step_ref`: un primer llamado con status `started` (o sin status) abre el paso como pendiente y uno posterior con el mismo `step_ref` lo completa. 201 si crea, 200 si actualiza o repite, 404 si no hay conversación de ese contacto, 409 si el `step_ref` es de otra conversación, 422 si el payload no es válido. Tokens, cookies, contraseñas y llaves se ocultan antes de guardarse."
-          }
+            "description": "Abre el paso como pendiente. Los parámetros sensibles del endpoint se enmascaran antes de guardarse.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{agent_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel\": \"{{channel}}\",\n  \"contact_id\": \"{{contact_id}}\",\n  \"engine\": \"n8n\",\n  \"step_ref\": \"{{step_ref}}\",\n  \"execution_id\": \"postman-demo\",\n  \"tool\": \"demo.api\",\n  \"tool_label\": \"API de demostración\",\n  \"method\": \"GET\",\n  \"endpoint\": \"https://api.example.com/v1/items?token=NO-REAL\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('step_ref', 'postman-' + Date.now() + ':paso:0');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200/201', () => pm.expect([200, 201]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('pendiente', () => pm.expect(body.status).to.eql('started'));"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "Reservas: registrar o actualizar una reserva (cualquier sistema)",
+          "name": "Paso técnico: fin (mismo step_ref)",
           "request": {
             "method": "POST",
             "header": [
@@ -3209,22 +3622,129 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
-              },
-              {
-                "key": "X-Ava-Engine",
-                "value": "n8n",
-                "description": "n8n | lava. Opcional; solo esos valores."
               }
             ],
+            "url": {
+              "raw": "{{base_url}}/api/agent/activity/steps",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agent",
+                "activity",
+                "steps"
+              ]
+            },
+            "description": "Completa el MISMO paso (200, `created:false`). Repetirlo no cambia nada.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{agent_token}}",
+                  "type": "string"
+                }
+              ]
+            },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"source\": \"booker\",\n  \"external_id\": \"BK-100\",\n  \"status\": \"confirmed\",\n  \"starts_at\": \"2026-11-05T15:00:00Z\",\n  \"booked_at\": \"2026-11-01T10:00:00Z\",\n  \"updated_at\": \"2026-11-01T10:00:00Z\",\n  \"location_id\": null,\n  \"location_ref\": \"3749\",\n  \"service_name\": \"Corte\",\n  \"professional_name\": \"Ana\",\n  \"origin\": \"web\"\n}",
+              "raw": "{\n  \"channel\": \"{{channel}}\",\n  \"contact_id\": \"{{contact_id}}\",\n  \"engine\": \"n8n\",\n  \"step_ref\": \"{{step_ref}}\",\n  \"tool\": \"demo.api\",\n  \"status\": \"succeeded\",\n  \"http_status\": 200,\n  \"duration_ms\": 120,\n  \"response_body\": {\n    \"items\": 3\n  }\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('mismo paso', () => pm.expect(body.created).to.eql(false));",
+                  "pm.test('terminado', () => pm.expect(body.finished).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mensaje saliente de la IA",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/agent/messages",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agent",
+                "messages"
+              ]
             },
+            "description": "Reporta lo que n8n envió. Ava lo guarda aunque una persona tenga el control (el historial es fiel); por eso n8n DEBE llamar a `authorize` antes de enviar.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{agent_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel\": \"{{channel}}\",\n  \"contact_id\": \"{{contact_id}}\",\n  \"direction\": \"out\",\n  \"type\": \"text\",\n  \"body\": \"Con gusto te ayudo.\",\n  \"external_id\": \"postman-msg-out-1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200/201', () => pm.expect([200, 201]).to.include(pm.response.code));",
+                  "const body = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reserva externa (Booker, etc.)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": {
               "raw": "{{base_url}}/api/agent/booking-records",
               "host": [
@@ -3236,11 +3756,43 @@
                 "booking-records"
               ]
             },
-            "description": "Auth: Bearer del chatbot (módulo Reportes). Idempotente por (source, external_id). `status`: booked|confirmed|completed|no_show|cancelled. Un reporte con `updated_at` anterior al guardado se ignora (`ignored: true`). `location_id`/`customer_id`, si se envían, deben ser del Workspace del token (422 si no)."
-          }
+            "description": "Idempotente por (source, external_id). Un `updated_at` anterior al guardado se ignora (`ignored:true`).",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{agent_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source\": \"booker\",\n  \"external_id\": \"{{booking_external_id}}\",\n  \"status\": \"confirmed\",\n  \"starts_at\": \"2026-12-01T15:00:00Z\",\n  \"updated_at\": \"2026-11-01T10:00:00Z\",\n  \"service_name\": \"Servicio de prueba\",\n  \"location_ref\": \"DEMO\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200/201', () => pm.expect([200, 201]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('trae id', () => pm.expect(body).to.have.property('id'));"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "Encuestas: definir una encuesta",
+          "name": "Encuesta: definir",
           "request": {
             "method": "POST",
             "header": [
@@ -3251,22 +3803,8 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
-              },
-              {
-                "key": "X-Ava-Engine",
-                "value": "n8n",
-                "description": "n8n | lava. Opcional; solo esos valores."
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"key\": \"post-visita\",\n  \"name\": \"Satisfacción post visita\",\n  \"type\": \"satisfaction\",\n  \"scale_min\": 1,\n  \"scale_max\": 5,\n  \"questions\": [\n    {\n      \"key\": \"atencion\",\n      \"label\": \"¿Cómo fue la atención?\",\n      \"type\": \"rating\"\n    },\n    {\n      \"key\": \"volveria\",\n      \"label\": \"¿Volvería?\",\n      \"type\": \"boolean\"\n    }\n  ]\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
             "url": {
               "raw": "{{base_url}}/api/agent/surveys",
               "host": [
@@ -3278,11 +3816,42 @@
                 "surveys"
               ]
             },
-            "description": "Crea o actualiza (por `key`) la definición. Tipos de pregunta: rating|text|choice|boolean|number."
-          }
+            "description": "Crea o actualiza por `key`.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{agent_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"key\": \"{{survey_key}}\",\n  \"name\": \"Encuesta de prueba\",\n  \"type\": \"satisfaction\",\n  \"scale_min\": 1,\n  \"scale_max\": 5,\n  \"questions\": [\n    {\n      \"key\": \"atencion\",\n      \"label\": \"¿Cómo fue la atención?\",\n      \"type\": \"rating\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200/201', () => pm.expect([200, 201]).to.include(pm.response.code));",
+                  "const body = pm.response.json();"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "Encuestas: registrar un envío",
+          "name": "Encuesta: envío",
           "request": {
             "method": "POST",
             "header": [
@@ -3293,22 +3862,8 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
-              },
-              {
-                "key": "X-Ava-Engine",
-                "value": "n8n",
-                "description": "n8n | lava. Opcional; solo esos valores."
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"survey_key\": \"post-visita\",\n  \"external_ref\": \"exec-4821:survey-sent\",\n  \"channel\": \"whatsapp\",\n  \"contact_id\": \"573001112233\",\n  \"booking_source\": \"booker\",\n  \"booking_external_id\": \"BK-100\",\n  \"sent_at\": \"2026-11-05T18:00:00Z\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
             "url": {
               "raw": "{{base_url}}/api/agent/surveys/dispatches",
               "host": [
@@ -3321,11 +3876,42 @@
                 "dispatches"
               ]
             },
-            "description": "Idempotente por `external_ref`. Cliente, conversación, reserva y sede opcionales; todos deben ser del Workspace del token."
-          }
+            "description": "Idempotente por `external_ref`.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{agent_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"survey_key\": \"{{survey_key}}\",\n  \"external_ref\": \"postman-dispatch-1\",\n  \"channel\": \"{{channel}}\",\n  \"contact_id\": \"{{contact_id}}\",\n  \"sent_at\": \"2026-11-05T18:00:00Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200/201', () => pm.expect([200, 201]).to.include(pm.response.code));",
+                  "const body = pm.response.json();"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "Encuestas: registrar una respuesta",
+          "name": "Encuesta: respuesta",
           "request": {
             "method": "POST",
             "header": [
@@ -3336,22 +3922,8 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
-              },
-              {
-                "key": "X-Ava-Engine",
-                "value": "n8n",
-                "description": "n8n | lava. Opcional; solo esos valores."
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"survey_key\": \"post-visita\",\n  \"external_ref\": \"exec-4822:survey-answer\",\n  \"dispatch_ref\": \"exec-4821:survey-sent\",\n  \"rating\": 5,\n  \"comment\": \"Excelente atención\",\n  \"answers\": {\n    \"atencion\": 5,\n    \"volveria\": true\n  }\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
             "url": {
               "raw": "{{base_url}}/api/agent/surveys/responses",
               "host": [
@@ -3364,8 +3936,208 @@
                 "responses"
               ]
             },
-            "description": "Idempotente por `external_ref` (un reintento devuelve 200 sin duplicar). Hereda cliente/reserva/sede del envío. `rating` dentro de la escala de la encuesta (422 si no). `is_complete` se calcula: todas las preguntas contestadas."
-          }
+            "description": "Idempotente por `external_ref`. 422 si la calificación sale de la escala.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{agent_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"survey_key\": \"{{survey_key}}\",\n  \"external_ref\": \"postman-response-1\",\n  \"dispatch_ref\": \"postman-dispatch-1\",\n  \"rating\": 5,\n  \"comment\": \"Excelente (ficticio)\",\n  \"answers\": {\n    \"atencion\": 5\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200/201', () => pm.expect([200, 201]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('completa', () => pm.expect(body.is_complete).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ERROR esperado: token inválido (401)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/agent/config",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agent",
+                "config"
+              ]
+            },
+            "description": "Con un token falso Ava responde 401. Esta solicitud sobrescribe la autenticación a propósito.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "ava_token_falso_para_probar_el_401",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', () => pm.expect([401]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ERROR esperado: payload inválido (422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/agent/conversations/handoff",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agent",
+                "conversations",
+                "handoff"
+              ]
+            },
+            "description": "Canal inexistente y contacto demasiado corto: 422.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{agent_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel\": \"no-existe\",\n  \"contact_id\": \"x\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 422', () => pm.expect([422]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ERROR esperado: conversación de otro contacto (404)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/agent/conversations/context?channel={{channel}}&contact_id=contacto-que-no-existe",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agent",
+                "conversations",
+                "context"
+              ],
+              "query": [
+                {
+                  "key": "channel",
+                  "value": "{{channel}}"
+                },
+                {
+                  "key": "contact_id",
+                  "value": "contacto-que-no-existe"
+                }
+              ]
+            },
+            "description": "Un contacto sin conversación en este Workspace (o de otro) da 404, nunca datos ajenos.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{agent_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404', () => pm.expect([404]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -6204,6 +6976,86 @@
               "body": ""
             }
           ]
+        },
+        {
+          "name": "Meta (Instagram/Messenger): verificación",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/webhooks/meta?hub_mode=subscribe&hub_verify_token={{meta_verify_token}}&hub_challenge=reto-de-prueba",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "webhooks",
+                "meta"
+              ],
+              "query": [
+                {
+                  "key": "hub_mode",
+                  "value": "subscribe"
+                },
+                {
+                  "key": "hub_verify_token",
+                  "value": "{{meta_verify_token}}"
+                },
+                {
+                  "key": "hub_challenge",
+                  "value": "reto-de-prueba"
+                }
+              ]
+            },
+            "description": "Verificación de la suscripción (GET) de la app global de Meta. Devuelve el reto si el token coincide."
+          }
+        },
+        {
+          "name": "Meta (Instagram/Messenger): evento",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Hub-Signature-256",
+                "value": "sha256=<HMAC-SHA256 del cuerpo con META_APP_SECRET>",
+                "description": "Firma de Meta. Sin firma válida Ava responde 401/403 y no lee nada."
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/webhooks/meta",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "webhooks",
+                "meta"
+              ]
+            },
+            "description": "Eventos de Instagram y Messenger. Firma `X-Hub-Signature-256` obligatoria; el Workspace se resuelve por la cuenta conectada. NO probado con Meta real.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"instagram\",\n  \"entry\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
         }
       ]
     },
@@ -35638,6 +36490,326 @@
             }
           },
           "response": []
+        }
+      ]
+    },
+    {
+      "name": "10 WooCommerce (API EXTERNA de la tienda, la consume n8n)",
+      "description": "Estas solicitudes NO son de Ava: son de la API REST de WooCommerce de una tienda de PRUEBAS (HTTP Basic con `ck_`/`cs_`, solo HTTPS). Sirven para comprobar la tienda antes de armar el flujo de n8n (ver `docs/integracion-woocommerce.md`). Las rutas deben confirmarse con la documentación oficial de WooCommerce y una tienda real. En Ava, la tienda se registra como conexión HTTP genérica (Integraciones) y n8n reporta cada llamada con `POST /api/agent/activity/steps`.",
+      "item": [
+        {
+          "name": "Productos (1 por página)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{woo_url}}/wp-json/wc/v3/products?per_page=1",
+              "host": [
+                "{{woo_url}}"
+              ],
+              "path": [
+                "wp-json",
+                "wc",
+                "v3",
+                "products"
+              ],
+              "query": [
+                {
+                  "key": "per_page",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Probar credenciales: 200 con lista. 401 = claves incorrectas.",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{woo_consumer_key}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{woo_consumer_secret}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.expect([200]).to.include(pm.response.code));",
+                  "pm.test('lista', () => pm.expect(pm.response.json()).to.be.an('array'));",
+                  "pm.test('paginación', () => pm.expect(pm.response.headers.get('X-WP-TotalPages')).to.not.be.undefined);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Variaciones de un producto",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{woo_url}}/wp-json/wc/v3/products/1/variations?per_page=20",
+              "host": [
+                "{{woo_url}}"
+              ],
+              "path": [
+                "wp-json",
+                "wc",
+                "v3",
+                "products",
+                "1",
+                "variations"
+              ],
+              "query": [
+                {
+                  "key": "per_page",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Cambia `1` por el id de un producto variable.",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{woo_consumer_key}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{woo_consumer_secret}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Categorías",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{woo_url}}/wp-json/wc/v3/products/categories?per_page=50",
+              "host": [
+                "{{woo_url}}"
+              ],
+              "path": [
+                "wp-json",
+                "wc",
+                "v3",
+                "products",
+                "categories"
+              ],
+              "query": [
+                {
+                  "key": "per_page",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Categorías de productos.",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{woo_consumer_key}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{woo_consumer_secret}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Pedidos",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{woo_url}}/wp-json/wc/v3/orders?per_page=5&status=processing",
+              "host": [
+                "{{woo_url}}"
+              ],
+              "path": [
+                "wp-json",
+                "wc",
+                "v3",
+                "orders"
+              ],
+              "query": [
+                {
+                  "key": "per_page",
+                  "value": "5"
+                },
+                {
+                  "key": "status",
+                  "value": "processing"
+                }
+              ]
+            },
+            "description": "Lista pedidos por estado (`pending`, `processing`, `on-hold`, `completed`, `cancelled`, `refunded`, `failed`).",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{woo_consumer_key}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{woo_consumer_secret}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Clientes",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{woo_url}}/wp-json/wc/v3/customers?per_page=5",
+              "host": [
+                "{{woo_url}}"
+              ],
+              "path": [
+                "wp-json",
+                "wc",
+                "v3",
+                "customers"
+              ],
+              "query": [
+                {
+                  "key": "per_page",
+                  "value": "5"
+                }
+              ]
+            },
+            "description": "Clientes de la tienda (datos personales: solo en tiendas de prueba).",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{woo_consumer_key}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{woo_consumer_secret}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Estado del sistema",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{woo_url}}/wp-json/wc/v3/system_status",
+              "host": [
+                "{{woo_url}}"
+              ],
+              "path": [
+                "wp-json",
+                "wc",
+                "v3",
+                "system_status"
+              ]
+            },
+            "description": "Comprobación de salud de la API (requiere clave con permiso).",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{woo_consumer_key}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{woo_consumer_secret}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
         }
       ]
     }

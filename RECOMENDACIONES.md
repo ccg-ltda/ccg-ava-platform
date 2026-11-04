@@ -4222,3 +4222,126 @@ Sin validación real de Booker, n8n ni Lava Studio. Todo se probó con pruebas a
 
 ### 89.4 Segunda suite completa
 Comando (host, mismo entorno que antes): `APP_ENV=testing DB_CONNECTION=sqlite DB_DATABASE=:memory: FILESYSTEM_DISK=local CACHE_STORE=array SESSION_DRIVER=array QUEUE_CONNECTION=sync BROADCAST_CONNECTION=null php -d memory_limit=2G vendor/bin/phpunit --do-not-cache-result`. Primera pasada tras las correcciones: 2 617 pruebas, 2 607 pasadas, 1 fallo (`CommercialControlsTest`, esperaba `sources` sin `bookingRecords`; mismo defecto que las 4 corregidas antes en otro archivo), 9 omitidas, 1 896 s. Corregido; el resultado final de la ejecución estable se anota en la entrega.
+
+## 90. Cierre integral: privacidad de la actividad técnica, migraciones aplicadas, n8n, WooCommerce, AWS, legal, favicon y marca (2026-11-04; sin commit desde `78d9d4a`)
+
+Estado inicial real de Git: `main` = `78d9d4a` (1 commit por delante de `origin/main` = `38c2d46`), árbol limpio. Estado final: los mismos commits con cambios locales sin commit (ver `git status`). No se hizo commit, push ni despliegue. No se modificó `.env`.
+
+### 90.1 Matriz de seguimiento
+
+| Pendiente | Estado real | Evidencia | Acción | Hecho | Prueba | Resultado | Dependencia externa |
+|---|---|---|---|---|---|---|---|
+| Retención y privacidad de `agent_tool_calls` | Antes: cuerpos con credenciales redactadas pero sin enmascarar contacto, retención única de 180 días, un solo permiso | §89 | Política 30/180, enmascarado de correos y teléfonos, patrones de credenciales ampliados, permiso `view-technical-activity-bodies`, interruptor por Workspace, purga en dos fases | **Sí** | `ActivityPrivacyPolicyTest` (7) | OK (SQLite y PostgreSQL) | Decisión jurídica de plazos |
+| Migraciones nuevas sin aplicar | 3 pendientes en `ccg_ava` | `migrate:status` | Revisión, backup verificado, `migrate --force` | **Sí** (ver 90.2) | Backup restaurado y comparado | OK | — |
+| Actividad técnica de n8n | Endpoint y panel hechos (§88) | `AgentActivityReportTest` | Verificado; contrato documentado | Sí | OK | OK local | n8n real |
+| Contexto e historial para n8n sin ejecución iniciada por Ava | **No existía** un endpoint | `ConversationContext` solo salía en el payload de Ava → n8n | `GET/POST /api/agent/conversations/context` | **Sí** | `N8nContractFlowTest` (3) | OK local | n8n real |
+| Handoff IA ⇄ humano | Existente y completo (§88.8) | `HumanHandlingTest` | Verificado con el ciclo completo vía HTTP | Sí | `N8nContractFlowTest::test_the_whole_human_and_ai_cycle…` | OK local | n8n real |
+| Booker / `booking_records` | Modelo e ingestión hechos; **sin lector ni webhook directo** (no hay endpoint documentado verificable) | §88.6 | Sin cambios; dependencia documentada | Parcial | `ReportingIngestionTest` | OK local | Documentación y credenciales de Booker |
+| Encuestas | Hechas (§88.7) | `ReportingIngestionTest` | Verificado | Sí | OK | OK local | n8n real |
+| Invitaciones multi-Workspace | Hechas (§88.2) | `TenantInvitationsTest` | — | Sí | OK | OK | Correo real |
+| WooCommerce | No existía nada | — | Conexión genérica + verificación de firma + diseño + guía | **Parcial**: sin tipo propio, receptor ni espejo de pedidos | `WooCommerceIntegrationTest` (2) | OK simulado | Tienda real, n8n |
+| AWS | No hay infraestructura | `docker-compose.prod.yml`, `INFRASTRUCTURE.md` | Arquitectura y checklist | Documentación | — | — | Cuenta AWS |
+| Documentos legales | Existían 3 borradores cortos en `resources/legal/` | `LegalTest` | Paquete de 14 documentos + PDF + matriz; cookies e IA en la interfaz | **Parcial** (borradores) | `LegalTest` (5 documentos) | OK | **Abogado colombiano**, datos de CCG |
+| Favicon | `public/favicon.ico` de 0 bytes | — | Integración + guía | Sí (falta el archivo) | `FaviconTest` | OK | Archivo de diseño |
+| Marca | — | — | Guía informativa | Sí | — | — | Abogado PI |
+| Suite PostgreSQL (concurrencia) | Se omitían en SQLite | — | Ejecutadas en PG desechable `*_testing` | Sí | 47 pruebas | OK | — |
+| Envío real de correo, Meta, Wompi, SIGO, Booker, n8n | Sin pruebas reales | `pendientes.md` §3 | — | No | — | — | Todos externos |
+
+### 90.2 Migraciones y backup
+- Revisión (`migrate --pretend`): solo `ALTER TABLE … ADD COLUMN` nulos o con valor por defecto, índices, claves foráneas y 4 tablas nuevas; **ningún `DROP`, ningún cambio de tipo, ninguna reescritura de datos**. Las columnas con `NOT NULL DEFAULT` son de metadatos en PostgreSQL ≥ 11.
+- **Backup:** `pg_dump -Fc` de `ccg_ava` a `../backups-ccg-ava/ccg_ava-20261104-143836.dump` (fuera del repositorio, 449 482 bytes). **Verificado:** restaurado en una base desechable (`ccg_ava_restore_check`, ya eliminada) y comparados los conteos de las 99 tablas (1 159 filas): idénticos.
+- **Aplicadas** a `ccg_ava` con `php artisan migrate --force`: `2026_11_22_100000_extend_agent_tool_calls_with_reported_steps` (139 ms), `2026_11_22_110000_create_booking_records_and_surveys_tables` (240 ms), `2026_11_23_100000_add_technical_activity_privacy` (9 ms). Después: 0 pendientes; los conteos de las 99 tablas anteriores no cambiaron (solo aparecen `booking_records`, `surveys`, `survey_dispatches`, `survey_responses` en 0 filas y 3 filas nuevas en `migrations`).
+- **Recuperación:** `pg_restore` del `.dump` sobre una base nueva (o `down()` de las tres migraciones, que solo borran lo añadido; no se ejecutó). No se aplicó nada a producción (no existe).
+- **Después de migrar (no hecho):** reiniciar `worker`, `scheduler` y `app` (`php artisan horizon:terminate`) porque los procesos largos guardan en memoria si una columna existe; y `php artisan db:seed --class=RolesAndPermissionsSeeder` para crear `view-technical-activity-bodies` y dárselo a los roles que ya tenían `view-technical-activity` (regla `legacy`); **hasta entonces nadie ve el contenido de la actividad técnica en `ccg_ava`**. Se dejó sin ejecutar porque el encargo prohíbe seeders generales; es un seeder específico e idempotente: pedir autorización.
+
+### 90.3 Política de registros técnicos (qué, quién, cuánto, cómo se elimina)
+| Qué | Quién lo ve | Conservación | Cómo se elimina |
+|---|---|---|---|
+| Credenciales, contraseñas, tokens, cookies, llaves | Nadie: **nunca se guardan** | — | — |
+| Metadatos (herramienta, método, endpoint sin parámetros sensibles, estado, HTTP, duración, motor, correlación) | `view-technical-activity` (solo `admin` por defecto) | 180 días | `agent:tools:prune` (diario 03:40) borra la fila |
+| Contenido (cuerpos, headers, parámetros, texto de error) con correos y teléfonos enmascarados (`a***@e***.com`, `••••1234`) | `view-technical-activity-bodies` | **30 días** (`chatbots.tool_trace_body_retention_days`, mínimo 7) | La misma tarea pone el contenido en `null` y marca `bodies_purged_at`; la pantalla dice «Eliminado por retención» |
+| Mensaje que activó el paso | `view-technical-activity-bodies` (se lee de `messages`; el original no se altera) | El del historial de la conversación | — |
+- Interruptor por Workspace (Configuraciones → Conversaciones → «Privacidad de la actividad técnica», `edit-settings`, auditado): desactivado, no se guarda contenido (solo metadatos).
+- Redactor: por nombre de clave (incluye `…_key`, `auth`, `pin`, `jwt`, `otp`, `passphrase`) y por patrón de valor (Bearer, Basic, JWT, `ck_/cs_` de WooCommerce, `AKIA…`, `sk-…`, tokens de GitHub/Slack, tokens de Ava, tarjetas, cadenas largas mixtas de ≥ 40 caracteres). **Límite:** sigue siendo heurístico; un secreto en un campo de nombre no sensible y con forma corriente puede pasar. Nombres y direcciones **no** se enmascaran (hacen falta para depurar).
+
+### 90.4 n8n: qué se revisó, qué se creó y qué falta
+Endpoints en `docs/api-n8n-contratos.md` (método, ruta, autenticación, campos, ejemplos, errores, idempotencia, Workspace, pruebas). **Nuevo:** `GET|POST /api/agent/conversations/context`. **Prueba de contrato** `N8nContractFlowTest`: mensaje entrante → creación de conversación → contexto → paso técnico → handoff (reintento idempotente) → `authorize` bloqueado mientras hay humano → toma y respuesta del agente → devolución a la IA → recuperación de historial y hechos (`resume = true`, 4 mensajes, sin duplicados) → reintento de un mensaje sin duplicar; y aislamiento por Workspace. **No hay workflows registrados ni instancia de n8n accesible** (`config/n8n.php` `workflows` vacío): los 12 escenarios del encargo están cubiertos **solo** por pruebas automáticas locales y simuladas; el procedimiento real está en el documento.
+
+### 90.5 WooCommerce
+Ver `docs/integracion-woocommerce.md`. Arquitectura propuesta: Woo fuente de verdad, n8n ejecuta, Ava registra. Implementado: conexión mediante la HTTP genérica (probada con `Http::fake`) y `WooCommerceWebhook` (verificación de firma). **No implementado:** tipo propio, receptor de webhooks, espejo de catálogo/pedidos y reportes de pedidos de Woo (requiere decidir la relación con Catálogo/Pedidos). Las rutas de Woo vienen de documentación conocida y fuentes secundarias: **no verificadas contra la documentación oficial ni una tienda**.
+
+### 90.6 AWS
+`docs/despliegue-aws-y-checklist.md`. No se creó nada. Arquitectura recomendada: ALB + ECS (app, worker Horizon, reverb, scheduler ×1) + RDS PostgreSQL 16 + ElastiCache Redis + S3 privado + Secrets Manager + SES + CloudWatch. Se mantiene Redis/Horizon (no SQS). Cambios de código pendientes: confirmar rol IAM sin llaves, `ARG` de `VITE_APP_NAME`, usuario no root.
+
+### 90.7 Legal, favicon y marca
+- `docs/legal/` (índice con datos faltantes, 13 documentos, matriz normativa y de correspondencia; PDF en `docs/legal/pdf/`, generables con `docs/legal/build_pdfs.py`). **Borradores sin aprobar.** Consultado de forma directa solo Ley 2300 de 2023 (+ C-278/24) y las tasas de la SIC; el resto está marcado «a verificar».
+- En la interfaz: política de cookies y condiciones de IA como páginas `/legal/politica-de-cookies` y `/legal/condiciones-de-uso-de-ia` (informativas, sin aceptación obligatoria) y enlaces en el pie. Los textos largos de `docs/legal` **no** reemplazan aún a los de `resources/legal/`.
+- Favicon: `docs/favicon.md`, integración en `public/brand/`. Marca: `docs/marca-ava-guia-informativa.md`.
+
+### 90.8 Pendientes abiertos
+Aprobación jurídica; datos corporativos (`docs/legal/00-…`); sembrar permisos y reiniciar procesos; WooCommerce (receptor/espejo); lector o webhook de Booker; pruebas reales de n8n, Booker, WooCommerce, Meta, Wompi y correo; infraestructura AWS; plazos de retención definitivos; Ley 2300 (horarios y frecuencia) antes de enviar campañas reales; favicon y logotipo institucionales; decidir el nombre comercial (Ava / «Zonno»).
+
+### 90.9 Resultados de pruebas (comandos reales)
+- **Suite PHP completa (host, SQLite en memoria):** `APP_ENV=testing DB_CONNECTION=sqlite DB_DATABASE=:memory: FILESYSTEM_DISK=local CACHE_STORE=array SESSION_DRIVER=array QUEUE_CONNECTION=sync BROADCAST_CONNECTION=null php -d memory_limit=2G vendor/bin/phpunit --do-not-cache-result` → **2 631 pruebas, 2 622 aprobadas, 0 fallos, 0 errores, 9 omitidas, 25 523 aserciones, 1 767 s.** Una pasada previa tuvo 1 fallo (`PlatformBoundaryTest`: la migración `add_technical_activity_privacy` no estaba en el inventario histórico); se registró en el inventario porque ya estaba aplicada a `ccg_ava`, y la suite se repitió completa.
+- **Omitidas (9):** las que el propio código marca por SQLite/entorno (concurrencia de reservas e inventario, longitudes de `SupportAudit`, JSON inválido de `WebhooksTest`, GD, build).
+- **PostgreSQL 16 desechable** (`ccg_ava_block_testing`, eliminada): `BookingRaceTest`, `BookingConcurrencyTest`, `InventoryConcurrencyTest`, `SupportAuditTest`, `ActivityPrivacyPolicyTest`, `ReportingIngestionTest`, `AgentActivityReportTest`, `N8nContractFlowTest`, `TenantInvitationsTest` → **47 pruebas, 47 aprobadas** (incluye las de concurrencia que SQLite omite). Migraciones además aplicadas, revertidas y reaplicadas en `ccg_ava_block_check` (eliminada).
+- `npm run test:js` 138/138; `npm run build` correcto; `vendor/bin/pint` sin pendientes.
+
+## 91. Cierre funcional: n8n de extremo a extremo, Postman, base de datos, WooCommerce, legal y estado de integraciones (2026-11-04, segunda ronda; sin commit desde `78d9d4a`)
+
+Estado inicial: `main` = `78d9d4a`, 1 commit por delante de `origin/main`, 37 archivos modificados o nuevos (coincide con lo reportado en §90). No se hizo commit, push ni despliegue; no se tocó `.env`.
+
+### 91.1 Base de datos, seeder y procesos
+- **Migraciones:** `migrate:status` en `ccg_ava`: todas «Ran», 0 pendientes; las tres de §90 (`2026_11_22_100000`, `2026_11_22_110000`, `2026_11_23_100000`) están en el lote 43. No se ejecutó ninguna migración en esta ronda.
+- **Backup previo al seeder:** `../backups-ccg-ava/ccg_ava-<fecha>.dump` (476 938 bytes, SHA-256 `99d4d61a9320554b44b97be00f01af183494085cdc66e90b91fabf5e0a1f8c0d`, archivo `.sha256` al lado). **Restauración verificada** en una base desechable (`ccg_ava_restore_check2`, eliminada): 103 tablas, 1 162 filas, conteos idénticos.
+- **Seeder `RolesAndPermissionsSeeder`:** revisado completo antes de ejecutarlo: usa `firstOrCreate`, da a `admin` solo los permisos no reservados, los demás roles reciben sus valores por defecto únicamente si el rol se crea, y la regla `legacy` da el permiso nuevo a los roles que ya tenían el amplio **solo al crearlo**. Con `APP_ENV=local` también hace `firstOrCreate` de tres cuentas de ejemplo: las tres ya existían, así que no se creó ninguna. Falta en la base: solo `view-technical-activity-bodies`. Ejecutado: `php artisan db:seed --class=RolesAndPermissionsSeeder --force`. **Resultado (diff de `role_has_permissions` antes/después): exactamente una fila nueva, `admin | view-technical-activity-bodies`**; ningún otro rol cambió (admin 86, supervisor 3, cliente 1, agente 6, plataforma 10, soporte 3). No se ejecutó ningún otro seeder.
+- **Procesos:** contenedores Docker `app`, `worker`, `scheduler`, `reverb` reiniciados (`horizon:terminate` en el worker y `docker restart` del resto; política `unless-stopped`); tras reiniciar: `worker`, `scheduler` y `reverb` `healthy`, `app` arrancando y luego sano; comprobado dentro del contenedor que la columna `bodies_purged_at` y el permiso existen. El `php artisan serve` del anfitrión no necesita reinicio (un proceso por petición). `postgres`, `redis`, `minio` no se tocaron. Esto es **desarrollo local**; nada se afirma de producción.
+
+### 91.2 n8n de extremo a extremo
+**Revisión de lo existente** (controladores, middleware, validación, servicios): ya existían mensajes (idempotentes por `external_id`), `authorize`, `handoff` (idempotente), actividad técnica, reservas, encuestas, contexto GET/POST, la ejecución firmada Ava → n8n con evento `resume`, la bandeja humana y los webhooks de salida (`conversation.handling_changed` cubre «devuelta a la IA»). **Huecos encontrados y cerrados:**
+1. `handoff` no distinguía «lo moví ahora» de «ya estaba pedido»: ahora responde `handoff: {outcome: requested|already_pending|already_human, executed: bool}` además de `control` (resultado inequívoco para n8n).
+2. No había forma de leer solo lo nuevo: `GET /api/agent/conversations/context` acepta `after_id` (de más antiguo a más nuevo; vacío si no hay nada).
+3. **Falla real de concurrencia (hallada por la prueba en PostgreSQL):** `ActivityStepReporter` lanzaba `UniqueConstraintViolationException` (500) si ocho reintentos del mismo `step_ref` llegaban a la vez, y una actualización de «inicio» podía reabrir un paso que otro proceso acababa de terminar. Corregido: se captura la violación y se continúa como actualización, y la actualización es condicional (`WHERE status = 'started'`).
+- **Decisiones de diseño:** (a) la regla de escalamiento **no** está en Laravel: vive en las instrucciones y el workflow; Ava solo valida y ejecuta el cambio de estado. (b) n8n **solo puede pedir** una persona; devolver a la IA lo hace una persona (o un gestor) en Ava: no hay endpoint para que n8n cambie estados arbitrariamente. (c) «Confirmar procesamiento de un evento»: no se añadió un endpoint de acuse; el cursor lo lleva n8n (`last_message_id` → `after_id`) y los reintentos son idempotentes.
+- **Pruebas locales del ciclo completo** (`tests/Feature/N8nContractFlowTest.php`, 4): mensaje entrante → conversación → contexto → paso técnico → handoff (reintento: `already_pending`) → `authorize` bloqueado → toma y respuesta del agente → devolución → recuperación de historial y hechos (`resume = true`, 4 mensajes sin duplicados, remitentes `contact/ai/agent/contact`) → reintento sin duplicar; lectura incremental con `after_id`; aislamiento por Workspace; payloads inválidos. El lado Ava → n8n (ejecución firmada, `resume`, no responder si habla un humano, respuesta tardía descartada) lo cubren `ConversationContinuityTest` y `ChatbotExecutionTest` con HTTP simulado.
+- **Concurrencia real** (`tests/Feature/N8nConcurrencyTest.php`, 6; **PostgreSQL 16 desechable, procesos PHP separados**): 8 handoffs simultáneos → un solo cambio de estado (`handling_version` +1); 2 agentes tomando la misma conversación → un propietario; el mismo mensaje entrante ×8 → una fila; el mismo paso técnico ×8 → un paso; la misma reserva ×8 → un registro; la misma respuesta de encuesta ×8 → una respuesta. Se omiten en SQLite.
+- **Guía y plantilla:** `docs/n8n-workflow-guia.md` (dos modos de conexión, secuencia, qué hace Ava en el handoff y qué no, devolución y reanudación, errores y reintentos, procedimiento de prueba real) y `docs/n8n/ava-referencia.workflow.json` (15 nodos, sin credenciales ni ids, **plantilla sin probar en una instancia de n8n**). Contratos completos: `docs/api-n8n-contratos.md`.
+- **Límite que no se puede cerrar con código:** Ava no puede impedir que n8n envíe un mensaje sin llamar antes a `authorize`; por eso el contrato obliga a hacerlo y el historial guarda lo que n8n reporta. **No hay validación contra una instancia real de n8n**; el objetivo «workflow real conectado» **no se declara cumplido**.
+
+### 91.3 Postman
+`postman/ava-platform.postman_collection.json` (la única, actualizada; JSON válido, 11 carpetas, 371 solicitudes). Comparada contra `php artisan route:list`: **todas las rutas `/api/*` están** (se añadieron `GET/POST /api/webhooks/meta`). Carpeta 01 rehecha (36 solicitudes) con scripts de prueba (código HTTP, estructura, idempotencia: mensaje y handoff repetidos, paso técnico inicio/fin), casos de error (401, 422, 404), variables `agent_token`, `conversation_id`, `message_id`, `last_message_id`, `control_version`, `step_ref`… (secretas vacías, datos ficticios; ninguna credencial real, comprobado por búsqueda de patrones) y nueva carpeta 10 con la API externa de WooCommerce. **Ejecutada de verdad con Newman** contra un servidor local desechable (`php -S 127.0.0.1:8011` sobre PostgreSQL `ccg_ava_postman_testing`, con un Workspace y un chatbot de prueba): **36 solicitudes, 52 aserciones, 0 fallos, dos corridas seguidas.** La corrida detectó un defecto de la propia colección (una solicitud nueva quedaba tapada por una antigua del mismo nombre) y se corrigió. Guía: `docs/postman-guia.md`. Booker no tiene solicitudes (no hay endpoints confirmados para consumidores externos).
+
+### 91.4 Graphify
+`C:\Users\Trabajo\.claude\skills\graphify` existe (SKILL.md + references): es **Graphify** (grafo de conocimiento del código), no GraphiQL; el proyecto **no tiene endpoint GraphQL** (búsqueda sin resultados), por lo que GraphiQL no aplica y no se inventó nada. El grafo estaba desactualizado (13:15, anterior al código de las rondas de hoy); se actualizó con `graphify update .` (solo AST, sin LLM, sin reconstruir de cero). Aportó: ubicar rápido controladores y servicios del flujo; **no** sustituyó la lectura del código ni las pruebas. Limitaciones: sin extracción semántica de Markdown/PDF (requiere subagentes y tokens) y los nombres de comunidades dependen de `graphify label`.
+
+### 91.5 WooCommerce
+Sin cambios de código en esta ronda. Se amplió `docs/integracion-woocommerce.md` con el mapa de cobertura contra cada capacidad pedida y la lista exacta de datos para la prueba real. Decisión: no se construye tipo propio, receptor ni espejo (WooCommerce es la fuente de verdad, n8n orquesta); **no hay prueba contra tienda alguna**, no se marca como completa.
+
+### 91.6 Matriz de estado de integraciones
+
+| Integración | Qué existe | Evidencia (automatizada/simulada) | Prueba real | Falta |
+|---|---|---|---|---|
+| **n8n** (ambas direcciones) | Contrato firmado Ava → n8n, token por chatbot, contexto, handoff, `resume`, actividad técnica, concurrencia | `N8nContractFlowTest`, `N8nConcurrencyTest` (PG), `ConversationContinuityTest`, `ChatbotExecutionTest`, `N8nIntegrationTest`, newman | **Ninguna** | Instancia de pruebas, workflow registrado en `config/n8n.php`, token |
+| **WooCommerce** | Conexión HTTP genérica con prueba real, verificador de firma | `WooCommerceIntegrationTest` | **Ninguna** | Tienda de pruebas, claves, n8n |
+| **Booker** | API Merchant (disponibilidad y reserva) simulada; `booking_records` para reservas externas; sin lector ni webhook | `BookerTest`, `BookerMerchantTest`, `ReportingIngestionTest` | **Ninguna** | Credenciales de Staging, confirmar supuestos A1–A4, endpoint de listado (no documentado públicamente; sin respuesta nueva de Booker en el repositorio) |
+| **Meta** (WhatsApp, Instagram, Messenger) | Aplicación global de CCG + autorización por Workspace, webhook firmado (`/api/webhooks/meta` y `/whatsapp`), refresco de tokens | `MetaMessagingTest`, `MetaPlatformSettingsTest`, `WhatsAppIntegrationWebhookTest`, `WhatsAppConnectionTest` | **Ninguna** | App de Meta real, número, plantillas, dominio HTTPS |
+| **Wompi** | Webhook firmado, idempotencia por evento, estados de pago, validación de configuración | `WompiPaymentTest`, `WompiConfigTest` | **Ninguna** (ni sandbox) | Llaves de Sandbox, dominio público |
+| **Correo** | Envío en línea de invitaciones, recordatorios y códigos | pruebas de notificaciones | Sí **manual del usuario** (informó que funcionan), no reproducida aquí | SMTP de producción, SPF/DKIM |
+| **SIGO** (facturación) | No existe | — | — | API, credenciales, reglas fiscales |
+| **AWS** | Código compatible con S3 y rol IAM (verificado en el código); nada creado | `docs/despliegue-aws-y-checklist.md` §7 | **Ninguna** | Cuenta y recursos |
+| **GraphQL** | No existe | — | — | — |
+
+### 91.7 Legal, favicon y marca
+- Nuevo `docs/legal/datos-empresa-por-completar.md` (54 campos, 0 completados, fuente única; incluye el análisis del RNBD y la recomendación técnica con el inventario de lugares donde está el nombre del producto). Índice `00-…` y matriz `14-…` actualizados (clasificación: verificado en fuente / pendiente de verificar / requiere abogado / obligación técnica implementable). PDF **regenerados desde el Markdown** con `docs/legal/build_pdfs.py` (los 14 + el formulario de datos). **Siguen siendo borradores no aprobados.** Nombre: no se decidió; **hay que elegir entre «Ava Platform» y «Zonno Platform by CCG»**.
+- Favicon: la guía real es `docs/favicon.md` (nombres exactos `favicon.ico`, `favicon.svg`, `apple-touch-icon.png` en `public/brand/`; el «nombre corrupto» del mensaje era un problema de visualización). No hay favicon vacío ni referencias rotas (el `public/favicon.ico` de 0 bytes se eliminó; `GET /favicon.ico` redirige o da 404). Falta el archivo de diseño.
+- AWS: `docs/despliegue-aws-y-checklist.md` ampliado con verificación del código (S3 sin MinIO, rol IAM, riesgo de `throw => false`).
+
+### 91.8 Resultados de pruebas (comandos reales)
+Ver 91.9 al final del documento (se completa con la suite final).
+
+### 91.9 Resultados de pruebas (comandos reales)
+- **Suite PHP completa (host, SQLite en memoria):** `APP_ENV=testing DB_CONNECTION=sqlite DB_DATABASE=:memory: FILESYSTEM_DISK=local CACHE_STORE=array SESSION_DRIVER=array QUEUE_CONNECTION=sync BROADCAST_CONNECTION=null php -d memory_limit=2G vendor/bin/phpunit --do-not-cache-result` → **2 638 pruebas, 2 623 aprobadas, 0 fallos, 0 errores, 15 omitidas, 25 533 aserciones, 1 801 s.** Las 15 omitidas son las 9 de siempre (PostgreSQL/GD/build) más las 6 de `N8nConcurrencyTest` (solo PostgreSQL).
+- **PostgreSQL 16 desechable** (`ccg_ava_postman_testing`, mismo servidor, nombre `*_testing`; **no** `ccg_ava`): `N8nConcurrencyTest`, `N8nContractFlowTest`, `AgentActivityReportTest`, `HumanHandlingTest`, `ConversationContinuityTest`, `BookingRaceTest`, `ReportingIngestionTest`, `ActivityPrivacyPolicyTest` → **75 pruebas, 75 aprobadas, 804 aserciones**, con `DB_CONNECTION=pgsql DB_HOST=127.0.0.1 DB_PORT=5433 DB_DATABASE=ccg_ava_postman_testing APP_ENV=testing`. (La primera corrida de `N8nConcurrencyTest` falló y reveló el defecto del paso técnico de 91.2; corregido y repetido.)
+- **Newman** (colección Postman, carpeta 01) contra servidor local desechable: 36 solicitudes, 52 aserciones, 0 fallos, dos corridas.
+- `npm run test:js` 138/138; `npm run build` correcto; `vendor/bin/pint` sin pendientes. Graphify: `graphify update .` → 9 990 nodos, 35 510 aristas, 427 comunidades.
+- **Pruebas reales externas ejecutadas: ninguna** (ni n8n, ni WooCommerce, ni Booker, ni Meta, ni Wompi, ni AWS).
