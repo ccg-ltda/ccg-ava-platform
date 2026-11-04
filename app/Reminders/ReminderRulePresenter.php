@@ -38,7 +38,7 @@ class ReminderRulePresenter
                 'templateLanguage' => $rule->template_language,
                 'templateParams' => $rule->template_params ?? [],
                 'stats' => [
-                    'scheduled' => (int) ($counts[Reminder::SCHEDULED] ?? 0) + (int) ($counts[Reminder::PROCESSING] ?? 0),
+                    'scheduled' => (int) ($counts[Reminder::SCHEDULED] ?? 0) + (int) ($counts[Reminder::QUEUED] ?? 0) + (int) ($counts[Reminder::PROCESSING] ?? 0),
                     'sent' => (int) ($counts[Reminder::SENT] ?? 0),
                     'failed' => (int) ($counts[Reminder::FAILED] ?? 0) + (int) ($counts[Reminder::UNCERTAIN] ?? 0),
                     'skipped' => (int) ($skipped[$rule->id] ?? 0) + (int) ($counts[Reminder::SKIPPED] ?? 0),

@@ -37,6 +37,7 @@ class SaveCustomerRequest extends FormRequest
             'notes' => ['nullable', 'string', 'max:2000'],
             'marketing_consent' => ['required', Rule::in(array_keys(config('customers.consents')))],
             'consent_note' => ['nullable', 'string', 'max:255'],
+            'consent_channel' => ['nullable', Rule::in(array_keys(config('customers.consent_channels')))],
             'preferred_channel' => ['nullable', Rule::in(array_keys(config('customers.contact_preferences')))],
             'tags' => ['nullable', 'array', 'max:'.config('customers.max_tags')],
             'tags.*' => ['string', 'max:40'],
@@ -55,15 +56,15 @@ class SaveCustomerRequest extends FormRequest
                 $validator->errors()->add('phone', 'Indica al menos un teléfono, un correo o un identificador de canal.');
             }
 
-            if (! $validator->errors()->any() && $this->input('marketing_consent') === 'granted' && blank($this->input('consent_note'))) {
-                $validator->errors()->add('consent_note', 'Indica cómo o dónde se obtuvo el consentimiento.');
+            if (! $validator->errors()->any() && $this->input('marketing_consent') === 'granted' && blank($this->input('consent_channel')) && blank($this->input('consent_note'))) {
+                $validator->errors()->add('consent_channel', 'Indica por qué canal autorizó la persona.');
             }
         }];
     }
 
     public function attributes(): array
     {
-        return ['first_name' => 'el nombre', 'last_name' => 'los apellidos', 'phone' => 'el teléfono', 'email' => 'el correo', 'notes' => 'las notas', 'consent_note' => 'la constancia del consentimiento'];
+        return ['first_name' => 'el nombre', 'last_name' => 'los apellidos', 'phone' => 'el teléfono', 'email' => 'el correo', 'notes' => 'las notas', 'consent_note' => 'la constancia del consentimiento', 'consent_channel' => 'el canal del consentimiento'];
     }
 
     /** @return array<string, mixed> the columns of the customer */
@@ -81,6 +82,7 @@ class SaveCustomerRequest extends FormRequest
             'notes' => $clean('notes'),
             'marketing_consent' => $data['marketing_consent'],
             'consent_note' => $clean('consent_note'),
+            'consent_channel' => $data['marketing_consent'] === 'granted' ? ($data['consent_channel'] ?? null) : null,
             'preferred_channel' => $data['preferred_channel'] ?? null,
         ];
     }

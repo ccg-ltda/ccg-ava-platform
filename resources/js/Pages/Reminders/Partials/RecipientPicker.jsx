@@ -6,6 +6,7 @@ import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
+import Select from '@/Components/Select';
 import TextInput from '@/Components/TextInput';
 
 /** Why this customer cannot receive a reminder through the channel (null = can). The server checks again; this only warns early. */
@@ -17,10 +18,10 @@ export function ineligibleReason(customer, channel) {
     return null;
 }
 
-const EMPTY = { first_name: '', last_name: '', phone: '', email: '', consent_granted: false, consent_note: '' };
+const EMPTY = { first_name: '', last_name: '', phone: '', email: '', consent_granted: false, consent_channel: '' };
 
 /** The same card as in Clientes, created without leaving the form. The server applies the duplicate rules and says which existing card collides. */
-function QuickCreate({ onCreated, onCancel }) {
+function QuickCreate({ onCreated, onCancel, consentChannels }) {
     const [values, setValues] = useState(EMPTY);
     const [errors, setErrors] = useState({});
     const [busy, setBusy] = useState(false);
@@ -69,9 +70,10 @@ function QuickCreate({ onCreated, onCancel }) {
             </label>
             {values.consent_granted && (
                 <div className="min-w-0">
-                    <InputLabel htmlFor="qc_note" value="Cómo y cuándo lo aceptó" />
-                    <TextInput id="qc_note" className="mt-1" value={values.consent_note} onChange={(event) => set('consent_note', event.target.value)} invalid={Boolean(errors.consent_note)} maxLength={255} autoComplete="off" />
-                    <InputError message={errors.consent_note} className="mt-1" />
+                    <InputLabel htmlFor="qc_channel" value="Canal por el que autorizó" />
+                    <Select id="qc_channel" className="mt-1" value={values.consent_channel} onChange={(value) => set('consent_channel', value)} options={Object.entries(consentChannels).map(([value, label]) => ({ value, label }))} placeholder="Elige un canal" invalid={Boolean(errors.consent_channel)} />
+                    <InputError message={errors.consent_channel} className="mt-1" />
+                    <p className="mt-1 text-xs text-ink-muted">La fecha y la hora las registra Ava al guardar.</p>
                 </div>
             )}
             <InputError message={errors.form ?? errors.contact ?? errors.customer} />
@@ -88,7 +90,7 @@ function QuickCreate({ onCreated, onCancel }) {
  * (each one gets their own message and status), and a person who is not there yet can be created in place. A chip shows early why someone could not receive it through the chosen
  * channel; the server decides in the end and reports it per person.
  */
-export default function RecipientPicker({ selected, onChange, channel, canCreate, error, limit }) {
+export default function RecipientPicker({ selected, onChange, channel, canCreate, error, limit, consentChannels = {} }) {
     const listId = useId();
     const [term, setTerm] = useState('');
     const [found, setFound] = useState([]);
@@ -189,6 +191,7 @@ export default function RecipientPicker({ selected, onChange, channel, canCreate
             )}
             {creating && (
                 <QuickCreate
+                    consentChannels={consentChannels}
                     onCancel={() => setCreating(false)}
                     onCreated={(customer) => {
                         add(customer);

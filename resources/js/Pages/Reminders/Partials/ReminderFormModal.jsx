@@ -20,7 +20,7 @@ const newKey = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypt
  * chosen); the server validates everything again, including that the customer and the related record belong to the Workspace. The date and time are in the Workspace's timezone.
  * Every row is a two-column grid of [label above control] cells so the fields line up; the message and channel are the shared MessageFields.
  */
-export default function ReminderFormModal({ reminder, channels, variables, relatedTypes, limits, timezone, onClose }) {
+export default function ReminderFormModal({ reminder, channels, variables, relatedTypes, limits, timezone, consentChannels = {}, onClose }) {
     const editing = Boolean(reminder);
     const { permissions } = useAccess();
     const firstAvailable = channels.find((channel) => channel.available)?.key ?? '';
@@ -82,7 +82,7 @@ export default function ReminderFormModal({ reminder, channels, variables, relat
                         </div>
                     ) : (
                         <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
-                            <RecipientPicker selected={selected} onChange={setSelected} channel={data.channel} canCreate={permissions.includes('create-customers')} limit={maxRecipients} error={errors.customer_ids ?? errors.customer_id} />
+                            <RecipientPicker selected={selected} onChange={setSelected} channel={data.channel} canCreate={permissions.includes('create-customers')} consentChannels={consentChannels} limit={maxRecipients} error={errors.customer_ids ?? errors.customer_id} />
                         </div>
                     )}
                     {blocked.length > 0 && (

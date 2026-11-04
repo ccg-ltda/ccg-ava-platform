@@ -71,7 +71,8 @@ class CustomersTest extends TestCase
 
     public function test_granting_consent_requires_the_evidence_and_records_when_it_changed(): void
     {
-        $this->post('/customers', $this->payload(['marketing_consent' => 'granted']))->assertSessionHasErrors('consent_note');
+        $this->post('/customers', $this->payload(['marketing_consent' => 'granted']))->assertSessionHasErrors('consent_channel');
+        $this->post('/customers', $this->payload(['marketing_consent' => 'granted', 'consent_channel' => 'telegram']))->assertSessionHasErrors('consent_channel');
 
         $this->post('/customers', $this->payload(['marketing_consent' => 'granted', 'consent_note' => 'Formulario web, 3 de octubre']))->assertSessionHasNoErrors();
         $customer = Customer::firstOrFail();

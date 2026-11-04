@@ -1,8 +1,6 @@
-import { router } from '@inertiajs/react';
-import { Check, Circle, Link2, Pencil, PlugZap, Power, RefreshCw, Settings2, Unplug } from 'lucide-react';
+import { Check, Circle, Pencil, PlugZap, Power, Settings2 } from 'lucide-react';
 import Badge from '@/Components/Badge';
 import Card from '@/Components/Card';
-import { useConfirm } from '@/Components/ConfirmDialog';
 import CopyBlock from '@/Components/CopyBlock';
 import IconButton from '@/Components/IconButton';
 import PrimaryButton from '@/Components/PrimaryButton';
@@ -75,17 +73,10 @@ function ConnectionStages({ connection }) {
  * One channel of the GLOBAL catalog as it stands in the Workspace being shown. The catalog is the same for every
  * Workspace; only this card's state and data are the Workspace's own. Credentials never reach it.
  */
-export default function ChannelCard({ channel, delay, readOnly, can = { edit: true, test: true, toggle: true }, testing, onConfigure, onToggle, onTest }) {
+export default function ChannelCard({ channel, delay, readOnly, can = { edit: true, test: true, toggle: true }, testing, platformEditable = false, onConfigure, onConfigureMeta, onToggle, onTest }) {
     const { label, description, available, unavailable, integration, testable } = channel;
     const { label: stateLabel, tone } = status(channel);
     const Icon = channelIcon(channel.key);
-    const confirm = useConfirm();
-
-    const disconnect = async () => {
-        const confirmed = await confirm({ description: `Ava dejará de recibir y enviar mensajes por ${label} y se borrará la autorización guardada. Las conversaciones ya registradas se conservan.`, confirmLabel: 'Desconectar' });
-
-        if (confirmed) router.delete(route('integrations.meta.disconnect', channel.key), { preserveScroll: true });
-    };
 
     return (
         <Card hover delay={delay} className={`flex flex-col p-5 ${available ? '' : 'bg-canvas/40'}`}>
@@ -125,32 +116,22 @@ export default function ChannelCard({ channel, delay, readOnly, can = { edit: tr
                     <span className="mt-0.5 block text-xs text-ink-muted">{integration.lastTest.at}</span>
                 </p>
             )}
-            {channel.connection && integration && <ConnectionStages connection={channel.connection} />}
+            {channel.connection && integration && !channel.oauth && <ConnectionStages connection={channel.connection} />}
             {integration && testable && !readOnly && can.test && !integration.lastTest && <p className="mt-3 text-sm text-ink-muted">Conexión sin verificar. Usa «Probar conexión» para comprobarla con el proveedor.</p>}
 
-            {available && !readOnly && channel.oauth && (can.edit || can.test || can.toggle) && (
-                <div className="mt-4 flex flex-wrap items-center justify-end gap-1 border-t border-line pt-3">
-                    {integration ? (
-                        <>
-                            {can.edit && <IconButton icon={Link2} label="Reconectar con Meta" context={label} onClick={() => { window.location.href = route('integrations.meta.connect', channel.key); }} />}
-                            {can.edit && !channel.connection?.stages?.find((stage) => stage.key === 'webhook')?.done && <IconButton icon={RefreshCw} label="Reintentar suscripción" context={label} onClick={() => router.post(route('integrations.meta.subscribe', channel.key), {}, { preserveScroll: true })} />}
-                            {can.test && testable && <IconButton icon={PlugZap} label={testing ? 'Probando...' : 'Probar conexión'} context={label} onClick={onTest} disabled={testing || !integration.isActive} />}
-                            {can.toggle && <IconButton icon={Power} label={integration.isActive ? 'Desactivar' : 'Activar'} context={label} tone={integration.isActive ? 'danger' : 'primary'} onClick={onToggle} />}
-                            {can.edit && <IconButton icon={Unplug} label="Desconectar" context={label} tone="danger" onClick={disconnect} />}
-                        </>
-                    ) : (
-                        can.edit && (
-                            <a href={route('integrations.meta.connect', channel.key)} className="inline-flex items-center gap-2 rounded-md border border-transparent bg-primary px-4 py-2 text-xs font-semibold tracking-widest text-white uppercase transition duration-150 hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
-                                <Link2 className="size-4" aria-hidden="true" />
-                                Conectar con {channel.key === 'instagram' ? 'Instagram' : 'Facebook'}
-                            </a>
-                        )
-                    )}
+            {/* One footer for every card: pinned to the bottom (cards of different heights line up) and centered, with no extra rule above it. Instagram and Messenger have a single «Configurar»
+                (the modal holds the connection, its stages and the platform app); the others keep Editar / Probar / Activar. */}
+            {!readOnly && !channel.restricted && channel.oauth && (can.edit || can.test || can.toggle || platformEditable) && (
+                <div className="mt-auto flex flex-wrap items-center justify-center gap-2 pt-5">
+                    <PrimaryButton type="button" onClick={onConfigureMeta} className="gap-2">
+                        <Settings2 className="size-4" aria-hidden="true" />
+                        Configurar
+                    </PrimaryButton>
                 </div>
             )}
 
             {available && !readOnly && !channel.oauth && (integration ? can.edit || can.test || can.toggle : can.edit) && (
-                <div className="mt-4 flex items-center justify-end gap-1 border-t border-line pt-3">
+                <div className="mt-auto flex flex-wrap items-center justify-center gap-2 pt-5">
                     {integration ? (
                         <>
                             {can.edit && <IconButton icon={Pencil} label="Editar" context={label} onClick={onConfigure} />}

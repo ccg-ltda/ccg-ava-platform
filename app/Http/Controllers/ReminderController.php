@@ -78,6 +78,7 @@ class ReminderController extends Controller
             'variables' => $this->variables->offered(false),
             // The result of the last manual send to several customers (who was scheduled and who was left out, and why), shown once.
             'lastBatch' => $request->session()->get('reminder_batch'),
+            'consentChannels' => config('customers.consent_channels'),
             'limits' => ['name' => config('reminders.limits.name_max'), 'purpose' => config('reminders.limits.purpose_max'), 'subject' => config('reminders.limits.subject_max'), 'body' => config('reminders.limits.body_max'), 'minLeadMinutes' => config('reminders.limits.min_lead_minutes'), 'maxRecipients' => config('reminders.limits.max_recipients')],
             'timezone' => $zone,
             // The automatic rules need Agenda too (the services done are its appointments): without it the tab does not exist, and the routes refuse as well.
@@ -135,7 +136,7 @@ class ReminderController extends Controller
         $reasons = config('reminders.reasons');
 
         return response()->json(['attempts' => ReminderAttempt::query()->where('reminder_id', $found->id)->where('workspace_id', $found->workspace_id)->orderByDesc('id')->limit(50)->get()->map(fn (ReminderAttempt $attempt) => [
-            'id' => $attempt->id, 'attempt' => $attempt->attempt, 'outcome' => $attempt->outcome, 'reason' => $attempt->reason ? ($reasons[$attempt->reason] ?? $attempt->reason) : null,
+            'id' => $attempt->id, 'attempt' => $attempt->attempt, 'outcome' => $attempt->outcome, 'reason' => $attempt->reason ? ($reasons[$attempt->reason] ?? $attempt->reason) : null, 'detail' => $attempt->detail, 'detail' => $attempt->detail,
             'at' => $settings->formatDate($attempt->created_at).' '.$settings->formatTime($attempt->created_at),
         ])->all()]);
     }
@@ -154,7 +155,7 @@ class ReminderController extends Controller
     /** A new customer from the manual form: the SAME card as in Clientes (same duplicate rules and audit), without leaving the form. Needs `create-customers` as well. */
     public function storeCustomer(Request $request): JsonResponse
     {
-        $card = $this->customerPicker->create($request->attributes->get('workspace'), $request->only(['first_name', 'last_name', 'phone', 'email', 'consent_granted', 'consent_note']));
+        $card = $this->customerPicker->create($request->attributes->get('workspace'), $request->only(['first_name', 'last_name', 'phone', 'email', 'consent_granted', 'consent_channel', 'consent_note']));
 
         return response()->json(['customer' => $this->presentCustomer($card)], 201);
     }

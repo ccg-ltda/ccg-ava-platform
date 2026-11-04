@@ -25,13 +25,13 @@ import ReminderAttemptsModal from './Partials/ReminderAttemptsModal';
 import ReminderFormModal from './Partials/ReminderFormModal';
 import RulesPanel from './Partials/RulesPanel';
 
-const TONES = { scheduled: 'blue', processing: 'blue', sent: 'green', failed: 'red', cancelled: 'neutral', skipped: 'amber', uncertain: 'amber' };
+const TONES = { scheduled: 'blue', queued: 'blue', processing: 'blue', sent: 'green', failed: 'red', cancelled: 'neutral', skipped: 'amber', uncertain: 'amber' };
 
 /**
  * Recordatorios: the commercial follow-ups the Workspace scheduled for its customers. Independent of Agenda (no appointment is confirmed or reminded here). The server decides
  * what each role may do and which channels are really available; this page only offers it. The list is paginated and filtered in the server.
  */
-export default function Index({ reminders, perPageOptions, filters, channels, statuses, reasons, relatedTypes, variables, limits, timezone, lastBatch = null, rules = null }) {
+export default function Index({ reminders, perPageOptions, filters, channels, statuses, reasons, relatedTypes, variables, limits, timezone, lastBatch = null, consentChannels = {}, rules = null }) {
     const confirm = useConfirm();
     const { permissions } = useAccess();
     const can = { create: permissions.includes('create-reminders'), edit: permissions.includes('edit-reminders'), cancel: permissions.includes('cancel-reminders') };
@@ -167,7 +167,7 @@ export default function Index({ reminders, perPageOptions, filters, channels, st
                 remindersView
             )}
 
-            {editing && <ReminderFormModal key={editing === 'new' ? 'new' : editing.id} reminder={editing === 'new' ? null : editing} channels={channels} variables={variables} relatedTypes={relatedTypes} limits={limits} timezone={timezone} onClose={() => setEditing(null)} />}
+            {editing && <ReminderFormModal key={editing === 'new' ? 'new' : editing.id} reminder={editing === 'new' ? null : editing} channels={channels} variables={variables} relatedTypes={relatedTypes} limits={limits} timezone={timezone} consentChannels={consentChannels} onClose={() => setEditing(null)} />}
             {attemptsOf && <ReminderAttemptsModal reminder={attemptsOf} onClose={() => setAttemptsOf(null)} />}
         </>
     );

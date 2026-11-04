@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\SendReminder;
 use App\Mail\ReminderMail;
 use App\Models\AuditLog;
 use App\Models\Customer;
@@ -18,8 +19,10 @@ use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Queue;
 use Inertia\Testing\AssertableInertia;
 use Spatie\Permission\Models\Role;
+use Symfony\Component\Mailer\Exception\TransportException;
 use Tests\Support\BuildsBookings;
 use Tests\TestCase;
 
@@ -341,7 +344,7 @@ class RemindersTest extends TestCase
 
     public function test_a_failure_where_nothing_went_out_is_retried_with_backoff_and_then_fails(): void
     {
-        Mail::shouldReceive('to')->andThrow(new \RuntimeException('smtp down'))->byDefault();
+        Mail::shouldReceive('to')->andThrow(new TransportException('smtp down'))->byDefault();
         $reminder = $this->schedule($this->customer());
         $this->due($reminder);
 
@@ -357,6 +360,57 @@ class RemindersTest extends TestCase
 
         $this->assertSame(['failed', 4], [$reminder->fresh()->status, $reminder->fresh()->attempts]);
         $this->assertSame(['retry', 'retry', 'retry', 'failed'], ReminderAttempt::where('reminder_id', $reminder->id)->orderBy('id')->pluck('outcome')->all());
+    }
+
+    public function test_the_subject_of_the_mail_has_the_customers_data_filled_in_like_the_body(): void
+    {
+        $reminder = $this->schedule($this->customer(), ['subject' => 'Hola {{nombre}}, te esperamos', 'body' => 'Para {{nombre_completo}}']);
+        $this->due($reminder);
+
+        app(ReminderDispatcher::class)->send($reminder->id);
+
+        Mail::assertSent(ReminderMail::class, fn (ReminderMail $mail) => $mail->hasTo('laura@example.com') && $mail->hasSubject('Hola Laura, te esperamos') && str_contains($mail->render(), 'Para Laura Pérez'));
+        $this->assertSame('sent', $reminder->fresh()->status);
+    }
+
+    public function test_a_failure_that_is_not_a_transport_problem_fails_at_once_with_its_real_cause_and_is_not_retried(): void
+    {
+        Mail::shouldReceive('to')->andThrow(new \TypeError('Argument #1 must be of type string, null given for ana@example.com'))->byDefault();
+        $reminder = $this->schedule($this->customer());
+        $this->due($reminder);
+
+        app(ReminderDispatcher::class)->send($reminder->id);
+
+        $this->assertSame(['failed', 1, 'send_failed'], [$reminder->fresh()->status, $reminder->fresh()->attempts, $reminder->fresh()->reason], 'a code or data error fails the same way every time: no retries');
+        $attempt = ReminderAttempt::where('reminder_id', $reminder->id)->sole();
+        $this->assertSame('failed', $attempt->outcome);
+        $this->assertStringStartsWith('TypeError: ', $attempt->detail, 'the real cause is kept, not only «no se pudo enviar»');
+        $this->assertStringNotContainsString('ana@example.com', $attempt->detail, 'addresses are masked');
+        $this->assertStringContainsString('[correo]', $attempt->detail);
+    }
+
+    public function test_the_scheduler_hands_a_due_reminder_to_the_queue_once_and_a_queue_that_is_never_read_gives_it_back(): void
+    {
+        Queue::fake();
+        $reminder = $this->schedule($this->customer());
+        $this->due($reminder);
+
+        Artisan::call('reminders:dispatch');
+        Artisan::call('reminders:dispatch');
+        Queue::assertPushed(SendReminder::class, 1);
+        $this->assertSame('queued', $reminder->fresh()->status, 'waiting for a worker: nothing was sent');
+        Mail::assertNothingSent();
+
+        // A worker that never listens to that queue: after the limit it goes back to waiting and is queued again, not stuck forever.
+        Reminder::whereKey($reminder->id)->update(['updated_at' => now()->subMinutes(30)]);
+        Artisan::call('reminders:dispatch');
+        Queue::assertPushed(SendReminder::class, 2);
+
+        // The worker finally takes it: processing -> sent, from `queued`.
+        Queue::fake();
+        app(ReminderDispatcher::class)->send($reminder->id);
+        $this->assertSame('sent', $reminder->fresh()->status);
+        Mail::assertSentCount(1);
     }
 
     public function test_a_reminder_stuck_in_processing_becomes_uncertain_and_is_never_resent(): void
@@ -505,7 +559,9 @@ class RemindersTest extends TestCase
         $this->postJson('/reminders/customers', ['first_name' => ''])->assertStatus(422);
         $this->postJson('/reminders/customers', ['first_name' => 'Sin dato'])->assertStatus(422);
         $this->postJson('/reminders/customers', ['first_name' => 'Con consent', 'email' => 'c@example.com', 'consent_granted' => true])->assertStatus(422);
-        $ok = $this->postJson('/reminders/customers', ['first_name' => 'Con consent', 'email' => 'c@example.com', 'consent_granted' => true, 'consent_note' => 'Lo dijo en mostrador'])->assertCreated();
+        $ok = $this->postJson('/reminders/customers', ['first_name' => 'Con consent', 'email' => 'c@example.com', 'consent_granted' => true, 'consent_channel' => 'in_person'])->assertCreated();
+        $this->assertSame('in_person', Customer::where('email', 'c@example.com')->value('consent_channel'));
+        $this->assertNotNull(Customer::where('email', 'c@example.com')->value('consent_at'), 'the server stamped the moment');
         $this->assertTrue($ok->json('customer.consent'));
 
         // Without the permission to create customers it is refused, and nothing is created in another Workspace.

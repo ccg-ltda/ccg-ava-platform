@@ -7,6 +7,7 @@ use App\Models\Plan;
 use App\Models\Subscription;
 use App\Models\Workspace;
 use App\Models\WorkspaceModuleOverride;
+use App\Support\RequestMemo;
 use Illuminate\Http\Request;
 
 /**
@@ -83,20 +84,7 @@ class ModuleAccess
     {
         // A page asks this many times (menu, each tab, each service): inside ONE read-only web request the answer cannot change, so it is worked out once (3 queries) instead of up to nine times.
         // Writes, jobs and the console never use it: they can change the plan or an exception and read it again in the same run.
-        $request = app()->runningInConsole() || ! app()->bound('request') ? null : request();
-        $memo = $request?->isMethodSafe() ? self::ATTRIBUTE.'.'.$workspace->id.'.'.($workspace->plan_id ?? 0) : null;
-
-        if ($memo !== null && $request->attributes->has($memo)) {
-            return $request->attributes->get($memo);
-        }
-
-        $keys = $this->resolveKeys($workspace);
-
-        if ($memo !== null) {
-            $request->attributes->set($memo, $keys);
-        }
-
-        return $keys;
+        return RequestMemo::remember(self::ATTRIBUTE.'.'.$workspace->id.'.'.($workspace->plan_id ?? 0), fn () => $this->resolveKeys($workspace));
     }
 
     /** @return list<string> */

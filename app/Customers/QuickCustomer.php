@@ -7,6 +7,7 @@ use App\Models\Workspace;
 use App\Rules\InternationalPhone;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -32,7 +33,7 @@ class QuickCustomer
     /**
      * A new card from the few fields a quick form asks: name, last name, phone and e-mail (at least one of the last two) and, optionally, that the customer authorized messages.
      *
-     * @param  array<string, mixed>  $data  first_name, last_name?, phone?, email?, consent_granted?, consent_note?
+     * @param  array<string, mixed>  $data  first_name, last_name?, phone?, email?, consent_granted?, consent_channel?, consent_note?
      *
      * @throws ValidationException
      */
@@ -44,8 +45,10 @@ class QuickCustomer
             'last_name' => ['nullable', 'string', 'max:100'],
             'phone' => ['nullable', 'string', 'max:32', new InternationalPhone],
             'email' => ['nullable', 'email:rfc', 'max:160'],
-            'consent_note' => [$granted ? 'required' : 'nullable', 'string', 'max:255'],
-        ], [], ['first_name' => 'el nombre', 'last_name' => 'el apellido', 'phone' => 'el teléfono', 'email' => 'el correo', 'consent_note' => 'la constancia del consentimiento'])
+            // Consent is explicit: when it is granted the CHANNEL it came through is required (the moment is stamped by the server); the note is optional detail.
+            'consent_channel' => [$granted ? 'required' : 'nullable', Rule::in(array_keys(config('customers.consent_channels')))],
+            'consent_note' => ['nullable', 'string', 'max:255'],
+        ], [], ['first_name' => 'el nombre', 'last_name' => 'el apellido', 'phone' => 'el teléfono', 'email' => 'el correo', 'consent_note' => 'la constancia del consentimiento', 'consent_channel' => 'el canal del consentimiento'])
             ->after(function ($validator) use ($data) {
                 if (Customer::normalizePhone($data['phone'] ?? null) === null && Customer::normalizeEmail($data['email'] ?? null) === null) {
                     $validator->errors()->add('phone', 'Indica al menos un teléfono o un correo.');
@@ -63,6 +66,7 @@ class QuickCustomer
             'notes' => null,
             'marketing_consent' => $granted ? Customer::CONSENT_GRANTED : 'unknown',
             'consent_note' => $granted ? $value('consent_note') : null,
+            'consent_channel' => $granted ? $value('consent_channel') : null,
             'preferred_channel' => null,
         ], [], []);
     }

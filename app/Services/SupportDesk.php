@@ -9,6 +9,7 @@ use App\Models\Message;
 use App\Models\MessageAttachment;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Support\RequestMemo;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
@@ -75,7 +76,8 @@ class SupportDesk
 
     private function adminWorkspace(): ?Workspace
     {
-        return Workspace::available()->where('workspaces.code', Workspace::normalizeCode((string) config('workspace.admin_code')))->first();
+        // Asked by the support panel, the shared props and the notifications of the same page: once per read-only request.
+        return RequestMemo::remember('support.admin_workspace', fn () => Workspace::available()->where('workspaces.code', Workspace::normalizeCode((string) config('workspace.admin_code')))->first());
     }
 
     /** The chatbot of the administrative Workspace that receives the requests, or null when there is none to receive them. */

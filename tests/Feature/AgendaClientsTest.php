@@ -200,4 +200,50 @@ class AgendaClientsTest extends TestCase
         $this->assertFalse($props['centralClients']);
         $this->assertSame(1, $props['customers']['meta']['total']);
     }
+
+    public function test_saving_a_new_client_records_consent_only_when_it_is_explicit_with_its_channel_and_a_server_timestamp(): void
+    {
+        $this->actAsMember($this->a);
+
+        // Booking and saving the person is NOT consent.
+        $this->book(['save_as_client' => true])->assertSessionHas('success');
+        $plain = Customer::firstOrFail();
+        $this->assertSame(['unknown', null], [$plain->marketing_consent, $plain->consent_channel]);
+
+        // Explicit consent needs its channel: without it nothing is saved.
+        $this->book(['save_as_client' => true, 'consent_granted' => true, 'customer' => ['name' => 'Mario Díaz', 'phone' => '+573004445566']], '2026-10-13T11:00:00Z')->assertSessionHasErrors('consent_channel');
+        $this->assertSame(1, Customer::count());
+        $this->assertSame(1, Appointment::count(), 'the refused booking created nothing');
+
+        $this->book(['save_as_client' => true, 'consent_granted' => true, 'consent_channel' => 'in_person', 'customer' => ['name' => 'Mario Díaz', 'phone' => '+573004445566']], '2026-10-13T11:00:00Z')->assertSessionHasNoErrors()->assertSessionHas('success');
+        $mario = Customer::where('first_name', 'Mario')->firstOrFail();
+        $this->assertSame(['granted', 'in_person'], [$mario->marketing_consent, $mario->consent_channel]);
+        $this->assertNotNull($mario->consent_at, 'the date and time come from the server, never typed');
+
+        // A date typed by the client is ignored and an unknown channel is refused.
+        $this->book(['save_as_client' => true, 'consent_granted' => true, 'consent_channel' => 'telegram', 'consent_at' => '2020-01-01', 'customer' => ['name' => 'Otra Persona', 'phone' => '+573006667788']], '2026-10-13T12:00:00Z')->assertSessionHasErrors('consent_channel');
+    }
+
+    public function test_picking_an_existing_client_never_changes_their_consent_and_shows_it(): void
+    {
+        $card = $this->card(null, ['marketing_consent' => 'revoked', 'consent_note' => 'Escribió STOP']);
+        $this->actAsMember($this->a);
+
+        $found = $this->getJson('/bookings/clients?q=Laura')->assertOk()->json('clients.0');
+        $this->assertSame(['revoked', 'Dado de baja'], [$found['consent'], $found['consentLabel']]);
+
+        // A consent sent along with a PICKED client is ignored: only a new card records consent.
+        $this->book(['central_customer_id' => $card->id, 'consent_granted' => true, 'consent_channel' => 'whatsapp'])->assertSessionHas('success');
+        $this->assertSame('revoked', $card->fresh()->marketing_consent);
+    }
+
+    public function test_the_options_of_the_form_list_the_consent_channels_only_for_roles_that_may_use_clientes(): void
+    {
+        $this->actAsMember($this->a);
+        $this->assertSame(array_keys(config('customers.consent_channels')), array_keys($this->get('/bookings')->viewData('page')['props']['options']['clients']['consentChannels']));
+
+        $this->app['auth']->forgetGuards();
+        $this->actAsMember($this->a, 'solo_agenda');
+        $this->assertArrayNotHasKey('consentChannels', $this->get('/bookings')->viewData('page')['props']['options']['clients']);
+    }
 }

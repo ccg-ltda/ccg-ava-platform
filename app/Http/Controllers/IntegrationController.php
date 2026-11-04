@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Middleware\EnsurePlatformAdministration;
 use App\Http\Requests\SaveChannelIntegrationRequest;
 use App\Http\Requests\SaveIntegrationRequest;
 use App\Http\Requests\SaveN8nIntegrationRequest;
@@ -13,6 +14,7 @@ use App\Services\ChatbotService;
 use App\Services\IntegrationService;
 use App\Services\MetaConnection;
 use App\Services\ModuleAccess;
+use App\Services\PlatformMeta;
 use App\Services\WorkspaceScope;
 use App\Webhooks\InboundWebhookService;
 use App\Webhooks\WebhookService;
@@ -57,6 +59,8 @@ class IntegrationController extends Controller
             'catalog' => $this->integrations->catalog(),
             // Messenger: the Pages the person authorized and has not chosen yet (id and name only; the Page tokens stay encrypted on the server).
             'metaPages' => $viewing->is($active) && $request->session()->has('meta_selection') ? app(MetaConnection::class)->pages($active, $request->user(), (string) $request->session()->get('meta_selection')) : null,
+            // The platform's Meta app, shown inside the Instagram and Messenger «Configurar»: only to the platform administration, never a secret (see PlatformMeta).
+            'metaPlatform' => $viewing->is($active) && EnsurePlatformAdministration::allows($request, 'view-meta-settings') ? app(PlatformMeta::class)->present() + ['canEdit' => EnsurePlatformAdministration::allows($request, 'edit-meta-settings')] : null,
             'webhooks' => $showWebhooks ? $this->webhooks->overview($viewing) : null,
             // The signing secret just created or rotated (shown once, to the person who did it).
             'newWebhookSecret' => $showWebhooks ? $request->session()->get('webhook_secret') : null,

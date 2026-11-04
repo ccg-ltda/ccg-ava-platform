@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
 use Inertia\Testing\AssertableInertia;
 use Spatie\Permission\Models\Role;
+use Symfony\Component\Mailer\Exception\TransportException;
 use Tests\Support\BuildsBookings;
 use Tests\TestCase;
 
@@ -336,7 +337,7 @@ class ReminderRulesTest extends TestCase
         app(ReminderDispatcher::class)->send(Reminder::where('customer_id', $laura->id)->value('id'));
         $this->assertSame(['skipped', 'no_consent'], [Reminder::where('customer_id', $laura->id)->value('status'), Reminder::where('customer_id', $laura->id)->value('reason')]);
 
-        Mail::shouldReceive('to')->once()->andThrow(new \RuntimeException('smtp down'));
+        Mail::shouldReceive('to')->once()->andThrow(new TransportException('smtp down'));
         $id = Reminder::where('customer_id', $maria->id)->value('id');
         app(ReminderDispatcher::class)->send($id);
         $failed = Reminder::findOrFail($id);

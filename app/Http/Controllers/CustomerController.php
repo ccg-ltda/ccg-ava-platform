@@ -115,6 +115,7 @@ class CustomerController extends Controller
             'anonymized' => $customer->isAnonymized(),
             'notes' => $customer->notes,
             'consentNote' => $customer->consent_note,
+            'consentChannel' => $customer->consent_channel,
             'tags' => $customer->tags->pluck('tag')->sort()->values()->all(),
             'identities' => $customer->identities->map(fn ($i) => ['channel' => $i->channel, 'external_id' => $i->external_id])->values()->all(),
         ];
@@ -145,6 +146,7 @@ class CustomerController extends Controller
         return [
             'sources' => config('customers.sources'),
             'consents' => config('customers.consents'),
+            'consentChannels' => config('customers.consent_channels'),
             'preferences' => config('customers.contact_preferences'),
             'channels' => collect(config('customers.identity_channels'))->mapWithKeys(fn (string $channel) => [$channel => config("chatbots.channels.{$channel}.label", ucfirst($channel))])->all(),
             'tags' => $this->search->tags($workspace),

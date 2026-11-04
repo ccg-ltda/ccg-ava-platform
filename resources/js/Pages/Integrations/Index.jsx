@@ -14,6 +14,7 @@ import ApiCallHistory from './Partials/ApiCallHistory';
 import AutomationCard from './Partials/AutomationCard';
 import ChannelCard from './Partials/ChannelCard';
 import ChannelIntegrationModal from './Partials/ChannelIntegrationModal';
+import MetaConfigModal from './Partials/MetaConfigModal';
 import MetaPagesModal from './Partials/MetaPagesModal';
 import IntegrationCard from './Partials/IntegrationCard';
 import IntegrationFormModal from './Partials/IntegrationFormModal';
@@ -33,7 +34,7 @@ const initialTab = () => {
     return Math.max(0, TABS.indexOf(requested));
 };
 
-export default function Index({ channels, providers = [], integrations, catalog, automation, metaPages = null, webhooks = null, newWebhookSecret = null, inboundWebhooks = null, newInboundSecret = null, scope }) {
+export default function Index({ channels, providers = [], integrations, catalog, automation, metaPages = null, metaPlatform = null, webhooks = null, newWebhookSecret = null, inboundWebhooks = null, newInboundSecret = null, scope }) {
     const confirm = useConfirm();
     const readOnly = scope.readOnly;
     // Each change has its own permission; the server enforces them, this only offers what the role can do.
@@ -48,6 +49,7 @@ export default function Index({ channels, providers = [], integrations, catalog,
     const [editing, setEditing] = useState(null); // null = closed, 'new' = creating, otherwise the integration
     const [configuring, setConfiguring] = useState(null); // the channel being configured
     const [configuringProvider, setConfiguringProvider] = useState(null); // the external agenda being configured
+    const [metaKey, setMetaKey] = useState(null); // 'instagram' | 'messenger': the Meta channel whose «Configurar» is open (looked up in `channels` so it always shows what the server just saved)
     const [testingId, setTestingId] = useState(null);
     const [tab, setTab] = useState(initialTab);
     const selectTab = (index) => {
@@ -153,7 +155,9 @@ export default function Index({ channels, providers = [], integrations, catalog,
                             can={can}
                             testing={testingId === `channel-${channel.key}`}
                             onTest={() => testChannel(channel)}
+                            platformEditable={Boolean(metaPlatform)}
                             onConfigure={() => setConfiguring(channel)}
+                            onConfigureMeta={() => setMetaKey(channel.key)}
                             onToggle={() => toggle({ id: channel.integration.id, name: channel.label, isActive: channel.integration.isActive })}
                         />
                     ))}
@@ -254,6 +258,18 @@ export default function Index({ channels, providers = [], integrations, catalog,
             </Tabs>
 
             {metaPages && metaPages.length > 0 && !scope.readOnly && <MetaPagesModal pages={metaPages} />}
+            {metaKey && channels.find((channel) => channel.key === metaKey) && (
+                <MetaConfigModal
+                    key={metaKey}
+                    channel={channels.find((channel) => channel.key === metaKey)}
+                    platform={metaPlatform}
+                    can={can}
+                    testing={testingId === `channel-${metaKey}`}
+                    onTest={() => testChannel(channels.find((channel) => channel.key === metaKey))}
+                    onToggle={() => { const target = channels.find((channel) => channel.key === metaKey); toggle({ id: target.integration.id, name: target.label, isActive: target.integration.isActive }); }}
+                    onClose={() => setMetaKey(null)}
+                />
+            )}
             {configuring && <ChannelIntegrationModal key={configuring.key} channel={configuring} onClose={() => setConfiguring(null)} />}
             {configuringProvider && <ChannelIntegrationModal key={configuringProvider.key} channel={configuringProvider} routeName="integrations.providers.update" onClose={() => setConfiguringProvider(null)} />}
             {editing && <IntegrationFormModal key={editing === 'new' ? 'new' : editing.id} integration={editing === 'new' ? null : editing} catalog={catalog} onClose={() => setEditing(null)} />}

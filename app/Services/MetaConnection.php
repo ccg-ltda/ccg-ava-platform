@@ -40,8 +40,8 @@ class MetaConnection
         $appId = $channel === 'instagram' ? PlatformMeta::get('instagram_app_id') : PlatformMeta::get('app_id');
 
         return match (true) {
-            blank($appId) || blank($secret) => 'Falta configurar la app de Meta de la plataforma ('.($channel === 'instagram' ? 'App ID y secreto de Instagram' : 'App ID y secreto de Facebook').'): la administración de CCG la configura una sola vez en Configuraciones > Meta.',
-            blank(PlatformMeta::get('webhook_verify_token')) => 'Falta el token de verificación del webhook de Meta: la administración de CCG lo configura en Configuraciones > Meta.',
+            blank($appId) || blank($secret) => 'Falta configurar la app de Meta de la plataforma ('.($channel === 'instagram' ? 'App ID y secreto de Instagram' : 'App ID y secreto de Facebook').'): la administración de CCG la configura una sola vez desde Integraciones, en el botón «Configurar» de esta tarjeta.',
+            blank(PlatformMeta::get('webhook_verify_token')) => 'Falta el token de verificación del webhook de Meta: la administración de CCG lo configura desde Integraciones, en el botón «Configurar» de esta tarjeta.',
             default => null,
         };
     }

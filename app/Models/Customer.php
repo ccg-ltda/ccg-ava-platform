@@ -8,13 +8,14 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * The customer record of a Workspace (see config/customers.php). Created and read only through `$workspace->customers()`; never
  * deleted, only deactivated. `phone_normalized` and `email_normalized` are the identities used to detect duplicates and are always
  * derived from `phone` / `email` here, so no code path can leave them out of step.
  */
-#[Fillable(['first_name', 'last_name', 'phone', 'email', 'source', 'notes', 'marketing_consent', 'consent_note', 'preferred_channel', 'is_active'])]
+#[Fillable(['first_name', 'last_name', 'phone', 'email', 'source', 'notes', 'marketing_consent', 'consent_note', 'consent_channel', 'preferred_channel', 'is_active'])]
 class Customer extends Model
 {
     use Audited {
@@ -45,7 +46,20 @@ class Customer extends Model
             if ($customer->isDirty('marketing_consent')) {
                 $customer->consent_at = now();
             }
+
+            // Code deployed ahead of its migration: the consent channel is simply not stored until the column exists (nothing fails in SQL).
+            if (! static::consentChannelReady()) {
+                $customer->offsetUnset('consent_channel');
+            }
         });
+    }
+
+    private static bool $consentChannelReady = false;
+
+    /** Whether the database has `customers.consent_channel`. Only a YES is remembered, so a long-lived worker notices the migration without a restart. */
+    public static function consentChannelReady(): bool
+    {
+        return self::$consentChannelReady = self::$consentChannelReady || Schema::hasColumn('customers', 'consent_channel');
     }
 
     /** Digits only, so "+57 300 111" and "57300111" are the same number (same rule as BookingCustomer). */
@@ -103,7 +117,7 @@ class Customer extends Model
 
     public function auditFields(): array
     {
-        return ['source' => 'Origen', 'marketing_consent' => 'Consentimiento', 'preferred_channel' => 'Canal preferido', 'is_active' => 'Activo'];
+        return ['source' => 'Origen', 'marketing_consent' => 'Consentimiento', 'consent_channel' => 'Canal del consentimiento', 'preferred_channel' => 'Canal preferido', 'is_active' => 'Activo'];
     }
 
     /** Whatever identifies or describes a person is audited as "changed", never stored: the audit log is read by people who may not see them. */

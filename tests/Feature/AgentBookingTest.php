@@ -7,6 +7,8 @@ use App\Models\AuditLog;
 use App\Models\BookingCustomer;
 use App\Models\Chatbot;
 use App\Models\Conversation;
+use App\Models\Customer;
+use App\Models\Module;
 use App\Models\Service;
 use App\Models\Workspace;
 use App\Services\AgentAccess;
@@ -374,5 +376,33 @@ class AgentBookingTest extends TestCase
 
         $this->assertSame([1, 1], [BookingCustomer::where('workspace_id', $this->workspace->id)->count(), BookingCustomer::where('workspace_id', $other->id)->count()]);
         $this->assertSame($other->id, Appointment::findOrFail($theirs->json('appointment.id'))->workspace_id);
+    }
+
+    public function test_the_assistant_books_with_only_the_basic_data_and_may_tie_or_save_a_central_customer_without_ever_recording_consent(): void
+    {
+        $plan = $this->workspace->plan;
+        $plan->modules()->syncWithoutDetaching(Module::where('key', 'customers')->pluck('id'));
+        $this->workspace->refresh();
+        $this->conversation('573001112233');
+
+        // Basic data only: no customer card is involved or created.
+        $this->agentCall('POST', '/appointments', $this->book())->assertCreated();
+        $this->assertSame(0, Customer::count());
+
+        // An existing card of THIS Workspace is tied by its id; another Workspace's id is refused.
+        $card = $this->workspace->customers()->create(['first_name' => 'Laura', 'last_name' => 'Pérez', 'phone' => '+573009990000', 'source' => 'manual', 'marketing_consent' => 'unknown']);
+        $this->conversation('573002223344');
+        $this->agentCall('POST', '/appointments', $this->book(['customer_id' => $card->id, 'starts_at' => '2026-10-13T12:00:00Z'], '573002223344'))->assertCreated();
+        $this->assertSame($card->id, BookingCustomer::whereNotNull('customer_id')->value('customer_id'));
+
+        $foreign = $this->bookingWorkspace('OTRO', ['dashboard', 'customers'])->customers()->create(['first_name' => 'Ajena', 'phone' => '+573001230000', 'source' => 'manual', 'marketing_consent' => 'unknown']);
+        $this->conversation('573003334455');
+        $this->agentCall('POST', '/appointments', $this->book(['customer_id' => $foreign->id, 'starts_at' => '2026-10-13T14:00:00Z'], '573003334455'))->assertStatus(422);
+
+        // An explicit instruction creates the card; consent can never be granted by the assistant, whatever it sends.
+        $this->conversation('573004445566');
+        $this->agentCall('POST', '/appointments', $this->book(['save_as_client' => true, 'consent_granted' => true, 'consent_channel' => 'whatsapp', 'customer' => ['name' => 'Mario Díaz', 'phone' => '+573004445566'], 'starts_at' => '2026-10-13T15:00:00Z'], '573004445566'))->assertCreated();
+        $mario = Customer::where('first_name', 'Mario')->firstOrFail();
+        $this->assertSame(['unknown', null], [$mario->marketing_consent, $mario->consent_channel]);
     }
 }

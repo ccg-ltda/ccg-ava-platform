@@ -23,6 +23,19 @@ return [
         'revoked' => 'Dado de baja',
     ],
 
+    /*
+     * Where a customer gave their marketing consent. It is the evidence of an EXPLICIT authorization: creating a customer, booking an appointment or giving a phone number is never consent.
+     * The date and time are stamped by the server (`consent_at`), never typed.
+     */
+    'consent_channels' => [
+        'in_person' => 'En persona',
+        'whatsapp' => 'WhatsApp',
+        'call' => 'Llamada telefónica',
+        'email' => 'Correo electrónico',
+        'sms' => 'SMS',
+        'web' => 'Formulario web',
+    ],
+
     /* Channels a customer can be identified on (keys of config/chatbots.php `channels`). */
     'identity_channels' => ['whatsapp', 'web', 'instagram', 'messenger'],
 

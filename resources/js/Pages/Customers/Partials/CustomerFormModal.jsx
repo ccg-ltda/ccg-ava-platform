@@ -45,6 +45,7 @@ export default function CustomerFormModal({ customer, options, onClose }) {
         notes: customer?.notes ?? '',
         marketing_consent: customer?.consent ?? 'unknown',
         consent_note: customer?.consentNote ?? '',
+        consent_channel: customer?.consentChannel ?? '',
         preferred_channel: customer?.preferredChannel ?? '',
         tags: customer?.tags ?? [],
         identities: customer?.identities ?? [],
@@ -144,7 +145,12 @@ export default function CustomerFormModal({ customer, options, onClose }) {
                         <Field id="customer_consent" label="Consentimiento para mensajes comerciales" error={errors.marketing_consent}>
                             <Select id="customer_consent" value={data.marketing_consent} onChange={(value) => setData('marketing_consent', value)} options={optionsOf(options.consents)} />
                         </Field>
-                        {field('consent_note', data.marketing_consent === 'granted' ? 'Cómo se obtuvo (obligatorio)' : 'Constancia (opcional)', { maxLength: 255 })}
+                        {data.marketing_consent === 'granted' ? (
+                            <Field id="customer_consent_channel" label="Canal por el que autorizó" error={errors.consent_channel} hint="La fecha y la hora las registra Ava al guardar.">
+                                <Select id="customer_consent_channel" value={data.consent_channel} onChange={(value) => setData('consent_channel', value)} options={optionsOf(options.consentChannels ?? {})} placeholder="Elige un canal" invalid={Boolean(errors.consent_channel)} />
+                            </Field>
+                        ) : null}
+                        {field('consent_note', 'Constancia (opcional)', { maxLength: 255 })}
                         <Field id="customer_tags" label="Etiquetas" error={errors.tags} className="sm:col-span-2" hint="Elige del catálogo del Workspace o crea una nueva: si ya existe con otra escritura (mayúsculas, espacios) se usa la existente.">
                             <EntityPicker id="customer_tags" value={data.tags} onChange={(tags) => setData('tags', tags)} options={tagOptions} placeholder="Buscar etiqueta" noneLabel="Sin etiquetas" invalid={Boolean(errors.tags)} />
                             <div className="mt-2 flex gap-2">

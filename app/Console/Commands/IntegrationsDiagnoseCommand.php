@@ -373,7 +373,7 @@ class IntegrationsDiagnoseCommand extends Command
 
         $secret && $verify
             ? $this->good('El secreto de la app de Meta y el token de verificación del webhook están definidos: el webhook existe.')
-            : $this->caution('Falta '.implode(' y ', array_filter([$secret ? null : 'el secreto de la app de Meta', $verify ? null : 'el token de verificación del webhook'])).' (se configuran en Configuraciones > App de Meta, o en .env como respaldo): el webhook responde 404 y no entra ningún mensaje de WhatsApp.');
+            : $this->caution('Falta '.implode(' y ', array_filter([$secret ? null : 'el secreto de la app de Meta', $verify ? null : 'el token de verificación del webhook'])).' (se configuran en Integraciones > Configurar de Instagram o Messenger, o en .env como respaldo): el webhook responde 404 y no entra ningún mensaje de WhatsApp.');
 
         $this->line('         URL del webhook para Meta: '.url('/api/webhooks/whatsapp'));
         $this->line('         Graph API: '.config('integrations.whatsapp.graph_version'));

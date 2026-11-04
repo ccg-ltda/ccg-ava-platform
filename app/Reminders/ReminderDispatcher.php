@@ -16,6 +16,9 @@ use App\Support\PhoneNumber;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
+use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 use Throwable;
 
 /**
@@ -46,15 +49,24 @@ class ReminderDispatcher
             $this->settle($reminder, Reminder::UNCERTAIN, 'interrupted', 'uncertain');
         }
 
+        // What was handed to the queue and never picked up (a lost queue, a worker that is not listening to this connection) goes back to waiting instead of staying `queued` forever.
+        Reminder::query()->where('status', Reminder::QUEUED)->where('updated_at', '<', now()->subMinutes((int) config('reminders.retries.stale_queued_minutes')))->update(['status' => Reminder::SCHEDULED, 'updated_at' => now()]);
+
         $queued = 0;
 
         Reminder::query()->where('status', Reminder::SCHEDULED)->where('next_attempt_at', '<=', now())->orderBy('next_attempt_at')->limit((int) config('reminders.dispatch_batch'))->pluck('id')
             ->each(function (int $id) use (&$queued) {
+                // An atomic claim: only the process that moves the row from `scheduled` to `queued` dispatches it (two schedulers can not queue the same one).
+                if (Reminder::query()->whereKey($id)->where('status', Reminder::SCHEDULED)->update(['status' => Reminder::QUEUED, 'updated_at' => now()]) !== 1) {
+                    return;
+                }
+
                 try {
                     SendReminder::dispatch($id);
                     $queued++;
                 } catch (Throwable $e) {
-                    report($e); // the row stays `scheduled`: the next minute queues it again
+                    Reminder::query()->whereKey($id)->where('status', Reminder::QUEUED)->update(['status' => Reminder::SCHEDULED, 'updated_at' => now()]);
+                    Log::error('reminder_dispatch_error', ['exception' => $e::class, 'reminder' => $id]); // back to waiting: the next minute queues it again
                 }
             });
 
@@ -63,7 +75,7 @@ class ReminderDispatcher
 
     public function send(int $id): void
     {
-        $claimed = Reminder::query()->whereKey($id)->where('status', Reminder::SCHEDULED)->where('next_attempt_at', '<=', now())
+        $claimed = Reminder::query()->whereKey($id)->whereIn('status', [Reminder::SCHEDULED, Reminder::QUEUED])->where('next_attempt_at', '<=', now())
             ->update(['status' => Reminder::PROCESSING, 'attempts' => DB::raw('attempts + 1'), 'updated_at' => now()]);
 
         if ($claimed !== 1) {
@@ -87,12 +99,16 @@ class ReminderDispatcher
                 'whatsapp' => $this->whatsapp($reminder, $customer, $integration),
             };
         } catch (Throwable $e) {
-            // Only the class is logged: the text of an exception may carry an address or a credential.
+            // The class goes to the log; the attempt keeps the class and a short text with addresses masked (an exception may carry an address or a server's reply), so the real cause is on
+            // screen instead of a generic «no se pudo enviar».
             Log::error('reminder_send_error', ['exception' => $e::class, 'reminder' => $reminder->id]);
-            $result = $reminder->channel === 'email' ? SendResult::failed('send_failed', true) : SendResult::uncertain('interrupted');
+            $detail = $this->describe($e);
+            // E-mail: a transport that could not deliver (no connection, a busy server) may work later. Anything else (a code error, a bad address, a template) fails the same way every time:
+            // it is closed as failed at once instead of being retried three more times.
+            $result = $reminder->channel === 'email' ? SendResult::failed('send_failed', $e instanceof TransportExceptionInterface) : SendResult::uncertain('interrupted');
         }
 
-        $this->record($reminder, $result);
+        $this->record($reminder, $result, $detail ?? null);
     }
 
     /** The reason this reminder must not go out any more, or null. @return array{0: string, 1: string}|null [new status, fixed reason] */
@@ -156,7 +172,9 @@ class ReminderDispatcher
 
     private function email(Reminder $reminder, Customer $customer): SendResult
     {
-        Mail::to($customer->email)->send(new ReminderMail($reminder, $this->variables->render($reminder->body, $customer, $this->appointmentOf($reminder))));
+        $appointment = $this->appointmentOf($reminder);
+
+        Mail::to($customer->email)->send(new ReminderMail($reminder, $this->variables->render($reminder->body, $customer, $appointment), $this->variables->render((string) $reminder->subject, $customer, $appointment)));
 
         return SendResult::accepted(null);
     }
@@ -188,7 +206,13 @@ class ReminderDispatcher
         return $digits !== '' && PhoneNumber::e164('+'.$digits) !== null ? $digits : null;
     }
 
-    private function record(Reminder $reminder, SendResult $result): void
+    /** The error class and its text, short and with e-mail addresses masked. */
+    private function describe(Throwable $e): string
+    {
+        return Str::limit(class_basename($e).': '.preg_replace('/[\w.+-]+@[\w.-]+/', '[correo]', $e->getMessage()), 240, '');
+    }
+
+    private function record(Reminder $reminder, SendResult $result, ?string $detail = null): void
     {
         $max = (int) config('reminders.retries.max_attempts');
         $backoff = (array) config('reminders.retries.backoff_seconds');
@@ -196,21 +220,21 @@ class ReminderDispatcher
         match (true) {
             $result->ok => $this->finish($reminder, ['status' => Reminder::SENT, 'sent_at' => now(), 'external_id' => $result->externalId, 'reason' => null, 'next_attempt_at' => null], 'sent', null),
             $result->uncertain => $this->settle($reminder, Reminder::UNCERTAIN, 'interrupted', 'uncertain'),
-            $result->retryable && $reminder->attempts < $max => $this->finish($reminder, ['status' => Reminder::SCHEDULED, 'reason' => 'send_failed', 'next_attempt_at' => now()->addSeconds((int) ($backoff[$reminder->attempts - 1] ?? 300))], 'retry', 'send_failed'),
-            default => $this->settle($reminder, Reminder::FAILED, 'send_failed', 'failed'),
+            $result->retryable && $reminder->attempts < $max => $this->finish($reminder, ['status' => Reminder::SCHEDULED, 'reason' => 'send_failed', 'next_attempt_at' => now()->addSeconds((int) ($backoff[$reminder->attempts - 1] ?? 300))], 'retry', 'send_failed', $detail),
+            default => $this->settle($reminder, Reminder::FAILED, 'send_failed', 'failed', $detail),
         };
     }
 
-    private function settle(Reminder $reminder, string $status, string $reason, string $outcome): void
+    private function settle(Reminder $reminder, string $status, string $reason, string $outcome, ?string $detail = null): void
     {
-        $this->finish($reminder, ['status' => $status, 'reason' => $reason, 'next_attempt_at' => null], $outcome, $reason);
+        $this->finish($reminder, ['status' => $status, 'reason' => $reason, 'next_attempt_at' => null], $outcome, $reason, $detail);
     }
 
     /** @param  array<string, mixed>  $attributes */
-    private function finish(Reminder $reminder, array $attributes, string $outcome, ?string $reason): void
+    private function finish(Reminder $reminder, array $attributes, string $outcome, ?string $reason, ?string $detail = null): void
     {
         $reminder->forceFill($attributes)->save();
 
-        ReminderAttempt::create(['reminder_id' => $reminder->id, 'workspace_id' => $reminder->workspace_id, 'attempt' => max(1, $reminder->attempts), 'outcome' => $outcome, 'reason' => $reason]);
+        ReminderAttempt::create(['reminder_id' => $reminder->id, 'workspace_id' => $reminder->workspace_id, 'attempt' => max(1, $reminder->attempts), 'outcome' => $outcome, 'reason' => $reason] + ($detail !== null && Schema::hasColumn('reminder_attempts', 'detail') ? ['detail' => $detail] : []));
     }
 }

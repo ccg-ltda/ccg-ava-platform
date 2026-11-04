@@ -9,6 +9,8 @@
 return [
     'statuses' => [
         'scheduled' => 'Programado',
+        'queued' => 'En cola',
+        'queued' => 'En cola',
         'processing' => 'Enviando',
         'sent' => 'Enviado',
         'failed' => 'Falló',
@@ -89,6 +91,8 @@ return [
         'backoff_seconds' => [300, 1800, 7200],
         // A `processing` reminder untouched this long is closed as «uncertain» (never re-sent automatically).
         'stale_processing_minutes' => 10,
+        // A reminder handed to the queue and untouched this long goes back to waiting (the worker is not listening to that queue, or the queue lost it).
+        'stale_queued_minutes' => 10,
     ],
 
     // Whether a customer must have granted marketing consent. Follow-ups are promotional invitations: the same rule as Campañas.

@@ -185,7 +185,7 @@ class BookingController extends Controller
         // Clientes is the central record: the staff may tie the appointment to a card they picked (it must be of THIS Workspace) or save the person as a new card. Optional, and
         // never for the public page or Ava Chat (this is the staff's route).
         $permissions = $request->attributes->get('workspace_permissions', []);
-        $card = $this->clients->resolve($workspace, $permissions, $request->integer('central_customer_id') ?: null, $request->boolean('save_as_client'), $booking['customer']);
+        $card = $this->clients->resolve($workspace, $permissions, $request->integer('central_customer_id') ?: null, $request->boolean('save_as_client'), $booking['customer'], $request->only(['consent_granted', 'consent_channel', 'consent_note']));
 
         if ($card !== null) {
             $booking['customer'] = ['name' => $card->fullName(), 'phone' => $card->phone ?: ($booking['customer']['phone'] ?? null), 'email' => $card->email ?: ($booking['customer']['email'] ?? null), 'central_id' => $card->id];

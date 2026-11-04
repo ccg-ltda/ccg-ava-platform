@@ -61,7 +61,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        Vite::prefetch(concurrency: 3);
+        // No `Vite::prefetch()`: it downloaded EVERY chunk of the application (about 240 files, 1.5 MB, including the sign-in, invitation and password pages a signed-in person never opens) in the
+        // background after each full page load, three at a time. On a single-threaded server (`php artisan serve`) those requests queue in front of the person's next click. A page's chunk is
+        // small and loads when it is opened.
 
         // Production accounts need a longer, mixed password; development and tests keep the framework minimum.
         Password::defaults(fn () => app()->isProduction() ? Password::min(12)->letters()->mixedCase()->numbers() : Password::min(8));

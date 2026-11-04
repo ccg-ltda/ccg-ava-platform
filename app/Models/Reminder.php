@@ -16,6 +16,9 @@ class Reminder extends Model
 {
     public const SCHEDULED = 'scheduled';
 
+    /** Handed to the queue by the scheduler and waiting for a worker: nothing has been sent yet. */
+    public const QUEUED = 'queued';
+
     public const PROCESSING = 'processing';
 
     public const SENT = 'sent';
@@ -35,7 +38,7 @@ class Reminder extends Model
 
     public function isPending(): bool
     {
-        return $this->status === self::SCHEDULED;
+        return $this->status === self::SCHEDULED || $this->status === self::QUEUED;
     }
 
     public function workspace(): BelongsTo

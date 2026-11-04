@@ -157,7 +157,7 @@ class ReminderRuleScheduler
     private function pending(ReminderRule $rule)
     {
         return ReminderRuleEvent::query()->where('reminder_rule_id', $rule->id)->where('status', ReminderRuleEvent::SCHEDULED)
-            ->whereHas('reminder', fn ($q) => $q->where('status', Reminder::SCHEDULED))->with('reminder.workspace')->orderBy('id')->lazyById(200);
+            ->whereHas('reminder', fn ($q) => $q->whereIn('status', [Reminder::SCHEDULED, Reminder::QUEUED]))->with('reminder.workspace')->orderBy('id')->lazyById(200);
     }
 
     private function cancelEvent(ReminderRuleEvent $event, string $reason): void

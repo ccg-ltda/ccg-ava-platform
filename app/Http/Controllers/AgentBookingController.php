@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Booking\AgendaClients;
 use App\Booking\AppointmentNotifier;
 use App\Booking\BookingException;
 use App\Booking\BookingManager;
@@ -73,7 +74,16 @@ class AgentBookingController extends Controller
 
         return $this->run(function (Workspace $workspace) use ($request, $data, &$status) {
             $conversation = $this->conversation($request, $data);
-            $result = $this->bookings->request($workspace, $request->booking(), 'chat', $conversation->id);
+            // The same business rule as the staff's form (AgendaClients): an optional `customer_id` of THIS Workspace ties the booking to its card, and `save_as_client: true` (an explicit instruction)
+            // creates the card. Neither is required, and a booking never creates a card or a consent by itself.
+            $booking = $request->booking();
+            $card = app(AgendaClients::class)->resolve($workspace, null, $request->integer('customer_id') ?: null, $request->boolean('save_as_client'), $booking['customer']);
+
+            if ($card !== null) {
+                $booking['customer'] = ['name' => $card->fullName(), 'phone' => $card->phone ?: ($booking['customer']['phone'] ?? null), 'email' => $card->email ?: ($booking['customer']['email'] ?? null), 'central_id' => $card->id];
+            }
+
+            $result = $this->bookings->request($workspace, $booking, 'chat', $conversation->id);
             // The same request again returns the booking Ava already has (200), not a second one.
             $status = ($result['replayed'] ?? false) ? 200 : 201;
 

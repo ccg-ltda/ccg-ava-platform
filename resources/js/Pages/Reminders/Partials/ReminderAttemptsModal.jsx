@@ -41,6 +41,8 @@ export default function ReminderAttemptsModal({ reminder, onClose }) {
                                         <p className="text-sm font-semibold text-ink">Intento {row.attempt}</p>
                                         <p className="text-xs text-ink-muted">{row.at}</p>
                                         {row.reason && <p className="mt-1 text-sm text-ink">{row.reason}</p>}
+                                        {row.detail && <p className="mt-0.5 font-mono text-xs break-words text-ink-muted">{row.detail}</p>}
+                                        {row.detail && <p className="mt-0.5 break-words font-mono text-xs text-ink-muted">{row.detail}</p>}
                                     </div>
                                     <Badge tone={(OUTCOMES[row.outcome] ?? OUTCOMES.failed).tone}>{(OUTCOMES[row.outcome] ?? { label: row.outcome }).label}</Badge>
                                 </li>

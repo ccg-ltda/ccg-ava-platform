@@ -44,7 +44,7 @@ class ReminderService
             return ['reminder' => $existing, 'replayed' => true];
         }
 
-        if ($workspace->reminders()->where('status', Reminder::SCHEDULED)->count() >= (int) config('reminders.limits.max_scheduled')) {
+        if ($workspace->reminders()->whereIn('status', [Reminder::SCHEDULED, Reminder::QUEUED])->count() >= (int) config('reminders.limits.max_scheduled')) {
             throw ValidationException::withMessages(['name' => 'Este Workspace alcanzó el máximo de recordatorios programados. Espera a que se envíen o cancela alguno.']);
         }
 
@@ -106,7 +106,7 @@ class ReminderService
         // A query-builder update does not apply the model's casts: the list is encoded here.
         $attributes['template_params'] = $attributes['template_params'] === null ? null : json_encode($attributes['template_params']);
 
-        $updated = Reminder::query()->whereKey($reminder->id)->where('workspace_id', $workspace->id)->where('status', Reminder::SCHEDULED)
+        $updated = Reminder::query()->whereKey($reminder->id)->where('workspace_id', $workspace->id)->whereIn('status', [Reminder::SCHEDULED, Reminder::QUEUED])
             ->update($attributes + ['updated_at' => now(), 'next_attempt_at' => $attributes['send_at']]);
 
         if ($updated !== 1) {
@@ -124,7 +124,7 @@ class ReminderService
     {
         $workspace = $reminder->workspace;
 
-        $cancelled = Reminder::query()->whereKey($reminder->id)->where('workspace_id', $workspace->id)->where('status', Reminder::SCHEDULED)
+        $cancelled = Reminder::query()->whereKey($reminder->id)->where('workspace_id', $workspace->id)->whereIn('status', [Reminder::SCHEDULED, Reminder::QUEUED])
             ->update(['status' => Reminder::CANCELLED, 'cancelled_at' => now(), 'next_attempt_at' => null, 'reason' => $reason, 'updated_at' => now()]);
 
         if ($cancelled !== 1) {

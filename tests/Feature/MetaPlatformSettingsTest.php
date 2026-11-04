@@ -68,7 +68,7 @@ class MetaPlatformSettingsTest extends TestCase
         $channel = collect(app(ChannelCatalog::class)->all($this->client))->firstWhere('key', 'instagram');
         $this->assertFalse($channel['available']);
         $this->assertStringNotContainsString('META_', (string) MetaConnection::platformIssue('instagram'), 'a customer is never told to edit .env');
-        $this->assertStringContainsString('Configuraciones', (string) MetaConnection::platformIssue('instagram'));
+        $this->assertStringContainsString('Integraciones', (string) MetaConnection::platformIssue('instagram'));
     }
 
     public function test_saving_in_ava_completes_the_platform_app_for_every_workspace_without_touching_env(): void
@@ -94,7 +94,7 @@ class MetaPlatformSettingsTest extends TestCase
         $this->assertStringNotContainsString(self::SECRET, json_encode($raw));
         $this->assertSame(self::SECRET, MetaPlatformSetting::first()->app_secret, 'decrypted only inside the server');
 
-        $page = json_encode($this->get('/settings?tab=meta')->assertOk()->viewData('page')['props']['meta'], JSON_UNESCAPED_UNICODE);
+        $page = json_encode($this->get('/integrations')->assertOk()->viewData('page')['props']['metaPlatform'], JSON_UNESCAPED_UNICODE);
         foreach ([self::SECRET, 'f0e1d2c3b4a5968778695a4b3c2d1e0f', 'token-de-verificacion-123'] as $secret) {
             $this->assertStringNotContainsString($secret, $page);
         }
@@ -144,11 +144,12 @@ class MetaPlatformSettingsTest extends TestCase
 
         $this->put('/settings/meta', $this->values())->assertForbidden();
         $this->post('/settings/meta/check')->assertForbidden();
-        $this->assertNull($this->get('/settings')->viewData('page')['props']['meta'], 'a client never even receives the data');
+        $this->assertNull($this->get('/integrations')->viewData('page')['props']['metaPlatform'], 'a client never even receives the data');
+        $this->assertArrayNotHasKey('meta', $this->get('/settings')->viewData('page')['props'], 'it no longer lives in Configuraciones');
         $this->assertSame(0, MetaPlatformSetting::count());
 
         $this->asPlatform();
-        $this->assertNotNull($this->get('/settings')->viewData('page')['props']['meta']);
+        $this->assertNotNull($this->get('/integrations')->viewData('page')['props']['metaPlatform']);
     }
 
     public function test_checking_with_meta_reports_a_fixed_message_never_metas_text_and_records_the_result(): void
