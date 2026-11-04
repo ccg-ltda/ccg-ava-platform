@@ -26,8 +26,9 @@ export default function PlansPanel({ plans, catalog, filters, can, commercial })
     const first = useRef(true);
 
     const blankOffer = { solution_ids: [], price_monthly: '', price_yearly: '', currency: null, is_public: false, requires_quote: false, limits: { users: '', ai_executions: '' } };
-    const create = useForm({ name: '', description: '', module_ids: [], ...blankOffer });
-    const edit = useForm({ name: '', description: '', module_ids: [], ...blankOffer });
+    const allChannels = (commercial?.channels ?? []).map((channel) => channel.key);
+    const create = useForm({ name: '', description: '', module_ids: [], channel_keys: allChannels, ...blankOffer });
+    const edit = useForm({ name: '', description: '', module_ids: [], channel_keys: allChannels, ...blankOffer });
     const [creating, setCreating] = useState(false);
     const [editing, setEditing] = useState(null);
 
@@ -65,6 +66,8 @@ export default function PlansPanel({ plans, catalog, filters, can, commercial })
             name: plan.name,
             description: plan.description ?? '',
             module_ids: plan.moduleIds ?? [],
+            // A plan whose channels were never saved still offers every channel: the editor starts from that.
+            channel_keys: plan.channelKeys ?? allChannels,
             solution_ids: plan.offer?.solutionIds ?? [],
             price_monthly: plan.offer?.priceMonthly ?? '',
             price_yearly: plan.offer?.priceYearly ?? '',

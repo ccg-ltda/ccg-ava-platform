@@ -262,7 +262,14 @@ class AppointmentNotifier
             return;
         }
 
-        $digits = BookingCustomer::normalizePhone($appointment->customer?->phone);
+        [$digits, $source] = $this->recipientPhone($appointment);
+
+        if ($source === 'anonymized') {
+            // The person asked to be erased from Clientes: no message is sent to the number kept in an old appointment.
+            $this->settle($notification, Notification::SKIPPED, 'customer_anonymized');
+
+            return;
+        }
 
         if ($digits === null || PhoneNumber::e164('+'.$digits) === null) {
             $this->settle($notification, Notification::SKIPPED, 'no_valid_phone');
@@ -300,6 +307,35 @@ class AppointmentNotifier
         }
 
         $this->record($notification, $result, $template ? 'template' : 'text');
+    }
+
+    /**
+     * The number a confirmation or reminder goes to. When the appointment's person is tied to a card of Clientes (the central record) the CARD's number is used, so a corrected phone reaches the
+     * messages that are still pending; an appointment with no card (every older one, or a booking from the public page) keeps the number it was booked with, exactly as before, and the
+     * source is logged. A card that was anonymized means the person was erased: nothing is sent.
+     *
+     * @return array{0: ?string, 1: 'central'|'snapshot'|'anonymized'} digits (or null) and where they came from
+     */
+    private function recipientPhone(Appointment $appointment): array
+    {
+        $person = $appointment->customer;
+        $card = $person?->customer_id !== null ? $person->card : null;
+
+        if ($card !== null && $card->workspace_id === $appointment->workspace_id) {
+            if ($card->isAnonymized()) {
+                return [null, 'anonymized'];
+            }
+
+            if (filled($card->phone_normalized)) {
+                Log::info('appointment_notification_recipient', ['source' => 'central']);
+
+                return [$card->phone_normalized, 'central'];
+            }
+        }
+
+        Log::info('appointment_notification_recipient', ['source' => 'snapshot', 'linked' => $card !== null]);
+
+        return [BookingCustomer::normalizePhone($person?->phone), 'snapshot'];
     }
 
     /** The reason this message must not go out any more, or null. @return array{0: string, 1: string}|null [new status, fixed reason] */

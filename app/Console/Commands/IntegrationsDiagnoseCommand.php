@@ -20,6 +20,7 @@ use App\Payments\PaymentGateway;
 use App\Services\AgentAccess;
 use App\Services\ModuleAccess;
 use App\Services\ModuleCatalog;
+use App\Services\PlatformMeta;
 use App\Services\SignupCatalog;
 use App\Services\SignupService;
 use App\Services\SupportChannel;
@@ -367,12 +368,12 @@ class IntegrationsDiagnoseCommand extends Command
 
     private function meta(): void
     {
-        $secret = filled(config('services.meta.app_secret'));
-        $verify = filled(config('services.meta.webhook_verify_token'));
+        $secret = filled(PlatformMeta::get('app_secret'));
+        $verify = filled(PlatformMeta::get('webhook_verify_token'));
 
         $secret && $verify
-            ? $this->good('META_APP_SECRET y META_WEBHOOK_VERIFY_TOKEN definidos: el webhook existe.')
-            : $this->caution('Falta '.implode(' y ', array_filter([$secret ? null : 'META_APP_SECRET', $verify ? null : 'META_WEBHOOK_VERIFY_TOKEN'])).': el webhook responde 404 y no entra ningún mensaje de WhatsApp.');
+            ? $this->good('El secreto de la app de Meta y el token de verificación del webhook están definidos: el webhook existe.')
+            : $this->caution('Falta '.implode(' y ', array_filter([$secret ? null : 'el secreto de la app de Meta', $verify ? null : 'el token de verificación del webhook'])).' (se configuran en Configuraciones > App de Meta, o en .env como respaldo): el webhook responde 404 y no entra ningún mensaje de WhatsApp.');
 
         $this->line('         URL del webhook para Meta: '.url('/api/webhooks/whatsapp'));
         $this->line('         Graph API: '.config('integrations.whatsapp.graph_version'));

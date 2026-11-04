@@ -17,6 +17,23 @@ export const EXAMPLE_VALUES = {
     negocio: 'Tu negocio',
 };
 
+/**
+ * Fictitious customer data for the preview of a reminder (the variables of `config/campaigns.php`, the ones Recordatorios fills from the customer's record). Examples only: never
+ * the data of a real customer and never stored.
+ */
+export const CUSTOMER_EXAMPLE_VALUES = {
+    nombre: 'Laura',
+    apellido: 'Pérez',
+    nombre_completo: 'Laura Pérez',
+    telefono: '+57 300 123 4567',
+    correo: 'laura@ejemplo.com',
+    servicio: 'Corte de cabello',
+    profesional: 'Ana',
+    fecha: '15/03/2026',
+    hora: '10:00 AM',
+    sede: 'Sede principal',
+};
+
 /** What each variable stands for, in words a person understands. */
 export const VARIABLE_LABELS = {
     nombre: 'Nombre del cliente',
@@ -37,6 +54,13 @@ export function renderText(body, values = EXAMPLE_VALUES) {
         .replace(PATTERN, (_, name) => values[name] ?? '')
         .replace(/[ \t]{2,}/g, ' ')
         .trim();
+}
+
+/** Whether the text has double braces that are not a variable (`{{`, `}}`, `{{ }}`, `{{1}}`): the server refuses them, so the preview warns. */
+export function hasMalformedMarkers(body) {
+    const rest = String(body ?? '').replace(PATTERN, '');
+
+    return rest.includes('{{') || rest.includes('}}');
 }
 
 /** The variables a text uses, in order of appearance, without repeats. */

@@ -418,4 +418,100 @@ class RemindersTest extends TestCase
 
         $this->withToken($token)->postJson('/api/agent/reminders', [])->assertForbidden();
     }
+
+    // --- manual reminders as a CRM tool: several customers, one reminder each ------------------------------------------------------
+
+    public function test_a_manual_send_to_several_customers_creates_one_reminder_each_and_reports_who_was_left_out(): void
+    {
+        $laura = $this->customer();
+        $mario = $this->customer(null, ['first_name' => 'Mario', 'email' => 'mario@example.com', 'phone' => '+573004445566']);
+        $noConsent = $this->customer(null, ['first_name' => 'Sara', 'email' => 'sara@example.com', 'phone' => '+573007778899', 'marketing_consent' => 'unknown', 'consent_note' => null]);
+        $noEmail = $this->customer(null, ['first_name' => 'Pablo', 'email' => null, 'phone' => '+573001230000']);
+        $foreign = $this->customer($this->b, ['first_name' => 'Ajena', 'email' => 'ajena@example.com', 'phone' => '+573009990000']);
+        $this->actAsMember($this->a);
+
+        $body = $this->payload($laura, ['idempotency_key' => 'batch-1']);
+        unset($body['customer_id']);
+        $body['customer_ids'] = [$laura->id, $mario->id, $noConsent->id, $noEmail->id, $foreign->id];
+
+        $this->post('/reminders', $body)->assertSessionHas('success')->assertSessionHas('reminder_batch', fn ($batch) => $batch['created'] === 2 && count($batch['skipped']) === 3);
+
+        $this->assertSame(2, Reminder::count(), 'one individual reminder per eligible customer; nobody shares a message');
+        $this->assertEqualsCanonicalizing([$laura->id, $mario->id], Reminder::pluck('customer_id')->all());
+        $this->assertSame(1, Reminder::pluck('batch_key')->unique()->count(), 'they share a batch key for the team');
+        $this->assertNotNull(Reminder::first()->batch_key);
+        $this->assertSame($this->a->id, Reminder::query()->distinct()->value('workspace_id'));
+
+        $skipped = collect(session('reminder_batch')['skipped'])->keyBy('id');
+        $this->assertTrue($skipped->has($noConsent->id) && $skipped->has($noEmail->id) && $skipped->has($foreign->id), 'every ineligible recipient is named with a reason');
+        $this->assertNotSame('', $skipped[$noConsent->id]['reason']);
+
+        // Repeating the same request (same key) does not duplicate anything.
+        $this->post('/reminders', $body);
+        $this->assertSame(2, Reminder::count());
+    }
+
+    public function test_a_manual_send_with_nobody_eligible_schedules_nothing_and_says_so(): void
+    {
+        $noConsent = $this->customer(null, ['marketing_consent' => 'unknown', 'consent_note' => null]);
+        $this->actAsMember($this->a);
+        $body = $this->payload($noConsent);
+        unset($body['customer_id']);
+
+        $this->post('/reminders', $body + ['customer_ids' => [$noConsent->id]])->assertSessionHas('error');
+        $this->assertSame(0, Reminder::count());
+    }
+
+    public function test_a_manual_send_is_limited_to_the_maximum_recipients_and_needs_at_least_one(): void
+    {
+        $customer = $this->customer();
+        $this->actAsMember($this->a);
+        $body = $this->payload($customer);
+        unset($body['customer_id']);
+        $max = (int) config('reminders.limits.max_recipients');
+
+        $this->post('/reminders', $body + ['customer_ids' => range(1, $max + 1)])->assertSessionHasErrors('customer_ids');
+        $this->post('/reminders', $body)->assertSessionHasErrors(['customer_id', 'customer_ids']);
+        $this->assertSame(0, Reminder::count());
+    }
+
+    public function test_the_customer_search_covers_name_last_name_phone_and_email_inside_the_workspace_only(): void
+    {
+        $this->customer();
+        $this->customer($this->b, ['first_name' => 'Laura', 'last_name' => 'Ajena', 'email' => 'otra@example.com', 'phone' => '+573001112233']);
+        $this->actAsMember($this->a);
+
+        foreach (['Laura', 'Pérez', '3001112233', 'laura@example'] as $term) {
+            $found = $this->getJson('/reminders/customers?q='.urlencode($term))->assertOk()->json('customers');
+            $this->assertCount(1, $found, "«{$term}» finds the customer of THIS Workspace and not the other one");
+            $this->assertSame('Laura Pérez', $found[0]['name']);
+        }
+    }
+
+    public function test_a_customer_can_be_created_from_the_form_through_the_central_service_with_the_right_permission(): void
+    {
+        $this->actAsMember($this->a);
+
+        $created = $this->postJson('/reminders/customers', ['first_name' => 'Nuevo', 'last_name' => 'Cliente', 'phone' => '+573001234567', 'email' => 'nuevo@example.com'])->assertCreated()->json('customer');
+        $this->assertSame('Nuevo Cliente', $created['name']);
+        $this->assertFalse($created['consent'], 'a quick customer has no consent unless the person says so and notes how');
+        $this->assertSame(1, Customer::where('workspace_id', $this->a->id)->where('email', 'nuevo@example.com')->count());
+
+        // Duplicate: refused, nothing duplicated.
+        $this->postJson('/reminders/customers', ['first_name' => 'Otro', 'phone' => '+573001234567'])->assertStatus(422);
+        $this->assertSame(1, Customer::where('workspace_id', $this->a->id)->where('phone_e164', '+573001234567')->count());
+
+        // Needs a name and a way to reach them; consent needs its note.
+        $this->postJson('/reminders/customers', ['first_name' => ''])->assertStatus(422);
+        $this->postJson('/reminders/customers', ['first_name' => 'Sin dato'])->assertStatus(422);
+        $this->postJson('/reminders/customers', ['first_name' => 'Con consent', 'email' => 'c@example.com', 'consent_granted' => true])->assertStatus(422);
+        $ok = $this->postJson('/reminders/customers', ['first_name' => 'Con consent', 'email' => 'c@example.com', 'consent_granted' => true, 'consent_note' => 'Lo dijo en mostrador'])->assertCreated();
+        $this->assertTrue($ok->json('customer.consent'));
+
+        // Without the permission to create customers it is refused, and nothing is created in another Workspace.
+        $this->app['auth']->forgetGuards();
+        $this->actAsMember($this->a, 'programador_rec');
+        $this->postJson('/reminders/customers', ['first_name' => 'X', 'email' => 'x@example.com'])->assertForbidden();
+        $this->assertSame(0, Customer::where('workspace_id', $this->b->id)->count());
+    }
 }

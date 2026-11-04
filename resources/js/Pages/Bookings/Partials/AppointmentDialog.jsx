@@ -1,3 +1,4 @@
+import ClientPicker, { SaveInListing } from './ClientPicker';
 import { router } from '@inertiajs/react';
 import { UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -87,6 +88,9 @@ export default function AppointmentDialog({ appointment, options, today, onClose
     const [slot, setSlot] = useState(null);
     const [dropped, setDropped] = useState(null);
     const [customer, setCustomer] = useState({ name: '', phone: '', email: '' });
+    // The card of Clientes this booking is tied to (picked), or the request to save the person as a new card. Both optional and for roles that may use Clientes.
+    const [picked, setPicked] = useState(null);
+    const [saveAsClient, setSaveAsClient] = useState(false);
     const [notes, setNotes] = useState('');
     const [errors, setErrors] = useState({});
     const [saving, setSaving] = useState(false);
@@ -138,7 +142,7 @@ export default function AppointmentDialog({ appointment, options, today, onClose
 
         const payload = rescheduling
             ? { starts_at: slot.startsAt, professional_id: slot.professionalId ?? undefined }
-            : { service_id: serviceId, professional_id: slot.professionalId ?? undefined, location_id: locationId || undefined, starts_at: slot.startsAt, customer, notes };
+            : { service_id: serviceId, professional_id: slot.professionalId ?? undefined, location_id: locationId || undefined, starts_at: slot.startsAt, customer, notes, central_customer_id: picked?.id, save_as_client: !picked && saveAsClient ? true : undefined };
 
         router.post(rescheduling ? route('bookings.reschedule', appointment.id) : route('bookings.store'), payload, {
             preserveScroll: true,
@@ -206,6 +210,18 @@ export default function AppointmentDialog({ appointment, options, today, onClose
                                 </div>
                             </header>
                             <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
+                                <ClientPicker
+                                    capabilities={options.clients}
+                                    picked={picked}
+                                    onPick={(client) => {
+                                        setPicked(client ? { id: client.id, name: client.name } : null);
+
+                                        if (client) {
+                                            setSaveAsClient(false);
+                                            setCustomer({ name: client.name, phone: client.phone ?? '', email: client.email ?? '' });
+                                        }
+                                    }}
+                                />
                                 <div>
                                     <InputLabel htmlFor="appt_name" value="Nombre" />
                                     <TextInput id="appt_name" className="mt-1" value={customer.name} maxLength={120} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} invalid={Boolean(errors['customer.name'])} />
@@ -227,6 +243,7 @@ export default function AppointmentDialog({ appointment, options, today, onClose
                                     <Textarea id="appt_notes" rows={2} className="mt-1" aria-describedby="appt_notes_hint" value={notes} maxLength={500} onChange={(e) => setNotes(e.target.value)} />
                                     <p id="appt_notes_hint" className="mt-1.5 text-xs text-ink-muted">Solo datos para organizar la cita. No registres diagnósticos ni información médica: Ava no tiene una política definida para guardarla.</p>
                                 </div>
+                                <SaveInListing capabilities={options.clients} picked={picked} checked={saveAsClient} onChange={setSaveAsClient} />
                             </div>
                         </section>
                     )}

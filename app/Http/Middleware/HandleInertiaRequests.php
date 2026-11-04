@@ -52,6 +52,8 @@ class HandleInertiaRequests extends Middleware
             // The visible brand (config/branding.php): ONE source for every title, header and email; the legal name and internal identifiers are not part of it.
             'brand' => fn () => (string) config('branding.name'),
             'brandShort' => fn () => (string) config('branding.short'),
+            // The shape of each module's page while it loads (config/skeleton.php): the same map the server used for the first paint.
+            'skeleton' => fn () => ['paths' => config('skeleton.paths'), 'default' => config('skeleton.default'), 'delay' => (int) config('skeleton.delay_ms'), 'giveUp' => (int) config('skeleton.give_up_ms')],
             // One-shot messages the UI shows as toasts.
             'flash' => fn () => [
                 'success' => $request->session()->get('success'),

@@ -2,7 +2,6 @@
 
 namespace App\Reminders;
 
-use App\Campaigns\MessageTemplates;
 use App\Integrations\IntegrationRegistry;
 use App\Integrations\SendResult;
 use App\Integrations\SendsTemplates;
@@ -32,7 +31,7 @@ class ReminderDispatcher
 {
     public function __construct(
         private readonly ReminderChannels $channels,
-        private readonly MessageTemplates $templates,
+        private readonly ReminderVariables $variables,
         private readonly IntegrationRegistry $types,
         private readonly ModuleAccess $modules,
     ) {}
@@ -157,7 +156,7 @@ class ReminderDispatcher
 
     private function email(Reminder $reminder, Customer $customer): SendResult
     {
-        Mail::to($customer->email)->send(new ReminderMail($reminder, $this->templates->render($reminder->body, $customer)));
+        Mail::to($customer->email)->send(new ReminderMail($reminder, $this->variables->render($reminder->body, $customer, $this->appointmentOf($reminder))));
 
         return SendResult::accepted(null);
     }
@@ -170,9 +169,16 @@ class ReminderDispatcher
             return SendResult::failed('channel_unavailable');
         }
 
-        $params = array_map(fn (string $variable) => $this->templates->valueFor($customer, $variable) ?? '', (array) $reminder->template_params);
+        $appointment = $this->appointmentOf($reminder);
+        $params = array_map(fn (string $variable) => $this->variables->valueFor($customer, $variable, $appointment) ?? '', (array) $reminder->template_params);
 
         return $type->sendTemplate($integration, (string) $this->digits($customer), (string) $reminder->template_name, (string) $reminder->template_language, $params, "rmd:{$reminder->id}");
+    }
+
+    /** The appointment a reminder is tied to (of ITS Workspace), for the variables that come from it. */
+    private function appointmentOf(Reminder $reminder): ?Appointment
+    {
+        return $reminder->related_type === 'appointment' ? $reminder->workspace->appointments()->find($reminder->related_id) : null;
     }
 
     private function digits(Customer $customer): ?string

@@ -513,6 +513,7 @@ class DashboardTest extends TestCase
             return count(DB::getQueryLog());
         };
         $this->conversation($workspace, 'uno', 'whatsapp', 'ai', null, 1, 1);
+        $this->get('/dashboard')->assertOk(); // warm-up: the one-time checks of what the database has are remembered after the first request and are not what is measured
         $few = $queries();
 
         foreach (range(2, 25) as $number) {

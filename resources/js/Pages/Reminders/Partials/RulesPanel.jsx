@@ -110,7 +110,7 @@ export default function RulesPanel({ rules, channels, variables, limits, timezon
                 </ul>
             )}
 
-            {editing && <RuleFormModal key={editing === 'new' ? 'new' : editing.id} rule={editing === 'new' ? null : editing} rules={rules} channels={channels} variables={variables} limits={limits} timezone={timezone} onClose={() => setEditing(null)} />}
+            {editing && <RuleFormModal key={editing === 'new' ? 'new' : editing.id} rule={editing === 'new' ? null : editing} rules={rules} channels={channels} variables={rules.variables ?? variables} limits={limits} timezone={timezone} onClose={() => setEditing(null)} />}
             {historyOf && <RuleEventsModal rule={historyOf} onClose={() => setHistoryOf(null)} />}
         </>
     );

@@ -32,8 +32,11 @@ class LocationScope
     /** Whether the database has what the scope needs (migration `limit_memberships_to_selected_locations`). */
     public function ready(): bool
     {
-        return Schema::hasColumn('workspace_user', 'location_scope') && Schema::hasTable('workspace_user_locations');
+        // Only a YES is remembered (this is asked several times per request).
+        return self::$isReady = self::$isReady || (Schema::hasColumn('workspace_user', 'location_scope') && Schema::hasTable('workspace_user_locations'));
     }
+
+    private static bool $isReady = false;
 
     /** @return ?list<int> null = every location; a list = only those ids ([] = none) */
     public function allowedIds(Workspace $workspace, ?User $user): ?array

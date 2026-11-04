@@ -125,7 +125,7 @@ class HealthAppointmentsFlowTest extends TestCase
         $customerB = $this->clinicB->customers()->create(['first_name' => 'Laura', 'phone' => '+573001112233', 'source' => 'manual', 'marketing_consent' => 'unknown']);
 
         $this->as($this->clinicB);
-        $this->get('/bookings?from=2026-10-13&days=7')->assertInertia(fn (AssertableInertia $page) => $page->has('appointments', 0)->has('customers.data', 0)->has('options.services', 0)->has('options.professionals', 0)
+        $this->get('/bookings?from=2026-10-13&days=7')->assertInertia(fn (AssertableInertia $page) => $page->has('appointments', 0)->where('customers', null)->has('options.services', 0)->has('options.professionals', 0)
             ->where('settings.values.cancel_notice_hours', 2)->where('settings.values.slot_step_minutes', 15));
         $this->get("/customers/{$customerB->id}")->assertInertia(fn (AssertableInertia $page) => $page->has('appointments', 0));
         $this->post('/bookings', ['service_id' => $serviceA, 'professional_id' => $professionalA, 'starts_at' => '2026-10-13T11:00:00Z', 'customer' => ['name' => 'Intruso', 'phone' => '+573005550000']])->assertSessionHas('error');

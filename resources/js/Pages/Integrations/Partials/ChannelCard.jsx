@@ -1,6 +1,8 @@
-import { Check, Circle, Pencil, PlugZap, Power, Settings2 } from 'lucide-react';
+import { router } from '@inertiajs/react';
+import { Check, Circle, Link2, Pencil, PlugZap, Power, RefreshCw, Settings2, Unplug } from 'lucide-react';
 import Badge from '@/Components/Badge';
 import Card from '@/Components/Card';
+import { useConfirm } from '@/Components/ConfirmDialog';
 import CopyBlock from '@/Components/CopyBlock';
 import IconButton from '@/Components/IconButton';
 import PrimaryButton from '@/Components/PrimaryButton';
@@ -27,7 +29,7 @@ function status(channel) {
 function ConnectionStages({ connection }) {
     return (
         <details className="mt-3 rounded-lg border border-line px-3 py-2 text-sm">
-            <summary className="cursor-pointer font-semibold text-ink">{connection.webhook ? 'Webhook y estado de la conexión' : 'Estado de la conexión'}</summary>
+            <summary className="cursor-pointer font-semibold text-ink">{connection.webhook || connection.oauth ? 'Webhook y estado de la conexión' : 'Estado de la conexión'}</summary>
             <ol className="mt-3 space-y-2" aria-label="Etapas de la conexión">
                 {connection.stages.map((stage) => (
                     <li key={stage.key} className="flex items-start gap-2">
@@ -39,6 +41,20 @@ function ConnectionStages({ connection }) {
                     </li>
                 ))}
             </ol>
+            {connection.oauth && (
+                <div className="mt-3 space-y-2">
+                    <p className="text-xs font-semibold text-ink">Datos para configurar la app de Meta (los configura CCG una sola vez)</p>
+                    <CopyBlock value={connection.oauth.redirect} label="URI de redireccionamiento de OAuth válida" />
+                    <CopyBlock value={connection.oauth.webhook} label="URL de devolución de llamada del webhook" />
+                    <p className="text-xs text-ink-muted">Permisos que se piden: {connection.oauth.scopes.join(', ')}. El webhook usa el campo «messages» y el mismo Verify Token que el de WhatsApp (META_WEBHOOK_VERIFY_TOKEN).</p>
+                    {!connection.oauth.public && (
+                        <p role="alert" className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                            Estas direcciones se generaron desde una dirección local o sin HTTPS: Meta no puede usarlas. Abre Zonno desde su dominio público (https).
+                        </p>
+                    )}
+                    <p className="text-xs text-ink-muted">Mientras la app de Meta esté en modo Development, solo pueden autorizar y escribir las personas con un rol en la app. Para atender al público hace falta la revisión de Meta (App Review) y el acceso avanzado a los permisos de mensajería.</p>
+                </div>
+            )}
             {connection.webhook && (
             <div className="mt-3 space-y-1.5">
                 <p className="text-xs font-semibold text-ink">URL del webhook para Meta (Callback URL)</p>
@@ -63,6 +79,13 @@ export default function ChannelCard({ channel, delay, readOnly, can = { edit: tr
     const { label, description, available, unavailable, integration, testable } = channel;
     const { label: stateLabel, tone } = status(channel);
     const Icon = channelIcon(channel.key);
+    const confirm = useConfirm();
+
+    const disconnect = async () => {
+        const confirmed = await confirm({ description: `Ava dejará de recibir y enviar mensajes por ${label} y se borrará la autorización guardada. Las conversaciones ya registradas se conservan.`, confirmLabel: 'Desconectar' });
+
+        if (confirmed) router.delete(route('integrations.meta.disconnect', channel.key), { preserveScroll: true });
+    };
 
     return (
         <Card hover delay={delay} className={`flex flex-col p-5 ${available ? '' : 'bg-canvas/40'}`}>
@@ -105,7 +128,28 @@ export default function ChannelCard({ channel, delay, readOnly, can = { edit: tr
             {channel.connection && integration && <ConnectionStages connection={channel.connection} />}
             {integration && testable && !readOnly && can.test && !integration.lastTest && <p className="mt-3 text-sm text-ink-muted">Conexión sin verificar. Usa «Probar conexión» para comprobarla con el proveedor.</p>}
 
-            {available && !readOnly && (integration ? can.edit || can.test || can.toggle : can.edit) && (
+            {available && !readOnly && channel.oauth && (can.edit || can.test || can.toggle) && (
+                <div className="mt-4 flex flex-wrap items-center justify-end gap-1 border-t border-line pt-3">
+                    {integration ? (
+                        <>
+                            {can.edit && <IconButton icon={Link2} label="Reconectar con Meta" context={label} onClick={() => { window.location.href = route('integrations.meta.connect', channel.key); }} />}
+                            {can.edit && !channel.connection?.stages?.find((stage) => stage.key === 'webhook')?.done && <IconButton icon={RefreshCw} label="Reintentar suscripción" context={label} onClick={() => router.post(route('integrations.meta.subscribe', channel.key), {}, { preserveScroll: true })} />}
+                            {can.test && testable && <IconButton icon={PlugZap} label={testing ? 'Probando...' : 'Probar conexión'} context={label} onClick={onTest} disabled={testing || !integration.isActive} />}
+                            {can.toggle && <IconButton icon={Power} label={integration.isActive ? 'Desactivar' : 'Activar'} context={label} tone={integration.isActive ? 'danger' : 'primary'} onClick={onToggle} />}
+                            {can.edit && <IconButton icon={Unplug} label="Desconectar" context={label} tone="danger" onClick={disconnect} />}
+                        </>
+                    ) : (
+                        can.edit && (
+                            <a href={route('integrations.meta.connect', channel.key)} className="inline-flex items-center gap-2 rounded-md border border-transparent bg-primary px-4 py-2 text-xs font-semibold tracking-widest text-white uppercase transition duration-150 hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
+                                <Link2 className="size-4" aria-hidden="true" />
+                                Conectar con {channel.key === 'instagram' ? 'Instagram' : 'Facebook'}
+                            </a>
+                        )
+                    )}
+                </div>
+            )}
+
+            {available && !readOnly && !channel.oauth && (integration ? can.edit || can.test || can.toggle : can.edit) && (
                 <div className="mt-4 flex items-center justify-end gap-1 border-t border-line pt-3">
                     {integration ? (
                         <>

@@ -10,6 +10,7 @@ use App\Notifications\WorkspaceInvitationNotification;
 use App\Privacy\Mask;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -225,8 +226,24 @@ class WorkspaceInvitations
         $workspace->invitations()->whereRaw('lower(email) = ?', [$email])->whereNull('accepted_at')->whereNull('revoked_at')->update(['revoked_at' => now()]);
     }
 
+    /**
+     * Sent INLINE with the mailer of the platform (the same path as the sign-up code and the reminders), not through a queue: an invitation is one e-mail a person is waiting for, and a
+     * queued one sat forever in `jobs` whenever the instance that created it had no worker for that queue (a host `artisan serve` on the `database` queue while Horizon reads Redis).
+     * If the transport refuses it, the link is killed (nothing valid stays anywhere), the failure is logged without the address or the link, and the person is told to re-send.
+     *
+     * @throws ValidationException
+     */
     private function send(WorkspaceInvitation $invitation, Workspace $workspace, string $token): void
     {
-        Notification::route('mail', $invitation->email)->notify(new WorkspaceInvitationNotification(route('invitations.show', ['token' => $token]), $workspace->name, self::hours(), $invitation->id));
+        $notification = new WorkspaceInvitationNotification(route('invitations.show', ['token' => $token]), $workspace->name, self::hours(), $invitation->id);
+
+        try {
+            Notification::route('mail', $invitation->email)->notifyNow($notification);
+        } catch (\Throwable $e) {
+            $notification->failed($e);
+            Log::error('workspace_invitation_send_failed', ['invitation' => $invitation->id, 'workspace' => $workspace->id, 'exception' => $e::class]);
+
+            throw ValidationException::withMessages(['email' => 'La invitación se guardó pero el correo no pudo enviarse (revisa la configuración de correo de la plataforma). Usa «Reenviar» cuando esté resuelto.']);
+        }
     }
 }

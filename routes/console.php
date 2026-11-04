@@ -39,6 +39,9 @@ ScheduledCommandMonitor::watch(Schedule::command('reminders:dispatch')->everyMin
 // Recordatorios by service: schedules one reminder per customer for every service that Agenda marked as done and an active rule covers (idempotent; Agenda is only read).
 ScheduledCommandMonitor::watch(Schedule::command('reminders:schedule-rules')->everyFiveMinutes()->withoutOverlapping()->onOneServer(), 'reminder-rules');
 
+// Instagram authorizations last about 60 days: renews the ones close to expiring (Meta only allows it after 24 hours and before they expire). Counts only; the tokens are never printed.
+ScheduledCommandMonitor::watch(Schedule::command('meta:refresh-tokens')->dailyAt('03:20')->withoutOverlapping()->onOneServer(), 'meta-refresh');
+
 // Technical trace of the assistant's tools: keeps it to the retention window (finished calls only; never business data).
 ScheduledCommandMonitor::watch(Schedule::command('agent:tools:prune')->dailyAt('03:40')->withoutOverlapping()->onOneServer(), 'agent-tools-prune');
 

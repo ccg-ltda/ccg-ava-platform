@@ -17,6 +17,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -201,7 +202,8 @@ class AppointmentService
             throw BookingException::state('Solo se puede marcar una cita que ya comenzó.');
         }
 
-        $appointment->forceFill(['status' => $to])->save();
+        // The moment staff marked it done: the real event of the reminder rules (before this, the only moment known was the appointment's own).
+        $appointment->forceFill(['status' => $to] + ($to === Appointment::COMPLETED && Schema::hasColumn('appointments', 'completed_at') ? ['completed_at' => now()] : []))->save();
         $this->safely(fn () => $to === Appointment::CONFIRMED ? $this->notifier->planEvent($appointment->loadMissing('workspace'), 'confirmed') : $this->notifier->invalidate($appointment, 'appointment_closed'));
         $this->publish($appointment, 'appointment.status_changed');
 
@@ -266,20 +268,25 @@ class AppointmentService
         }
     }
 
-    /** The customer of a Workspace identified by phone, else by email; created when new, name refreshed otherwise. */
+    /**
+     * The person of a Workspace identified by phone, else by email; created when new, name refreshed otherwise. `central_id` (only the staff's agenda sets it, after checking the
+     * card belongs to this Workspace) ties the person to its Clientes card; a person already tied to another card is re-tied only by that explicit choice, and nothing is ever
+     * matched to a card here by name, phone or e-mail.
+     */
     public function customer(Workspace $workspace, array $data): BookingCustomer
     {
         $phone = BookingCustomer::normalizePhone($data['phone'] ?? null);
         $email = filled($data['email'] ?? null) ? mb_strtolower(trim($data['email'])) : null;
+        $card = isset($data['central_id']) ? (int) $data['central_id'] : null;
         $found = $this->findCustomer($workspace, $data);
 
         if ($found) {
-            $found->forceFill(['name' => $data['name'], 'email' => $email ?? $found->email])->save();
+            $found->forceFill(['name' => $data['name'], 'email' => $email ?? $found->email] + ($card !== null ? ['customer_id' => $card] : []))->save();
 
             return $found;
         }
 
-        return $workspace->bookingCustomers()->create(['name' => $data['name'], 'phone' => $phone, 'email' => $email]);
+        return $workspace->bookingCustomers()->create(['name' => $data['name'], 'phone' => $phone, 'email' => $email, 'customer_id' => $card]);
     }
 
     private function findCustomer(Workspace $workspace, array $data): ?BookingCustomer

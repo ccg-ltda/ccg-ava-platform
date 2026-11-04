@@ -185,7 +185,7 @@ class IntegrationReadinessTest extends TestCase
         config(['services.meta.app_secret' => null, 'services.meta.webhook_verify_token' => null, 'n8n.secret' => null]);
         [, $output] = $this->diagnose();
 
-        $this->assertStringContainsString('META_APP_SECRET y META_WEBHOOK_VERIFY_TOKEN', $output);
+        $this->assertStringContainsString('el secreto de la app de Meta y el token de verificación del webhook', $output);
         $this->assertStringContainsString('N8N_EXECUTION_URL y N8N_EXECUTION_SECRET', $output);
         $this->assertStringContainsString('/api/webhooks/whatsapp', $output);
 

@@ -14,6 +14,7 @@ import ApiCallHistory from './Partials/ApiCallHistory';
 import AutomationCard from './Partials/AutomationCard';
 import ChannelCard from './Partials/ChannelCard';
 import ChannelIntegrationModal from './Partials/ChannelIntegrationModal';
+import MetaPagesModal from './Partials/MetaPagesModal';
 import IntegrationCard from './Partials/IntegrationCard';
 import IntegrationFormModal from './Partials/IntegrationFormModal';
 import InboundEndpointsSection from './Partials/InboundEndpointsSection';
@@ -32,7 +33,7 @@ const initialTab = () => {
     return Math.max(0, TABS.indexOf(requested));
 };
 
-export default function Index({ channels, providers = [], integrations, catalog, automation, webhooks = null, newWebhookSecret = null, inboundWebhooks = null, newInboundSecret = null, scope }) {
+export default function Index({ channels, providers = [], integrations, catalog, automation, metaPages = null, webhooks = null, newWebhookSecret = null, inboundWebhooks = null, newInboundSecret = null, scope }) {
     const confirm = useConfirm();
     const readOnly = scope.readOnly;
     // Each change has its own permission; the server enforces them, this only offers what the role can do.
@@ -252,6 +253,7 @@ export default function Index({ channels, providers = [], integrations, catalog,
                 </>
             </Tabs>
 
+            {metaPages && metaPages.length > 0 && !scope.readOnly && <MetaPagesModal pages={metaPages} />}
             {configuring && <ChannelIntegrationModal key={configuring.key} channel={configuring} onClose={() => setConfiguring(null)} />}
             {configuringProvider && <ChannelIntegrationModal key={configuringProvider.key} channel={configuringProvider} routeName="integrations.providers.update" onClose={() => setConfiguringProvider(null)} />}
             {editing && <IntegrationFormModal key={editing === 'new' ? 'new' : editing.id} integration={editing === 'new' ? null : editing} catalog={catalog} onClose={() => setEditing(null)} />}

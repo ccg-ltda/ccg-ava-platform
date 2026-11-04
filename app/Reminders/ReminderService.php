@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -24,6 +25,7 @@ class ReminderService
     public function __construct(
         private readonly ReminderChannels $channels,
         private readonly MessageTemplates $templates,
+        private readonly ReminderVariables $variables,
         private readonly AuditLogger $audit,
     ) {}
 
@@ -58,6 +60,41 @@ class ReminderService
         $this->record('created', $reminder, $workspace, [AuditLogger::change('Envío programado', null, $reminder->send_at->toDateTimeString().' UTC'), AuditLogger::change('Canal', null, $reminder->channel)], $source);
 
         return ['reminder' => $reminder, 'replayed' => false];
+    }
+
+    /**
+     * ONE manual send to SEVERAL customers: each gets its OWN reminder (its own message, status, attempts and history), never a shared one, so nobody sees who else received it and
+     * a failure of one never touches the rest. They share a `batch_key` that ties them together for the team. A customer who cannot receive it (no consent, no contact data for the
+     * channel, deactivated) is NOT scheduled and is reported with the reason; the rest go ahead. Repeating the same request (same `idempotency_key`) returns the same reminders.
+     *
+     * @param  array<string, mixed>  $data  like `create`, with `customer_ids` instead of `customer_id`
+     * @return array{batch: string, created: list<Reminder>, skipped: list<array{id: int, name: string, reason: string}>}
+     */
+    public function createMany(Workspace $workspace, array $data, ?User $by): array
+    {
+        $ids = collect((array) ($data['customer_ids'] ?? []))->map(fn ($id) => (int) $id)->filter()->unique()->values();
+
+        if ($ids->isEmpty() || $ids->count() > (int) config('reminders.limits.max_recipients')) {
+            throw ValidationException::withMessages(['customer_ids' => 'Elige entre 1 y '.config('reminders.limits.max_recipients').' clientes.']);
+        }
+
+        $base = (string) ($data['idempotency_key'] ?? Str::uuid());
+        $names = $workspace->customers()->whereIn('id', $ids)->get()->keyBy('id');
+        $batch = Str::lower(Str::substr(preg_replace('/[^A-Za-z0-9]/', '', $base).Str::random(24), 0, 24));
+        $created = [];
+        $skipped = [];
+
+        foreach ($ids as $id) {
+            $name = $names->get($id)?->fullName() ?? 'Cliente '.$id;
+
+            try {
+                $created[] = $this->create($workspace, ['customer_id' => $id, 'idempotency_key' => "{$base}-{$id}"] + $data, $by, 'user', Schema::hasColumn('reminders', 'batch_key') ? ['batch_key' => $batch] : [])['reminder'];
+            } catch (ValidationException $e) {
+                $skipped[] = ['id' => $id, 'name' => $name, 'reason' => (string) collect($e->errors())->flatten()->first()];
+            }
+        }
+
+        return ['batch' => $batch, 'created' => $created, 'skipped' => $skipped];
     }
 
     /** Only a reminder that has not started to be sent can change. @param  array<string, mixed>  $data */
@@ -112,7 +149,8 @@ class ReminderService
             throw ValidationException::withMessages(['customer_id' => 'Elige un cliente activo de este Workspace.']);
         }
 
-        $message = $this->message($workspace, $data);
+        // The appointment's data (service, date...) can only be resolved for a reminder tied to an appointment: the ones an automatic rule schedules.
+        $message = $this->message($workspace, $data, ($data['related_type'] ?? null) === 'appointment');
         $channel = $message['channel'];
 
         $this->assertContact($customer, $channel);
@@ -139,7 +177,7 @@ class ReminderService
      * @param  array<string, mixed>  $data
      * @return array{channel: string, subject: ?string, body: string, template_name: ?string, template_language: ?string, template_params: ?array<int, string>}
      */
-    public function message(Workspace $workspace, array $data): array
+    public function message(Workspace $workspace, array $data, bool $withAppointment = false): array
     {
         $channel = (string) ($data['channel'] ?? '');
         $availability = $this->channels->check($workspace, $channel);
@@ -150,7 +188,7 @@ class ReminderService
 
         $body = $this->templates->normalize((string) ($data['body'] ?? ''));
 
-        if ($unknown = $this->templates->unknown($body)) {
+        if ($unknown = $this->variables->unknown($body, $withAppointment)) {
             throw ValidationException::withMessages(['body' => 'Variables que no existen: '.implode(', ', $unknown).'.']);
         }
 

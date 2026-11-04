@@ -7,6 +7,7 @@ use App\Models\Appointment;
 use App\Models\AppointmentNotification;
 use App\Models\AuditLog;
 use App\Models\Customer;
+use App\Models\Integration;
 use App\Models\Reminder;
 use App\Models\ReminderRule;
 use App\Models\ReminderRuleEvent;
@@ -376,6 +377,149 @@ class ReminderRulesTest extends TestCase
         Queue::assertNothingPushed();
         $this->assertSame(Reminder::UNCERTAIN, $reminder->fresh()->status);
         $this->assertSame(1, Reminder::count(), 'the scan does not schedule a replacement for it either');
+    }
+
+    // --- services picker, variables and the channels that are really available -----------------------------------------------------------------
+
+    private function connectWhatsApp(Workspace $workspace, bool $verified = true): void
+    {
+        $workspace->integrations()->create(['name' => 'WhatsApp', 'type' => 'whatsapp', 'is_active' => true, 'config' => ['phone_number_id' => '123456789'], 'secrets' => ['access_token' => 'EAAB-token'], 'last_test_ok' => $verified ? true : null, 'last_tested_at' => $verified ? now() : null]);
+    }
+
+    public function test_the_same_service_chosen_twice_is_stored_once_and_the_page_offers_only_this_workspaces_active_services(): void
+    {
+        $this->actAsMember($this->a);
+        $foreign = $this->makeService($this->b, ['name' => 'De otro Workspace']);
+        $inactive = $this->makeService($this->a, ['name' => 'Retirado', 'is_active' => false]);
+
+        $this->post('/reminders/rules', $this->payload(['service_ids' => [$this->nails->id, $this->nails->id, (string) $this->nails->id]]))->assertSessionHasNoErrors();
+
+        $rule = ReminderRule::firstOrFail();
+        $this->assertSame([$this->nails->id], $rule->services()->pluck('services.id')->all());
+        $offered = collect($this->get('/reminders')->viewData('page')['props']['rules']['services'])->pluck('name')->all();
+        $this->assertContains('Mantenimiento de uñas', $offered);
+        $this->assertNotContains('De otro Workspace', $offered);
+        $this->assertNotContains('Retirado', $offered);
+
+        $this->post('/reminders/rules', $this->payload(['service_ids' => [$foreign->id]]))->assertSessionHasErrors('service_ids');
+        $this->put("/reminders/rules/{$rule->id}", $this->payload(['service_ids' => [$this->nails->id, $foreign->id]]))->assertSessionHasErrors('service_ids');
+        $this->assertSame([$this->nails->id], $rule->services()->pluck('services.id')->all(), 'a rejected edit changed nothing');
+    }
+
+    public function test_every_customer_variable_the_page_offers_is_filled_from_the_customer_when_sending(): void
+    {
+        $this->actAsMember($this->a);
+        $offered = collect($this->get('/reminders')->viewData('page')['props']['variables'])->pluck('key')->all();
+        $this->assertEqualsCanonicalizing(['nombre', 'apellido', 'nombre_completo', 'telefono', 'correo'], $offered);
+
+        $body = collect($offered)->map(fn ($key) => '{{'.$key.'}}')->implode(' | ');
+        $this->rule(['body' => $body]);
+        $this->travelTo($this->now()->addDays(3));
+        $laura = $this->customer('Laura', '+573001112233');
+        $this->appointment($laura, $this->nails, Appointment::COMPLETED, '+1 day');
+        $this->scan();
+        Reminder::query()->update(['next_attempt_at' => now()->subMinute(), 'send_at' => now()->subMinute()]);
+
+        app(ReminderDispatcher::class)->send(Reminder::firstOrFail()->id);
+
+        Mail::assertSent(ReminderMail::class, fn ($mail) => str_contains($mail->render(), 'Laura | Prueba | Laura Prueba | +573001112233 | laura@example.com'));
+    }
+
+    public function test_a_variable_that_does_not_exist_or_loose_braces_are_refused_on_the_server(): void
+    {
+        $this->actAsMember($this->a);
+
+        $this->post('/reminders/rules', $this->payload(['body' => 'Hola {{inventada}}']))->assertSessionHasErrors('body');
+        $this->post('/reminders/rules', $this->payload(['body' => 'Hola {{nombre']))->assertSessionHasErrors('body');
+        $this->post('/reminders/rules', $this->payload(['body' => 'Hola {{1}}']))->assertSessionHasErrors('body');
+        $this->assertSame(0, ReminderRule::count());
+    }
+
+    public function test_only_channels_that_are_really_available_can_be_used_and_instagram_and_messenger_are_never_offered(): void
+    {
+        $this->contractModules($this->a, [...self::MODULES, 'integrations']);
+        $this->actAsMember($this->a);
+        $offered = fn () => collect($this->get('/reminders')->viewData('page')['props']['channels'])->mapWithKeys(fn ($c) => [$c['key'] => $c['available']])->all();
+
+        $this->assertSame(['email' => true, 'whatsapp' => false], $offered(), 'WhatsApp is not connected: not selectable; Instagram and Messenger are not channels of reminders');
+
+        $this->connectWhatsApp($this->a, verified: false);
+        $this->assertSame(['email' => true, 'whatsapp' => false], $offered(), 'saved but never proven is not connected');
+        $this->post('/reminders/rules', $this->payload(['channel' => 'whatsapp', 'template_name' => 'recordatorio', 'template_language' => 'es', 'template_params' => ['nombre']]))->assertSessionHasErrors('channel');
+
+        Integration::where('type', 'whatsapp')->update(['last_test_ok' => true, 'last_tested_at' => now()]);
+        $this->assertSame(['email' => true, 'whatsapp' => true], $offered());
+        $this->post('/reminders/rules', $this->payload(['channel' => 'whatsapp', 'template_name' => 'recordatorio', 'template_language' => 'es', 'template_params' => ['nombre']]))->assertSessionHasNoErrors();
+
+        config(['mail.default' => 'log']);
+        $this->assertSame(['email' => false, 'whatsapp' => true], $offered(), 'without real mail only WhatsApp is left');
+    }
+
+    public function test_a_channel_that_stops_being_available_after_scheduling_skips_the_send_with_a_readable_reason(): void
+    {
+        $this->rule();
+        $this->travelTo($this->now()->addDays(3));
+        $this->appointment($this->customer('Laura', '+573001112233'), $this->nails, Appointment::COMPLETED, '+1 day');
+        $this->scan();
+        Reminder::query()->update(['next_attempt_at' => now()->subMinute(), 'send_at' => now()->subMinute()]);
+
+        config(['mail.default' => 'log']); // the mail integration was lost after scheduling
+        app(ReminderDispatcher::class)->send(Reminder::firstOrFail()->id);
+
+        $reminder = Reminder::firstOrFail();
+        $this->assertSame(['skipped', 'channel_unavailable'], [$reminder->status, $reminder->reason]);
+        Mail::assertNothingSent();
+        $this->assertStringContainsString('canal', mb_strtolower(config('reminders.reasons.channel_unavailable')));
+        $this->assertSame('channel_unavailable', $reminder->attemptsLog()->latest('id')->value('reason'));
+    }
+
+    public function test_a_rule_can_use_the_appointments_data_and_a_manual_reminder_cannot(): void
+    {
+        $this->actAsMember($this->a);
+        $variables = collect($this->get('/reminders')->viewData('page')['props']);
+        $this->assertSame(['nombre', 'apellido', 'nombre_completo', 'telefono', 'correo'], collect($variables['variables'])->pluck('key')->all(), 'manual: only the customer');
+        $this->assertSame(['nombre', 'apellido', 'nombre_completo', 'telefono', 'correo', 'servicio', 'profesional', 'fecha', 'hora', 'sede'], collect($variables['rules']['variables'])->pluck('key')->all(), 'rule: also the appointment');
+
+        $laura = $this->customer('Laura', '+573001112233');
+        $this->post('/reminders', ['customer_ids' => [$laura->id], 'name' => 'Manual', 'channel' => 'email', 'subject' => 'S', 'body' => 'Tu {{servicio}} del {{fecha}}', 'send_at' => now()->addDays(2)->format('Y-m-d\TH:i'), 'timezone' => 'UTC'])->assertSessionHas('error');
+        $this->assertSame(0, Reminder::count(), 'a manual reminder has no appointment to resolve «servicio»: refused, not sent with a hole');
+
+        $this->post('/reminders/rules', $this->payload(['body' => 'Hola {{nombre}}, tu {{servicio}} con {{profesional}} el {{fecha}} a las {{hora}}.']))->assertSessionHasNoErrors();
+        $this->travelTo($this->now()->addDays(3));
+        $this->appointment($laura, $this->nails, Appointment::COMPLETED, '+1 day');
+        $this->scan();
+        Reminder::query()->update(['next_attempt_at' => now()->subMinute(), 'send_at' => now()->subMinute()]);
+
+        app(ReminderDispatcher::class)->send(Reminder::firstOrFail()->id);
+
+        Mail::assertSent(ReminderMail::class, fn ($mail) => str_contains($mail->render(), 'Hola Laura, tu Mantenimiento de uñas con Ana el 13/10/2026 a las 08:00 AM'));
+    }
+
+    public function test_the_wait_counts_from_the_moment_staff_marked_the_appointment_as_done(): void
+    {
+        $this->rule(['delay_amount' => 1, 'delay_unit' => 'hours', 'send_time' => null]);
+        $this->travelTo($this->now()->addDays(3));
+        $laura = $this->customer('Laura', '+573001112233');
+        $done = $this->appointment($laura, $this->nails, Appointment::COMPLETED, '+1 day');
+        $done->forceFill(['completed_at' => now()->subMinutes(10)])->save(); // staff closed it ten minutes ago
+
+        $this->scan();
+
+        $this->assertSame(now()->addMinutes(50)->format('Y-m-d H:i'), Reminder::firstOrFail()->send_at->format('Y-m-d H:i'), 'one hour AFTER it was marked as done');
+    }
+
+    public function test_marking_an_appointment_as_done_records_when_and_the_reminder_follows_that_moment(): void
+    {
+        $this->rule(['delay_amount' => 1, 'delay_unit' => 'hours', 'send_time' => null]);
+        $this->travelTo($this->now()->addDays(3));
+        $appointment = $this->appointment($this->customer('Laura', '+573001112233'), $this->nails, Appointment::CONFIRMED, '+1 day');
+
+        $this->signInAgain();
+        $this->post("/bookings/{$appointment->id}/status", ['status' => 'completed'])->assertSessionHas('success');
+
+        $this->assertNotNull($appointment->fresh()->completed_at);
+        $this->scan();
+        $this->assertSame(now()->addHour()->format('Y-m-d H:i'), Reminder::firstOrFail()->send_at->format('Y-m-d H:i'));
     }
 
     // --- editing the rule ---------------------------------------------------------------------------------------------------------------

@@ -7,6 +7,7 @@ use App\Http\Controllers\AgentMessageController;
 use App\Http\Controllers\AgentOrderController;
 use App\Http\Controllers\AgentReminderController;
 use App\Http\Controllers\InboundWebhookReceiveController;
+use App\Http\Controllers\MetaWebhookController;
 use App\Http\Controllers\PublicBookingController;
 use App\Http\Controllers\WhatsAppWebhookController;
 use App\Http\Controllers\WidgetController;
@@ -24,6 +25,9 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('webhooks')->name('webhooks.')->middleware(['body.limit:provider', 'throttle.safe:600,1'])->group(function () {
     Route::get('/whatsapp', [WhatsAppWebhookController::class, 'verify'])->name('whatsapp.verify');
     Route::post('/whatsapp', [WhatsAppWebhookController::class, 'receive'])->name('whatsapp.receive');
+    // Instagram Messaging and Messenger (one Meta app): signed events; the account id of each one is looked up in the Workspaces' own integrations.
+    Route::get('/meta', [MetaWebhookController::class, 'verify'])->name('meta.verify');
+    Route::post('/meta', [MetaWebhookController::class, 'receive'])->name('meta.receive');
     // Events URL of Wompi (one per environment in the merchant portal): authenticated by checksum, then confirmed against Wompi's API.
     Route::post('/wompi', [WompiWebhookController::class, 'receive'])->name('wompi.receive');
     // The webhook of ONE Workspace's number: the key is the public, non-secret part generated with its WhatsApp integration (the secrets stay in the integration).

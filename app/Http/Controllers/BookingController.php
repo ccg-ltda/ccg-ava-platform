@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Audit\AuditLogger;
+use App\Booking\AgendaClients;
 use App\Booking\AppointmentNotifier;
 use App\Booking\BookingException;
 use App\Booking\BookingManager;
@@ -52,6 +53,7 @@ class BookingController extends Controller
         private readonly AuditLogger $audit,
         private readonly Locations $locations,
         private readonly AppointmentNotifier $notifier,
+        private readonly AgendaClients $clients,
     ) {}
 
     public function index(Request $request): Response
@@ -78,7 +80,9 @@ class BookingController extends Controller
             'appointments' => $month && $view === 'calendar' ? [] : $this->agendaQuery($workspace, $request, $filters, $from, $end)->with(['customer', 'workspace'])->when($this->notifier->ready(), fn ($query) => $query->with('notifications'))
                 ->orderBy('starts_at')->limit(self::LIST_LIMIT)->get()->map(fn (Appointment $appointment) => $this->present->appointment($appointment))->all(),
             'options' => $this->options($workspace, $capabilities, $request),
-            'customers' => $this->customers($request, $workspace),
+            // With Clientes in the plan, people are managed there only: Agenda sends no listing of its own (and does not query it).
+            'customers' => $this->clients->central($workspace) ? null : $this->customers($request, $workspace),
+            'centralClients' => $this->clients->central($workspace),
             'settings' => $this->settings($workspace, $setting),
             'perPageOptions' => ListPagination::OPTIONS,
             'today' => CarbonImmutable::now($timezone)->toDateString(),
@@ -175,9 +179,27 @@ class BookingController extends Controller
     public function store(BookAppointmentRequest $request): RedirectResponse
     {
         $workspace = $request->attributes->get('workspace');
-        $this->guardLocation($request, $request->booking()['location_id']);
+        $booking = $request->booking();
+        $this->guardLocation($request, $booking['location_id']);
 
-        return $this->attempt(fn () => $this->bookings->request($workspace, $request->booking(), 'admin'), 'Cita creada correctamente');
+        // Clientes is the central record: the staff may tie the appointment to a card they picked (it must be of THIS Workspace) or save the person as a new card. Optional, and
+        // never for the public page or Ava Chat (this is the staff's route).
+        $permissions = $request->attributes->get('workspace_permissions', []);
+        $card = $this->clients->resolve($workspace, $permissions, $request->integer('central_customer_id') ?: null, $request->boolean('save_as_client'), $booking['customer']);
+
+        if ($card !== null) {
+            $booking['customer'] = ['name' => $card->fullName(), 'phone' => $card->phone ?: ($booking['customer']['phone'] ?? null), 'email' => $card->email ?: ($booking['customer']['email'] ?? null), 'central_id' => $card->id];
+        }
+
+        return $this->attempt(fn () => $this->bookings->request($workspace, $booking, 'admin'), 'Cita creada correctamente');
+    }
+
+    /** Clientes search for the appointment dialog (name, phone or e-mail). Needs the module and `view-customers`. */
+    public function searchClients(Request $request): JsonResponse
+    {
+        $term = trim((string) $request->query('q', ''));
+
+        return response()->json(['clients' => mb_strlen($term) < 2 ? [] : $this->clients->search($request->attributes->get('workspace'), $request->attributes->get('workspace_permissions', []), $term)])->header('Cache-Control', 'no-store');
     }
 
     public function status(Request $request, int $appointment): RedirectResponse
@@ -364,10 +386,12 @@ class BookingController extends Controller
                 'locations' => $capabilities['external'] ? [] : $locations->map(fn ($location) => ['id' => $location->id, 'name' => $location->name])->values()->all(),
                 'locationRequired' => ! $capabilities['external'] && $locations->count() > 1,
                 'currency' => $workspace->settingsOrDefault()->currency,
+                // What the dialog may offer about Clientes (search and tie a card, or save a new one).
+                'clients' => $this->clients->capabilities($workspace, $request?->attributes->get('workspace_permissions', []) ?? []),
                 'error' => null,
             ];
         } catch (BookingException $exception) {
-            return ['services' => [], 'professionals' => [], 'locations' => [], 'locationRequired' => false, 'currency' => $workspace->settingsOrDefault()->currency, 'error' => $exception->getMessage()];
+            return ['services' => [], 'professionals' => [], 'locations' => [], 'locationRequired' => false, 'currency' => $workspace->settingsOrDefault()->currency, 'clients' => ['enabled' => false, 'canCreate' => false], 'error' => $exception->getMessage()];
         }
     }
 

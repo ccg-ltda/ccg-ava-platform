@@ -110,7 +110,7 @@ class ReminderRuleService
             throw ValidationException::withMessages(['delay_amount' => "La espera debe estar entre 1 y {$limit}."]);
         }
 
-        $message = $this->reminders->message($workspace, $data);
+        $message = $this->reminders->message($workspace, $data, true);
 
         return [
             'name' => trim((string) $data['name']),

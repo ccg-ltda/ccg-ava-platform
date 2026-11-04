@@ -37,6 +37,7 @@ return [
         'orders' => ['label' => 'Pedidos', 'description' => 'Pedidos, su detalle y su flujo de estados.', 'list' => 'view-orders', 'module' => 'orders'],
         'plans' => ['label' => 'Planes comerciales', 'description' => 'Planes de CCG y su asignación a los Workspaces de clientes.', 'list' => 'view-plans'],
         'email' => ['label' => 'Correo de la plataforma', 'description' => 'Plantilla HTML global de los correos. Solo opera en Desarrollo_DEV.', 'list' => 'view-email-template'],
+        'meta' => ['label' => 'App de Meta', 'description' => 'La app de Meta de la plataforma (Instagram, Messenger, WhatsApp), configurada una sola vez. Solo opera en Desarrollo_DEV.', 'list' => 'view-meta-settings'],
         'payments' => ['label' => 'Pagos y Wompi', 'description' => 'Credenciales de Wompi, validación de la conexión e historial de pagos. Solo opera en Desarrollo_DEV.', 'list' => 'view-payment-settings'],
         'modules' => ['label' => 'Catálogo de módulos', 'description' => 'Módulos y categorías que los planes pueden incluir.', 'list' => 'view-modules'],
         'platform' => ['label' => 'Soporte de la plataforma', 'description' => 'Accesos temporales y justificados de soporte de CCG.'],
@@ -175,6 +176,8 @@ return [
         'edit-email-template' => ['group' => 'email', 'label' => 'Editar y restaurar la plantilla HTML de correos', 'description' => 'Cambia la plantilla global de todos los correos de la plataforma o la restaura a la predeterminada. Solo opera en Desarrollo_DEV.', 'platform' => true],
 
         // Pagos de la plataforma (solo Desarrollo_DEV)
+        'view-meta-settings' => ['group' => 'meta', 'label' => 'Consultar la configuración de la app de Meta', 'description' => 'Ve el estado (sin secretos) de la app de Meta de la plataforma. Solo opera en Desarrollo_DEV.', 'platform' => true],
+        'edit-meta-settings' => ['group' => 'meta', 'label' => 'Configurar y comprobar la app de Meta', 'description' => 'Guarda cifrados el App ID, los secretos y el token del webhook de Meta, y comprueba la app. Solo opera en Desarrollo_DEV.', 'platform' => true],
         'view-payment-settings' => ['group' => 'payments', 'label' => 'Consultar la configuración de Wompi y el historial de pagos', 'description' => 'Ve el estado (sin secretos) de la configuración de Wompi y los pagos recibidos. Solo opera en Desarrollo_DEV.', 'platform' => true],
         'edit-payment-settings' => ['group' => 'payments', 'label' => 'Configurar y validar Wompi', 'description' => 'Guarda las credenciales cifradas de Wompi, cambia el entorno y prueba la conexión. Solo opera en Desarrollo_DEV.', 'platform' => true],
 

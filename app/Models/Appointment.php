@@ -50,7 +50,7 @@ class Appointment extends Model
 
     protected function casts(): array
     {
-        return ['starts_at' => 'datetime', 'ends_at' => 'datetime', 'blocks_until' => 'datetime', 'cancelled_at' => 'datetime', 'price_amount' => 'decimal:2', 'customer_confirmed_at' => 'datetime'];
+        return ['starts_at' => 'datetime', 'ends_at' => 'datetime', 'blocks_until' => 'datetime', 'cancelled_at' => 'datetime', 'price_amount' => 'decimal:2', 'customer_confirmed_at' => 'datetime', 'completed_at' => 'datetime'];
     }
 
     public function workspace(): BelongsTo

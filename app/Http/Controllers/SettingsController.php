@@ -11,6 +11,7 @@ use App\Payments\WompiConfig;
 use App\Services\ConversationAutoClose;
 use App\Services\EmailTemplates;
 use App\Services\ModuleAccess;
+use App\Services\PlatformMeta;
 use App\Services\WorkspaceSettingsService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -43,6 +44,8 @@ class SettingsController extends Controller
             'autoClose' => ConversationAutoClose::ready() && app(ModuleAccess::class)->allows($request->attributes->get('workspace'), 'conversations') ? $this->autoClose($request->attributes->get('workspace')) : null,
             // Wompi: only the platform administration inside the administrative Workspace gets this (the routes re-check it). Never a secret: only "is it set" and its last characters.
             'wompi' => EnsurePlatformAdministration::allows($request, 'view-payment-settings') ? $this->wompi($request) : null,
+            // The platform's Meta app: the same rule (platform administration only, never a secret).
+            'meta' => EnsurePlatformAdministration::allows($request, 'view-meta-settings') ? app(PlatformMeta::class)->present() + ['canEdit' => EnsurePlatformAdministration::allows($request, 'edit-meta-settings')] : null,
         ]);
     }
 

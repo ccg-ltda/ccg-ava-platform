@@ -11,6 +11,7 @@ use App\Integrations\IntegrationRegistry;
 use App\Models\Integration;
 use App\Services\ChatbotService;
 use App\Services\IntegrationService;
+use App\Services\MetaConnection;
 use App\Services\ModuleAccess;
 use App\Services\WorkspaceScope;
 use App\Webhooks\InboundWebhookService;
@@ -54,6 +55,8 @@ class IntegrationController extends Controller
             'providers' => $this->modules->allows($viewing, 'calendar_providers') ? $this->integrations->providers($viewing) : [],
             'automation' => $this->chatbots->automation($viewing) + ['connection' => $this->integrations->n8n($viewing)],
             'catalog' => $this->integrations->catalog(),
+            // Messenger: the Pages the person authorized and has not chosen yet (id and name only; the Page tokens stay encrypted on the server).
+            'metaPages' => $viewing->is($active) && $request->session()->has('meta_selection') ? app(MetaConnection::class)->pages($active, $request->user(), (string) $request->session()->get('meta_selection')) : null,
             'webhooks' => $showWebhooks ? $this->webhooks->overview($viewing) : null,
             // The signing secret just created or rotated (shown once, to the person who did it).
             'newWebhookSecret' => $showWebhooks ? $request->session()->get('webhook_secret') : null,

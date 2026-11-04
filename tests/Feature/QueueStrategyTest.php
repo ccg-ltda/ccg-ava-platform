@@ -41,8 +41,8 @@ class QueueStrategyTest extends TestCase
         $this->assertStringNotContainsString('--stop-when-empty', $worker, 'it keeps serving the host instance until stopped');
     }
 
-    public function test_the_invitation_mail_is_queued_never_sent_inline(): void
+    public function test_the_invitation_mail_is_sent_inline_so_it_never_depends_on_a_worker(): void
     {
-        $this->assertContains(ShouldQueue::class, class_implements(WorkspaceInvitationNotification::class));
+        $this->assertNotContains(ShouldQueue::class, class_implements(WorkspaceInvitationNotification::class));
     }
 }

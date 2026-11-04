@@ -18,6 +18,11 @@ return [
     'meta' => [
         'app_secret' => env('META_APP_SECRET'),
         'webhook_verify_token' => env('META_WEBHOOK_VERIFY_TOKEN'),
+        // Messenger (Facebook Login): the App ID of the Meta app Zonno publishes. Its secret is `app_secret` above.
+        'app_id' => env('META_APP_ID'),
+        // Instagram API with Instagram Login: the Instagram app ID and secret shown in the app dashboard (Instagram > API setup). Separate from the Facebook ones.
+        'instagram_app_id' => env('META_INSTAGRAM_APP_ID'),
+        'instagram_app_secret' => env('META_INSTAGRAM_APP_SECRET'),
     ],
 
     'postmark' => [

@@ -12,10 +12,11 @@ import { toggleInScope, toggleValue } from '@/lib/pickers';
  * is no longer offered is still shown (so editing never drops it silently) and can be removed. Disabled options cannot be added; loading, empty and error states are explicit.
  * With `allLabel` (a list whose EMPTY value means every one, future ones included, as for the locations of a service) the first option is that «all» and, while it is on,
  * a single chip says so instead of one chip per option; clicking an option while «all» is on excludes it (an explicit list), and choosing every option collapses back to «all».
- * Nothing invented is ever sent: «all» is the empty list.
+ * Nothing invented is ever sent: «all» is the empty list. `closeOnSelect` closes the list after every choice (default: it stays open to pick several in a row).
  */
-export default function EntityPicker({ id, value, onChange, options, multiple = true, placeholder = 'Buscar por nombre', emptyLabel = 'Ninguna opción coincide', allLabel = null, noneLabel = 'Ninguna seleccionada', loading = false, error, disabled = false, invalid = false, className = '', ...props }) {
+export default function EntityPicker({ id, value, onChange, options, multiple = true, placeholder = 'Buscar por nombre', emptyLabel = 'Ninguna opción coincide', allLabel = null, noneLabel = 'Ninguna seleccionada', closeOnSelect = false, loading = false, error, disabled = false, invalid = false, className = '', ...props }) {
     const [query, setQuery] = useState('');
+    const [shut, setShut] = useState(0);
     const chosen = multiple ? [...new Set(value ?? [])] : value === '' || value === null || value === undefined ? [] : [value];
     const known = new Map(options.map((option) => [option.value, option]));
     const needle = normalize(query).trim();
@@ -24,7 +25,16 @@ export default function EntityPicker({ id, value, onChange, options, multiple = 
     const scoped = Boolean(allLabel) && multiple;
     const allOn = scoped && chosen.length === 0;
     const offered = options.filter((option) => !option.disabled).map((option) => option.value);
-    const change = (next) => onChange(multiple ? next : (next[0] ?? ''));
+    // `closeOnSelect`: the list closes after each choice (the chosen ones appear below), so the picker never stays open over the form; the person types again to add another.
+    // The library offers no way to close it from outside, so the control is remounted (its open state starts closed) and the search text is cleared.
+    const change = (next) => {
+        onChange(multiple ? next : (next[0] ?? ''));
+
+        if (closeOnSelect) {
+            setQuery('');
+            setShut((count) => count + 1);
+        }
+    };
     const choose = (next) => {
         if (!scoped) return change(next);
         const shown = allOn ? [ALL, ...offered] : chosen;
@@ -42,7 +52,7 @@ export default function EntityPicker({ id, value, onChange, options, multiple = 
 
     return (
         <div className={className}>
-            <Combobox immediate value={multiple ? (allOn ? [ALL, ...offered] : chosen) : (chosen[0] ?? null)} onChange={multiple ? choose : (item) => pick(item)} multiple={multiple} disabled={disabled || loading} onClose={() => setQuery('')}>
+            <Combobox key={shut} immediate value={multiple ? (allOn ? [ALL, ...offered] : chosen) : (chosen[0] ?? null)} onChange={multiple ? choose : (item) => pick(item)} multiple={multiple} disabled={disabled || loading} onClose={() => setQuery('')}>
                 <div className="relative">
                     <ComboboxInput
                         id={id}

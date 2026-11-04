@@ -1,6 +1,6 @@
 import { Head, useForm } from '@inertiajs/react';
 import { useState } from 'react';
-import { Globe, Mail, MessageSquare, Palette, Receipt, SlidersHorizontal } from 'lucide-react';
+import { Globe, Mail, MessageSquare, Palette, Receipt, Share2, SlidersHorizontal } from 'lucide-react';
 import PageHeader from '@/Components/PageHeader';
 import Tabs from '@/Components/Tabs';
 import { useToast } from '@/Components/Toast';
@@ -10,6 +10,7 @@ import AppearancePanel from './Partials/AppearancePanel';
 import EmailTemplatePanel from './Partials/EmailTemplatePanel';
 import AutoClosePanel from './Partials/AutoClosePanel';
 import GeneralPanel from './Partials/GeneralPanel';
+import MetaPanel from './Partials/MetaPanel';
 import RegionalPanel from './Partials/RegionalPanel';
 import TaxesPanel from './Partials/TaxesPanel';
 
@@ -37,10 +38,10 @@ const BASE_TAB_IDS = ['general', 'regional', 'apariencia', 'impuestos'];
  * (one at a time) and saving or cancelling returns to the summary. The one form of the page holds the saved values while nothing is edited (the server
  * only ever writes to the Workspace of the session). Success arrives as a toast.
  */
-export default function Index({ settings, catalog, canEdit, emailTemplate = null, wompi = null, autoClose = null }) {
+export default function Index({ settings, catalog, canEdit, emailTemplate = null, wompi = null, autoClose = null, meta = null }) {
     const toast = useToast();
     // The global email template tab exists only for the platform administration (the server sends its data to nobody else).
-    const TAB_IDS = [...BASE_TAB_IDS, ...(autoClose ? ['conversaciones'] : []), ...(emailTemplate ? ['correos'] : [])];
+    const TAB_IDS = [...BASE_TAB_IDS, ...(autoClose ? ['conversaciones'] : []), ...(emailTemplate ? ['correos'] : []), ...(meta ? ['meta'] : [])];
     const [selected, select] = useUrlTab(TAB_IDS);
     const form = useForm({ ...settings, logo: null, remove_logo: false });
     const [editing, setEditing] = useState(null); // the id of the tab being edited, or null
@@ -92,6 +93,7 @@ export default function Index({ settings, catalog, canEdit, emailTemplate = null
         { id: 'impuestos', label: 'Impuestos y facturación', icon: Receipt },
         ...(autoClose ? [{ id: 'conversaciones', label: 'Conversaciones', icon: MessageSquare }] : []),
         ...(emailTemplate ? [{ id: 'correos', label: 'Plantilla HTML para correos', icon: Mail }] : []),
+        ...(meta ? [{ id: 'meta', label: 'App de Meta', icon: Share2 }] : []),
     ];
 
     return (
@@ -107,6 +109,7 @@ export default function Index({ settings, catalog, canEdit, emailTemplate = null
                 <TaxesPanel settings={settings} form={form} onSave={save} catalog={catalog} section={sectionOf('impuestos')} wompi={wompi} />
                 {autoClose && <AutoClosePanel autoClose={autoClose} canEdit={canEdit} />}
                 {emailTemplate && <EmailTemplatePanel template={emailTemplate} />}
+                {meta && <MetaPanel meta={meta} />}
             </Tabs>
         </>
     );

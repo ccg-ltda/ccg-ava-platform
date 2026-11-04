@@ -4,24 +4,16 @@ namespace App\Notifications;
 
 use App\Models\WorkspaceInvitation;
 use App\Services\EmailTemplates;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Str;
 
 /**
- * The invitation e-mail: a one-time link to choose a password and join ONE Workspace. It is queued (like the password recovery) and carries no password and no
+ * The invitation e-mail: a one-time link to choose a password and join ONE Workspace. It is sent inline by WorkspaceInvitations (see `send`) and carries no password and no
  * credential of any kind. If delivery fails for good, the invitation can be re-sent from the administration (that issues a new token and kills the old one).
  */
-class WorkspaceInvitationNotification extends Notification implements ShouldQueue
+class WorkspaceInvitationNotification extends Notification
 {
-    use Queueable;
-
-    public int $tries = 3;
-
-    public array $backoff = [30, 120];
-
     public function __construct(private readonly string $url, private readonly string $workspaceName, private readonly int $hours, private readonly ?int $invitationId = null) {}
 
     /**

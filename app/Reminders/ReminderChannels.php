@@ -7,6 +7,7 @@ use App\Integrations\SendsTemplates;
 use App\Models\Integration;
 use App\Models\Workspace;
 use App\Services\ModuleAccess;
+use App\Services\WorkspaceChannels;
 use App\Support\MailAvailability;
 
 /**
@@ -24,6 +25,13 @@ class ReminderChannels
     /** @return array{ok: bool, code: ?string, reason: ?string, integration: ?Integration} */
     public function check(Workspace $workspace, string $channel): array
     {
+        // The plan decides first which channels exist for the Workspace (independent of its modules and of the person's role).
+        $plans = app(WorkspaceChannels::class);
+
+        if (in_array($channel, $plans::keys(), true) && ! $plans->allows($workspace, $channel)) {
+            return $this->no('plan', $plans->restriction());
+        }
+
         return match ($channel) {
             'email' => MailAvailability::deliversRealMail()
                 ? $this->ok(null)

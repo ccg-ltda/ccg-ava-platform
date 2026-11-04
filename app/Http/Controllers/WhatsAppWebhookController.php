@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Integration;
+use App\Services\PlatformMeta;
 use App\Services\WhatsAppConnection;
 use App\Services\WhatsAppInbound;
 use Illuminate\Http\Request;
@@ -21,8 +22,8 @@ class WhatsAppWebhookController extends Controller
 
     public function verify(Request $request): Response
     {
-        $token = config('services.meta.webhook_verify_token');
-        abort_unless(filled($token) && filled(config('services.meta.app_secret')), 404);
+        $token = PlatformMeta::get('webhook_verify_token');
+        abort_unless(filled($token) && filled(PlatformMeta::get('app_secret')), 404);
 
         $given = $request->query('hub_verify_token');
         $challenge = $request->query('hub_challenge');
@@ -37,8 +38,8 @@ class WhatsAppWebhookController extends Controller
 
     public function receive(Request $request, WhatsAppInbound $inbound): Response
     {
-        $secret = config('services.meta.app_secret');
-        abort_unless(filled($secret) && filled(config('services.meta.webhook_verify_token')), 404);
+        $secret = PlatformMeta::get('app_secret');
+        abort_unless(filled($secret) && filled(PlatformMeta::get('webhook_verify_token')), 404);
 
         $raw = $request->getContent();
         abort_if(strlen($raw) > self::MAX_BYTES, 413);

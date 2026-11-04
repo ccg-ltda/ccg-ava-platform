@@ -13,7 +13,6 @@ use App\Services\WorkspaceInvitations;
 use Illuminate\Contracts\Notifications\Dispatcher;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Notifications\ChannelManager;
-use Illuminate\Notifications\SendQueuedNotifications;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
@@ -299,16 +298,26 @@ class WorkspaceInvitationsTest extends TestCase
         app()->forgetInstance(Dispatcher::class);
     }
 
-    public function test_the_invitation_is_queued_not_sent_inline_and_survives_a_broken_queue_connection_choice(): void
+    public function test_the_invitation_is_sent_inline_whatever_the_queue_and_a_failing_transport_is_reported_and_keeps_the_invitation_to_resend(): void
     {
         Queue::fake();
         $this->realNotifications();
+        config(['mail.default' => 'array']);
 
         $this->post("/workspaces/{$this->client->id}/invitations", ['email' => 'cola@cliente.com', 'role' => 'admin', 'name' => 'Cola'])->assertSessionHasNoErrors();
 
-        Queue::assertPushed(SendQueuedNotifications::class, fn ($job) => $job->notification instanceof WorkspaceInvitationNotification);
-        $this->assertSame(1, WorkspaceInvitation::count());
+        Queue::assertNothingPushed();
+        $this->assertCount(1, app('mailer')->getSymfonyTransport()->messages(), 'it went out through the mailer without any worker');
         $this->assertSame(0, User::where('email', 'cola@cliente.com')->count());
+
+        // A transport that refuses it: the invitation is kept (its link was invalidated by the notification's failed()) and the person is told to re-send.
+        $this->app->forgetInstance('mail.manager');
+        config(['mail.default' => 'failover', 'mail.mailers.failover' => ['transport' => 'failover', 'mailers' => ['broken']], 'mail.mailers.broken' => ['transport' => 'smtp', 'host' => '127.0.0.1', 'port' => 1, 'timeout' => 1]]);
+        Notification::clearResolvedInstances();
+        $before = WorkspaceInvitation::count();
+        $this->post("/workspaces/{$this->client->id}/invitations", ['email' => 'rota@cliente.com', 'role' => 'admin', 'name' => 'Rota'])->assertSessionHasErrors('email');
+        $this->assertSame($before + 1, WorkspaceInvitation::count());
+        $this->assertSame(1, WorkspaceInvitation::where('email', 'rota@cliente.com')->count(), 'kept, so «Reenviar» can issue a new link');
     }
 
     public function test_the_e_mail_that_reaches_the_transport_is_addressed_to_the_invitee_with_the_working_link_and_no_secret(): void

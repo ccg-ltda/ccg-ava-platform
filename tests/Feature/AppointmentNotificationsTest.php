@@ -822,4 +822,40 @@ class AppointmentNotificationsTest extends TestCase
         $this->assertSame([true, 30, false, false, false, null], [$setting->requires_confirmation, $setting->min_notice_minutes, $setting->notify_received, $setting->notify_confirmed, $setting->reminders_enabled, $setting->reminder_offsets]);
         $this->assertSame(0, AppointmentNotification::count(), 'nothing is planned or invented for what already exists');
     }
+
+    public function test_a_linked_card_decides_the_number_and_an_anonymized_one_stops_the_message_while_an_unlinked_appointment_keeps_its_own(): void
+    {
+        $this->configure(['notify_confirmed' => true, 'notify_messages' => $this->template('confirmed')]);
+        $card = $this->workspace->customers()->create(['first_name' => 'Laura', 'last_name' => 'Pérez', 'phone' => '+573009990000', 'email' => 'l@example.com', 'marketing_consent' => 'unknown']);
+
+        // Linked: the card's number (corrected after the booking) is where it goes.
+        $linked = $this->book();
+        $linked->customer->forceFill(['customer_id' => $card->id])->save();
+        $row = $this->notifications($linked)->sole();
+        $row->update(['status' => 'scheduled']);
+        $this->openWindow('573009990000');
+        $before = count($this->sent()); // booking by the team already planned and sent one: only what this explicit send adds is measured
+        app(AppointmentNotifier::class)->send($row->id);
+        $this->assertSame('573009990000', $this->sent()[$before]['to'], 'the central card wins over the number the appointment was booked with');
+
+        // Not linked (every older appointment): exactly as before, with the number it was booked with.
+        $unlinked = $this->book('2026-10-13T12:00:00Z', '+573005550000');
+        $row2 = $this->notifications($unlinked)->sole();
+        $row2->update(['status' => 'scheduled']);
+        $this->openWindow('573005550000');
+        $before = count($this->sent());
+        app(AppointmentNotifier::class)->send($row2->id);
+        $this->assertSame('573005550000', $this->sent()[$before]['to']);
+
+        // Anonymized card: the person was erased, nothing goes to the number kept in the old appointment.
+        $erased = $this->book('2026-10-13T14:00:00Z', '+573001112233');
+        $erased->customer->forceFill(['customer_id' => $card->id])->save();
+        $card->forceFill(['anonymized_at' => now()])->save();
+        $row3 = $this->notifications($erased)->sole();
+        $row3->update(['status' => 'scheduled']);
+        $before = count($this->sent());
+        app(AppointmentNotifier::class)->send($row3->id);
+        $this->assertSame([AppointmentNotification::SKIPPED, 'customer_anonymized'], [$row3->fresh()->status, $row3->fresh()->reason]);
+        $this->assertCount($before, $this->sent(), 'nothing new went out');
+    }
 }

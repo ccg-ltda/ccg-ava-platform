@@ -401,7 +401,8 @@ class ConversationsTest extends TestCase
         [$bot] = $this->liveBot($workspace);
         $this->actAs(in: $workspace);
 
-        $this->get($this->url($bot, 'instagram'))->assertNotFound();
+        // Instagram and Messenger keep conversations now (App\Services\MetaMessagingInbound); a channel that does not exist still has no page.
+        $this->get($this->url($bot, 'instagram'))->assertOk();
         $this->get($this->url($bot, 'nope'))->assertNotFound();
     }
 
@@ -472,6 +473,7 @@ class ConversationsTest extends TestCase
 
         $this->assertTrue($channels['whatsapp']['conversations']);
         $this->assertTrue($channels['web']['conversations']);
-        $this->assertFalse($channels['instagram']['conversations']);
+        $this->assertTrue($channels['instagram']['conversations']);
+        $this->assertTrue($channels['messenger']['conversations']);
     }
 }

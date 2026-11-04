@@ -232,6 +232,11 @@ class ReminderRuleScheduler
      */
     private function customerOf(Workspace $workspace, ?BookingCustomer $booked): Customer|string
     {
+        // The person was tied to a card by the staff (Agenda picked or created it): that card, and nothing else. Only the rest are looked up by phone or e-mail.
+        if ($booked?->customer_id !== null) {
+            return $workspace->customers()->whereNull('anonymized_at')->find($booked->customer_id) ?? 'no_customer';
+        }
+
         $phone = BookingCustomer::normalizePhone($booked?->phone);
         $email = Customer::normalizeEmail($booked?->email);
 
@@ -276,7 +281,8 @@ class ReminderRuleScheduler
      */
     private function sendAt(ReminderRule $rule, Appointment $appointment, string $zone, bool $strict): ?Carbon
     {
-        $moment = $appointment->starts_at->copy()->setTimezone($zone);
+        // The wait counts from the moment staff marked the appointment as done; for one completed before that moment was recorded, from the end of the appointment.
+        $moment = ($appointment->completed_at ?? $appointment->ends_at)->copy()->setTimezone($zone);
 
         if ($rule->delay_unit === 'hours') {
             $moment->addHours($rule->delay_amount);

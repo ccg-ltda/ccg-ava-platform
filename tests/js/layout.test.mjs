@@ -71,3 +71,15 @@ test('Tabs ignores the panel of a hidden tab, so a page with a conditional panel
     assert.match(tabs, /Children\.toArray\(children\)/);
     assert.doesNotMatch(tabs, /Array\.isArray\(children\)/);
 });
+
+test('a page that is on its way shows the skeleton of its module in the content area, and never one that stays forever', () => {
+    const layout = source('Layouts/AppLayout.jsx');
+    assert.match(layout, /useNavigationSkeleton\(props\.skeleton\)/);
+    assert.match(layout, /<PageSkeleton variant=\{loading\.variant\} \/>/);
+    assert.match(layout, /hidden=\{Boolean\(loading\.variant\)\}/, 'the current page stays mounted while the skeleton shows');
+    assert.match(layout, /loading\.failed/, 'a page that does not arrive says so and offers a retry');
+    const hook = source('Hooks/useNavigationSkeleton.js');
+    assert.match(hook, /router\.on\('finish', clear\)/, 'whatever the outcome, the skeleton goes');
+    assert.match(hook, /giveUp/);
+    assert.match(source('Components/Skeleton.jsx'), /role="status"/);
+});

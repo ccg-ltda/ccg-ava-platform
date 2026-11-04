@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\ModuleCategory;
 use App\Models\Plan;
+use App\Services\WorkspaceChannels;
 use App\Services\WorkspaceLimits;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -48,6 +49,9 @@ class SavePlanRequest extends FormRequest
             'limits.ai_executions' => ['nullable', 'integer', 'min:1', 'max:100000000'],
             'is_public' => ['sometimes', 'boolean'],
             'requires_quote' => ['sometimes', 'boolean'],
+            // The communication channels the plan includes (independent of its modules). Only the key that is sent is changed.
+            'channel_keys' => ['sometimes', 'array'],
+            'channel_keys.*' => ['string', 'distinct', Rule::in(WorkspaceChannels::keys())],
             'module_ids' => ['sometimes', 'array'],
             'module_ids.*' => ['integer', 'distinct', Rule::exists('modules', 'id')],
         ];
@@ -151,6 +155,12 @@ class SavePlanRequest extends FormRequest
     }
 
     /** @return list<int> */
+    /** @return ?list<string> the channels to save, or null when the form did not send them (nothing changes) */
+    public function channelKeys(): ?array
+    {
+        return $this->has('channel_keys') ? array_values(array_map('strval', $this->validated('channel_keys', []))) : null;
+    }
+
     public function moduleIds(): array
     {
         return array_map('intval', $this->validated('module_ids', []));

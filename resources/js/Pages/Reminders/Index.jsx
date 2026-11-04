@@ -31,7 +31,7 @@ const TONES = { scheduled: 'blue', processing: 'blue', sent: 'green', failed: 'r
  * Recordatorios: the commercial follow-ups the Workspace scheduled for its customers. Independent of Agenda (no appointment is confirmed or reminded here). The server decides
  * what each role may do and which channels are really available; this page only offers it. The list is paginated and filtered in the server.
  */
-export default function Index({ reminders, perPageOptions, filters, channels, statuses, reasons, relatedTypes, variables, limits, timezone, rules = null }) {
+export default function Index({ reminders, perPageOptions, filters, channels, statuses, reasons, relatedTypes, variables, limits, timezone, lastBatch = null, rules = null }) {
     const confirm = useConfirm();
     const { permissions } = useAccess();
     const can = { create: permissions.includes('create-reminders'), edit: permissions.includes('edit-reminders'), cancel: permissions.includes('cancel-reminders') };
@@ -54,6 +54,18 @@ export default function Index({ reminders, perPageOptions, filters, channels, st
 
     const remindersView = (
         <div className="space-y-6">
+            {lastBatch && lastBatch.skipped.length > 0 && (
+                <Alert tone="warning">
+                    <p className="font-semibold">{lastBatch.created} recordatorio(s) programado(s). No se programó para {lastBatch.skipped.length}:</p>
+                    <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                        {lastBatch.skipped.map((item) => (
+                            <li key={item.id}>
+                                <strong>{item.name}</strong>: {item.reason}
+                            </li>
+                        ))}
+                    </ul>
+                </Alert>
+            )}
             {!anyChannel && <Alert tone="warning">Ningún canal está disponible para enviar recordatorios: {channels.map((channel) => `${channel.label} (${channel.reason})`).join(' · ')}</Alert>}
 
             <Card className="p-4 sm:p-5">

@@ -1,6 +1,5 @@
 import { useForm } from '@inertiajs/react';
-import { useState } from 'react';
-import Checkbox from '@/Components/Checkbox';
+import EntityPicker from '@/Components/EntityPicker';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import Modal from '@/Components/Modal';
@@ -32,12 +31,10 @@ export default function RuleFormModal({ rule, rules, channels, variables, limits
         template_params: rule?.templateParams ?? [],
     });
     const { data, setData, errors } = form;
-    const [filter, setFilter] = useState('');
-    // The services of the rule stay listed even if one was deactivated since, so editing never silently drops it.
+    // The services the server offered for THIS Workspace, plus the ones the rule already has (even if one was deactivated since, so editing never drops it silently).
     const known = new Map(rules.services.map((service) => [service.id, service]));
     rule?.services.forEach((service) => known.has(service.id) || known.set(service.id, service));
-    const visible = [...known.values()].filter((service) => service.name.toLowerCase().includes(filter.trim().toLowerCase()));
-    const toggleService = (id) => setData('service_ids', data.service_ids.includes(id) ? data.service_ids.filter((item) => item !== id) : [...data.service_ids, id]);
+    const serviceOptions = [...known.values()].map((service) => ({ value: service.id, label: service.name })).sort((x, y) => x.label.localeCompare(y.label, 'es'));
     const daily = data.delay_unit !== 'hours';
 
     const submit = (event) => {
@@ -65,27 +62,22 @@ export default function RuleFormModal({ rule, rules, channels, variables, limits
                         <InputError message={errors.name} className="mt-1" />
                     </div>
 
-                    <fieldset className="min-w-0">
-                        <legend className="text-sm font-medium text-ink">Servicios que activan la regla</legend>
-                        <div className={`mt-1 rounded-lg border ${errors.service_ids ? 'border-danger' : 'border-field'} bg-card`}>
-                            <div className="border-b border-line p-2">
-                                <TextInput value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Buscar servicio" aria-label="Buscar servicio" autoComplete="off" />
-                            </div>
-                            <ul className="max-h-44 divide-y divide-line overflow-y-auto">
-                                {visible.length === 0 && <li className="px-3 py-3 text-sm text-ink-muted">{known.size === 0 ? 'Este Workspace no tiene servicios activos.' : 'Ningún servicio coincide.'}</li>}
-                                {visible.map((service) => (
-                                    <li key={service.id}>
-                                        <label className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm text-ink hover:bg-canvas">
-                                            <Checkbox checked={data.service_ids.includes(service.id)} onChange={() => toggleService(service.id)} />
-                                            <span className="min-w-0 truncate">{service.name}</span>
-                                        </label>
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                        <p className="mt-1 text-xs text-ink-muted">{data.service_ids.length} {data.service_ids.length === 1 ? 'servicio elegido' : 'servicios elegidos'}</p>
+                    <div className="min-w-0">
+                        <InputLabel htmlFor="rule_services" value="Servicios que activan la regla" />
+                        <EntityPicker
+                            id="rule_services"
+                            className="mt-1"
+                            value={data.service_ids}
+                            onChange={(ids) => setData('service_ids', ids)}
+                            options={serviceOptions}
+                            placeholder={serviceOptions.length === 0 ? 'No hay servicios activos' : 'Buscar servicio por nombre'}
+                            emptyLabel={serviceOptions.length === 0 ? 'Este Workspace no tiene servicios activos: crea uno en Servicios.' : 'Ningún servicio coincide con la búsqueda'}
+                            noneLabel="Ningún servicio elegido todavía"
+                            invalid={Boolean(errors.service_ids)}
+                            closeOnSelect
+                        />
                         <InputError message={errors.service_ids} className="mt-1" />
-                    </fieldset>
+                    </div>
 
                     <div className="grid gap-x-5 gap-y-4 sm:grid-cols-3">
                         <div className="min-w-0">

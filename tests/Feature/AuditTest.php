@@ -462,7 +462,9 @@ class AuditTest extends TestCase
         }
 
         $count = fn () => collect(DB::getQueryLog())->count();
+        $this->get('/audit')->assertOk(); // warm-up: the one-time checks of what the database has (remembered after the first request) are not part of what is measured
         DB::enableQueryLog();
+        DB::flushQueryLog();
         $this->get('/audit')->assertOk();
         $few = $count();
 

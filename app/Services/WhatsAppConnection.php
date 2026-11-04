@@ -73,7 +73,7 @@ class WhatsAppConnection
 
     public function platformConfigured(): bool
     {
-        return filled(config('services.meta.app_secret')) && filled(config('services.meta.webhook_verify_token'));
+        return filled(PlatformMeta::get('app_secret')) && filled(PlatformMeta::get('webhook_verify_token'));
     }
 
     /** Called by the webhook when Meta passes the verification handshake. */

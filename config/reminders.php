@@ -63,6 +63,9 @@ return [
         'whatsapp' => ['label' => 'WhatsApp', 'description' => 'Con una plantilla aprobada por Meta (un seguimiento siempre cae fuera de la ventana de 24 h).'],
     ],
 
+    // What a reminder tied to an APPOINTMENT (those an automatic rule schedules) can also say, besides the customer's data (config/campaigns.php): resolved from that appointment when it goes out.
+    'appointment_variables' => ['servicio' => 'Servicio', 'profesional' => 'Profesional', 'fecha' => 'Fecha de la cita', 'hora' => 'Hora de la cita', 'sede' => 'Sede'],
+
     'related_types' => ['appointment' => 'Cita', 'order' => 'Pedido', 'service' => 'Servicio'],
 
     'limits' => [
@@ -76,6 +79,8 @@ return [
         // Scheduled reminders a Workspace can hold at once (a runaway automation can not fill the table).
         'max_scheduled' => 5000,
         'page_size' => 15,
+        // Customers one manual send may address (each gets its own message).
+        'max_recipients' => 50,
     ],
 
     'retries' => [

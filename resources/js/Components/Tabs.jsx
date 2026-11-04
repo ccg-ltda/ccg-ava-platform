@@ -30,7 +30,7 @@ export default function Tabs({ tabs, selectedIndex, onChange, children }) {
 
             <TabPanels className="mt-6">
                 {panels.map((panel, index) => (
-                    <TabPanel key={tabs[index].id} className="space-y-6 outline-none motion-safe:animate-fade-in">
+                    <TabPanel key={tabs[index].id} className="space-y-6 outline-none">
                         {panel}
                     </TabPanel>
                 ))}

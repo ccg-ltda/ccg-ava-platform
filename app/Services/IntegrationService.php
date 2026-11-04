@@ -83,7 +83,10 @@ class IntegrationService
                 'description' => $channel['description'],
                 'available' => $channel['available'],
                 'unavailable' => $channel['unavailable'],
+                'restricted' => (bool) ($channel['restricted'] ?? false),
                 'needsIntegration' => $channel['integration'] !== null,
+                // Connected with Meta's OAuth: the card offers «Conectar», not a form.
+                'oauth' => (bool) ($channel['oauth'] ?? false),
                 'fields' => $type instanceof ChannelIntegrationType ? $type->fields() : [],
                 'notice' => $type instanceof ChannelIntegrationType ? $type->notice() : null,
                 'testable' => (bool) $type?->supportsTest(),
@@ -91,6 +94,7 @@ class IntegrationService
                 'connection' => match ($channel['key']) {
                     'whatsapp' => app(WhatsAppConnection::class)->status($workspace, $integration),
                     'web' => app(WebChannelConnection::class)->status($workspace, $integration),
+                    'instagram', 'messenger' => app(MetaConnection::class)->status($channel['key'], $integration),
                     default => null,
                 },
                 'integration' => $integration ? [
@@ -106,7 +110,7 @@ class IntegrationService
                     ] : null,
                 ] : null,
             ];
-        }, $this->channels->all());
+        }, $this->channels->all($workspace));
     }
 
     /**
@@ -171,7 +175,11 @@ class IntegrationService
      */
     public function saveChannel(Workspace $workspace, string $channel, array $data): Integration
     {
-        $definition = $this->channels->get($channel);
+        $definition = $this->channels->get($channel, $workspace);
+
+        if ($definition['restricted'] ?? false) {
+            throw ValidationException::withMessages(['channel' => $definition['unavailable']]);
+        }
 
         return $this->saveSingle($workspace, $definition['integration'], $definition['label'], $data);
     }
@@ -342,12 +350,22 @@ class IntegrationService
 
     public function setActive(Integration $integration, bool $active): void
     {
+        $this->assertChannelIncluded($integration, $active);
         $integration->update(['is_active' => $active]);
+    }
+
+    /** A channel's connection can be switched on (or tested) only while the Workspace's plan includes that channel; switching off is always allowed. @throws ValidationException */
+    private function assertChannelIncluded(Integration $integration, bool $needed = true): void
+    {
+        if ($needed && in_array($integration->type, $this->channels->integrationTypes(), true)) {
+            app(WorkspaceChannels::class)->assertAllows($integration->workspace, $integration->type);
+        }
     }
 
     /** Runs the connection test and keeps only a short summary of the outcome. */
     public function test(Integration $integration): TestResult
     {
+        $this->assertChannelIncluded($integration);
         $result = $this->types->get($integration->type)->test($integration);
 
         $integration->forceFill([

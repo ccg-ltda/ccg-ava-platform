@@ -113,9 +113,11 @@ class SavedFiltersTest extends TestCase
 
         $this->store('conversations', ['name' => 'Asistente ajeno', 'criteria' => ['chatbot' => $foreignBot->id]])->assertSessionHasErrors('criteria.chatbot');
         $this->store('conversations', ['name' => 'Estado falso', 'criteria' => ['status' => 'frozen']])->assertSessionHasErrors('criteria.status');
-        $this->store('conversations', ['name' => 'Canal sin conversaciones', 'criteria' => ['channel' => 'instagram']])->assertSessionHasErrors('criteria.channel');
+        // Instagram and Messenger keep conversations now, so they are valid channels; one that does not exist (or keeps none) is still refused.
+        $this->store('conversations', ['name' => 'Canal sin conversaciones', 'criteria' => ['channel' => 'telegram']])->assertSessionHasErrors('criteria.channel');
+        $this->store('conversations', ['name' => 'Canal de Instagram', 'criteria' => ['channel' => 'instagram']])->assertSessionHasNoErrors();
 
-        $this->assertSame(0, SavedFilter::count());
+        $this->assertSame(1, SavedFilter::count(), 'only the valid Instagram filter was saved');
     }
 
     public function test_names_are_unique_per_user_and_module_but_may_repeat_elsewhere(): void

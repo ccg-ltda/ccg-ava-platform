@@ -26,6 +26,13 @@ export default function useWorkspaceTheme(settings) {
             applied = Object.keys(variables);
             applied.forEach((name) => root.style.setProperty(name, variables[name]));
             root.dataset.appTheme = dark ? 'dark' : 'light';
+
+            // Remembered so the next first paint (the skeleton, before this code runs) already has the right mode. A convenience: storage can be unavailable.
+            try {
+                window.localStorage.setItem('ava.app-theme', dark ? 'dark' : 'light');
+            } catch {
+                /* the first paint is just light */
+            }
         };
 
         apply();

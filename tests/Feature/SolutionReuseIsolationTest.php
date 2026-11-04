@@ -198,7 +198,7 @@ class SolutionReuseIsolationTest extends TestCase
 
         $this->assertNull($dev->fresh()->plan_id);
         $this->assertContains('bookings', app(ModuleAccess::class)->keys($dev->fresh()), 'the administrative Workspace has every implemented module without a plan');
-        $this->get("/bookings?from=2026-10-13&days=7&workspace={$this->salon->id}")->assertInertia(fn (AssertableInertia $page) => $page->has('appointments', 0)->has('customers.data', 0));
+        $this->get("/bookings?from=2026-10-13&days=7&workspace={$this->salon->id}")->assertInertia(fn (AssertableInertia $page) => $page->has('appointments', 0)->where('customers', null));
         $this->post("/bookings/{$foreign->id}/cancel")->assertNotFound();
         $this->assertSame('confirmed', $foreign->fresh()->status);
     }

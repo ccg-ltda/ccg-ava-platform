@@ -4,14 +4,12 @@ namespace App\Services;
 
 use App\Booking\AppointmentNotifier;
 use App\Models\Chatbot;
-use App\Models\ChatbotChannel;
 use App\Models\ChatbotExecution;
-use App\Models\Conversation;
 use App\Models\Integration;
 use App\Models\Message;
+use App\Services\Concerns\StartsChannelConversations;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
-use Throwable;
 
 /**
  * What Meta's WhatsApp webhook tells Ava (messages and delivery states of a number), already authenticated by the
@@ -23,13 +21,11 @@ use Throwable;
  */
 class WhatsAppInbound
 {
+    use StartsChannelConversations;
+
     private const MEDIA = ['audio', 'image', 'video', 'document', 'sticker', 'location'];
 
-    public function __construct(
-        private readonly ConversationService $conversations,
-        private readonly ChatbotExecutions $executions,
-        private readonly ModuleAccess $modules,
-    ) {}
+    public function __construct(private readonly ConversationService $conversations) {}
 
     /**
      * @param  array<string, mixed>  $payload
@@ -74,11 +70,7 @@ class WhatsAppInbound
             return null;
         }
 
-        $channel = ChatbotChannel::with('chatbot.workspace.organization')->where('integration_id', $integrations->first()->id)->where('channel', 'whatsapp')->where('is_active', true)->first();
-        $chatbot = $channel?->chatbot;
-
-        return $chatbot && $chatbot->is_active && $chatbot->workspace->is_active && $chatbot->workspace->organization->is_active
-            && $this->modules->allowsAll($chatbot->workspace, ModuleAccess::CHANNEL_MODULES) ? $chatbot : null;
+        return $this->chatbotForIntegration($integrations->first(), 'whatsapp');
     }
 
     /** @param  array<string, mixed>  $value */
@@ -111,19 +103,8 @@ class WhatsAppInbound
 
             // A repeated event (Meta retries) is stored once and must not make the chatbot answer twice.
             if ($result['created']) {
-                $this->start($result['conversation'], $result['message']);
+                $this->startExecution($result['conversation'], $result['message']);
             }
-        }
-    }
-
-    private function start(Conversation $conversation, Message $message): void
-    {
-        try {
-            $this->executions->schedule($conversation->load('chatbot.workspace.organization'), $message);
-        } catch (Throwable $e) {
-            // The message is already stored: a problem starting the workflow must not make Meta resend the event. Only the
-            // class is logged: the exception text may carry the message itself (a failed query lists its values).
-            Log::error('chatbot_execution_schedule_failed', ['exception' => $e::class, 'conversation' => $conversation->id]);
         }
     }
 

@@ -45,6 +45,7 @@ class WebWidget
             && $channel->chatbot->workspace->is_active
             && $channel->chatbot->workspace->organization->is_active
             && $this->modules->allowsAll($channel->chatbot->workspace, ModuleAccess::CHANNEL_MODULES)
+            && app(WorkspaceChannels::class)->allows($channel->chatbot->workspace, $channel->channel)
             && $channel->integration?->is_active
             && $this->look->destination($channel->chatbot->workspace, $channel->channel)['ready']
             && $this->look->enabled($channel->chatbot, $channel->channel)

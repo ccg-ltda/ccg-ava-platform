@@ -2,6 +2,8 @@
 
 use App\Integrations\BookerType;
 use App\Integrations\HttpApiType;
+use App\Integrations\InstagramType;
+use App\Integrations\MessengerType;
 use App\Integrations\N8nType;
 use App\Integrations\WebType;
 use App\Integrations\WhatsAppType;
@@ -16,6 +18,8 @@ return [
     'types' => [
         'http' => HttpApiType::class,
         'whatsapp' => WhatsAppType::class,
+        'instagram' => InstagramType::class,
+        'messenger' => MessengerType::class,
         'web' => WebType::class,
         'n8n' => N8nType::class,
         'booker' => BookerType::class,
@@ -86,6 +90,31 @@ return [
         'timeout' => 10,
         // Requests per minute that ONE integration's webhook accepts (on top of the per-IP limit of the whole group): a flood aimed at one number cannot starve the others.
         'webhook_per_minute' => 300,
+    ],
+
+    /*
+     * Instagram Messaging and Messenger (Meta). Both are connected by OAUTH, never by pasting a token: the account or Page the person authorizes becomes the
+     * Workspace's own integration (its token encrypted). The Meta app itself (IDs and secrets) is the platform's: `config/services.php` `meta`.
+     * Hosts and paths come from Meta's current documentation (Instagram API with Instagram Login; Messenger Platform); the Graph version is configuration.
+     */
+    'meta' => [
+        'graph_version' => env('META_GRAPH_VERSION', 'v26.0'),
+        'facebook_graph_url' => 'https://graph.facebook.com',
+        'facebook_dialog_url' => 'https://www.facebook.com',
+        'instagram_graph_url' => 'https://graph.instagram.com',
+        'instagram_oauth_url' => 'https://www.instagram.com/oauth/authorize',
+        'instagram_token_url' => 'https://api.instagram.com/oauth/access_token',
+        'timeout' => 10,
+        // Scopes Meta documents for messaging. Instagram: instagram_business_basic + instagram_business_manage_messages. Messenger: pages_show_list + pages_messaging + pages_manage_metadata (subscribe the Page to the webhook).
+        'scopes' => [
+            'instagram' => ['instagram_business_basic', 'instagram_business_manage_messages'],
+            'messenger' => ['pages_show_list', 'pages_messaging', 'pages_manage_metadata'],
+        ],
+        // The webhook fields Ava subscribes to: only what it processes (messages). Delivery receipts and reactions are not handled yet.
+        'webhook_fields' => ['instagram' => 'messages', 'messenger' => 'messages'],
+        // How long the authorization the person started stays valid (the `state`), and how long the Pages list waits for the choice.
+        'state_minutes' => 15,
+        'webhook_per_minute' => 600,
     ],
 
     /*

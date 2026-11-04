@@ -27,6 +27,8 @@ use App\Http\Controllers\KnowledgeController;
 use App\Http\Controllers\LegalController;
 use App\Http\Controllers\LocationController;
 use App\Http\Controllers\MessageTemplateController;
+use App\Http\Controllers\MetaConnectionController;
+use App\Http\Controllers\MetaPlatformSettingsController;
 use App\Http\Controllers\ModuleCategoryController;
 use App\Http\Controllers\ModuleController;
 use App\Http\Controllers\NotificationController;
@@ -144,6 +146,15 @@ Route::middleware(['auth', 'workspace', 'throttle:authenticated'])->group(functi
         Route::put('/n8n', [IntegrationController::class, 'updateN8n'])->middleware('workspace.permission:manage-integrations')->name('n8n.update');
         Route::delete('/n8n', [IntegrationController::class, 'disconnectN8n'])->middleware('workspace.permission:activate-integrations')->name('n8n.destroy');
         Route::put('/providers/{provider}', [IntegrationController::class, 'updateProvider'])->where('provider', '[a-z_]+')->middleware(['workspace.module:calendar_providers', 'workspace.permission:manage-integrations'])->name('providers.update');
+        // Instagram and Messenger are connected with Meta's OAuth (never by pasting a token). The callback is the only route Meta calls (with the person's session); every one needs `manage-integrations`.
+        Route::prefix('meta')->name('meta.')->middleware(['workspace.permission:manage-integrations', 'throttle:30,1'])->group(function () {
+            Route::get('/callback', [MetaConnectionController::class, 'callback'])->name('callback');
+            Route::post('/messenger/select', [MetaConnectionController::class, 'selectPage'])->name('select');
+            Route::delete('/messenger/select', [MetaConnectionController::class, 'cancelSelection'])->name('select.cancel');
+            Route::get('/{channel}/connect', [MetaConnectionController::class, 'connect'])->where('channel', 'instagram|messenger')->name('connect');
+            Route::post('/{channel}/subscribe', [MetaConnectionController::class, 'subscribe'])->where('channel', 'instagram|messenger')->name('subscribe');
+            Route::delete('/{channel}', [MetaConnectionController::class, 'disconnect'])->where('channel', 'instagram|messenger')->name('disconnect');
+        });
         Route::put('/channels/{channel}', [IntegrationController::class, 'updateChannel'])->where('channel', '[a-z_]+')->middleware('workspace.permission:manage-integrations')->name('channels.update');
         Route::put('/{integration}', [IntegrationController::class, 'update'])->whereNumber('integration')->middleware('workspace.permission:manage-integrations')->name('update');
         Route::post('/{integration}/activate', [IntegrationController::class, 'activate'])->whereNumber('integration')->middleware('workspace.permission:activate-integrations')->name('activate');
@@ -333,6 +344,7 @@ Route::middleware(['auth', 'workspace', 'throttle:authenticated'])->group(functi
         Route::get('/', [BookingController::class, 'index'])->name('index');
         Route::get('/availability', [BookingController::class, 'availability'])->middleware('throttle:120,1')->name('availability');
         Route::get('/day', [BookingController::class, 'dayDetail'])->middleware('throttle:120,1')->name('day');
+        Route::get('/clients', [BookingController::class, 'searchClients'])->middleware(['workspace.module:customers', 'workspace.permission:view-customers', 'throttle:120,1'])->name('clients');
         Route::put('/settings', [BookingController::class, 'updateSettings'])->middleware('workspace.permission:manage-booking-settings')->name('settings.update');
         Route::put('/settings/notifications', [BookingController::class, 'updateNotifications'])->middleware('workspace.permission:manage-booking-settings')->name('settings.notifications');
         Route::post('/settings/public-key', [BookingController::class, 'rotateKey'])->middleware(['workspace.permission:manage-booking-settings', 'throttle:10,1'])->name('settings.rotate-key');
@@ -368,6 +380,8 @@ Route::middleware(['auth', 'workspace', 'throttle:authenticated'])->group(functi
     Route::middleware(['workspace.module:reminders', 'workspace.permission:view-reminders'])->prefix('reminders')->name('reminders.')->group(function () {
         Route::get('/', [ReminderController::class, 'index'])->name('index');
         Route::get('/customers', [ReminderController::class, 'customers'])->middleware(['workspace.permission:create-reminders', 'throttle:reminders-read'])->name('customers');
+        // A new customer without leaving the manual form: the same card as Clientes, so it needs the permission to create customers too.
+        Route::post('/customers', [ReminderController::class, 'storeCustomer'])->middleware(['workspace.permission:create-reminders', 'workspace.permission:create-customers', 'throttle:reminders-write'])->name('customers.store');
         Route::get('/{reminder}/attempts', [ReminderController::class, 'attempts'])->whereNumber('reminder')->middleware('throttle:reminders-read')->name('attempts');
         Route::post('/', [ReminderController::class, 'store'])->middleware(['workspace.permission:create-reminders', 'throttle:reminders-write'])->name('store');
         Route::put('/{reminder}', [ReminderController::class, 'update'])->whereNumber('reminder')->middleware('workspace.permission:edit-reminders')->name('update');
@@ -488,6 +502,10 @@ Route::middleware(['auth', 'workspace', 'throttle:authenticated'])->group(functi
 
     // Global email template (its own permissions, not part of the module catalog group above).
     // Plantilla HTML global de los correos: solo la administración de la plataforma dentro de Desarrollo_DEV (middleware + permiso; un cliente recibe 403).
+    // The platform's Meta app (platform administration only, Desarrollo_DEV): configured once for every Workspace; secrets are write-only.
+    Route::put('/settings/meta', [MetaPlatformSettingsController::class, 'update'])->middleware('workspace.platform:edit-meta-settings')->name('meta-settings.update');
+    Route::post('/settings/meta/check', [MetaPlatformSettingsController::class, 'check'])->middleware(['workspace.platform:edit-meta-settings', 'throttle:10,1'])->name('meta-settings.check');
+
     // Wompi (platform administration only, Desarrollo_DEV): credentials are write-only; the history lists persisted payments.
     Route::put('/settings/wompi', [PaymentSettingsController::class, 'update'])->middleware('workspace.platform:edit-payment-settings')->name('wompi-settings.update');
     Route::post('/settings/wompi/validate', [PaymentSettingsController::class, 'validateConnection'])->middleware(['workspace.platform:edit-payment-settings', 'throttle:10,1'])->name('wompi-settings.validate');

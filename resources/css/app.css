@@ -142,6 +142,21 @@ html[data-app-theme='dark'],
     }
 
     /*
+     * Skeleton block (loading placeholder): a soft tint of the ink color, so it reads in the light and the dark mode alike. It pulses only when the person has not asked for less
+     * motion. Used by the first-paint skeleton of the HTML shell (partials/boot-skeleton.blade.php) and by Components/Skeleton.jsx.
+     */
+    .sk {
+        background-color: color-mix(in srgb, var(--color-ink) 11%, transparent);
+        border-radius: 0.5rem;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        .sk {
+            animation: sk-pulse 1.6s ease-in-out infinite;
+        }
+    }
+
+    /*
      * Outgoing message bubble of Conversaciones: a soft tint of the Workspace's primary color over the card color (so it follows any configured color, and the light and dark
      * modes, with no color of its own). The text stays the normal ink color, which keeps the contrast of the message at any tint.
      */
@@ -258,5 +273,11 @@ html[data-app-theme='dark'],
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
         scroll-behavior: auto !important;
+    }
+}
+
+@keyframes sk-pulse {
+    50% {
+        opacity: 0.55;
     }
 }

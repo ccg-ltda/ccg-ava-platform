@@ -18,6 +18,8 @@ createInertiaApp({
     setup({ el, App, props }) {
         const root = ReactDOM.createRoot(el);
         root.render(<App {...props} />);
+        // The server painted a skeleton of the page (partials/boot-skeleton.blade.php): it goes once the real page is on screen.
+        requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById('boot-skeleton')?.remove()));
     },
     progress: {
         color: '#4B5563',

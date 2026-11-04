@@ -98,7 +98,7 @@ class ChatbotService
                 'connection' => $integration ? $this->connection($integration, $settings) : null,
                 'installCode' => $state === 'active' && ($channel['embeddable'] ?? false) && $row?->public_key && $this->appearance->destination($chatbot->workspace, $channel['key'])['ready'] ? $this->installCode($row->public_key) : null,
             ];
-        }, $this->channels->all());
+        }, $this->channels->all($chatbot->workspace));
     }
 
     /**
@@ -259,7 +259,7 @@ class ChatbotService
      */
     public function setChannelActive(Chatbot $chatbot, string $channelKey, bool $active): void
     {
-        $channel = $this->channels->get($channelKey);
+        $channel = $this->channels->get($channelKey, $chatbot->workspace);
 
         if (! $active) {
             $chatbot->channels()->where('channel', $channelKey)->get()->each->update(['is_active' => false, 'integration_id' => null]);

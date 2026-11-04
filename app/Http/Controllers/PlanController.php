@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Audit\AuditLogger;
 use App\Http\Middleware\EnsurePlatformAdministration;
 use App\Http\Requests\SavePlanModulesRequest;
 use App\Http\Requests\SavePlanRequest;
@@ -10,6 +11,7 @@ use App\Models\Plan;
 use App\Models\Workspace;
 use App\Services\ListPagination;
 use App\Services\ModuleCatalog;
+use App\Services\WorkspaceChannels;
 use App\Services\WorkspaceLimits;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -91,6 +93,8 @@ class PlanController extends Controller
             $this->limits->setPlanLimits($plan, $limits);
         }
 
+        $this->saveChannels($plan, $request->channelKeys());
+
         return redirect()->route('plans.show', $plan)->with('success', 'Plan creado correctamente');
     }
 
@@ -107,6 +111,8 @@ class PlanController extends Controller
             if ($request->has('module_ids')) {
                 $this->catalog->syncModules($plan, $request->moduleIds());
             }
+
+            $this->saveChannels($plan, $request->channelKeys());
         });
 
         return back()->with('success', 'Plan actualizado correctamente');
@@ -139,6 +145,22 @@ class PlanController extends Controller
         return Plan::solutionsReady() ? $plan->loadMissing('solutions') : $plan;
     }
 
+    /** Saves the channels a plan includes (audited by name). Credentials and conversations of the Workspaces are never touched: a channel left out only stops being usable. @param ?list<string> $keys */
+    private function saveChannels(Plan $plan, ?array $keys): void
+    {
+        if ($keys === null || ! WorkspaceChannels::ready()) {
+            return;
+        }
+
+        $before = $plan->channels;
+        $plan->forceFill(['channels' => array_values(array_intersect(WorkspaceChannels::keys(), $keys))])->save();
+        $label = fn (?array $list) => $list === null ? 'Todos (sin configurar)' : (collect($list)->map(fn ($key) => WorkspaceChannels::catalog()[$key] ?? $key)->implode(', ') ?: 'Ninguno');
+
+        if ($before !== $plan->channels) {
+            app(AuditLogger::class)->record('updated', 'plan', $plan->id, $plan->name, [AuditLogger::change('Canales', $label($before), $label($plan->channels))]);
+        }
+    }
+
     /** @return array<string, mixed> */
     private function summary(Plan $plan, int $workspacesCount): array
     {
@@ -151,6 +173,8 @@ class PlanController extends Controller
             // Standard limits the plan sells (metric => value or null); `workspacesCount` Workspaces inherit them unless they carry a particular limit.
             'limits' => $this->limits->planLimits($plan),
             'moduleIds' => $plan->modules()->pluck('modules.id')->all(),
+            // The channels the plan includes; null = never configured (the plan still offers every channel, as before).
+            'channelKeys' => WorkspaceChannels::ready() ? $plan->channels : null,
             'modulesCount' => $plan->modules_count,
             'workspacesCount' => $workspacesCount,
             // The commercial offer, exactly as saved (price in major units): what the public sign-up reads.
@@ -174,6 +198,8 @@ class PlanController extends Controller
             // false = the database lacks the commercial columns / the limits tables: the editor says so and does not send what could not be saved.
             'ready' => Plan::commercialReady(),
             'limitsReady' => $this->limits->available(),
+            'channelsReady' => WorkspaceChannels::ready(),
+            'channels' => collect(WorkspaceChannels::catalog())->map(fn (string $label, string $key) => ['key' => $key, 'label' => $label])->values()->all(),
             'metrics' => collect(WorkspaceLimits::METRICS)->map(fn (array $meta, string $key) => ['key' => $key] + $meta)->values()->all(),
             // Only categories that are commercial solutions: the groups of shared capabilities are not offered as a solution.
             'solutions' => ModuleCategory::where('is_active', true)->orderBy('sort_order')->get()->filter(fn (ModuleCategory $c) => $c->isSolution())->map(fn ($c) => ['value' => $c->id, 'label' => $c->name])->values()->all(),

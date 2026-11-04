@@ -23,7 +23,10 @@ class SaveReminderRequest extends FormRequest
         $limits = config('reminders.limits');
 
         return [
-            'customer_id' => ['required', 'integer', 'min:1'],
+            // Editing (or the agent API) names ONE customer; a manual send names one or several, each of whom gets their own message.
+            'customer_id' => ['required_without:customer_ids', 'nullable', 'integer', 'min:1'],
+            'customer_ids' => ['required_without:customer_id', 'nullable', 'array', 'min:1', 'max:'.$limits['max_recipients']],
+            'customer_ids.*' => ['integer', 'min:1'],
             'name' => ['required', 'string', 'max:'.$limits['name_max']],
             'purpose' => ['nullable', 'string', 'max:'.$limits['purpose_max']],
             'related_type' => ['nullable', 'string', Rule::in(array_keys(config('reminders.related_types')))],
@@ -53,7 +56,8 @@ class SaveReminderRequest extends FormRequest
             'send_at.date_format' => 'Elige la fecha y la hora del envío.',
             'send_at.required' => 'Elige la fecha y la hora del envío.',
             'name.required' => 'El nombre es obligatorio.',
-            'customer_id.required' => 'Elige un cliente.',
+            'customer_id.required_without' => 'Elige al menos un cliente.',
+            'customer_ids.required_without' => 'Elige al menos un cliente.',
             'body.required' => 'El mensaje es obligatorio.',
         ];
     }

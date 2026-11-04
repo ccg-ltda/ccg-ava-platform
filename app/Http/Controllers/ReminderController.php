@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Customers\QuickCustomer;
 use App\Http\Requests\SaveReminderRequest;
 use App\Models\Customer;
 use App\Models\Reminder;
@@ -9,6 +10,7 @@ use App\Models\ReminderAttempt;
 use App\Reminders\ReminderChannels;
 use App\Reminders\ReminderRulePresenter;
 use App\Reminders\ReminderService;
+use App\Reminders\ReminderVariables;
 use App\Services\ListPagination;
 use App\Services\ModuleAccess;
 use Illuminate\Http\JsonResponse;
@@ -31,7 +33,9 @@ class ReminderController extends Controller
         private readonly ReminderService $reminders,
         private readonly ReminderChannels $channels,
         private readonly ReminderRulePresenter $rulePresenter,
+        private readonly ReminderVariables $variables,
         private readonly ModuleAccess $modules,
+        private readonly QuickCustomer $customerPicker,
     ) {}
 
     public function index(Request $request): Response
@@ -70,17 +74,34 @@ class ReminderController extends Controller
             'statuses' => config('reminders.statuses'),
             'reasons' => config('reminders.reasons'),
             'relatedTypes' => config('reminders.related_types'),
-            'variables' => collect(config('campaigns.variables'))->map(fn (array $variable, string $key) => ['key' => $key, 'label' => $variable['label']])->values()->all(),
-            'limits' => ['name' => config('reminders.limits.name_max'), 'purpose' => config('reminders.limits.purpose_max'), 'subject' => config('reminders.limits.subject_max'), 'body' => config('reminders.limits.body_max'), 'minLeadMinutes' => config('reminders.limits.min_lead_minutes')],
+            // A manual reminder is not tied to an appointment: only the customer's data can be filled (the rules' editor also gets the appointment's, in `rules.variables`).
+            'variables' => $this->variables->offered(false),
+            // The result of the last manual send to several customers (who was scheduled and who was left out, and why), shown once.
+            'lastBatch' => $request->session()->get('reminder_batch'),
+            'limits' => ['name' => config('reminders.limits.name_max'), 'purpose' => config('reminders.limits.purpose_max'), 'subject' => config('reminders.limits.subject_max'), 'body' => config('reminders.limits.body_max'), 'minLeadMinutes' => config('reminders.limits.min_lead_minutes'), 'maxRecipients' => config('reminders.limits.max_recipients')],
             'timezone' => $zone,
             // The automatic rules need Agenda too (the services done are its appointments): without it the tab does not exist, and the routes refuse as well.
-            'rules' => $rules ? ['data' => $this->rulePresenter->list($workspace), 'services' => $this->rulePresenter->services($workspace), 'delayUnits' => config('reminders.rules.delay_units'), 'defaultSendTime' => config('reminders.rules.default_send_time'), 'graceHours' => config('reminders.rules.grace_hours')] : null,
+            'rules' => $rules ? ['data' => $this->rulePresenter->list($workspace), 'services' => $this->rulePresenter->services($workspace), 'delayUnits' => config('reminders.rules.delay_units'), 'defaultSendTime' => config('reminders.rules.default_send_time'), 'graceHours' => config('reminders.rules.grace_hours'), 'variables' => $this->variables->offered(true)] : null,
         ]);
     }
 
     public function store(SaveReminderRequest $request): RedirectResponse
     {
-        $result = $this->reminders->create($request->attributes->get('workspace'), $request->validated(), $request->user());
+        $workspace = $request->attributes->get('workspace');
+
+        // One or several customers: each gets their OWN reminder; the ones who cannot receive it are reported with the reason and the rest go ahead.
+        if ($request->filled('customer_ids')) {
+            $result = $this->reminders->createMany($workspace, $request->validated(), $request->user());
+            $request->session()->flash('reminder_batch', ['created' => count($result['created']), 'skipped' => $result['skipped']]);
+
+            return back()->with(count($result['created']) > 0 ? 'success' : 'error', match (true) {
+                count($result['created']) === 0 => 'No se programó ningún recordatorio: ninguno de los destinatarios puede recibirlo.',
+                $result['skipped'] === [] => count($result['created']) === 1 ? 'Recordatorio programado.' : count($result['created']).' recordatorios programados, uno por cliente.',
+                default => count($result['created']).' recordatorio(s) programado(s); '.count($result['skipped']).' destinatario(s) omitido(s), revisa el motivo.',
+            });
+        }
+
+        $result = $this->reminders->create($workspace, $request->validated(), $request->user());
 
         return back()->with('success', $result['replayed'] ? 'Ese recordatorio ya estaba programado.' : 'Recordatorio programado.');
     }
@@ -119,21 +140,32 @@ class ReminderController extends Controller
         ])->all()]);
     }
 
-    /** Customers of THIS Workspace to pick a recipient: what the picker needs and nothing else (no phone, no e-mail, no notes). */
+    /**
+     * Customers of THIS Workspace to pick as recipients, by name, last name, phone or e-mail (the central Clientes table, never a copy). The person who schedules is about to write to
+     * them, so their contact data is included for the preview; the consent flag says whether they can be written to at all.
+     */
     public function customers(Request $request): JsonResponse
     {
-        $workspace = $request->attributes->get('workspace');
-        $term = trim((string) $request->query('q', ''));
-        $like = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($term)).'%';
+        $found = $this->customerPicker->find($request->attributes->get('workspace'), trim((string) $request->query('q', '')), 20);
 
-        $found = $workspace->customers()->whereNull('anonymized_at')->where('is_active', true)
-            ->when($term !== '', fn ($q) => $q->whereRaw("lower(first_name || ' ' || coalesce(last_name, '')) like ? escape '!'", [$like]))
-            ->orderBy('first_name')->limit(20)->get();
+        return response()->json(['customers' => $found->map(fn (Customer $customer) => $this->presentCustomer($customer))->all()])->header('Cache-Control', 'no-store');
+    }
 
-        return response()->json(['customers' => $found->map(fn (Customer $customer) => [
-            'id' => $customer->id, 'name' => $customer->fullName(), 'hasEmail' => filled($customer->email), 'hasPhone' => filled($customer->phone_e164) || filled($customer->phone_normalized),
-            'consent' => $customer->marketing_consent === Customer::CONSENT_GRANTED,
-        ])->all()]);
+    /** A new customer from the manual form: the SAME card as in Clientes (same duplicate rules and audit), without leaving the form. Needs `create-customers` as well. */
+    public function storeCustomer(Request $request): JsonResponse
+    {
+        $card = $this->customerPicker->create($request->attributes->get('workspace'), $request->only(['first_name', 'last_name', 'phone', 'email', 'consent_granted', 'consent_note']));
+
+        return response()->json(['customer' => $this->presentCustomer($card)], 201);
+    }
+
+    /** @return array<string, mixed> */
+    private function presentCustomer(Customer $customer): array
+    {
+        return [
+            'id' => $customer->id, 'name' => $customer->fullName(), 'firstName' => $customer->first_name, 'lastName' => $customer->last_name, 'phone' => $customer->phone, 'email' => $customer->email,
+            'hasEmail' => filled($customer->email), 'hasPhone' => filled($customer->phone_e164) || filled($customer->phone_normalized), 'consent' => $customer->marketing_consent === Customer::CONSENT_GRANTED,
+        ];
     }
 
     private function find(Request $request, int $id): Reminder
