@@ -191,6 +191,9 @@ return [
     // Days the technical trace of the assistant's tool calls (conversation > Actividad técnica) is kept. `agent:tools:prune` deletes finished calls older than this (never below 30).
     'tool_trace_retention_days' => 180,
 
+    /* Automation engines that run an assistant's workflow. `X-Ava-Engine` and the activity report accept only these keys. */
+    'engines' => ['n8n' => 'n8n', 'lava' => 'Lava Studio'],
+
     'tool_statuses' => ['started' => 'Sin resultado registrado', 'succeeded' => 'Hecho', 'rejected' => 'Rechazado', 'failed' => 'Falló', 'uncertain' => 'Resultado incierto'],
 
     /* Avatar of a chatbot: same formats and weight limit as the Workspace logo (never SVG). */

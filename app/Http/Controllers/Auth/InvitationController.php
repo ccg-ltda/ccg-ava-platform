@@ -27,6 +27,7 @@ class InvitationController extends Controller
             'valid' => $invitation !== null,
             'token' => $invitation ? $token : null,
             'email' => $invitation?->email,
+            'existingAccount' => $invitation ? $this->invitations->existingAccount($invitation) !== null : false,
             'name' => $invitation?->name,
             'workspace' => $invitation?->workspace->name,
             'message' => $invitation ? null : WorkspaceInvitations::INVALID,
@@ -35,6 +36,17 @@ class InvitationController extends Controller
 
     public function store(Request $request, string $token): RedirectResponse
     {
+        $invitation = $this->invitations->find($token);
+
+        // The address already has an account: the holder confirms with that account's password; no second account is created.
+        if ($invitation && $this->invitations->existingAccount($invitation)) {
+            $data = $request->validate(['password' => ['required', 'string', 'max:255']]);
+            $code = $invitation->workspace->code;
+            $this->invitations->acceptExisting($token, $data['password']);
+
+            return redirect()->route('pre-login')->with('status', "Te uniste al Workspace. Ingresa con el código {$code}, tu correo y tu contraseña de siempre.");
+        }
+
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'password' => ['required', 'confirmed', Password::defaults()],

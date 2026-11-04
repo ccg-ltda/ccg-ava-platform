@@ -5,7 +5,7 @@
  * granularities each one allows (the first is the default). `metrics` is the contract with the data behind Reportes:
  * `source` names the table the figure is computed from (`DashboardMetrics`, shared with the Dashboard, always starting
  * from the Workspace `WorkspaceScope` resolved). A metric without a source reports no figure, so the page says so
- * instead of showing a number. `questions` and `surveys` have no source: Ava stores no question text or survey answers.
+ * instead of showing a number. `questions` has no source (Ava stores no question text); Encuestas are built from persisted survey responses by SurveyMetrics, outside this metric list.
  */
 return [
     'periods' => [

@@ -51,13 +51,16 @@ class WorkspaceInvitations
      *
      * @throws ValidationException
      */
-    public function invite(User $actor, Workspace $workspace, string $email, ?string $name, string $role): array
+    public function invite(User $actor, Workspace $workspace, string $email, ?string $name, string $role, bool $existingAcceptsByPassword = false): array
     {
         $this->assertTarget($actor, $workspace, $role);
         $email = mb_strtolower(trim($email));
         $existing = User::whereRaw('lower(email) = ?', [$email])->first();
 
-        if ($existing) {
+        if ($existing && $existingAcceptsByPassword) {
+            // A Workspace administrator (not the platform) never attaches somebody else's account by themselves: the account holder accepts with their own password.
+            $this->assertExistingAccountMayJoin($workspace, $existing);
+        } elseif ($existing) {
             $this->memberships->add($workspace, $existing, $role, 'email');
 
             return ['outcome' => 'associated', 'invitation' => null];
@@ -120,6 +123,57 @@ class WorkspaceInvitations
             $invitation->update(['revoked_at' => now()]);
             $this->audit->record('deleted', 'invitation', $invitation->id, Mask::email($invitation->email), [AuditLogger::change('Estado', 'Pendiente', 'Cancelada')], $workspace);
         }
+    }
+
+    /** Whether the address of an invitation already belongs to an account (it then accepts with that account's password instead of creating one). */
+    public function existingAccount(WorkspaceInvitation $invitation): ?User
+    {
+        return User::whereRaw('lower(email) = ?', [mb_strtolower($invitation->email)])->first();
+    }
+
+    /**
+     * An EXISTING account accepts with its own password: same identity, no duplicate account, other memberships and credentials untouched. The membership
+     * goes through WorkspaceMemberships (active account, no internal CCG account in a client Workspace, plan limit). Neutral failure like `accept`.
+     *
+     * @throws ValidationException
+     */
+    public function acceptExisting(string $token, string $password): User
+    {
+        $invalid = fn () => ValidationException::withMessages(['token' => self::INVALID]);
+
+        if (! self::ready() || strlen($token) !== 64) {
+            throw $invalid();
+        }
+
+        return DB::transaction(function () use ($token, $password, $invalid) {
+            $invitation = WorkspaceInvitation::where('token_hash', WorkspaceInvitation::hash($token))->lockForUpdate()->first();
+            $workspace = $invitation ? Workspace::with('organization')->find($invitation->workspace_id) : null;
+
+            if (! $invitation || ! $invitation->isPending() || ! $workspace || ! $workspace->is_active || ! $workspace->organization->is_active || $workspace->isAdministrative()) {
+                throw $invalid();
+            }
+
+            $user = $this->existingAccount($invitation);
+
+            if (! $user || ! Hash::check($password, $user->password)) {
+                throw ValidationException::withMessages(['password' => 'La contraseña no es correcta.']);
+            }
+
+            $this->limits->lockWorkspace($workspace);
+
+            try {
+                $this->memberships->add($workspace, $user, $invitation->role, 'token');
+            } catch (ValidationException) {
+                throw $invalid();
+            }
+
+            $invitation->update(['accepted_at' => now(), 'accepted_user_id' => $user->id]);
+            $this->audit->system('created', 'membership', $user->id, $user->name, [
+                AuditLogger::change('Workspace', null, $workspace->name), AuditLogger::change('Rol', null, $invitation->role),
+            ], $workspace, 'Invitación aceptada (cuenta existente)');
+
+            return $user;
+        });
     }
 
     /** The invitation behind a token if it can still be accepted, or null. Reads only. */
@@ -196,6 +250,16 @@ class WorkspaceInvitations
             'expiresAt' => $invitation->expires_at->toIso8601String(),
             'acceptedAt' => $invitation->accepted_at?->toIso8601String(),
         ])->all();
+    }
+
+    /** @throws ValidationException */
+    private function assertExistingAccountMayJoin(Workspace $workspace, User $account): void
+    {
+        if ($workspace->users()->whereKey($account->id)->exists()) {
+            throw ValidationException::withMessages(['email' => 'Este usuario ya pertenece al Workspace.']);
+        }
+
+        $this->administration->assertMayReceive($workspace, $account, 'email');
     }
 
     /** Whether the actor may issue invitations for this Workspace and the role: client Workspace, enabled, administered by the actor, a role they may hand out. */

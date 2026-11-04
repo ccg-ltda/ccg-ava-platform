@@ -8,6 +8,7 @@ use App\Services\ListPagination;
 use App\Services\RoleCatalog;
 use App\Services\UserIdentityGuard;
 use App\Services\WorkspaceAdministration;
+use App\Services\WorkspaceInvitations;
 use App\Services\WorkspaceLimits;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -58,9 +59,31 @@ class UserController extends Controller
             'permissionCatalog' => fn () => $this->permissionCatalog($actor),
             'permissionRoles' => fn () => $this->catalog->all()->map(fn ($role) => ['id' => $role->id, 'name' => $role->name])->values(),
             'canManageRoles' => $actor->can('manage-roles'),
+            'invite' => fn () => $this->invitePanel($request, $actor, $workspace),
             'workspaces' => fn () => $this->workspaces->overview($actor, $request),
             'organizations' => fn () => $this->workspaces->organizations($actor, $request),
         ]);
+    }
+
+    /**
+     * Invitations of the ACTIVE Workspace for the people who may issue them (a customer administrator in their own Workspace, or the platform inside a client
+     * one): the roles they can hand out and the invitations so far. Null when the Workspace is the administrative one, the module's table is missing or the
+     * actor lacks `create-users` and `assign-roles`.
+     *
+     * @return array{roles: list<string>, invitations: list<array<string, mixed>>}|null
+     */
+    private function invitePanel(Request $request, User $actor, $workspace): ?array
+    {
+        $permissions = $request->attributes->get('workspace_permissions', []);
+
+        if ($workspace->isAdministrative() || ! WorkspaceInvitations::ready() || ! in_array('create-users', $permissions, true) || ! in_array('assign-roles', $permissions, true)) {
+            return null;
+        }
+
+        return [
+            'roles' => $this->workspaces->assignableRoles($actor, $workspace)->pluck('name')->values()->all(),
+            'invitations' => app(WorkspaceInvitations::class)->overview($workspace, false),
+        ];
     }
 
     /** @return array{groups: array<string, array<string, mixed>>, items: list<array<string, mixed>>} */

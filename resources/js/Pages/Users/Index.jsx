@@ -25,6 +25,7 @@ export default function Index({
     permissionCatalog,
     permissionRoles,
     canManageRoles,
+    invite,
     workspaces,
     organizations,
 }) {
@@ -34,7 +35,7 @@ export default function Index({
             label: 'Usuarios',
             icon: Users,
             count: filters.search || filters.status !== 'all' ? undefined : users.meta.total,
-            panel: <UsersPanel users={users} filters={filters} perPageOptions={perPageOptions} createTargets={createTargets} permissionCatalog={permissionCatalog} />,
+            panel: <UsersPanel invite={invite} users={users} filters={filters} perPageOptions={perPageOptions} createTargets={createTargets} permissionCatalog={permissionCatalog} />,
         },
         {
             id: 'roles',

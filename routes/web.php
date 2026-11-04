@@ -54,6 +54,7 @@ use App\Http\Controllers\SignupController;
 use App\Http\Controllers\SupportAccessController;
 use App\Http\Controllers\SupportDeskController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\UserInvitationController;
 use App\Http\Controllers\UserLocationScopeController;
 use App\Http\Controllers\WebhookController;
 use App\Http\Controllers\WorkspaceController;
@@ -201,6 +202,7 @@ Route::middleware(['auth', 'workspace', 'throttle:authenticated'])->group(functi
         // «Anything new?» for the notification of the team (ids and kinds only, never content); asked every few seconds with a cursor.
         Route::get('/alerts', ConversationAlertsController::class)->middleware('throttle:60,1')->name('alerts');
         Route::get('/{conversation}/activity', [ConversationActivityController::class, 'show'])->whereNumber('conversation')->middleware(['workspace.permission:view-technical-activity', 'throttle:activity-read'])->name('activity');
+        Route::get('/{conversation}/activity/{call}', [ConversationActivityController::class, 'call'])->whereNumber(['conversation', 'call'])->middleware(['workspace.permission:view-technical-activity', 'throttle:activity-read'])->name('activity.call');
         Route::get('/{conversation}/attachments/{attachment}', [ConversationController::class, 'attachment'])->whereNumber(['conversation', 'attachment'])->middleware('throttle:240,1')->name('attachments');
         Route::post('/{conversation}/take', [ConversationActionController::class, 'take'])->whereNumber('conversation')->middleware('workspace.permission:take-conversations')->name('take');
         Route::post('/{conversation}/release', [ConversationActionController::class, 'release'])->whereNumber('conversation')->middleware('workspace.permission:release-conversations')->name('release');
@@ -439,6 +441,12 @@ Route::middleware(['auth', 'workspace', 'throttle:authenticated'])->group(functi
         Route::put('/users/{user}/locations', [UserLocationScopeController::class, 'update'])->whereNumber('user')->middleware('workspace.permission:assign-roles')->name('users.locations.update');
         Route::post('/users/{user}/deactivate', [UserController::class, 'deactivate'])->middleware('workspace.permission:deactivate-users')->name('users.deactivate');
         Route::post('/users/{user}/activate', [UserController::class, 'activate'])->middleware('workspace.permission:deactivate-users')->name('users.activate');
+        // E-mail invitations into the ACTIVE Workspace (the session decides the target; a client administrator invites only into their own).
+        Route::middleware(['workspace.permission:create-users', 'workspace.permission:assign-roles'])->prefix('/users/invitations')->name('users.invitations.')->group(function () {
+            Route::post('/', [UserInvitationController::class, 'store'])->middleware('throttle:30,1')->name('store');
+            Route::post('/{invitation}/resend', [UserInvitationController::class, 'resend'])->whereNumber('invitation')->middleware('throttle:30,1')->name('resend');
+            Route::delete('/{invitation}', [UserInvitationController::class, 'destroy'])->whereNumber('invitation')->name('destroy');
+        });
     });
 
     // Workspaces are listed inside /users. WorkspaceAdministration decides who may act on which one.

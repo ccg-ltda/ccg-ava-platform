@@ -1,11 +1,13 @@
 <?php
 
+use App\Http\Controllers\AgentActivityController;
 use App\Http\Controllers\AgentBookingController;
 use App\Http\Controllers\AgentController;
 use App\Http\Controllers\AgentKnowledgeController;
 use App\Http\Controllers\AgentMessageController;
 use App\Http\Controllers\AgentOrderController;
 use App\Http\Controllers\AgentReminderController;
+use App\Http\Controllers\AgentReportingController;
 use App\Http\Controllers\InboundWebhookReceiveController;
 use App\Http\Controllers\MetaWebhookController;
 use App\Http\Controllers\PublicBookingController;
@@ -43,11 +45,21 @@ Route::middleware(['body.limit:agent', 'throttle.safe:agent', 'agent', 'api.prot
     Route::get('/config', [AgentController::class, 'config'])->name('config');
     // Search in the knowledge base of THIS assistant (traced like the other tools; it needs only the module Asistentes).
     Route::get('/knowledge/search', [AgentKnowledgeController::class, 'search'])->middleware('agent.trace')->name('knowledge.search');
+    // What feeds the reports, whatever engine produced it: reservations of any system and surveys (definition, dispatch, answer). Idempotent; the Workspace is the token's.
+    Route::middleware('workspace.module:reports')->group(function () {
+        Route::post('/booking-records', [AgentReportingController::class, 'booking'])->name('reporting.bookings');
+        Route::post('/surveys', [AgentReportingController::class, 'define'])->name('reporting.surveys.define');
+        Route::post('/surveys/dispatches', [AgentReportingController::class, 'dispatch'])->name('reporting.surveys.dispatch');
+        Route::post('/surveys/responses', [AgentReportingController::class, 'respond'])->name('reporting.surveys.respond');
+    });
+
     Route::middleware('workspace.module:conversations')->group(function () {
         Route::post('/messages', [AgentMessageController::class, 'store'])->name('messages.store');
         Route::post('/messages/status', [AgentMessageController::class, 'status'])->name('messages.status');
         Route::post('/conversations/authorize', [AgentMessageController::class, 'authorizeReply'])->name('conversations.authorize');
         Route::post('/conversations/handoff', [AgentMessageController::class, 'handoff'])->name('conversations.handoff');
+        // The engine reports the API calls it made by itself (one step per call; idempotent by `step_ref`) for the technical activity of the conversation.
+        Route::post('/activity/steps', [AgentActivityController::class, 'store'])->name('activity.steps');
 
         // Booking tools of Ava Chat: they also need the plan of the Workspace to include Servicios y Reservas (every module the booking page needs).
         Route::middleware(['workspace.module:service_catalog', 'workspace.module:professionals', 'workspace.module:bookings', 'agent.trace'])->prefix('booking')->name('booking.')->group(function () {

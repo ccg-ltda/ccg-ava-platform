@@ -61,7 +61,7 @@ class ReportsModuleAvailabilityTest extends TestCase
 
         [$props, $tables] = $this->visit('/reports');
 
-        $this->assertSame(['conversations' => false, 'team' => false, 'economics' => true, 'bookings' => true, 'orders' => false, 'customers' => false], $props['sources']);
+        $this->assertSame(['conversations' => false, 'team' => false, 'economics' => true, 'bookingRecords' => false, 'bookings' => true, 'orders' => false, 'customers' => false], $props['sources']);
         $this->assertNotNull($props['operations']['bookings']);
         $this->assertNull($props['operations']['orders']);
         $this->assertNull($props['operations']['customers']);
@@ -95,7 +95,7 @@ class ReportsModuleAvailabilityTest extends TestCase
         $this->signIn($workspace);
 
         [$reports] = $this->visit('/reports');
-        $this->assertSame(['conversations' => true, 'team' => true, 'economics' => true, 'bookings' => true, 'orders' => true, 'customers' => true], $reports['sources']);
+        $this->assertSame(['conversations' => true, 'team' => true, 'economics' => true, 'bookingRecords' => false, 'bookings' => true, 'orders' => true, 'customers' => true], $reports['sources']);
         $this->assertNotEmpty($reports['metrics']);
         foreach (['bookings', 'orders', 'customers'] as $module) {
             $this->assertNotNull($reports['operations'][$module]);
@@ -116,7 +116,7 @@ class ReportsModuleAvailabilityTest extends TestCase
 
         [$reports, $tables] = $this->visit('/reports');
 
-        $this->assertSame(['conversations' => false, 'team' => false, 'economics' => false, 'bookings' => false, 'orders' => false, 'customers' => false], $reports['sources']);
+        $this->assertSame(['conversations' => false, 'team' => false, 'economics' => false, 'bookingRecords' => false, 'bookings' => false, 'orders' => false, 'customers' => false], $reports['sources']);
         $this->assertSame([null, null, null], array_values($reports['operations']));
         $this->assertSame([], array_values(array_intersect($tables, [...self::CONVERSATION_TABLES, 'appointments', 'orders', 'customers'])));
     }

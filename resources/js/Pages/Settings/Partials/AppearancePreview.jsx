@@ -3,8 +3,9 @@ import Badge from '@/Components/Badge';
 import { brandVariables, isHexColor } from '@/lib/theme';
 
 /**
- * A miniature of Ava's shell (top bar, menu, a card, a button) drawn with the given primary color and mode. It is scoped to its own box through
- * `data-preview-theme` and local CSS variables: it never touches the theme of the real application, so previewing a change changes nothing.
+ * A miniature of Ava's shell (top bar, menu, a card, a button) drawn with the given primary color and mode. The top bar and the menu keep the institutional
+ * surface tokens (`--color-surface-*`), exactly like the real shell: only buttons, labels, links and other inner elements follow the configurable color.
+ * It is scoped to its own box through `data-preview-theme` and local CSS variables: it never touches the theme of the real application.
  */
 function Mini({ name, color, dark, logoUrl }) {
     const valid = isHexColor(color ?? '');
@@ -17,7 +18,7 @@ function Mini({ name, color, dark, logoUrl }) {
             role="img"
             aria-label={`Vista previa en modo ${dark ? 'oscuro' : 'claro'}`}
         >
-            <div className="flex items-center gap-2 bg-primary px-3 py-2 text-white">
+            <div className="flex items-center gap-2 px-3 py-2 text-white" style={{ background: 'linear-gradient(100deg, var(--color-surface-light) 0%, var(--color-surface-mid) 45%, var(--color-surface-deep) 100%)' }}>
                 {logoUrl ? (
                     <img src={logoUrl} alt="" className="size-5 rounded object-contain" />
                 ) : (
@@ -26,7 +27,11 @@ function Mini({ name, color, dark, logoUrl }) {
                 <span className="truncate text-[11px] font-bold tracking-widest uppercase">{name || 'Tu Workspace'}</span>
             </div>
             <div className="flex">
-                <div className="w-14 shrink-0 space-y-2 bg-primary-strong/90 p-2" aria-hidden="true">
+                <div
+                    className="w-14 shrink-0 space-y-2 p-2"
+                    style={{ background: 'linear-gradient(180deg, var(--color-surface-light) 0%, var(--color-surface-mid) 38%, var(--color-surface-deep) 78%, var(--color-surface-deepest) 100%)' }}
+                    aria-hidden="true"
+                >
                     {[0, 1, 2, 3].map((item) => (
                         <div key={item} className={`h-2 rounded ${item === 0 ? 'bg-white/90' : 'bg-white/30'}`} />
                     ))}

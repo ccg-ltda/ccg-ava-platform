@@ -1,4 +1,5 @@
 import { router, useForm } from '@inertiajs/react';
+import InvitePeople from '@/Pages/Users/Partials/InvitePeople';
 import RoleLabel from '@/Components/RoleLabel';
 import { KeyRound, Lock, MapPin, Pencil, Plus, Power, SearchX, Users } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -132,7 +133,7 @@ function FormModal({ show, title, onClose, onSubmit, processing, submitLabel, ch
 }
 
 /** Usuarios tab: server-side search and pagination, plus create / edit / deactivate / activate, each offered only with its permission. */
-export default function UsersPanel({ users, filters, perPageOptions, createTargets, permissionCatalog }) {
+export default function UsersPanel({ users, filters, perPageOptions, createTargets, permissionCatalog, invite }) {
     const { permissions } = useAccess();
     const canCreate = permissions.includes('create-users');
     const canEdit = permissions.includes('edit-users') || permissions.includes('assign-roles');
@@ -305,6 +306,19 @@ export default function UsersPanel({ users, filters, perPageOptions, createTarge
             )}
 
             <Pagination noun="usuarios" {...list.paginationProps} />
+
+            {invite && (
+                <InvitePeople
+                    roles={invite.roles}
+                    invitations={invite.invitations}
+                    className="border-t border-line p-4 sm:px-6"
+                    routes={{
+                        store: () => route('users.invitations.store'),
+                        resend: (invitation) => route('users.invitations.resend', invitation.id),
+                        destroy: (invitation) => route('users.invitations.destroy', invitation.id),
+                    }}
+                />
+            )}
 
             <GrantsModal user={grantsOf} catalog={permissionCatalog} onClose={() => setGrantsOf(null)} />
             {scopeOf && <LocationScopeModal user={scopeOf} onClose={() => setScopeOf(null)} />}

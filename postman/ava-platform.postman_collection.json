@@ -3153,6 +3153,219 @@
               "body": ""
             }
           ]
+        },
+        {
+          "name": "Actividad técnica: reportar un paso",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Ava-Engine",
+                "value": "n8n",
+                "description": "n8n | lava. Opcional; solo esos valores."
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel\": \"whatsapp\",\n  \"contact_id\": \"573001112233\",\n  \"engine\": \"n8n\",\n  \"step_ref\": \"{{$randomUUID}}:booker_availability:0\",\n  \"execution_id\": \"4821\",\n  \"tool\": \"booker.availability\",\n  \"tool_label\": \"Disponibilidad en Booker\",\n  \"trigger_message_external_id\": \"wamid.XYZ\",\n  \"method\": \"POST\",\n  \"endpoint\": \"https://api.booker.com/v4.1/merchant/availability/1day\",\n  \"request_headers\": {\n    \"Content-Type\": \"application/json\"\n  },\n  \"request_body\": {\n    \"service\": 5,\n    \"date\": \"2026-11-05\"\n  },\n  \"status\": \"succeeded\",\n  \"http_status\": 200,\n  \"duration_ms\": 321,\n  \"response_body\": {\n    \"slots\": [\n      \"09:00\",\n      \"10:30\"\n    ]\n  },\n  \"started_at\": \"2026-11-04T15:00:00Z\",\n  \"finished_at\": \"2026-11-04T15:00:01Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/agent/activity/steps",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agent",
+                "activity",
+                "steps"
+              ]
+            },
+            "description": "Auth: Bearer del chatbot. Idempotente por `step_ref`: un primer llamado con status `started` (o sin status) abre el paso como pendiente y uno posterior con el mismo `step_ref` lo completa. 201 si crea, 200 si actualiza o repite, 404 si no hay conversación de ese contacto, 409 si el `step_ref` es de otra conversación, 422 si el payload no es válido. Tokens, cookies, contraseñas y llaves se ocultan antes de guardarse."
+          }
+        },
+        {
+          "name": "Reservas: registrar o actualizar una reserva (cualquier sistema)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Ava-Engine",
+                "value": "n8n",
+                "description": "n8n | lava. Opcional; solo esos valores."
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source\": \"booker\",\n  \"external_id\": \"BK-100\",\n  \"status\": \"confirmed\",\n  \"starts_at\": \"2026-11-05T15:00:00Z\",\n  \"booked_at\": \"2026-11-01T10:00:00Z\",\n  \"updated_at\": \"2026-11-01T10:00:00Z\",\n  \"location_id\": null,\n  \"location_ref\": \"3749\",\n  \"service_name\": \"Corte\",\n  \"professional_name\": \"Ana\",\n  \"origin\": \"web\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/agent/booking-records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agent",
+                "booking-records"
+              ]
+            },
+            "description": "Auth: Bearer del chatbot (módulo Reportes). Idempotente por (source, external_id). `status`: booked|confirmed|completed|no_show|cancelled. Un reporte con `updated_at` anterior al guardado se ignora (`ignored: true`). `location_id`/`customer_id`, si se envían, deben ser del Workspace del token (422 si no)."
+          }
+        },
+        {
+          "name": "Encuestas: definir una encuesta",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Ava-Engine",
+                "value": "n8n",
+                "description": "n8n | lava. Opcional; solo esos valores."
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"key\": \"post-visita\",\n  \"name\": \"Satisfacción post visita\",\n  \"type\": \"satisfaction\",\n  \"scale_min\": 1,\n  \"scale_max\": 5,\n  \"questions\": [\n    {\n      \"key\": \"atencion\",\n      \"label\": \"¿Cómo fue la atención?\",\n      \"type\": \"rating\"\n    },\n    {\n      \"key\": \"volveria\",\n      \"label\": \"¿Volvería?\",\n      \"type\": \"boolean\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/agent/surveys",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agent",
+                "surveys"
+              ]
+            },
+            "description": "Crea o actualiza (por `key`) la definición. Tipos de pregunta: rating|text|choice|boolean|number."
+          }
+        },
+        {
+          "name": "Encuestas: registrar un envío",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Ava-Engine",
+                "value": "n8n",
+                "description": "n8n | lava. Opcional; solo esos valores."
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"survey_key\": \"post-visita\",\n  \"external_ref\": \"exec-4821:survey-sent\",\n  \"channel\": \"whatsapp\",\n  \"contact_id\": \"573001112233\",\n  \"booking_source\": \"booker\",\n  \"booking_external_id\": \"BK-100\",\n  \"sent_at\": \"2026-11-05T18:00:00Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/agent/surveys/dispatches",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agent",
+                "surveys",
+                "dispatches"
+              ]
+            },
+            "description": "Idempotente por `external_ref`. Cliente, conversación, reserva y sede opcionales; todos deben ser del Workspace del token."
+          }
+        },
+        {
+          "name": "Encuestas: registrar una respuesta",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Ava-Engine",
+                "value": "n8n",
+                "description": "n8n | lava. Opcional; solo esos valores."
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"survey_key\": \"post-visita\",\n  \"external_ref\": \"exec-4822:survey-answer\",\n  \"dispatch_ref\": \"exec-4821:survey-sent\",\n  \"rating\": 5,\n  \"comment\": \"Excelente atención\",\n  \"answers\": {\n    \"atencion\": 5,\n    \"volveria\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/agent/surveys/responses",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agent",
+                "surveys",
+                "responses"
+              ]
+            },
+            "description": "Idempotente por `external_ref` (un reintento devuelve 200 sin duplicar). Hereda cliente/reserva/sede del envío. `rating` dentro de la escala de la encuesta (422 si no). `is_complete` se calcula: todas las preguntas contestadas."
+          }
         }
       ]
     },

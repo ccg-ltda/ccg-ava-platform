@@ -13,6 +13,9 @@ class ApiRedactor
 
     public const MAX_BYTES = 4096;
 
+    /** Cap of the bodies of a technical-activity step, where the full request and answer are meant to be read. */
+    public const STEP_BYTES = 65536;
+
     private const SENSITIVE_KEY = '/(authorization|cookie|token|secret|password|passwd|pwd|api[-_]?key|apikey|private|signature|checksum|credential|bearer|card|cvv|cvc|session|x-ava)/i';
 
     private const SENSITIVE_VALUE = '/\b(?:pub|prv)_(?:test|prod)_[A-Za-z0-9]+|\b(?:test|prod)_(?:events|integrity)_[A-Za-z0-9]+|\bBearer\s+[A-Za-z0-9._~+\/=-]+|\b(?:\d[ -]?){13,19}\b/';
@@ -58,7 +61,7 @@ class ApiRedactor
      *
      * @return array{0: ?string, 1: bool} [text, truncated]
      */
-    public function body(?string $raw): array
+    public function body(?string $raw, int $max = self::MAX_BYTES): array
     {
         if ($raw === null || $raw === '') {
             return [null, false];
@@ -75,17 +78,17 @@ class ApiRedactor
                 : $this->scrub($raw);
         }
 
-        return $this->cap((string) $text);
+        return $this->cap((string) $text, $max);
     }
 
     /** @return array{0: string, 1: bool} */
-    public function cap(string $text): array
+    public function cap(string $text, int $max = self::MAX_BYTES): array
     {
-        if (strlen($text) <= self::MAX_BYTES) {
+        if (strlen($text) <= $max) {
             return [$text, false];
         }
 
-        return [mb_strcut($text, 0, self::MAX_BYTES).'… [truncado, '.strlen($text).' bytes]', true];
+        return [mb_strcut($text, 0, $max).'… [truncado, '.strlen($text).' bytes]', true];
     }
 
     /**

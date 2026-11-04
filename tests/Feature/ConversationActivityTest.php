@@ -84,7 +84,8 @@ class ConversationActivityTest extends TestCase
         $this->assertTrue($response->json('calls.0.replayed'));
         $this->assertSame(2, $response->json('runs.0.attempts'));
         $this->assertSame('succeeded', $response->json('calls.1.run.status'));
-        $this->assertStringNotContainsString('TEXTO-PRIVADO', $response->getContent());
+        $this->assertSame('TEXTO-PRIVADO', $response->json('calls.1.trigger.text'), 'The message that started the run is shown.');
+        $this->assertNull($response->json('calls.0.trigger'));
         $this->assertStringNotContainsString('573001112233', $response->getContent());
     }
 

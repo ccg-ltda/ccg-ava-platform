@@ -27,6 +27,11 @@ class ReportFilterRequest extends FormRequest
             'workspace' => ['nullable', 'string', 'regex:/^(all|\d+)$/'],
             // A location of the ACTIVE Workspace the member is authorized for; the controller re-checks it (a forged or foreign id is refused, never ignored).
             'location' => ['nullable', 'integer', 'min:1'],
+            // Filters of the consolidated reservations (any system): exact names as the source reported them.
+            'service' => ['nullable', 'string', 'max:160'],
+            'professional' => ['nullable', 'string', 'max:160'],
+            'status' => ['nullable', Rule::in(['booked', 'confirmed', 'completed', 'no_show', 'cancelled'])],
+            'source' => ['nullable', Rule::in(['booker', 'lava', 'ava'])],
         ];
     }
 
@@ -38,6 +43,12 @@ class ReportFilterRequest extends FormRequest
     public function locationFilter(): ?int
     {
         return $this->validated('location') ? (int) $this->validated('location') : null;
+    }
+
+    /** @return array{service: ?string, professional: ?string, status: ?string, source: ?string} */
+    public function bookingFilters(): array
+    {
+        return ['service' => $this->validated('service'), 'professional' => $this->validated('professional'), 'status' => $this->validated('status'), 'source' => $this->validated('source')];
     }
 
     public function workspaceScope(): ?string

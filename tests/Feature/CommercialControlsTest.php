@@ -213,7 +213,7 @@ class CommercialControlsTest extends TestCase
         $props = $this->props('/reports');
 
         $this->assertSame(
-            ['conversations' => false, 'team' => false, 'economics' => false, 'bookings' => false, 'orders' => false, 'customers' => false],
+            ['conversations' => false, 'team' => false, 'economics' => false, 'bookingRecords' => false, 'bookings' => false, 'orders' => false, 'customers' => false],
             $props['sources'],
         );
         foreach (['figures', 'activity', 'channels', 'states', 'chatHours', 'messageHours', 'stats', 'roleBreakdown', 'recentUsers', 'teamGrowth'] as $key) {

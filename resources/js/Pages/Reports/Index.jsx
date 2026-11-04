@@ -21,8 +21,10 @@ import { metricStyles, reportSections, seriesLabels } from '@/config/reports';
 import useUrlTab from '@/Hooks/useUrlTab';
 import AppLayout from '@/Layouts/AppLayout';
 import EconomicsPanel from './Partials/EconomicsPanel';
+import ConsolidatedBookingsPanel from './Partials/ConsolidatedBookingsPanel';
 import OperationsPanel from './Partials/OperationsPanel';
 import SectionPreview from './Partials/SectionPreview';
+import SurveysPanel from './Partials/SurveysPanel';
 import TeamPanel from './Partials/TeamPanel';
 
 const GRANULARITY = { day: 'día', week: 'semana', month: 'mes' };
@@ -51,7 +53,7 @@ function Variation({ change, previous }) {
  * server data. Every section arrives on its own: one that could not be read shows an error and never a zero, and a real
  * zero shows an explicit empty state. Questions and surveys have no data source and say so.
  */
-export default function Index({ stats, roleBreakdown, recentUsers, sources, filters, range, options, metrics, teamGrowth, figures, activity, channels, states, chatHours, messageHours, scope, operations, economics, locations }) {
+export default function Index({ stats, roleBreakdown, recentUsers, sources, filters, range, options, metrics, teamGrowth, figures, activity, channels, states, chatHours, messageHours, scope, operations, economics, locations, consolidatedBookings, bookingFilters, surveys }) {
     const { workspace, errors } = usePage().props;
     // Only the sections whose data the plan of the Workspace includes; the server sends nothing for the rest.
     const sections = reportSections.filter((section) => section.needs.some((source) => sources[source]));
@@ -78,6 +80,7 @@ export default function Index({ stats, roleBreakdown, recentUsers, sources, filt
     const changeGranularity = (granularity) => visit({ period: filters.period, granularity, workspace: workspaceParam, location: locationParam });
     const changeWorkspace = (option) => option && visit({ period: filters.period, workspace: option.id });
     const changeLocation = (value) => visit({ period: filters.period, granularity: filters.granularity, workspace: workspaceParam, location: value || undefined });
+    const changeBookingFilter = (extra) => visit({ period: filters.period, granularity: filters.granularity, workspace: workspaceParam, location: locationParam, ...bookingFilters, ...extra });
     const places = locations?.enabled ? locations.options : [];
     const placeLabel = places.find((place) => place.id === locations?.selected)?.name ?? null;
 
@@ -244,6 +247,19 @@ export default function Index({ stats, roleBreakdown, recentUsers, sources, filt
             case 'economics':
                 return <EconomicsPanel economics={economics} range={range} granularity={granularity} loading={loading} onRetry={retry} />;
             case 'bookings':
+                return (
+                    <>
+                        {consolidatedBookings && <ConsolidatedBookingsPanel section={consolidatedBookings} filters={bookingFilters} onFilter={changeBookingFilter} loading={loading} onRetry={retry} />}
+                        {operations.bookings && (
+                            <>
+                                <h2 className="text-base font-bold text-ink">Agenda de Ava</h2>
+                                <OperationsPanel kind="bookings" section={operations.bookings} range={range} loading={loading} onRetry={retry} />
+                            </>
+                        )}
+                    </>
+                );
+            case 'surveys':
+                return <SurveysPanel section={surveys} loading={loading} onRetry={retry} />;
             case 'orders':
             case 'customers':
                 return <OperationsPanel kind={section.id} section={operations[section.id]} range={range} loading={loading} onRetry={retry} />;

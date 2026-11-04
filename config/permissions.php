@@ -81,7 +81,7 @@ return [
         'manage-agent-tokens' => ['group' => 'assistants', 'label' => 'Generar y revocar el token de acceso', 'description' => 'Genera o revoca el token con el que n8n lee las instrucciones del asistente.'],
 
         // Conversaciones
-        'view-technical-activity' => ['group' => 'conversations', 'label' => 'Ver la actividad técnica', 'description' => 'Abre el panel «Actividad técnica» de una conversación: qué herramientas usó el asistente, con qué resultado y duración. Nunca muestra el texto de los mensajes ni credenciales.'],
+        'view-technical-activity' => ['group' => 'conversations', 'label' => 'Ver la actividad técnica', 'description' => 'Abre el panel «Actividad técnica» de una conversación: qué APIs usó el asistente, con su solicitud y respuesta completas (pueden incluir datos personales del cliente, como nombre o teléfono, y el mensaje que activó la llamada), resultado y duración. Nunca muestra credenciales: se ocultan antes de guardarse.'],
         'view-conversations' => ['group' => 'conversations', 'label' => 'Consultar conversaciones', 'description' => 'Lee las conversaciones y los mensajes de los contactos del Workspace.'],
         'take-conversations' => ['group' => 'conversations', 'label' => 'Tomar conversaciones', 'description' => 'Toma una conversación para atenderla. Mientras la atiende, la IA no responde.'],
         'reply-conversations' => ['group' => 'conversations', 'label' => 'Responder conversaciones', 'description' => 'Escribe mensajes al contacto en una conversación que está atendiendo. Quien lo tiene aparece como agente disponible.'],

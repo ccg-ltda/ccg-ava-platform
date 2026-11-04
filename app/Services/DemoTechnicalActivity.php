@@ -59,6 +59,7 @@ class DemoTechnicalActivity
                 'resultState' => null,
                 'notification' => 'none',
                 'executionRef' => 'demo-0001',
+                'engineLabel' => 'Demostración',
                 'run' => ['status' => 'succeeded', 'attempts' => 1],
                 'sourceMessageId' => $first?->id,
                 'when' => $when($start->copy()->addSeconds($offset)),

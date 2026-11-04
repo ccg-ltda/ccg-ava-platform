@@ -5,7 +5,9 @@ namespace App\Services;
 use App\Models\AgentToolCall;
 use App\Models\ChatbotExecution;
 use App\Models\Conversation;
+use App\Models\Message;
 use App\Models\WorkspaceSetting;
+use Illuminate\Support\Collection;
 
 /**
  * The technical activity of ONE conversation (the «Actividad técnica» side panel): which business tools the assistant really called through Ava (the trace written by
@@ -43,20 +45,31 @@ class ConversationActivity
             ->orderByDesc('id')->paginate(self::PER_PAGE, ['*'], 'page', max(1, $page));
 
         $executions = ChatbotExecution::query()->where('workspace_id', $conversation->workspace_id)->where('conversation_id', $conversation->id)->orderByDesc('id')->limit(10)->get();
-        $byRef = $executions->keyBy('correlation_id');
         $labels = (array) config('chatbots.tools');
+        $page = $paginator->getCollection();
+        $runs = ChatbotExecution::query()->where('workspace_id', $conversation->workspace_id)->where('conversation_id', $conversation->id)
+            ->whereIn('correlation_id', $page->pluck('execution_ref')->filter()->unique()->all())->get()->keyBy('correlation_id');
+        $steps = $this->stepNumbers($conversation, $page);
+        $triggers = $this->triggerMessages($conversation, $page, $runs);
 
-        $calls = $paginator->getCollection()->map(function (AgentToolCall $call) use ($when, $byRef, $labels) {
-            $run = $call->execution_ref ? $byRef->get($call->execution_ref) : null;
+        $calls = $page->map(function (AgentToolCall $call) use ($when, $runs, $labels, $steps, $triggers) {
+            $run = $call->execution_ref ? $runs->get($call->execution_ref) : null;
+            $trigger = $triggers[$call->id] ?? null;
 
             return [
                 'id' => $call->id,
+                'step' => $steps[$call->id] ?? null,
+                'source' => $call->source,
                 'tool' => $call->tool,
-                'label' => $labels[$call->tool]['label'] ?? $call->tool,
+                'label' => $call->tool_label ?? ($labels[$call->tool]['label'] ?? $call->tool),
                 'kind' => $call->kind,
                 'auth' => $call->auth,
+                'engine' => $this->engine($call),
+                'engineLabel' => $this->engineLabel($call),
+                'method' => $call->method,
+                'endpoint' => $call->endpoint,
                 'status' => $call->status,
-                'statusLabel' => config("chatbots.tool_statuses.{$call->status}"),
+                'statusLabel' => $call->source === 'reported' && $call->status === AgentToolCall::STARTED ? 'Pendiente' : config("chatbots.tool_statuses.{$call->status}"),
                 'httpStatus' => $call->http_status,
                 'reason' => $call->reason,
                 'durationMs' => $call->duration_ms,
@@ -66,9 +79,11 @@ class ConversationActivity
                 'resultState' => $call->result_state,
                 'notification' => $call->notification,
                 'executionRef' => $call->execution_ref ? substr($call->execution_ref, 0, 8) : null,
+                'executionId' => $call->execution_id,
                 'run' => $run ? ['status' => $run->status, 'attempts' => $run->attempts] : null,
-                'when' => $when($call->created_at),
-                'summary' => $this->summary($call, $labels[$call->tool]['label'] ?? $call->tool),
+                'trigger' => $trigger ? ['id' => $trigger->id, 'text' => $trigger->body !== null ? mb_strimwidth($trigger->body, 0, 160, '…') : null, 'type' => $trigger->type] : null,
+                'when' => $when($call->started_at ?? $call->created_at),
+                'summary' => $this->summary($call, $call->tool_label ?? ($labels[$call->tool]['label'] ?? $call->tool)),
             ];
         })->all();
 
@@ -90,6 +105,117 @@ class ConversationActivity
             'calls' => $calls,
             'meta' => $this->meta($paginator->total(), $paginator->currentPage(), $paginator->lastPage(), (int) $paginator->firstItem(), (int) $paginator->lastItem()),
         ];
+    }
+
+    /**
+     * The full request and answer of ONE step (already redacted when stored). A field nobody reported is null and the screen says "no reportado": nothing is filled in.
+     *
+     * @return array<string, mixed>
+     */
+    public function detail(Conversation $conversation, int $callId, WorkspaceSetting $settings): array
+    {
+        $call = AgentToolCall::query()->where('workspace_id', $conversation->workspace_id)->where('conversation_id', $conversation->id)->findOrFail($callId);
+        $at = fn ($date) => $date ? $settings->formatDate($date).' '.$settings->formatTime($date) : null;
+        $decode = fn (?string $json) => $json === null ? null : (json_decode($json, true) ?? $json);
+        $run = $call->execution_ref ? ChatbotExecution::where('workspace_id', $call->workspace_id)->where('correlation_id', $call->execution_ref)->first() : null;
+        $trigger = $this->triggerMessages($conversation, collect([$call]), $run ? collect([$run->correlation_id => $run]) : collect())[$call->id] ?? null;
+
+        return [
+            'id' => $call->id,
+            'source' => $call->source,
+            'tool' => $call->tool_label ?? $call->tool,
+            'engine' => $this->engineLabel($call),
+            'executionId' => $call->execution_id,
+            'correlationId' => $call->execution_ref,
+            'status' => $call->status,
+            'statusLabel' => $call->source === 'reported' && $call->status === AgentToolCall::STARTED ? 'Pendiente' : config("chatbots.tool_statuses.{$call->status}"),
+            'truncated' => $call->truncated,
+            'request' => [
+                'message' => $trigger ? ['id' => $trigger->id, 'text' => $trigger->body, 'type' => $trigger->type] : null,
+                'method' => $call->method,
+                'endpoint' => $call->endpoint,
+                'headers' => $decode($call->request_headers),
+                'query' => $decode($call->request_query),
+                'body' => $decode($call->request_body),
+                'at' => $at($call->started_at ?? $call->created_at),
+            ],
+            'response' => [
+                'httpStatus' => $call->http_status,
+                'durationMs' => $call->duration_ms,
+                'headers' => $decode($call->response_headers),
+                'body' => $decode($call->response_body),
+                'errorClass' => $call->error_class,
+                'errorMessage' => $call->error_message,
+                'reason' => $call->reason,
+                'at' => $at($call->finished_at),
+            ],
+        ];
+    }
+
+    /** The engine that made the call: the one it declared, or n8n for a run Ava itself started; null when nobody said. */
+    private function engine(AgentToolCall $call): ?string
+    {
+        return $call->engine ?? ($call->auth === 'execution' ? 'n8n' : null);
+    }
+
+    private function engineLabel(AgentToolCall $call): string
+    {
+        $engine = $this->engine($call);
+
+        return $engine === null ? 'No informado' : (string) (config("chatbots.engines.{$engine}") ?? $engine);
+    }
+
+    /**
+     * Position of each call of the page inside its run (the engine's execution id, else Ava's correlation id), counted over the whole conversation so the number
+     * does not change from page to page. Calls with neither are numbered as one group.
+     *
+     * @param  Collection<int, AgentToolCall>  $page
+     * @return array<int, int>
+     */
+    private function stepNumbers(Conversation $conversation, Collection $page): array
+    {
+        $groups = fn (AgentToolCall $call) => $call->execution_id ?? $call->execution_ref ?? '-';
+        $keys = $page->map($groups)->unique()->values()->all();
+        $real = array_values(array_diff($keys, ['-']));
+        $all = AgentToolCall::query()->where('workspace_id', $conversation->workspace_id)->where('conversation_id', $conversation->id)
+            ->where(function ($query) use ($keys, $real) {
+                $query->whereIn('execution_id', $real)->orWhereIn('execution_ref', $real);
+
+                if (in_array('-', $keys, true)) {
+                    $query->orWhere(fn ($q) => $q->whereNull('execution_id')->whereNull('execution_ref'));
+                }
+            })->orderBy('id')->limit(2000)->get(['id', 'execution_id', 'execution_ref']);
+
+        $counter = [];
+        $numbers = [];
+
+        foreach ($all as $row) {
+            $key = $groups($row);
+            $numbers[$row->id] = $counter[$key] = ($counter[$key] ?? 0) + 1;
+        }
+
+        return $numbers;
+    }
+
+    /**
+     * The inbound message that started each call: the one the engine named, else the message of the run Ava started.
+     *
+     * @param  Collection<int, AgentToolCall>  $page
+     * @param  Collection<string, ChatbotExecution>  $runs
+     * @return array<int, Message>
+     */
+    private function triggerMessages(Conversation $conversation, Collection $page, Collection $runs): array
+    {
+        $wanted = [];
+
+        foreach ($page as $call) {
+            $wanted[$call->id] = $call->trigger_message_id ?? ($call->execution_ref ? $runs->get($call->execution_ref)?->message_id : null);
+        }
+
+        $messages = Message::query()->where('workspace_id', $conversation->workspace_id)->where('conversation_id', $conversation->id)
+            ->whereIn('id', array_values(array_filter($wanted)))->get()->keyBy('id');
+
+        return collect($wanted)->map(fn ($id) => $id ? $messages->get($id) : null)->filter()->all();
     }
 
     /** One plain sentence for a person who does not need to know the infrastructure. */

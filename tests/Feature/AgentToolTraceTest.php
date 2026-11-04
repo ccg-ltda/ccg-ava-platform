@@ -230,7 +230,7 @@ class AgentToolTraceTest extends TestCase
 
     // --- what the trace never holds -----------------------------------------------------------------------------------------------------
 
-    public function test_the_trace_holds_no_token_no_message_text_and_no_personal_data(): void
+    public function test_the_trace_stores_the_request_and_the_answer_but_never_a_secret(): void
     {
         $burger = $this->product();
         [, $run] = $this->running($this->conversation);
@@ -239,10 +239,18 @@ class AgentToolTraceTest extends TestCase
         $this->api('GET', '/orders/products?q=hamburguesa', [], $this->token)->assertOk();
 
         $dump = json_encode(AgentToolCall::all()->map->getAttributes()->all());
-        foreach ([$run, $this->token, 'avx_', 'ava_', 'Laura', 'Pérez', '573001112233', 'Calle 1', 'Pedro', 'Sin cebolla', 'Quiero pedir', 'raw-key-should-not-appear', 'hamburguesa'] as $secret) {
-            $this->assertStringNotContainsString($secret, $dump);
+        foreach ([$run, $this->token, 'avx_', 'ava_', 'raw-key-should-not-appear'] as $secret) {
+            $this->assertStringNotContainsString($secret, $dump, 'Credentials never reach the stored request.');
         }
-        $this->assertSame(['id', 'workspace_id', 'chatbot_id', 'conversation_id', 'execution_ref', 'tool', 'kind', 'auth', 'status', 'http_status', 'reason', 'idempotency_ref', 'resource_type', 'resource_id', 'replayed', 'result_state', 'notification', 'duration_ms', 'created_at', 'finished_at'], Schema::getColumnListing('agent_tool_calls'), 'A new column is a decision about privacy: it must be reviewed here.');
+
+        $order = AgentToolCall::where('tool', 'orders.store')->firstOrFail();
+        $this->assertSame(['ava', 'POST', '/api/agent/orders'], [$order->source, $order->method, $order->endpoint]);
+        $this->assertStringContainsString('Sin cebolla', $order->request_body, 'The technical activity shows what the engine sent.');
+        $this->assertStringContainsString('"status":"received"', $order->response_body);
+        $this->assertStringContainsString('[REDACTED]', $order->request_headers);
+        $this->assertSame(['q' => 'hamburguesa'], json_decode(AgentToolCall::where('tool', 'orders.products')->value('request_query'), true));
+        $this->assertSame('n8n', $order->engine, 'A run Ava started itself is an n8n run.');
+        $this->assertNull(AgentToolCall::where('tool', 'orders.products')->value('engine'), 'A call that did not say which engine made it stays unknown.');
     }
 
     public function test_the_trace_of_one_workspace_never_reaches_another(): void
@@ -354,7 +362,7 @@ class AgentToolTraceTest extends TestCase
         $call->refresh();
         $this->assertSame(['uncertain', 409, 'uncertain', 'appointment', 41], [$call->status, $call->http_status, $call->reason, $call->resource_type, $call->resource_id]);
         $this->assertNull($call->result_state);
-        $this->assertStringNotContainsString('proveedor', json_encode($call->getAttributes()));
+        $this->assertNull($call->error_message, 'The provider text is not a reason: only the fixed code is.');
     }
 
     public function test_free_text_in_a_reason_is_never_stored(): void
@@ -364,7 +372,6 @@ class AgentToolTraceTest extends TestCase
         app(AgentToolTrace::class)->finish($call, Request::create('/x'), new JsonResponse(['reason' => 'El teléfono 573001112233 no es válido'], 422), null, microtime(true));
 
         $this->assertSame('invalid', $call->fresh()->reason, 'The text is dropped and replaced by the fixed code of the status.');
-        $this->assertStringNotContainsString('573001112233', json_encode($call->fresh()->getAttributes()));
         $this->assertSame('rejected', $call->fresh()->status);
     }
 

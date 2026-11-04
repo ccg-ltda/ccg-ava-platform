@@ -17,8 +17,8 @@ export const seriesLabels = {
 
 /**
  * Sections of Reportes. `summary`, `conversations`, `interactions` and `trends` are built with real data from the
- * stored conversations and messages. `questions` and `surveys` have no source (Ava stores no question text and no
- * survey answers): they say so (`reason`) and draw nothing.
+ * stored conversations and messages. `questions` has no source (Ava stores no question text): it says so (`reason`) and draws nothing. `surveys` is
+ * built from the surveys the automation engine reports (SurveysPanel).
  *
  * `needs` lists the sources a section is built from (any one is enough): `conversations` (conversations and messages, module
  * Conversaciones), `team` (the people of the Workspace, module Usuarios y roles) and `bookings`, `orders`, `economics` (the money of Agenda and Pedidos) and `customers` (the figures of Agenda,
@@ -42,21 +42,9 @@ export const reportSections = [
             { type: 'donut', title: 'Distribución por tema', description: 'Proporción de preguntas por categoría.' },
         ],
     },
-    {
-        id: 'surveys',
-        label: 'Encuestas',
-        icon: ClipboardList,
-        metric: 'surveys',
-        needs: ['conversations'],
-        description: 'Respuestas y satisfacción de las encuestas que se envían tras una conversación.',
-        reason: 'Ava todavía no envía encuestas ni guarda sus respuestas, así que no hay de dónde calcular este reporte. No se muestran cifras inventadas.',
-        charts: [
-            { type: 'line', title: 'Respuestas en el tiempo', description: 'Encuestas contestadas por periodo.' },
-            { type: 'donut', title: 'Resultado de las encuestas', description: 'Distribución de las valoraciones.' },
-        ],
-    },
+    { id: 'surveys', label: 'Encuestas', icon: ClipboardList, metric: 'surveys', needs: ['conversations'] },
     { id: 'trends', label: 'Tendencias', icon: LineChart, needs: ['conversations'] },
-    { id: 'bookings', label: 'Reservas', icon: CalendarDays, needs: ['bookings'] },
+    { id: 'bookings', label: 'Reservas', icon: CalendarDays, needs: ['bookings', 'bookingRecords'] },
     { id: 'orders', label: 'Pedidos', icon: ShoppingCart, needs: ['orders'] },
     { id: 'economics', label: 'Economía', icon: Coins, needs: ['economics'] },
     { id: 'customers', label: 'Clientes', icon: Contact, needs: ['customers'] },

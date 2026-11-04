@@ -7,7 +7,7 @@ import TextInput from '@/Components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
 
 /** Acceptance of an invitation: the person chooses their name and password; nothing else about the invitation can be changed from here. */
-export default function AcceptInvitation({ valid, token, email, name, workspace, message }) {
+export default function AcceptInvitation({ valid, token, email, existingAccount, name, workspace, message }) {
     const { data, setData, post, processing, errors, reset } = useForm({ name: name ?? '', password: '', password_confirmation: '' });
 
     const submit = (event) => {
@@ -21,6 +21,23 @@ export default function AcceptInvitation({ valid, token, email, name, workspace,
 
             {!valid ? (
                 <Alert tone="danger">{message}</Alert>
+            ) : existingAccount ? (
+                <form onSubmit={submit} className="space-y-4">
+                    <p className="text-sm text-ink-muted">
+                        Te invitaron a unirte a <strong className="text-ink">{workspace}</strong>. Ya tienes una cuenta con <strong className="text-ink">{email}</strong>: confirma con tu contraseña actual para añadir este Workspace a tu cuenta. No se crea otra cuenta ni cambia tu contraseña.
+                    </p>
+                    {errors.token && <Alert tone="danger">{errors.token}</Alert>}
+
+                    <div>
+                        <InputLabel htmlFor="password" value="Tu contraseña actual" />
+                        <TextInput id="password" type="password" name="password" value={data.password} className="mt-1" autoComplete="current-password" isFocused invalid={Boolean(errors.password)} onChange={(e) => setData('password', e.target.value)} />
+                        <InputError message={errors.password} className="mt-2" />
+                    </div>
+
+                    <div className="flex items-center justify-end">
+                        <PrimaryButton disabled={processing}>Unirme al Workspace</PrimaryButton>
+                    </div>
+                </form>
             ) : (
                 <form onSubmit={submit} className="space-y-4">
                     <p className="text-sm text-ink-muted">

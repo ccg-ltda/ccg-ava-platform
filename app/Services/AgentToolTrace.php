@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\AgentToolCall;
 use App\Models\Order;
+use App\Observability\ApiRedactor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -22,7 +23,8 @@ use Throwable;
  *     (or refused). A process that dies in between leaves `started`, which is the truth: nobody recorded an outcome. `reconcile` settles those rows against
  *     the operation they were about when that can be proven, and otherwise marks them `uncertain`.
  * Tracing never blocks nor changes the tool: a failure to write the trace is logged with a fixed code and the tool goes on (a limit, documented in
- * RECOMENDACIONES.md). It holds no token, no message text and no personal data, and every query starts from a Workspace.
+ * RECOMENDACIONES.md). It stores the request and the answer of each call so the technical activity can show them, but only AFTER ApiRedactor removed tokens,
+ * cookies, passwords and keys, and every query starts from a Workspace. Reading them needs `view-technical-activity`.
  */
 class AgentToolTrace
 {
@@ -63,12 +65,39 @@ class AgentToolTrace
                 'kind' => config('chatbots.tools')[$tool]['kind'],
                 'auth' => $execution ? 'execution' : 'chatbot',
                 'status' => AgentToolCall::STARTED,
-            ]);
+            ] + $this->requestFacts($request, $execution !== null));
         } catch (Throwable $e) {
             $this->unavailable($e);
 
             return null;
         }
+    }
+
+    /**
+     * What the engine sent, redacted BEFORE it is stored (ApiRedactor: tokens, cookies, passwords and keys never reach the table) and capped. The engine is only
+     * known for a run Ava started itself (n8n) or when the caller declared it in `X-Ava-Engine`; otherwise it stays null and the screen says so.
+     *
+     * @return array<string, mixed>
+     */
+    private function requestFacts(Request $request, bool $startedByAva): array
+    {
+        $redactor = app(ApiRedactor::class);
+        $declared = strtolower((string) $request->header('X-Ava-Engine'));
+        $engine = $startedByAva ? 'n8n' : (array_key_exists($declared, (array) config('chatbots.engines')) ? $declared : null);
+        [$body, $cut] = $redactor->body($request->getContent() ?: null, ApiRedactor::STEP_BYTES);
+        $query = $request->query();
+
+        return [
+            'source' => 'ava',
+            'engine' => $engine,
+            'method' => $request->getMethod(),
+            'endpoint' => '/'.ltrim($request->path(), '/'),
+            'request_headers' => json_encode($redactor->headers(array_replace($request->headers->all(), array_fill_keys(array_intersect(['idempotency-key'], array_keys($request->headers->all())), ApiRedactor::MASK)))),
+            'request_query' => $query === [] ? null : json_encode($redactor->data($query), JSON_UNESCAPED_UNICODE),
+            'request_body' => $body,
+            'truncated' => $cut,
+            'started_at' => now(),
+        ];
     }
 
     /**
@@ -134,7 +163,7 @@ class AgentToolTrace
                 'notification' => $facts['notification'] ?? 'none',
                 'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
                 'finished_at' => now(),
-            ]);
+            ] + $this->responseFacts($response, $exception));
         } catch (Throwable $e) {
             $this->unavailable($e);
         } finally {
@@ -176,6 +205,24 @@ class AgentToolTrace
         return $counts;
     }
 
+    /** @return array<string, mixed> the redacted answer of the tool (or the exception it threw) */
+    private function responseFacts(?Response $response, ?Throwable $exception): array
+    {
+        $redactor = app(ApiRedactor::class);
+        $facts = [];
+
+        if ($response) {
+            [$text, $cut] = $redactor->body($response->getContent() ?: null, ApiRedactor::STEP_BYTES);
+            $facts = ['response_body' => $text, 'response_headers' => json_encode($redactor->headers($response->headers->all())), 'truncated' => $cut];
+        }
+
+        if ($exception) {
+            $facts += ['error_class' => substr($exception::class, 0, 120), 'error_message' => $redactor->message($exception->getMessage())];
+        }
+
+        return $facts;
+    }
+
     /** The tool of this request (route name without "agent."), or null when it is not one of the traced tools. */
     private function tool(Request $request): ?string
     {
@@ -209,6 +256,11 @@ class AgentToolTrace
     }
 
     /** The fixed code for a refusal that carries none of its own (a validation error, an aborted request). */
+    public function reasonForStatus(int $http): string
+    {
+        return $this->statusReason($http);
+    }
+
     private function statusReason(int $http): string
     {
         return match (true) {

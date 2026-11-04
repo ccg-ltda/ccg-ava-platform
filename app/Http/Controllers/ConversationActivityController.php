@@ -28,4 +28,13 @@ class ConversationActivityController extends Controller
 
         return response()->json($this->activity->page($found, $workspace->settingsOrDefault(), $filters, (int) ($filters['page'] ?? 1)));
     }
+
+    /** The request and the answer of ONE step, for the detail view of the panel. */
+    public function call(Request $request, int $conversation, int $call): JsonResponse
+    {
+        $workspace = $request->attributes->get('workspace');
+        $found = $this->inbox->find($this->inbox->scope($workspace), $conversation);
+
+        return response()->json($this->activity->detail($found, $call, $workspace->settingsOrDefault()))->header('Cache-Control', 'no-store');
+    }
 }

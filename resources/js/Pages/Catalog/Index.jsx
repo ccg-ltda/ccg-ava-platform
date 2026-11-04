@@ -258,7 +258,7 @@ export default function Index({ schemaPending, categoryAdmin, products, filters,
                 {permissions.includes('view-catalog-reminders') && (
                     <Link href={route('catalog.reminders.index')} className="inline-flex items-center gap-2 rounded-lg border border-field px-3.5 py-2 text-sm font-semibold text-ink hover:bg-canvas">
                         <BellRing className="size-4" aria-hidden="true" />
-                        Recordatorios
+                        Recordatorios personales
                     </Link>
                 )}
                 {canCreate && (

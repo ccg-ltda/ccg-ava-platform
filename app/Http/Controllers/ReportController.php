@@ -5,12 +5,15 @@ namespace App\Http\Controllers;
 use App\Booking\Locations;
 use App\Http\Controllers\Concerns\ReadsSections;
 use App\Http\Requests\ReportFilterRequest;
+use App\Models\BookingRecord;
 use App\Models\Workspace;
+use App\Services\ConsolidatedBookings;
 use App\Services\DashboardMetrics;
 use App\Services\EconomicMetrics;
 use App\Services\LocationScope;
 use App\Services\ModuleAccess;
 use App\Services\OperationsMetrics;
+use App\Services\SurveyMetrics;
 use App\Services\WorkspaceReport;
 use App\Services\WorkspaceScope;
 use Illuminate\Validation\ValidationException;
@@ -33,7 +36,7 @@ class ReportController extends Controller
      * What the Workspace's plan does not include is neither computed nor sent: the conversation and message figures need
      * `conversations`, the team figures `users_roles` (the page hides the sections that have no source).
      */
-    public function index(ReportFilterRequest $request, WorkspaceReport $report, DashboardMetrics $metrics, OperationsMetrics $operations, EconomicMetrics $economics, WorkspaceScope $scope, ModuleAccess $access): Response
+    public function index(ReportFilterRequest $request, WorkspaceReport $report, DashboardMetrics $metrics, OperationsMetrics $operations, EconomicMetrics $economics, WorkspaceScope $scope, ModuleAccess $access, ConsolidatedBookings $consolidated, SurveyMetrics $surveys): Response
     {
         $active = $request->attributes->get('workspace');
         $role = $request->attributes->get('workspace_role');
@@ -56,12 +59,17 @@ class ReportController extends Controller
         $where = $this->locationFilter($request, $active, $own);
         $has = fn (string $module, string $permission) => $own && in_array($module, $modules, true) && in_array($permission, $permissions, true);
         // The stock is managed in Catálogo and has no report of its own here.
+        // Reservations reported from any system (Booker, Lava Studio) and surveys need no agenda module: they are the Workspace's own persisted data.
+        $records = $own && BookingRecord::where('workspace_id', $active->id)->exists();
         $ops = ['bookings' => $has('bookings', 'view-bookings'), 'orders' => $has('orders', 'view-orders'), 'customers' => $has('customers', 'view-customers')];
 
         return Inertia::render('Reports/Index', ($team ? $report->for($active, $role, $target, $global, in_array('view-users', $permissions, true)) : ['stats' => null, 'roleBreakdown' => null, 'recentUsers' => null])
             + array_merge($analytics, ['metrics' => $conversations ? $analytics['metrics'] : []])
             + [
-                'sources' => ['conversations' => $conversations, 'team' => $team, 'economics' => $ops['bookings'] || $ops['orders']] + $ops,
+                'sources' => ['conversations' => $conversations, 'team' => $team, 'economics' => $ops['bookings'] || $ops['orders'], 'bookingRecords' => $records] + $ops,
+                'consolidatedBookings' => $records || $ops['bookings'] ? $this->section('consolidatedBookings', fn () => $consolidated->summary($active, $period, ['locations' => $where['ids']] + $request->bookingFilters())) : null,
+                'bookingFilters' => $request->bookingFilters(),
+                'surveys' => $own ? $this->section('surveys', fn () => $surveys->summary($active, $period, $where['ids'])) : null,
                 'locations' => $where['view'],
                 'operations' => [
                     'bookings' => $ops['bookings'] ? $this->section('bookings', fn () => $operations->bookings($active, $period, $where['ids'])) : null,

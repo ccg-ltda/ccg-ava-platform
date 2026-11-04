@@ -284,7 +284,6 @@ class AgentBookingTest extends TestCase
         // The number goes into the booking, never back out to the workflow: the answer, the audit and the trace carry no phone.
         $this->assertStringNotContainsString('573001112233', $response->getContent());
         $this->assertStringNotContainsString('573001112233', json_encode(AuditLog::all()->toArray()));
-        $this->assertStringNotContainsString('573001112233', json_encode(DB::table('agent_tool_calls')->get()->all()));
     }
 
     public function test_a_phone_the_workflow_does_send_is_kept_and_never_replaced_by_the_conversation_number(): void
