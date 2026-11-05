@@ -50,7 +50,7 @@ class ReminderRuleController extends Controller
     /** What the rule decided for each appointment (read only, fixed reasons). */
     public function events(Request $request, int $rule): JsonResponse
     {
-        return response()->json(['events' => $this->presenter->events($this->find($request, $rule))]);
+        return response()->json($this->presenter->events($this->find($request, $rule), $request));
     }
 
     private function find(Request $request, int $id): ReminderRule

@@ -11,9 +11,10 @@ use App\Models\Integration;
 interface SendsTemplates
 {
     /**
-     * `$parameters` fill the body variables in order. Never throws for a refused or failed delivery; same outcome semantics as SendsMessages::send.
+     * `$parameters` fill the body variables in order. `$quickReplies` are the payloads of the template's quick-reply buttons, in the order the template declares them (Meta returns the payload of the one the contact presses). Never throws for a refused or failed delivery; same outcome semantics as SendsMessages::send.
      *
      * @param  list<string>  $parameters
+     * @param  list<string>  $quickReplies
      */
-    public function sendTemplate(Integration $integration, string $to, string $template, string $language, array $parameters, ?string $reference = null): SendResult;
+    public function sendTemplate(Integration $integration, string $to, string $template, string $language, array $parameters, ?string $reference = null, array $quickReplies = []): SendResult;
 }

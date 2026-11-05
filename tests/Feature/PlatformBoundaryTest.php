@@ -488,6 +488,7 @@ class PlatformBoundaryTest extends TestCase
         '2026_11_09_110000_add_offers_all_services_to_locations.php', // already ran in development
         '2026_11_10_110000_add_offers_all_locations_to_products.php', // already ran in development
         '2026_11_23_100000_add_technical_activity_privacy.php', // already applied to `ccg_ava` (two columns on tables that were created earlier)
+        '2026_11_24_110000_add_unique_event_key_to_payment_events.php', // unique key on `payment_events`, which already exists in `ccg_ava` (the table was created earlier); written to apply there
     ];
 
     /**

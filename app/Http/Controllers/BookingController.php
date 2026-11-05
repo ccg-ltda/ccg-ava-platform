@@ -77,7 +77,7 @@ class BookingController extends Controller
             'capabilities' => $capabilities,
             'filters' => ['from' => $from->setTimezone($timezone)->toDateString(), 'to' => $span['to'], 'days' => $span['days'], 'period' => $month ? 'month' : ($custom ? 'custom' : ($days === 1 ? 'day' : 'week')), 'view' => $view, 'professional' => $filters['professional'], 'location' => $filters['location'], 'service' => $filters['service'], 'status' => $filters['status'], 'origin' => $filters['origin'], 'search' => trim((string) $request->query('search', ''))],
             'dayCounts' => $month ? $this->dayCounts($this->agendaQuery($workspace, $request, $filters, $from, $end), $timezone) : null,
-            'appointments' => $month && $view === 'calendar' ? [] : $this->agendaQuery($workspace, $request, $filters, $from, $end)->with(['customer', 'workspace'])->when($this->notifier->ready(), fn ($query) => $query->with('notifications'))
+            'appointments' => $month && $view === 'calendar' ? [] : $this->agendaQuery($workspace, $request, $filters, $from, $end)->with(['customer', 'workspace'])->when($this->notifier->ready(), fn ($query) => $query->with($this->notifier->repliesReady() ? 'notifications.replies' : 'notifications'))
                 ->orderBy('starts_at')->limit(self::LIST_LIMIT)->get()->map(fn (Appointment $appointment) => $this->present->appointment($appointment))->all(),
             'options' => $this->options($workspace, $capabilities, $request),
             // With Clientes in the plan, people are managed there only: Agenda sends no listing of its own (and does not query it).

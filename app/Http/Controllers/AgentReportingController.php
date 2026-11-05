@@ -107,7 +107,15 @@ class AgentReportingController extends Controller
 
         $result = $this->surveys->respond($request->attributes->get('workspace'), $data, $this->engine($request));
 
-        return response()->json(['id' => $result['response']->id, 'external_ref' => $result['response']->external_ref, 'created' => $result['created'], 'is_complete' => $result['response']->is_complete], $result['created'] ? 201 : 200);
+        return response()->json(['id' => $result['response']->id, 'external_ref' => $result['response']->external_ref, 'created' => $result['created'], 'updated' => $result['updated'], 'is_complete' => $result['response']->is_complete], $result['created'] ? 201 : 200);
+    }
+
+    /** Where a response stands (what is stored, what is left to ask), so any engine resumes an interrupted survey instead of starting over. */
+    public function progress(Request $request): JsonResponse
+    {
+        $data = $request->validate(['survey_key' => ['required', 'string', 'max:64'], 'external_ref' => ['required', 'string', 'regex:/^[A-Za-z0-9:._-]{4,120}$/']]);
+
+        return response()->json($this->surveys->progress($request->attributes->get('workspace'), $data['survey_key'], $data['external_ref']))->header('Cache-Control', 'no-store');
     }
 
     /** The engine the caller declares (`X-Ava-Engine`), only among the known ones. */

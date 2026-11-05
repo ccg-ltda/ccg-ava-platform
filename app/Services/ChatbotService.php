@@ -10,6 +10,7 @@ use App\Models\Workspace;
 use App\Models\WorkspaceSetting;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -207,6 +208,14 @@ class ChatbotService
     public function update(Chatbot $chatbot, array $data, ?UploadedFile $avatar, bool $removeAvatar): void
     {
         $stored = $avatar ? Storage::putFile("workspaces/{$chatbot->workspace_id}/chatbots/{$chatbot->id}/avatar", $avatar) : null;
+
+        // The disk does not throw (`throw => false`): a failed write returns false. Saving then would report success and keep the old avatar without saying so.
+        if ($avatar && ! $stored) {
+            Log::error('chatbot_avatar_store_failed', ['workspace_id' => $chatbot->workspace_id, 'chatbot_id' => $chatbot->id]);
+
+            throw ValidationException::withMessages(['avatar' => 'No se pudo guardar la imagen. Se conserva la anterior; inténtalo de nuevo.']);
+        }
+
         $previous = null;
 
         try {

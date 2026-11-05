@@ -162,6 +162,7 @@ services:
       - "${APP_PORT:-80}:80"
     volumes:
       - ./docker/nginx/lb.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./docker/nginx/trusted-lb.conf:/etc/nginx/conf.d/trusted-lb.inc:ro
     depends_on:
       app: { condition: service_healthy }
     healthcheck:

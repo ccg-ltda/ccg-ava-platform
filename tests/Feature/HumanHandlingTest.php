@@ -563,15 +563,16 @@ class HumanHandlingTest extends TestCase
 
         $this->signIn($admin, $workspace);
         $this->get('/conversations')->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('Conversations/Index')->where('channel', null)->has('conversations', 3)
+            ->component('Conversations/Index')->where('filters.channel', null)->has('conversations', 3)
             ->where('counts', ['ai' => 1, 'pending' => 1, 'human' => 0, 'resolved' => 1])->where('filters.status', 'all'));
         $this->get('/conversations?status=pending')->assertInertia(fn (AssertableInertia $page) => $page
             ->has('conversations', 1)->where('conversations.0.contactId', '573000000002')->where('conversations.0.channel.label', 'WhatsApp')->where('filters.status', 'pending'));
         $this->get('/conversations?q=0003')->assertInertia(fn (AssertableInertia $page) => $page->has('conversations', 1)->where('conversations.0.id', $c->id));
         $this->get('/conversations?status=nope&channel=nope&chatbot=abc')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->has('conversations', 3));
-        // The page of one channel is the same module, limited to it.
-        $this->get("/chatbots/{$bot->id}/channels/whatsapp/conversations?status=ai")->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('channel.key', 'whatsapp')->has('conversations', 1)->where('conversations.0.id', $a->id));
+        // The old address of one channel redirects to the same module, filtered by that channel and assistant.
+        $this->get("/chatbots/{$bot->id}/channels/whatsapp/conversations?status=ai")->assertRedirect(route('conversations.index', ['chatbot' => $bot->id, 'channel' => 'whatsapp', 'status' => 'ai']));
+        $this->get("/conversations?chatbot={$bot->id}&channel=whatsapp&status=ai")->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('filters.channel', 'whatsapp')->has('conversations', 1)->where('conversations.0.id', $a->id));
     }
 
     public function test_the_selected_conversation_tells_what_the_user_can_do(): void

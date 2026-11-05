@@ -174,7 +174,7 @@ class IntegrationsDiagnoseCommand extends Command
             str_starts_with((string) config('app.url'), 'https://') ? $this->good('APP_URL usa https.') : $this->blocker('APP_URL no usa https: Meta y n8n exigen TLS en producción.');
             config('app.debug') ? $this->blocker('APP_DEBUG está activo en producción.') : $this->good('APP_DEBUG apagado.');
             config('app.trusted_proxies') === '*'
-                ? $this->caution('TRUSTED_PROXIES=* confía en X-Forwarded-For de cualquiera: un visitante puede falsear su IP y escapar de los límites por IP. Usa la lista de IP o rangos de tu balanceador.')
+                ? $this->caution('TRUSTED_PROXIES=* se ignora en producción (confiaría en X-Forwarded-For de cualquiera y permitiría falsear la IP de los límites): se usan los rangos privados. Define la lista exacta de IP o rangos de tu balanceador.')
                 : $this->good('TRUSTED_PROXIES no es un comodín.');
             config('integrations.allow_private_hosts') ? $this->blocker('INTEGRATIONS_ALLOW_PRIVATE_HOSTS está activo en producción (permite llamar a la red interna).') : $this->good('Las conexiones salientes no pueden alcanzar la red interna.');
         } elseif (config('integrations.allow_private_hosts')) {

@@ -3936,7 +3936,7 @@
                 "responses"
               ]
             },
-            "description": "Idempotente por `external_ref`. 422 si la calificación sale de la escala.",
+            "description": "Idempotente por `external_ref`. 422 si la calificación sale de la escala o una respuesta no corresponde al tipo de su pregunta (opción inexistente, texto en una pregunta numérica...). Se puede enviar por partes: la misma `external_ref` fusiona las respuestas nuevas en la respuesta incompleta; una vez completa ya no cambia. `updated` indica si esta llamada la modificó.",
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -3966,6 +3966,69 @@
                   "pm.test('HTTP 200/201', () => pm.expect([200, 201]).to.include(pm.response.code));",
                   "const body = pm.response.json();",
                   "pm.test('completa', () => pm.expect(body.is_complete).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Encuesta: progreso de una respuesta",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/agent/surveys/responses/progress?survey_key={{survey_key}}&external_ref=postman-response-1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agent",
+                "surveys",
+                "responses",
+                "progress"
+              ],
+              "query": [
+                {
+                  "key": "survey_key",
+                  "value": "{{survey_key}}"
+                },
+                {
+                  "key": "external_ref",
+                  "value": "postman-response-1"
+                }
+              ]
+            },
+            "description": "Dónde va una respuesta (lo guardado y las preguntas pendientes) para que n8n o Lava Studio retomen una encuesta interrumpida en vez de empezarla de nuevo. 422 si no existe en este Workspace.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{agent_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('trae el estado', () => pm.expect(body).to.have.property('is_complete'));"
                 ]
               }
             }
@@ -14162,7 +14225,7 @@
                     }
                   ]
                 },
-                "description": "Ruta Laravel: `chatbots.conversations` → `ConversationController@index`.\n\nAutenticada: sesión web (`auth`) + CSRF (`X-XSRF-TOKEN`) + contexto de Workspace (`EnsureWorkspaceContext`: el Workspace sale de la sesión, nunca de la petición).\n\nMódulo(s) del plan requerido(s) (se comprueba en el servidor, independiente del permiso): `assistants`, `conversations`.\n\nPermiso(s) del rol en el Workspace (todos los listados): `view-conversations`.\n\nLímite: `authenticated`.\n\nOtros middleware: `EnsureWorkspaceContext`.",
+                "description": "Ruta Laravel: `chatbots.conversations` → `ConversationController@channel` (302 a `/conversations` con los filtros `chatbot` y `channel`: un solo módulo de Conversaciones).\n\nAutenticada: sesión web (`auth`) + CSRF (`X-XSRF-TOKEN`) + contexto de Workspace (`EnsureWorkspaceContext`: el Workspace sale de la sesión, nunca de la petición).\n\nMódulo(s) del plan requerido(s) (se comprueba en el servidor, independiente del permiso): `assistants`, `conversations`.\n\nPermiso(s) del rol en el Workspace (todos los listados): `view-conversations`.\n\nLímite: `authenticated`.\n\nOtros middleware: `EnsureWorkspaceContext`.",
                 "auth": {
                   "type": "noauth"
                 }

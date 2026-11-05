@@ -28,7 +28,7 @@ class EmailTemplates
 
     public const MAX_BYTES = 60000;
 
-    /** @var array<string, string> placeholder => what it is (documented in the editor) */
+    /** @var array<string, string> placeholder => what it is (documented in the editor, grouped by DETAILS) */
     public const PLACEHOLDERS = [
         'brand' => 'Nombre visible de la plataforma (se escapa).',
         'title' => 'Título del mensaje (se escapa).',
@@ -36,6 +36,38 @@ class EmailTemplates
         'action' => 'Botón de acción con su enlace, solo si el mensaje lo tiene (enlace http o https validado).',
         'footer' => 'Pie del mensaje (se escapa).',
         'support' => 'Línea de contacto de soporte, solo si está configurada (se escapa).',
+    ];
+
+    /** The groups the editor lists the variables under (key => title). */
+    public const CATEGORIES = ['structure' => 'Estructura del mensaje', 'text' => 'Textos', 'brand' => 'Marca'];
+
+    /**
+     * What the editor shows about each placeholder: its group, an example of what it becomes and of how to write it. Every name here is one render() resolves (a test checks both lists
+     * against each other and renders them all), so the editor never offers a variable the engine can not fill. There are no variables exclusive to one kind of email: the template is
+     * ONE shared layout and what differs between emails (the code of a verification, the link of an invitation) travels inside content and action.
+     *
+     * @var array<string, array{category: string, example: string, usage: string, required: bool}>
+     */
+    public const DETAILS = [
+        'brand' => ['category' => 'brand', 'example' => 'Ava Platform', 'usage' => '<h2>{{brand}}</h2>', 'required' => false],
+        'title' => ['category' => 'text', 'example' => 'Tu código de verificación', 'usage' => '<h1>{{title}}</h1>', 'required' => false],
+        'content' => ['category' => 'structure', 'example' => 'Los párrafos del mensaje y, si lo hay, el código destacado.', 'usage' => '<div>{{content}}</div>', 'required' => true],
+        'action' => ['category' => 'structure', 'example' => 'Un botón «Abrir» con su enlace (vacío si el mensaje no tiene acción).', 'usage' => '<p>{{action}}</p>', 'required' => false],
+        'footer' => ['category' => 'text', 'example' => 'Este mensaje fue enviado por Ava Platform.', 'usage' => '<small>{{footer}}</small>', 'required' => false],
+        'support' => ['category' => 'text', 'example' => '¿Necesitas ayuda? Escribe a soporte@ejemplo.com.', 'usage' => '<small>{{support}}</small>', 'required' => false],
+    ];
+
+    /**
+     * The emails that use the template and which variables each one really fills (the rest come out empty). The footer is the default one unless it says custom.
+     *
+     * @var list<array{label: string, action: bool, footer: string}>
+     */
+    public const MESSAGES = [
+        ['label' => 'Código de verificación del registro', 'action' => false, 'footer' => 'default'],
+        ['label' => 'Recuperación de contraseña', 'action' => true, 'footer' => 'default'],
+        ['label' => 'Invitación a un Workspace', 'action' => true, 'footer' => 'default'],
+        ['label' => 'Recordatorio a un cliente (módulo Recordatorios)', 'action' => false, 'footer' => 'custom'],
+        ['label' => 'Recordatorio del Catálogo (a un miembro del equipo)', 'action' => false, 'footer' => 'custom'],
     ];
 
     /** Tags the template may use: layout and text only. No script, style element, form, frame, image, link or object. */
@@ -319,6 +351,30 @@ class EmailTemplates
         }
 
         return trim(implode("\n", $lines))."\n";
+    }
+
+    /**
+     * The variables for the editor, by category: name, the text to copy, what it is, an example, how it is written and in which emails it comes filled.
+     *
+     * @return list<array{key: string, label: string, variables: list<array<string, mixed>>}>
+     */
+    public function catalog(): array
+    {
+        $uses = fn (string $name): string => match ($name) {
+            'action' => 'Solo en: '.implode(', ', array_column(array_filter(self::MESSAGES, fn ($m) => $m['action']), 'label')).'.',
+            'footer' => 'En todos; los recordatorios llevan su propio pie.',
+            'support' => 'Solo si la plataforma tiene correo de soporte configurado.',
+            default => 'En todos los correos.',
+        };
+
+        return collect(self::CATEGORIES)->map(fn (string $label, string $key) => [
+            'key' => $key,
+            'label' => $label,
+            'variables' => collect(self::DETAILS)->filter(fn (array $d) => $d['category'] === $key)->map(fn (array $d, string $name) => [
+                'name' => $name, 'token' => '{{'.$name.'}}', 'description' => self::PLACEHOLDERS[$name], 'example' => $name === 'brand' ? (string) config('branding.name') : $d['example'],
+                'usage' => $d['usage'], 'required' => $d['required'], 'availability' => $uses($name),
+            ])->values()->all(),
+        ])->values()->all();
     }
 
     /** The message used by the editor's preview: fictitious data, nothing is sent. */

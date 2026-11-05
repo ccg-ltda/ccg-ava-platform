@@ -28,6 +28,37 @@ const SHARED_FIELDS = [
     { key: 'webhook_verify_token', label: 'Token de verificación del webhook', secret: true, hint: 'Lo inventas tú (16 a 100 caracteres) y lo escribes igual en el webhook de Meta. Lo comparten Instagram, Messenger y WhatsApp.' },
     { key: 'graph_version', label: 'Versión de Graph', secret: false, hint: 'Por ejemplo v26.0. Vacío usa la versión por defecto. Compartida por los canales de Meta.' },
 ];
+// What each channel needs, in a few words: shown only inside «Configurar», in a collapsible block like the one of the webhooks.
+const HELP = {
+    instagram: {
+        need: 'Una cuenta profesional de Instagram (empresa o creador) cuyo administrador pueda autorizar la conexión, y que CCG tenga configurada la app de Meta de la plataforma.',
+        use: 'Recibir los mensajes directos de esa cuenta en Conversaciones y responderlos desde Ava.',
+        how: 'Pulsa «Conectar con Instagram», inicia sesión y acepta los permisos. Ava guarda el token cifrado y suscribe el webhook sola; después usa «Probar conexión».',
+    },
+    messenger: {
+        need: 'Una página de Facebook de tu negocio de la que seas administrador, y que CCG tenga configurada la app de Meta de la plataforma.',
+        use: 'Recibir los mensajes de esa página en Conversaciones y responderlos desde Ava.',
+        how: 'Pulsa «Conectar con Facebook», acepta los permisos y elige la página. Ava guarda el token cifrado y suscribe el webhook sola; después usa «Probar conexión».',
+    },
+};
+
+/** The short explanation of a channel (what is needed, what it is for, how to finish), collapsed so it takes no room until it is asked for. */
+function Help({ channelKey }) {
+    const help = HELP[channelKey];
+
+    return (
+        <details className="rounded-lg border border-line px-3 py-2 text-sm">
+            <summary className="cursor-pointer font-semibold text-ink">¿Qué necesito y cómo se completa?</summary>
+            <dl className="mt-3 space-y-2 text-xs text-ink-muted">
+                <div><dt className="font-semibold text-ink">Qué necesitas</dt><dd>{help.need}</dd></div>
+                <div><dt className="font-semibold text-ink">Para qué sirve</dt><dd>{help.use}</dd></div>
+                <div><dt className="font-semibold text-ink">Cómo completarlo</dt><dd>{help.how}</dd></div>
+            </dl>
+            <p className="mt-2 text-xs text-ink-muted">Mientras la app de Meta esté en modo Development solo pueden autorizar y escribir las personas con un rol en la app; para atender al público hace falta la revisión de Meta (App Review).</p>
+        </details>
+    );
+}
+
 const SOURCE = { database: 'Guardado en Ava', environment: 'Viene del servidor (.env)', none: 'Sin configurar' };
 
 /** The stages of THIS Workspace's connection: each is done only when it was really observed. */
@@ -157,8 +188,9 @@ export default function MetaConfigModal({ channel, platform, can, testing, onTes
                 </header>
 
                 <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-6 sm:px-8">
+                    <Help channelKey={channel.key} />
                     {platform && <PlatformApp channel={channel} platform={platform} />}
-                    {!platform && !channel.available && <Alert tone="warning">{channel.unavailable}</Alert>}
+                    {!channel.available && <Alert tone="warning">{channel.unavailable}</Alert>}
 
                     <section className="space-y-3 rounded-xl border border-line p-4" aria-label={`Conexión de ${label} de este Workspace`}>
                         <div>

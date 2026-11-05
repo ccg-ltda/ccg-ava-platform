@@ -105,7 +105,7 @@ export default function ChannelsTab({ chatbot, channels, canManage, workspaceId 
                         {channel.conversations && canSeeConversations && channel.state !== 'not_configured' && (
                             <div className="mt-4">
                                 <Link
-                                    href={route('chatbots.conversations', { chatbot: chatbot.id, channel: channel.key, ...(workspaceId ? { workspace: workspaceId } : {}) })}
+                                    href={route('conversations.index', { chatbot: chatbot.id, channel: channel.key, ...(workspaceId ? { workspace: workspaceId } : {}) })}
                                     className="inline-flex items-center gap-2 rounded-lg border border-line bg-card px-4 py-2 text-sm font-semibold text-ink transition-colors hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-primary"
                                 >
                                     <MessagesSquare className="size-4" aria-hidden="true" />

@@ -571,4 +571,40 @@ class CatalogRemindersAndEmailTemplateTest extends TestCase
         $this->assertStringContainsString('Zonno by CCG', $html);
         $this->assertStringContainsString('Tu código de verificación de Zonno by CCG', (new SignupCodeMail('111111', 10))->render());
     }
+
+    public function test_every_variable_the_editor_offers_is_one_the_engine_resolves_and_is_listed_once_by_category(): void
+    {
+        $templates = app(EmailTemplates::class);
+        $names = array_keys(EmailTemplates::PLACEHOLDERS);
+
+        $this->assertEqualsCanonicalizing($names, array_keys(EmailTemplates::DETAILS), 'what is documented and what is offered are the same list');
+        $listed = collect($templates->catalog())->flatMap(fn ($group) => collect($group['variables'])->pluck('name'))->all();
+        $this->assertEqualsCanonicalizing($names, $listed);
+        $this->assertCount(count($names), array_unique($listed), 'no variable is listed twice');
+        $this->assertSame(array_keys(EmailTemplates::CATEGORIES), array_column($templates->catalog(), 'key'));
+
+        // Rendering a template that uses EVERY offered variable leaves none unresolved (with the support line configured).
+        config(['branding.support_email' => 'soporte@ejemplo.com']);
+        $all = '<html><body>'.implode('', array_map(fn ($n) => '{{'.$n.'}}', $names)).'</body></html>';
+        $this->assertSame([], $templates->validate($all));
+        $html = $templates->render('Titulo', ['Parrafo'], ['label' => 'Abrir', 'url' => 'https://example.com/x'], 'Pie', $all);
+        $this->assertStringNotContainsString('{{', $html);
+        foreach (['Titulo', 'Parrafo', 'https://example.com/x', 'Pie', 'soporte@ejemplo.com'] as $expected) {
+            $this->assertStringContainsString($expected, $html);
+        }
+        $this->assertStringContainsString((string) config('branding.name'), $html);
+
+        // A name that is not offered is refused when saving, so it can never be copied from the editor by mistake.
+        $this->assertNotSame([], $templates->validate('<html><body>{{content}}{{invitation_link}}</body></html>'));
+    }
+
+    public function test_the_settings_page_sends_the_variables_by_category_with_what_the_editor_needs(): void
+    {
+        $this->platformAdmin();
+
+        $this->get('/settings')->assertOk()->assertInertia(fn ($page) => $page
+            ->has('emailTemplate.variables', 3)->where('emailTemplate.variables.0.key', 'structure')
+            ->where('emailTemplate.variables.0.variables.0.token', '{{content}}')->where('emailTemplate.variables.0.variables.0.required', true)
+            ->has('emailTemplate.variables.0.variables.0.example')->has('emailTemplate.variables.0.variables.0.usage')->has('emailTemplate.messages', count(EmailTemplates::MESSAGES)));
+    }
 }

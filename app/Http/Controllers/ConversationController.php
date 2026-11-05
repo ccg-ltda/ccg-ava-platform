@@ -8,20 +8,19 @@ use App\Models\Conversation;
 use App\Models\MessageAttachment;
 use App\Privacy\SupportAccess;
 use App\Services\ChannelCatalog;
-use App\Services\ChatbotService;
 use App\Services\ConversationInbox;
 use App\Services\DemoConversations;
 use App\Services\MessageAttachments;
 use App\Services\SavedFilters;
 use App\Services\WorkspaceScope;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * The inbox of the Workspace's conversations, for every chatbot and channel (`conversations.index`) or for one channel
- * of one chatbot, which also shows the technical connection (`chatbots.conversations`). It is one page: list, filters by
- * who answers, the chat and the actions of human attention (see ConversationActionController). Needs
+ * The inbox of the Workspace's conversations, for every chatbot and channel (`conversations.index`; Web, WhatsApp, Instagram and Messenger share it and only
+ * differ in the transport adapter). It is one page: list, filters by channel, assistant and who answers, the chat and the actions of human attention (see ConversationActionController). Needs
  * `view-conversations`; every lookup starts from the Workspace being shown, so an id of another Workspace, chatbot or
  * channel is a 404. An administrator of the platform may look at one other Workspace with `?workspace=` (read only).
  */
@@ -31,7 +30,6 @@ class ConversationController extends Controller
 
     public function __construct(
         private readonly ConversationInbox $inbox,
-        private readonly ChatbotService $chatbots,
         private readonly ChannelCatalog $channels,
         private readonly DemoConversations $demo,
         private readonly SavedFilters $saved,
@@ -53,16 +51,15 @@ class ConversationController extends Controller
         return $files->response(MessageAttachment::where('workspace_id', $workspace->id)->where('conversation_id', $model->id)->findOrFail($attachment));
     }
 
-    public function index(Request $request, ?int $chatbot = null, ?string $channel = null): Response
+    /**
+     * The one inbox: every chatbot and channel of the Workspace, narrowed by the optional filters `channel` and `chatbot` (an unknown one is simply not applied). The old address of a
+     * channel (`chatbots.conversations`) only redirects here with those filters, so there is a single Conversations module for Web, WhatsApp, Instagram and Messenger.
+     */
+    public function index(Request $request): Response
     {
         [$viewing, $foreign] = $this->viewing($request);
-        $bot = $chatbot !== null ? $viewing->chatbots()->findOrFail($chatbot) : null;
-
-        abort_unless($channel === null || $this->inbox->supports($channel), 404);
-
-        // On the shared inbox the chatbot and the channel are optional filters; an unknown one is simply not applied.
-        $filterBot = $bot ?? $this->filterChatbot($request, $viewing);
-        $filterChannel = $channel ?? $this->filterChannel($request);
+        $filterBot = $this->filterChatbot($request, $viewing);
+        $filterChannel = $this->filterChannel($request);
         $scope = $this->inbox->scope($viewing, $filterBot, $filterChannel);
 
         // What the contacts of ANOTHER Workspace wrote is private: it is shown only under a live, justified support access (SupportAccess),
@@ -87,23 +84,19 @@ class ConversationController extends Controller
         }
 
         return Inertia::render('Conversations/Index', [
-            'chatbot' => $bot ? ['id' => $bot->id, 'name' => $bot->name, 'isActive' => $bot->is_active, 'avatarUrl' => $this->chatbots->form($bot, $foreign)['avatarUrl']] : null,
-            'channel' => $bot && $channel ? $this->channelProps($bot, $channel) : null,
             'conversations' => $locked ? [] : $this->inbox->list($scope, $status, $search, $settings, $foreign),
             'counts' => $this->inbox->counts($scope),
             'selected' => $conversation ? $this->inbox->detail($conversation, $settings, $request->user(), $permissions, $foreign, $foreign) : null,
             'agents' => $conversation ? $this->inbox->assignableAgents($viewing, $permissions, $foreign) : [],
             'filters' => ['q' => $search, 'status' => $status ?? 'all', 'channel' => $filterChannel, 'chatbot' => $filterBot?->id],
-            'options' => $bot ? null : [
+            'options' => [
                 'channels' => collect($this->channels->all())->filter(fn (array $c) => $c['conversations'] ?? false)->map(fn (array $c) => ['value' => $c['key'], 'label' => $c['label']])->values()->all(),
                 'chatbots' => $viewing->chatbots()->orderBy('name')->get(['id', 'name'])->map(fn (Chatbot $c) => ['value' => $c->id, 'label' => $c->name])->all(),
             ],
             // The demo tools: only in a demo environment, and managed only from the administrative Workspace itself.
             'demo' => $this->demo->enabled() ? ['canManage' => ! $foreign && $viewing->isAdministrative() && in_array('use-conversation-demo', $permissions, true)] + $this->demo->counts($viewing) : null,
-            // Saved filters are the user's own in their Workspace and belong to the shared inbox: not offered on a channel's page nor on another Workspace seen read only.
-            'savedFilters' => $bot || $foreign ? null : $this->saved->for($request->user(), $viewing, 'conversations'),
-            'reportEndpoint' => url('/api/agent/messages'),
-            'canConfigure' => ! $foreign && in_array('manage-integrations', $permissions, true),
+            // Saved filters are the user's own in their Workspace: not offered on another Workspace seen read only.
+            'savedFilters' => $foreign ? null : $this->saved->for($request->user(), $viewing, 'conversations'),
             'scope' => $this->scopeProps($request, $viewing, $foreign, 'edit-chatbots'),
             // Only when looking at another Workspace: whether its private content is locked and how a platform administrator unlocks it.
             'privateAccess' => $foreign ? [
@@ -117,18 +110,18 @@ class ConversationController extends Controller
         ]);
     }
 
-    /** @return array<string, mixed> */
-    private function channelProps(Chatbot $chatbot, string $channel): array
+    /**
+     * The address the channel cards used to link to (`/chatbots/{chatbot}/channels/{channel}/conversations`): a redirect to the one inbox with the chatbot and channel filters. The chatbot is
+     * looked up inside the Workspace being viewed and the channel must keep conversations, so a foreign chatbot or an unknown channel is still a 404.
+     */
+    public function channel(Request $request, int $chatbot, string $channel): RedirectResponse
     {
-        $state = collect($this->chatbots->channelStates($chatbot))->firstWhere('key', $channel);
+        [$viewing] = $this->viewing($request);
+        $viewing->chatbots()->findOrFail($chatbot);
 
-        return [
-            'key' => $channel,
-            'label' => $this->channels->get($channel)['label'],
-            'state' => $state['state'],
-            'connection' => $state['connection'],
-            'account' => $this->chatbots->channelAccount($chatbot, $channel),
-        ];
+        abort_unless($this->inbox->supports($channel), 404);
+
+        return redirect()->route('conversations.index', ['chatbot' => $chatbot, 'channel' => $channel] + array_filter($request->only(['workspace', 'status', 'q', 'c']), 'is_string'));
     }
 
     private function status(Request $request): ?string

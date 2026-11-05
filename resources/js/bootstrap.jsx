@@ -3,13 +3,11 @@ import ReactDOM from 'react-dom/client';
 import { createInertiaApp } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 
-const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
-
 createInertiaApp({
     // The per-request nonce of the Content-Security-Policy (App\Http\Middleware\SecurityHeaders); the progress bar's inline <style> carries it.
     nonce: document.querySelector('meta[name="csp-nonce"]')?.content || undefined,
-    // The visible brand comes from the server (config/branding.php), not from a build-time variable.
-    title: (title) => `${title} - ${document.querySelector('meta[name="brand"]')?.content || appName}`,
+    // The visible brand comes from the server (config/branding.php; the Blade shell always prints it), not from a build-time variable: the production image is built without an .env.
+    title: (title) => `${title} - ${document.querySelector('meta[name="brand"]')?.content ?? ''}`.replace(/ - $/, ''),
     resolve: (name) =>
         resolvePageComponent(
             `./Pages/${name}.jsx`,

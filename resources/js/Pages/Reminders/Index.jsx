@@ -36,7 +36,7 @@ export default function Index({ reminders, perPageOptions, filters, channels, st
     const { permissions } = useAccess();
     const can = { create: permissions.includes('create-reminders'), edit: permissions.includes('edit-reminders'), cancel: permissions.includes('cancel-reminders') };
     const ruleCan = { create: permissions.includes('create-reminder-rules'), edit: permissions.includes('edit-reminder-rules'), activate: permissions.includes('activate-reminder-rules') };
-    const tabs = [{ id: 'recordatorios', label: 'Recordatorios', icon: BellRing }, ...(rules ? [{ id: 'reglas', label: 'Reglas automáticas', icon: Workflow, count: rules.data.length }] : [])];
+    const tabs = [{ id: 'recordatorios', label: 'Recordatorios', icon: BellRing }, ...(rules ? [{ id: 'reglas', label: 'Reglas automáticas', icon: Workflow, count: rules.meta.total }] : [])];
     const [tab, selectTab] = useUrlTab(tabs.map((item) => item.id));
     const [editing, setEditing] = useState(null); // null = closed, 'new' = creating, otherwise the reminder
     const [attemptsOf, setAttemptsOf] = useState(null);
@@ -161,7 +161,7 @@ export default function Index({ reminders, perPageOptions, filters, channels, st
             {rules ? (
                 <Tabs tabs={tabs} selectedIndex={tab} onChange={selectTab}>
                     {remindersView}
-                    <RulesPanel rules={rules} channels={channels} variables={variables} limits={limits} timezone={timezone} can={ruleCan} />
+                    <RulesPanel rules={rules} perPageOptions={perPageOptions} filters={filters} channels={channels} variables={variables} limits={limits} timezone={timezone} can={ruleCan} />
                 </Tabs>
             ) : (
                 remindersView

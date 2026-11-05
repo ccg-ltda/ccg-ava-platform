@@ -9,6 +9,7 @@ use App\Integrations\SendsTemplates;
 use App\Jobs\SendAppointmentNotification;
 use App\Models\Appointment;
 use App\Models\AppointmentNotification as Notification;
+use App\Models\AppointmentReply;
 use App\Models\BookingCustomer;
 use App\Models\BookingSetting;
 use App\Models\Integration;
@@ -46,6 +47,14 @@ class AppointmentNotifier
     {
         return $this->ready ??= Schema::hasTable('appointment_notifications') && Schema::hasColumn('booking_settings', 'reminders_enabled') && Schema::hasColumn('appointments', 'customer_confirmed_at');
     }
+
+    /** Whether the answers to the buttons of a reminder can be stored and read (their table is a later migration). */
+    public function repliesReady(): bool
+    {
+        return $this->repliesReady ??= Schema::hasTable('appointment_replies');
+    }
+
+    private ?bool $repliesReady = null;
 
     // --- what the Workspace can do right now ----------------------------------------------------------------------------------------
 
@@ -293,7 +302,7 @@ class AppointmentNotifier
 
         try {
             $result = match (true) {
-                $template !== null && $type instanceof SendsTemplates => $type->sendTemplate($integration, $digits, $template['name'], $template['language'], $composer->parameters($appointment, $template['params']), "avn:{$notification->id}"),
+                $template !== null && $type instanceof SendsTemplates => $type->sendTemplate($integration, $digits, $template['name'], $template['language'], $composer->parameters($appointment, $template['params']), "avn:{$notification->id}", $template['buttons'] && $notification->kind === 'reminder' ? AppointmentReplies::payloads($notification) : []),
                 $template !== null => SendResult::failed('El canal no puede enviar plantillas.'),
                 $type instanceof SendsMessages => $type->send($integration, $digits, $composer->text($appointment, $configured['text'] ?? null, $notification->kind), "avn:{$notification->id}"),
                 default => SendResult::failed('El canal no puede enviar mensajes.'),
@@ -316,7 +325,7 @@ class AppointmentNotifier
      *
      * @return array{0: ?string, 1: 'central'|'snapshot'|'anonymized'} digits (or null) and where they came from
      */
-    private function recipientPhone(Appointment $appointment): array
+    public function recipientPhone(Appointment $appointment): array
     {
         $person = $appointment->customer;
         $card = $person?->customer_id !== null ? $person->card : null;
@@ -372,13 +381,13 @@ class AppointmentNotifier
         };
     }
 
-    /** @param  array<string, mixed>  $configured @return array{name: string, language: string, params: list<string>}|null */
+    /** @param  array<string, mixed>  $configured @return array{name: string, language: string, params: list<string>, buttons: bool}|null */
     private function declaredTemplate(array $configured): ?array
     {
         $template = $configured['template'] ?? null;
 
         return is_array($template) && filled($template['name'] ?? null) && filled($template['language'] ?? null)
-            ? ['name' => (string) $template['name'], 'language' => (string) $template['language'], 'params' => array_values(array_map('strval', (array) ($template['params'] ?? [])))]
+            ? ['name' => (string) $template['name'], 'language' => (string) $template['language'], 'params' => array_values(array_map('strval', (array) ($template['params'] ?? []))), 'buttons' => (bool) ($template['buttons'] ?? false)]
             : null;
     }
 
@@ -472,6 +481,18 @@ class AppointmentNotifier
         return $appointment->notifications->where('version', $appointment->reschedule_count)->sortBy('scheduled_for')->map(fn (Notification $n) => [
             'kind' => $n->kind, 'offset' => $n->offset_minutes, 'status' => $n->status, 'statusLabel' => Notification::LABELS[$n->status] ?? $n->status,
             'scheduledFor' => $n->scheduled_for->utc()->toIso8601ZuluString(),
-        ] + ($staff ? ['reason' => $n->reason, 'mode' => $n->mode] : []))->values()->all();
+        ] + ($staff ? ['reason' => $n->reason, 'mode' => $n->mode, 'answer' => $this->answerLabel($n)] : []))->values()->all();
+    }
+
+    /** What the customer answered to this message with its buttons, for the history (the last answer that changed something, or the last one). */
+    private function answerLabel(Notification $notification): ?string
+    {
+        if (! $notification->relationLoaded('replies') || $notification->replies->isEmpty()) {
+            return null;
+        }
+
+        $reply = $notification->replies->sortByDesc('responded_at')->first(fn ($r) => $r->result === AppointmentReply::APPLIED) ?? $notification->replies->sortByDesc('responded_at')->first();
+
+        return AppointmentReply::ACTION_LABELS[$reply->action].' · '.AppointmentReply::RESULT_LABELS[$reply->result];
     }
 }

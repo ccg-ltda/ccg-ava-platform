@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\BookingRecord;
+use App\Models\Conversation;
 use App\Models\Survey;
 use App\Models\SurveyDispatch;
 use App\Models\SurveyResponse;
@@ -163,5 +164,121 @@ class ReportingIngestionTest extends TestCase
         $this->assertSame([3.5, 50.0], [$summary['average'], $summary['satisfaction']]);
         $empty = app(SurveyMetrics::class)->summary($this->other, ReportPeriod::make('7d', null, 'UTC'));
         $this->assertSame([0, 0, null, null, null], [$empty['sent'], $empty['responses'], $empty['responseRate'], $empty['average'], $empty['satisfaction']], 'No data is not a zero.');
+    }
+    // --- one contract for every engine: progress, resume, types, duplicates ---------------------------------------------------------------
+
+    /** The same call as `agent()`, as another engine says it (Lava Studio): nothing may depend on it. */
+    private function agentAs(string $engine, string $path, array $data, ?string $token = null)
+    {
+        return $this->flushHeaders()->withToken($token ?? $this->token)->withHeaders(['X-Ava-Engine' => $engine])->postJson("/api/agent{$path}", $data);
+    }
+
+    private function progress(string $surveyKey, string $ref, ?string $token = null)
+    {
+        return $this->flushHeaders()->withToken($token ?? $this->token)->getJson('/api/agent/surveys/responses/progress?'.http_build_query(['survey_key' => $surveyKey, 'external_ref' => $ref]));
+    }
+
+    private function defineChoiceSurvey(): void
+    {
+        $this->agent('/surveys', ['key' => 'mixta', 'name' => 'Mixta', 'scale_min' => 1, 'scale_max' => 5, 'questions' => [
+            ['key' => 'nota', 'label' => 'Nota', 'type' => 'rating'],
+            ['key' => 'canal', 'label' => '¿Cómo nos conociste?', 'type' => 'choice', 'options' => ['Redes', 'Amigos', 'Otro']],
+            ['key' => 'volveria', 'label' => '¿Volverías?', 'type' => 'boolean'],
+            ['key' => 'cuantas', 'label' => '¿Cuántas veces vienes al mes?', 'type' => 'number'],
+            ['key' => 'comentario', 'label' => 'Cuéntanos más', 'type' => 'text'],
+        ]])->assertCreated();
+    }
+
+    public function test_an_interrupted_survey_resumes_where_it_stopped_and_finishes_once(): void
+    {
+        $this->defineChoiceSurvey();
+        $this->workspace->chatbots()->firstOrFail()->conversations()->create(['workspace_id' => $this->workspace->id, 'channel' => 'whatsapp', 'contact_id' => '573001112233']);
+        $this->agent('/surveys/dispatches', ['survey_key' => 'mixta', 'external_ref' => 'disp-m1', 'channel' => 'whatsapp', 'contact_id' => '573001112233'])->assertCreated();
+        $base = ['survey_key' => 'mixta', 'external_ref' => 'resp-m1', 'dispatch_ref' => 'disp-m1'];
+
+        // First pieces: two answers, then the customer disappears.
+        $this->agent('/surveys/responses', $base + ['answers' => ['nota' => 4, 'canal' => 'Redes']])->assertCreated()->assertJsonPath('is_complete', false);
+        $this->assertSame('started', SurveyDispatch::firstOrFail()->status);
+
+        // The engine (or another one) comes back and asks where it was.
+        $this->progress('mixta', 'resp-m1')->assertOk()->assertJsonPath('is_complete', false)->assertJsonPath('answers.canal', 'Redes')
+            ->assertJsonPath('next_question.key', 'volveria')->assertJsonPath('remaining', ['volveria', 'cuantas', 'comentario']);
+
+        // The same piece again changes nothing worse than itself; the rest completes it.
+        $this->agent('/surveys/responses', $base + ['answers' => ['nota' => 4]])->assertOk()->assertJsonPath('created', false)->assertJsonPath('is_complete', false);
+        $this->agentAs('lava', '/surveys/responses', $base + ['answers' => ['volveria' => true, 'cuantas' => 2, 'comentario' => 'Todo bien']])->assertOk()->assertJsonPath('is_complete', true)->assertJsonPath('updated', true);
+
+        $this->assertSame(1, SurveyResponse::count());
+        $this->assertSame(['nota' => 4, 'canal' => 'Redes', 'volveria' => true, 'cuantas' => 2, 'comentario' => 'Todo bien'], SurveyResponse::firstOrFail()->answers);
+        $this->assertSame('answered', SurveyDispatch::firstOrFail()->status);
+        $this->assertSame(Conversation::where('contact_id', '573001112233')->value('id'), SurveyResponse::firstOrFail()->conversation_id, 'the response keeps the conversation of its dispatch');
+
+        // Complete is final: a late duplicate with other values touches nothing.
+        $this->agent('/surveys/responses', $base + ['answers' => ['nota' => 1, 'volveria' => false]])->assertOk()->assertJsonPath('updated', false);
+        $this->assertSame(4, SurveyResponse::firstOrFail()->answers['nota']);
+        $this->progress('mixta', 'resp-m1')->assertOk()->assertJsonPath('is_complete', true)->assertJsonPath('next_question', null)->assertJsonPath('remaining', []);
+    }
+
+    public function test_both_engines_get_the_same_answers_and_the_engine_is_only_a_label(): void
+    {
+        $this->defineChoiceSurvey();
+        $answers = ['nota' => 5, 'canal' => 'Amigos', 'volveria' => true, 'cuantas' => 3, 'comentario' => 'Excelente'];
+
+        foreach (['n8n' => 'r-n8n-1', 'lava' => 'r-lava-1'] as $engine => $ref) {
+            $this->agentAs($engine, '/surveys/dispatches', ['survey_key' => 'mixta', 'external_ref' => "d-{$ref}"])->assertCreated();
+            $this->agentAs($engine, '/surveys/responses', ['survey_key' => 'mixta', 'external_ref' => $ref, 'dispatch_ref' => "d-{$ref}", 'answers' => $answers])->assertCreated()->assertJsonPath('is_complete', true);
+        }
+
+        $rows = SurveyResponse::orderBy('id')->get();
+        $this->assertSame(['n8n', 'lava'], $rows->pluck('engine')->all());
+        $this->assertSame($rows[0]->answers, $rows[1]->answers);
+        $this->assertSame([true, true], $rows->pluck('is_complete')->all());
+        $this->assertSame(['answered', 'answered'], SurveyDispatch::orderBy('id')->pluck('status')->all());
+
+        // An unknown engine is stored as none, never as whatever the caller wrote.
+        $this->agentAs('inventado', '/surveys/responses', ['survey_key' => 'mixta', 'external_ref' => 'r-x-1', 'answers' => $answers])->assertCreated();
+        $this->assertNull(SurveyResponse::where('external_ref', 'r-x-1')->value('engine'));
+    }
+
+    public function test_every_answer_is_checked_against_the_type_of_its_question(): void
+    {
+        $this->defineChoiceSurvey();
+        $send = fn (array $answers, string $ref) => $this->agent('/surveys/responses', ['survey_key' => 'mixta', 'external_ref' => $ref, 'answers' => $answers]);
+
+        $send(['nota' => 9], 'tipo-001')->assertStatus(422)->assertJsonValidationErrors('answers.nota');
+        $send(['nota' => 'alta'], 'tipo-002')->assertStatus(422)->assertJsonValidationErrors('answers.nota');
+        $send(['canal' => 'Radio'], 'tipo-003')->assertStatus(422)->assertJsonValidationErrors('answers.canal');
+        $send(['canal' => ['Redes']], 'tipo-004')->assertStatus(422)->assertJsonValidationErrors('answers.canal');
+        $send(['volveria' => 'si'], 'tipo-005')->assertStatus(422)->assertJsonValidationErrors('answers.volveria');
+        $send(['cuantas' => 'muchas'], 'tipo-006')->assertStatus(422)->assertJsonValidationErrors('answers.cuantas');
+        $send(['comentario' => 123], 'tipo-007')->assertStatus(422)->assertJsonValidationErrors('answers.comentario');
+        $this->assertSame(0, SurveyResponse::count(), 'a refused answer stores nothing');
+
+        $send(['nota' => 3, 'canal' => 'Otro', 'volveria' => false, 'cuantas' => 0, 'comentario' => 'ok', 'otra' => null], 'tipo-008')->assertStatus(422); // a question the survey does not have
+        $send(['nota' => 3, 'canal' => 'Otro', 'volveria' => false, 'cuantas' => 0, 'comentario' => 'ok'], 'tipo-009')->assertCreated()->assertJsonPath('is_complete', true);
+    }
+
+    public function test_a_reference_belongs_to_one_survey_and_one_workspace(): void
+    {
+        $this->defineChoiceSurvey();
+        $this->defineSurvey();
+        $this->agent('/surveys/responses', ['survey_key' => 'mixta', 'external_ref' => 'ref-compartida', 'answers' => ['nota' => 2]])->assertCreated();
+
+        $this->agent('/surveys/responses', ['survey_key' => 'post-visita', 'external_ref' => 'ref-compartida', 'rating' => 3])->assertStatus(422)->assertJsonValidationErrors('external_ref');
+        // Another Workspace's token neither reads nor extends it.
+        $this->progress('mixta', 'ref-compartida', $this->otherToken)->assertStatus(422);
+        $this->assertSame(1, SurveyResponse::count());
+        $this->progress('mixta', 'no-existe-1')->assertStatus(422);
+    }
+
+    public function test_the_survey_contract_needs_the_reports_module_of_the_plan(): void
+    {
+        $this->defineChoiceSurvey();
+        $this->agent('/surveys/responses', ['survey_key' => 'mixta', 'external_ref' => 'plan-0001', 'answers' => ['nota' => 2]])->assertCreated();
+
+        $this->contractModules($this->workspace, ['dashboard', 'assistants', 'conversations']); // no Reportes
+        $this->agent('/surveys/responses', ['survey_key' => 'mixta', 'external_ref' => 'plan-0002', 'answers' => ['nota' => 2]])->assertForbidden();
+        $this->progress('mixta', 'plan-0001')->assertForbidden();
+        $this->assertSame(1, SurveyResponse::count());
     }
 }

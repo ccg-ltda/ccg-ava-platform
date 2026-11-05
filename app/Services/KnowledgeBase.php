@@ -87,7 +87,13 @@ class KnowledgeBase
         }
 
         $path = "workspaces/{$workspace->id}/knowledge/".bin2hex(random_bytes(16)).".{$extension}";
-        Storage::put($path, $bytes);
+
+        // The disk does not throw (`throw => false`): without this check a failed write would register a document whose file does not exist.
+        if (! Storage::put($path, $bytes)) {
+            Log::error('knowledge_file_store_failed', ['workspace_id' => $workspace->id]);
+
+            $this->refuse('No se pudo guardar el archivo. Inténtalo de nuevo.');
+        }
 
         try {
             $document = KnowledgeDocument::create([

@@ -1,5 +1,5 @@
 import { router, useForm } from '@inertiajs/react';
-import { Eye, RotateCcw } from 'lucide-react';
+import { Check, Copy, Eye, RotateCcw } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import Alert from '@/Components/Alert';
 import Badge from '@/Components/Badge';
@@ -10,6 +10,35 @@ import InputLabel from '@/Components/InputLabel';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import Textarea from '@/Components/Textarea';
+
+/** Copies the variable's name (written with its braces) so it can be pasted into the HTML. Falls back to a hidden textarea where the clipboard API is not available. */
+function CopyToken({ token }) {
+    const [copied, setCopied] = useState(false);
+
+    const copy = async () => {
+        try {
+            await navigator.clipboard.writeText(token);
+        } catch {
+            const area = document.createElement('textarea');
+
+            area.value = token;
+            document.body.appendChild(area);
+            area.select();
+            document.execCommand('copy');
+            area.remove();
+        }
+
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+    };
+
+    return (
+        <button type="button" onClick={copy} className="inline-flex items-center gap-1.5 rounded-md border border-line bg-card px-2 py-1 text-xs font-semibold text-ink transition-colors hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-primary" aria-label={`Copiar ${token}`}>
+            {copied ? <Check className="size-3.5 text-accent-green" aria-hidden="true" /> : <Copy className="size-3.5" aria-hidden="true" />}
+            {copied ? 'Copiado' : 'Copiar'}
+        </button>
+    );
+}
 
 async function postJson(url, body) {
     const token = document.querySelector('meta[name="csrf-token"]')?.content;
@@ -128,14 +157,41 @@ export default function EmailTemplatePanel({ template }) {
                     <Card className="p-4 sm:p-6">
                         <h2 className="text-base font-bold text-ink">Marcadores disponibles</h2>
                         <p className="mt-1 text-xs text-ink-muted">Escríbelos con llaves dobles, solo en el texto del documento (no dentro de atributos). Cualquier otro marcador se rechaza al guardar y nada de la plantilla se ejecuta.</p>
-                        <dl className="mt-3 space-y-2 text-sm">
-                            {Object.entries(template.placeholders).map(([name, description]) => (
-                                <div key={name}>
-                                    <dt><code className="rounded bg-canvas px-1.5 py-0.5 text-xs">{`{{${name}}}`}</code></dt>
-                                    <dd className="mt-0.5 text-ink-muted">{description}</dd>
-                                </div>
+                        <div className="mt-4 space-y-5">
+                            {template.variables.map((group) => (
+                                <section key={group.key} aria-label={group.label}>
+                                    <h3 className="text-xs font-bold tracking-wide text-ink-muted uppercase">{group.label}</h3>
+                                    <ul className="mt-2 divide-y divide-line">
+                                        {group.variables.map((variable) => (
+                                            <li key={variable.name} className="space-y-1.5 py-3 text-sm">
+                                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                                    <code className="rounded bg-canvas px-1.5 py-0.5 text-xs">{variable.token}</code>
+                                                    <div className="flex items-center gap-2">
+                                                        {variable.required && <Badge tone="amber">Obligatoria</Badge>}
+                                                        <CopyToken token={variable.token} />
+                                                    </div>
+                                                </div>
+                                                <p className="text-ink-muted">{variable.description}</p>
+                                                <p className="text-xs text-ink-muted">
+                                                    <span className="font-semibold text-ink">Ejemplo:</span> {variable.example}
+                                                </p>
+                                                <p className="text-xs text-ink-muted">
+                                                    <span className="font-semibold text-ink">Uso:</span> <code className="break-all">{variable.usage}</code>
+                                                </p>
+                                                <p className="text-xs text-ink-muted">{variable.availability}</p>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </section>
                             ))}
-                        </dl>
+                        </div>
+                        <details className="mt-3 rounded-lg border border-line px-3 py-2 text-xs text-ink-muted">
+                            <summary className="cursor-pointer text-sm font-semibold text-ink">Correos que usan esta plantilla</summary>
+                            <ul className="mt-2 list-disc space-y-0.5 pl-5">
+                                {template.messages.map((label) => <li key={label}>{label}</li>)}
+                            </ul>
+                            <p className="mt-2">Las variables son las mismas para todos: lo que cambia de un correo a otro (el código, el enlace, el texto del recordatorio) va dentro de <code>{'{{content}}'}</code> y <code>{'{{action}}'}</code>, no hay variables propias de cada tipo.</p>
+                        </details>
                         <p className="mt-3 text-xs text-ink-muted">
                             Se admite HTML de maquetación (tablas, divisiones, texto, enlaces http, https o mailto) con estilos en línea. No se admiten scripts, imágenes, formularios, hojas de estilo ni comentarios. Marca visible: <strong>{template.brand}</strong>.
                         </p>

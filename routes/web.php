@@ -235,8 +235,8 @@ Route::middleware(['auth', 'workspace', 'throttle:authenticated'])->group(functi
             Route::get('/{chatbot}', [ChatbotController::class, 'show'])->whereNumber('chatbot')->name('show');
             Route::get('/{chatbot}/avatar', [ChatbotController::class, 'avatar'])->whereNumber('chatbot')->name('avatar');
         });
-        // The conversations of a channel hold what the contacts wrote: their own permission.
-        Route::get('/{chatbot}/channels/{channel}/conversations', [ConversationController::class, 'index'])
+        // The old address of a channel's conversations: it redirects to the one inbox (`conversations.index`) filtered by that chatbot and channel.
+        Route::get('/{chatbot}/channels/{channel}/conversations', [ConversationController::class, 'channel'])
             ->whereNumber('chatbot')->where('channel', '[a-z_]+')->middleware(['workspace.module:conversations', 'workspace.permission:view-conversations'])->name('conversations');
         Route::middleware('workspace.permission:view-chatbots')->group(function () {
             Route::post('/', [ChatbotController::class, 'store'])->middleware('workspace.permission:create-chatbots')->name('store');

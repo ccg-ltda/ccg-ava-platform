@@ -7,7 +7,9 @@ import Card from '@/Components/Card';
 import { useConfirm } from '@/Components/ConfirmDialog';
 import EmptyState from '@/Components/EmptyState';
 import IconButton from '@/Components/IconButton';
+import Pagination from '@/Components/Pagination';
 import PrimaryButton from '@/Components/PrimaryButton';
+import usePagedList from '@/Hooks/usePagedList';
 import RuleEventsModal from './RuleEventsModal';
 import RuleFormModal from './RuleFormModal';
 
@@ -27,11 +29,13 @@ const waitLabel = (rule) => `${rule.delayAmount} ${UNITS[rule.delayUnit][rule.de
  * Automatic reminders by service. A rule says «N days after a customer had service X, send this message» and Ava does the rest: it looks for the services Agenda marked as done
  * and schedules one reminder per customer, each with its own date. Nobody picks customers here. The server decides what each role may do and which channels exist.
  */
-export default function RulesPanel({ rules, channels, variables, limits, timezone, can }) {
+export default function RulesPanel({ rules, perPageOptions, filters, channels, variables, limits, timezone, can }) {
     const confirm = useConfirm();
     const [editing, setEditing] = useState(null); // null = closed, 'new' = creating, otherwise the rule
     const [historyOf, setHistoryOf] = useState(null);
     const anyChannel = channels.some((channel) => channel.available);
+    // Only the rules page: the reminders list and its filters travel along unchanged.
+    const list = usePagedList({ tab: 'reglas', section: 'rules', only: ['rules'], meta: rules.meta, perPageOptions, routeName: 'reminders.index', extra: { ...filters } });
 
     const toggle = async (rule) => {
         if (rule.isActive) {
@@ -108,6 +112,12 @@ export default function RulesPanel({ rules, channels, variables, limits, timezon
                         </li>
                     ))}
                 </ul>
+            )}
+
+            {rules.meta.total > 0 && (
+                <Card className="overflow-hidden">
+                    <Pagination {...list.paginationProps} noun="reglas" />
+                </Card>
             )}
 
             {editing && <RuleFormModal key={editing === 'new' ? 'new' : editing.id} rule={editing === 'new' ? null : editing} rules={rules} channels={channels} variables={rules.variables ?? variables} limits={limits} timezone={timezone} onClose={() => setEditing(null)} />}

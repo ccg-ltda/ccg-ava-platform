@@ -32,7 +32,7 @@ const initialMessages = (messages) =>
         KINDS.map(({ key }) => {
             const entry = messages?.[key] ?? {};
 
-            return [key, { text: entry.text ?? '', template: { name: entry.template?.name ?? '', language: entry.template?.language ?? '', params: [...(entry.template?.params ?? [])] } }];
+            return [key, { text: entry.text ?? '', template: { name: entry.template?.name ?? '', language: entry.template?.language ?? '', params: [...(entry.template?.params ?? [])], buttons: Boolean(entry.template?.buttons) } }];
         }),
     );
 
@@ -55,7 +55,7 @@ export default function NotificationSettings({ notifications, canManage }) {
                 KINDS.map(({ key }) => {
                     const entry = payload.messages[key];
 
-                    return [key, { text: entry.text, template: { name: entry.template.name, language: entry.template.language, params: entry.template.params } }];
+                    return [key, { text: entry.text, template: { name: entry.template.name, language: entry.template.language, params: entry.template.params, buttons: entry.template.buttons } }];
                 }),
             ),
         }));

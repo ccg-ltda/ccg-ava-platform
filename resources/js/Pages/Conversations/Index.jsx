@@ -1,47 +1,39 @@
-import { Head, Link, router } from '@inertiajs/react';
-import { ArrowLeft, MessagesSquare, Plug } from 'lucide-react';
-import Badge from '@/Components/Badge';
+import { Head, router } from '@inertiajs/react';
+import { MessagesSquare } from 'lucide-react';
 import PageHeader from '@/Components/PageHeader';
 import SavedFilters from '@/Components/SavedFilters';
 import Select from '@/Components/Select';
-import Tabs from '@/Components/Tabs';
 import { ReadOnlyWorkspaceNotice } from '@/Components/WorkspaceViewSelector';
-import { channelIcon, channelStates } from '@/config/chatbots';
 import usePolling from '@/Hooks/usePolling';
-import useUrlTab from '@/Hooks/useUrlTab';
 import AppLayout from '@/Layouts/AppLayout';
 import ChatPanel from './Partials/ChatPanel';
-import ConnectionPanel from './Partials/ConnectionPanel';
 import ConversationList from './Partials/ConversationList';
 import { DemoPanel } from './Partials/DemoTools';
 import { ActiveAccessNotice, PrivateAccessPanel } from './Partials/PrivateAccessPanel';
 import StatusFilter from './Partials/StatusFilter';
 
-const TAB_IDS = ['conversaciones', 'conexion'];
 const ALL = { value: '', label: 'Todos' };
 
 /**
- * The inbox of conversations. On `/conversations` it covers every chatbot and channel of the Workspace; on the page of
- * one channel of a chatbot it is limited to that channel and keeps its technical connection in a second tab. Who answers
+ * The inbox of conversations: the ONE module for Web, WhatsApp, Instagram and Messenger. It covers every chatbot and channel of the Workspace and is narrowed with the
+ * channel and assistant filters (the channel cards of Asistentes link here already filtered). Who answers
  * (AI, waiting for an agent, in attention, resolved) comes from the server, and so do the actions the user has on a
  * conversation; the page refreshes itself from the server while it is open, so nothing is guessed in the browser.
  */
-export default function Index({ chatbot, channel, conversations, counts, selected, agents, filters, options, savedFilters, demo, reportEndpoint, canConfigure, scope, privateAccess }) {
-    const [tab, selectTab] = useUrlTab(TAB_IDS);
+export default function Index({ conversations, counts, selected, agents, filters, options, savedFilters, demo, scope, privateAccess }) {
     const workspaceId = scope.readOnly ? scope.workspace.id : undefined;
-    const channelMode = Boolean(channel);
 
     // A conversation open in front of an agent refreshes faster than a list nobody is looking at closely.
     usePolling(['conversations', 'counts', 'selected', 'agents'], selected ? 5000 : 15000);
 
-    const baseUrl = channelMode ? route('chatbots.conversations', { chatbot: chatbot.id, channel: channel.key }) : route('conversations.index');
+    const baseUrl = route('conversations.index');
     const query = (overrides = {}) => {
         const merged = {
             ...(workspaceId ? { workspace: workspaceId } : {}),
             ...(filters.status !== 'all' ? { status: filters.status } : {}),
             ...(filters.q ? { q: filters.q } : {}),
-            ...(!channelMode && filters.channel ? { channel: filters.channel } : {}),
-            ...(!channelMode && filters.chatbot ? { chatbot: filters.chatbot } : {}),
+            ...(filters.channel ? { channel: filters.channel } : {}),
+            ...(filters.chatbot ? { chatbot: filters.chatbot } : {}),
             ...overrides,
         };
 
@@ -69,8 +61,6 @@ export default function Index({ chatbot, channel, conversations, counts, selecte
 
     const applySaved = (saved) => router.get(baseUrl, { ...(workspaceId ? { workspace: workspaceId } : {}), ...saved }, { preserveState: true, preserveScroll: true, replace: true });
 
-    const Icon = channelMode ? channelIcon(channel.key) : MessagesSquare;
-    const state = channelMode ? channelStates[channel.state] : null;
     const inbox = (
         // The bottom padding keeps the floating chat button of Ava from covering the composer when the page is scrolled to its end.
         <div className="space-y-3">
@@ -87,7 +77,7 @@ export default function Index({ chatbot, channel, conversations, counts, selecte
                         hrefFor={hrefFor}
                         baseUrl={baseUrl}
                         baseParams={listParams}
-                        showChannel={!channelMode}
+                        showChannel
                         filtered={filters.status !== 'all' || Boolean(filters.channel) || Boolean(filters.chatbot)}
                     />
                 </div>
@@ -113,40 +103,27 @@ export default function Index({ chatbot, channel, conversations, counts, selecte
 
     return (
         <>
-            <Head title={channelMode ? `${channel.label} · ${chatbot.name}` : 'Conversaciones'} />
+            <Head title="Conversaciones" />
 
-            {channelMode && (
-                <Link
-                    href={route('chatbots.show', { chatbot: chatbot.id, tab: 'canales', ...(workspaceId ? { workspace: workspaceId } : {}) })}
-                    className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-muted outline-none hover:text-ink focus-visible:text-primary"
-                >
-                    <ArrowLeft className="size-4" aria-hidden="true" />
-                    {chatbot.name}
-                </Link>
-            )}
-
-            <div className={selected && !channelMode ? 'hidden space-y-3 lg:block' : 'space-y-3'}>
+            <div className={selected ? 'hidden space-y-3 lg:block' : 'space-y-3'}>
                 <PageHeader
                     title={
                         <span className="flex items-center gap-3">
                             <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/15 text-accent-blue">
-                                <Icon className="size-5" aria-hidden="true" />
+                                <MessagesSquare className="size-5" aria-hidden="true" />
                             </span>
-                            {channelMode ? channel.label : 'Conversaciones'}
+                            Conversaciones
                         </span>
                     }
-                    description={channelMode ? `Conversaciones de ${chatbot.name} por ${channel.label}.` : 'Atiende a tus contactos: la IA responde y tú tomas el control cuando haga falta.'}
+                    description="Atiende a tus contactos de todos los canales: la IA responde y tú tomas el control cuando haga falta."
                 >
-                    {state && <Badge tone={state.tone}>{state.label}</Badge>}
-                    {options && (
-                        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto" role="group" aria-label="Filtros de la bandeja">
-                            <Select value={filters.channel ?? ''} onChange={filter('channel')} options={[{ ...ALL, label: 'Todos los canales' }, ...options.channels]} size="sm" className="sm:w-44" aria-label="Filtrar por canal" />
-                            <Select value={filters.chatbot ?? ''} onChange={filter('chatbot')} options={[{ ...ALL, label: 'Todos los asistentes' }, ...options.chatbots]} size="sm" className="sm:w-48" aria-label="Filtrar por asistente" />
-                        </div>
-                    )}
+                    <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto" role="group" aria-label="Filtros de la bandeja">
+                        <Select value={filters.channel ?? ''} onChange={filter('channel')} options={[{ ...ALL, label: 'Todos los canales' }, ...options.channels]} size="sm" className="sm:w-44" aria-label="Filtrar por canal" />
+                        <Select value={filters.chatbot ?? ''} onChange={filter('chatbot')} options={[{ ...ALL, label: 'Todos los asistentes' }, ...options.chatbots]} size="sm" className="sm:w-48" aria-label="Filtrar por asistente" />
+                    </div>
                 </PageHeader>
 
-                {demo && !channelMode && (
+                {demo && (
                     <div className="flex sm:justify-end">
                         <DemoPanel demo={demo} />
                     </div>
@@ -158,21 +135,7 @@ export default function Index({ chatbot, channel, conversations, counts, selecte
 
             {savedFilters && <SavedFilters scope="conversations" saved={savedFilters} criteria={criteria} resolve={resolve} onApply={applySaved} />}
 
-            {channelMode ? (
-                <Tabs
-                    tabs={[
-                        { id: 'conversaciones', label: 'Conversaciones', icon: MessagesSquare, count: Object.values(counts).reduce((sum, total) => sum + total, 0) },
-                        { id: 'conexion', label: 'Conexión', icon: Plug },
-                    ]}
-                    selectedIndex={tab}
-                    onChange={selectTab}
-                >
-                    {content}
-                    <ConnectionPanel channel={channel} chatbot={chatbot} reportEndpoint={reportEndpoint} canConfigure={canConfigure} workspaceId={workspaceId} />
-                </Tabs>
-            ) : (
-                content
-            )}
+            {content}
         </>
     );
 }

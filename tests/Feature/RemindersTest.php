@@ -570,4 +570,20 @@ class RemindersTest extends TestCase
         $this->postJson('/reminders/customers', ['first_name' => 'X', 'email' => 'x@example.com'])->assertForbidden();
         $this->assertSame(0, Customer::where('workspace_id', $this->b->id)->count());
     }
+
+    public function test_the_tries_of_a_reminder_are_paged_newest_first(): void
+    {
+        $reminder = $this->schedule($this->customer());
+
+        for ($i = 1; $i <= 23; $i++) {
+            ReminderAttempt::create(['reminder_id' => $reminder->id, 'workspace_id' => $this->a->id, 'attempt' => $i, 'outcome' => 'retry', 'reason' => 'send_failed']);
+        }
+
+        $this->actAsMember($this->a);
+        $first = $this->getJson("/reminders/{$reminder->id}/attempts")->assertOk()->assertJsonPath('meta.total', 23)->assertJsonPath('meta.last_page', 3);
+        $this->assertSame([23, 22, 21, 20, 19, 18, 17, 16, 15, 14], array_column($first->json('attempts'), 'attempt'));
+        $this->assertCount(3, $this->getJson("/reminders/{$reminder->id}/attempts?attempts_page=3")->json('attempts'));
+        $this->assertCount(20, $this->getJson("/reminders/{$reminder->id}/attempts?attempts_per_page=20")->json('attempts'));
+        $this->assertCount(10, $this->getJson("/reminders/{$reminder->id}/attempts?attempts_per_page=1000")->json('attempts'), 'a size that is not offered falls back to 10');
+    }
 }

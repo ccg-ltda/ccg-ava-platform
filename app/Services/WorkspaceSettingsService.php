@@ -8,7 +8,9 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
@@ -85,6 +87,14 @@ class WorkspaceSettingsService
     public function update(Workspace $workspace, array $data, ?UploadedFile $logo, bool $removeLogo): void
     {
         $stored = $logo ? Storage::putFile("workspaces/{$workspace->id}/logo", $logo) : null;
+
+        // The disk does not throw (`throw => false`): a failed write returns false, and carrying on would report success while the old logo stays.
+        if ($logo && ! $stored) {
+            Log::error('workspace_logo_store_failed', ['workspace_id' => $workspace->id]);
+
+            throw ValidationException::withMessages(['logo' => 'No se pudo guardar el logo. Se conserva el anterior; inténtalo de nuevo.']);
+        }
+
         $previous = null;
 
         try {

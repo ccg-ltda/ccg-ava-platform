@@ -278,6 +278,7 @@ export default function AgendaPanel({ appointments, dayCounts, filters, options,
                                                         <span key={`${item.kind}-${item.offset}-${index}`} title={item.reason ?? undefined}>
                                                             {index > 0 && ' · '}
                                                             {notificationLabel(item)}: {item.statusLabel}
+                                                            {item.answer && ` (${item.answer})`}
                                                         </span>
                                                     ))}
                                                 </p>
@@ -343,7 +344,7 @@ export default function AgendaPanel({ appointments, dayCounts, filters, options,
                             <div className="flex justify-between gap-4"><dt className="text-ink-muted">Origen</dt><dd className="text-right font-medium text-ink">{detail.originLabel}</dd></div>
                             {detail.notes && <div><dt className="text-ink-muted">Nota</dt><dd className="mt-0.5 text-ink">{detail.notes}</dd></div>}
                             {detail.notifications?.length > 0 && (
-                                <div><dt className="text-ink-muted">Avisos</dt><dd className="mt-0.5 text-ink">{detail.notifications.map((item) => `${notificationLabel(item)}: ${item.statusLabel}`).join(' · ')}</dd></div>
+                                <div><dt className="text-ink-muted">Avisos</dt><dd className="mt-0.5 text-ink">{detail.notifications.map((item) => `${notificationLabel(item)}: ${item.statusLabel}${item.answer ? ` (${item.answer})` : ''}`).join(' · ')}</dd></div>
                             )}
                             {detail.active && detail.customerConfirmed && <div><Badge tone="green">Cliente confirmó</Badge></div>}
                         </dl>

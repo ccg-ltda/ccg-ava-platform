@@ -29,7 +29,7 @@ use Illuminate\Support\Str;
 class AppointmentService
 {
     /** Whoever the audit trail names when nobody is signed in (the web page, Ava Chat). */
-    private const SOURCES = ['web' => 'Reserva en línea (automático)', 'chat' => 'Asistente (automático)', 'admin' => 'Consola de la plataforma'];
+    private const SOURCES = ['web' => 'Reserva en línea (automático)', 'chat' => 'Asistente (automático)', 'admin' => 'Consola de la plataforma', 'whatsapp' => 'Cliente (botón de WhatsApp)'];
 
     public function __construct(private readonly AvailabilityCalculator $calculator, private readonly AuditLogger $audit, private readonly Locations $locations, private readonly AppointmentNotifier $notifier) {}
 
@@ -219,7 +219,7 @@ class AppointmentService
      */
     public function customerConfirm(Appointment $appointment, string $source): array
     {
-        if (! in_array($source, ['assistant', 'link', 'staff'], true)) {
+        if (! in_array($source, ['assistant', 'link', 'staff', 'whatsapp'], true)) {
             throw new \InvalidArgumentException("Unknown confirmation source [{$source}].");
         }
 
@@ -241,7 +241,7 @@ class AppointmentService
             }
 
             $current->forceFill(['customer_confirmed_at' => now(), 'customer_confirmation_source' => $source])->save();
-            $this->auditAutomatic($current, 'updated', [AuditLogger::change('Confirmación del cliente', null, 'Confirmó que asistirá')], ['assistant' => 'chat', 'link' => 'web', 'staff' => 'admin'][$source]);
+            $this->auditAutomatic($current, 'updated', [AuditLogger::change('Confirmación del cliente', null, 'Confirmó que asistirá')], ['assistant' => 'chat', 'link' => 'web', 'staff' => 'admin', 'whatsapp' => 'whatsapp'][$source]);
 
             return ['appointment' => $current, 'replayed' => false];
         });

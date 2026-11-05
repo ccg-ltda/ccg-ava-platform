@@ -79,7 +79,7 @@ export default function ChannelCard({ channel, delay, readOnly, can = { edit: tr
     const Icon = channelIcon(channel.key);
 
     return (
-        <Card hover delay={delay} className={`flex flex-col p-5 ${available ? '' : 'bg-canvas/40'}`}>
+        <Card hover delay={delay} className={`flex h-full flex-col p-5 ${available ? '' : 'bg-canvas/40'}`}>
             <div className="flex flex-wrap items-start gap-3">
                 <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/15 text-accent-blue">
                     <Icon className="size-5" aria-hidden="true" />
@@ -91,7 +91,8 @@ export default function ChannelCard({ channel, delay, readOnly, can = { edit: tr
                 <Badge tone={tone}>{stateLabel}</Badge>
             </div>
 
-            {!available && <p className="mt-3 text-sm text-ink-muted">{unavailable}</p>}
+            {/* Instagram and Messenger explain themselves inside «Configurar», not on the card. */}
+            {!available && !channel.oauth && <p className="mt-3 text-sm text-ink-muted">{unavailable}</p>}
 
             {integration && (
                 <dl className="mt-4 space-y-1.5 text-sm">
@@ -119,10 +120,10 @@ export default function ChannelCard({ channel, delay, readOnly, can = { edit: tr
             {channel.connection && integration && !channel.oauth && <ConnectionStages connection={channel.connection} />}
             {integration && testable && !readOnly && can.test && !integration.lastTest && <p className="mt-3 text-sm text-ink-muted">Conexión sin verificar. Usa «Probar conexión» para comprobarla con el proveedor.</p>}
 
-            {/* One footer for every card: pinned to the bottom (cards of different heights line up) and centered, with no extra rule above it. Instagram and Messenger have a single «Configurar»
-                (the modal holds the connection, its stages and the platform app); the others keep Editar / Probar / Activar. */}
+            {/* One footer for every card, pinned to the bottom and aligned to the right edge (cards of different heights line up). Instagram and Messenger have a single «Configurar»
+                (the modal holds the explanation, the connection, its stages and the platform app); the others keep Editar / Probar / Activar. */}
             {!readOnly && !channel.restricted && channel.oauth && (can.edit || can.test || can.toggle || platformEditable) && (
-                <div className="mt-auto flex flex-wrap items-center justify-center gap-2 pt-5">
+                <div className="mt-auto flex flex-wrap items-center justify-end gap-2 pt-5">
                     <PrimaryButton type="button" onClick={onConfigureMeta} className="gap-2">
                         <Settings2 className="size-4" aria-hidden="true" />
                         Configurar
@@ -131,7 +132,7 @@ export default function ChannelCard({ channel, delay, readOnly, can = { edit: tr
             )}
 
             {available && !readOnly && !channel.oauth && (integration ? can.edit || can.test || can.toggle : can.edit) && (
-                <div className="mt-auto flex flex-wrap items-center justify-center gap-2 pt-5">
+                <div className="mt-auto flex flex-wrap items-center justify-end gap-2 pt-5">
                     {integration ? (
                         <>
                             {can.edit && <IconButton icon={Pencil} label="Editar" context={label} onClick={onConfigure} />}

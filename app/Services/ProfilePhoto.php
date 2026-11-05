@@ -68,7 +68,11 @@ class ProfilePhoto
         imagejpeg($canvas, null, 85);
         $encoded = (string) ob_get_clean();
 
-        Storage::put($this->path($user), $encoded);
+        // The disk does not throw (`throw => false`): a failed write must not be reported as a saved photo.
+        if (! Storage::put($this->path($user), $encoded)) {
+            throw ValidationException::withMessages(['photo' => 'No se pudo guardar la foto. Inténtalo de nuevo.']);
+        }
+
         $this->changed($user, true);
     }
 

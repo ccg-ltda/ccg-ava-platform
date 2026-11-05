@@ -36,6 +36,8 @@ class SettingsController extends Controller
             // The global email template: offered (and its data sent) ONLY to the platform administration inside the administrative Workspace. The routes re-check it.
             'emailTemplate' => EnsurePlatformAdministration::allows($request, 'view-email-template') ? app(EmailTemplates::class)->current() + [
                 'placeholders' => EmailTemplates::PLACEHOLDERS,
+                'variables' => app(EmailTemplates::class)->catalog(),
+                'messages' => array_column(EmailTemplates::MESSAGES, 'label'),
                 'canEdit' => EnsurePlatformAdministration::allows($request, 'edit-email-template'),
                 'brand' => (string) config('branding.name'),
                 'maxBytes' => EmailTemplates::MAX_BYTES,

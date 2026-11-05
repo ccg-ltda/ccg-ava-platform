@@ -3,13 +3,18 @@
 namespace App\Services;
 
 use App\Booking\AppointmentNotifier;
+use App\Booking\AppointmentReplies;
+use App\Jobs\SendAgentMessage;
+use App\Models\AppointmentReply;
 use App\Models\Chatbot;
 use App\Models\ChatbotExecution;
+use App\Models\Conversation;
 use App\Models\Integration;
 use App\Models\Message;
 use App\Services\Concerns\StartsChannelConversations;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * What Meta's WhatsApp webhook tells Ava (messages and delivery states of a number), already authenticated by the
@@ -86,9 +91,11 @@ class WhatsAppInbound
                 continue;
             }
 
-            $type = $message['type'] ?? 'other';
+            // A button the contact pressed (a template's quick reply or an interactive reply) is the contact's own message: its title is the text.
+            $button = $this->buttonReply($message);
+            $type = $button !== null ? 'text' : ($message['type'] ?? 'other');
             $type = $type === 'text' || in_array($type, self::MEDIA, true) ? $type : 'other';
-            $body = $type === 'text' ? ($message['text']['body'] ?? null) : ($message[$message['type'] ?? '']['caption'] ?? null);
+            $body = $button['text'] ?? ($type === 'text' ? ($message['text']['body'] ?? null) : ($message[$message['type'] ?? '']['caption'] ?? null));
             $name = $names->get($from);
 
             $result = $this->conversations->record($chatbot, 'whatsapp', [
@@ -101,10 +108,82 @@ class WhatsAppInbound
                 'sent_at' => $this->moment($message['timestamp'] ?? null),
             ]);
 
+            // A button of an appointment reminder is an ANSWER to Agenda: it is applied (once, however many times Meta repeats the event) and only «Reprogramar» goes on to the workflow.
+            if ($button !== null && AppointmentReplies::isOurs($button['payload'])) {
+                $this->appointmentAnswer($chatbot, $from, $id, $button['payload'], $result);
+
+                continue;
+            }
+
             // A repeated event (Meta retries) is stored once and must not make the chatbot answer twice.
             if ($result['created']) {
                 $this->startExecution($result['conversation'], $result['message']);
             }
+        }
+    }
+
+    /** @param  array<string, mixed>  $message  @return array{payload: string, text: string}|null */
+    private function buttonReply(array $message): ?array
+    {
+        $found = match ($message['type'] ?? null) {
+            'button' => [$message['button']['payload'] ?? null, $message['button']['text'] ?? null],
+            'interactive' => [$message['interactive']['button_reply']['id'] ?? null, $message['interactive']['button_reply']['title'] ?? null],
+            default => null,
+        };
+
+        return $found !== null && is_string($found[0]) && $found[0] !== '' && strlen($found[0]) <= 256
+            ? ['payload' => $found[0], 'text' => is_string($found[1]) ? mb_substr($found[1], 0, 200) : $found[0]]
+            : null;
+    }
+
+    /** @param  array{message: Message, created: bool, conversation: Conversation}  $recorded */
+    private function appointmentAnswer(Chatbot $chatbot, string $from, string $externalId, string $payload, array $recorded): void
+    {
+        try {
+            $replies = app(AppointmentReplies::class);
+            $answer = $replies->handle($chatbot, $from, $externalId, $payload, $recorded['conversation']->id);
+        } catch (Throwable $e) {
+            // Only the class: the exception text may carry the customer's data. Meta will retry the event, and the repeat guard makes that safe.
+            Log::error('appointment_reply_failed', ['exception' => $e::class, 'conversation' => $recorded['conversation']->id]);
+
+            return;
+        }
+
+        if ($answer === null) {
+            return;
+        }
+
+        if ($recorded['created'] && in_array($answer['result'], [AppointmentReply::APPLIED, AppointmentReply::ALREADY_DONE], true)) {
+            $recorded['message']->update(['body' => $replies->conversationText($answer['action'], $answer['appointment'])]);
+        }
+
+        if ($answer['action'] === 'reschedule' && $answer['result'] === AppointmentReply::APPLIED) {
+            $this->startExecution($recorded['conversation'], $recorded['message']->refresh());
+
+            return;
+        }
+
+        $this->acknowledge($recorded['conversation'], $replies->acknowledgement($answer['action'], $answer['result'], $answer['appointment']));
+    }
+
+    /**
+     * The acknowledgement the customer gets for a button: one text message in the same conversation, from the system, handed to the channel like an agent's message (one attempt,
+     * never resent). It is created only when `AppointmentReplies::handle` accepted a NEW answer, so a repeated webhook event never sends it twice.
+     */
+    private function acknowledge(Conversation $conversation, ?string $text): void
+    {
+        if ($text === null) {
+            return;
+        }
+
+        try {
+            $message = $conversation->messages()->create([
+                'workspace_id' => $conversation->workspace_id, 'direction' => 'out', 'sender' => 'system', 'type' => 'text', 'body' => $text, 'status' => Message::PENDING, 'sent_at' => now(),
+            ]);
+            $conversation->forceFill(['last_message_at' => $message->sent_at])->save();
+            SendAgentMessage::dispatchAfterResponse($message->id);
+        } catch (Throwable $e) {
+            Log::error('appointment_reply_ack_failed', ['exception' => $e::class, 'conversation' => $conversation->id]);
         }
     }
 

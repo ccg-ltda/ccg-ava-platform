@@ -50,8 +50,8 @@ class EnvExampleTest extends TestCase
         $forwarded = array_flip($found[1]);
 
         $notForwarded = [
-            // Development only (published ports, the local MinIO) and the build-time Vite variable (the production image is built without an .env).
-            'APP_PORT', 'VITE_PORT', 'DB_FORWARD_PORT', 'MINIO_PORT', 'MINIO_ROOT_USER', 'MINIO_ROOT_PASSWORD', 'VITE_APP_NAME', 'E2E_ALLOW_DATABASE',
+            // Development only (published ports, the local MinIO) and the local E2E guard.
+            'APP_PORT', 'VITE_PORT', 'DB_FORWARD_PORT', 'MINIO_PORT', 'MINIO_ROOT_USER', 'MINIO_ROOT_PASSWORD', 'E2E_ALLOW_DATABASE',
             // Defaults computed in code, fixed by the Compose (LOG_CHANNEL=stderr) or used only by seeders.
             'CACHE_PREFIX', 'ALERT_LOG_PATH', 'LOG_STACK', 'LOG_DEPRECATIONS_CHANNEL', 'APP_FAKER_LOCALE',
             // Fixed by the Compose itself instead of being forwarded.

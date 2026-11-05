@@ -1,6 +1,7 @@
 import { ChevronDown, ChevronUp, MessageSquareText, Plus, X } from 'lucide-react';
 import { useRef } from 'react';
 import Badge from '@/Components/Badge';
+import Checkbox from '@/Components/Checkbox';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import Textarea from '@/Components/Textarea';
@@ -167,6 +168,19 @@ export default function MessageFields({ kind, message, onChange, variables, fall
                             <InputError message={errors[`messages.${kind}.template.language`]} className="mt-1" />
                         </div>
                     </div>
+
+                    {kind === 'reminder' && (
+                        <div className="space-y-1">
+                            <label className="flex items-start gap-2 text-sm text-ink">
+                                <Checkbox className="mt-0.5" checked={Boolean(message.template.buttons)} onChange={(event) => setTemplate({ buttons: event.target.checked })} disabled={disabled} />
+                                <span>La plantilla tiene los botones Confirmar, Reprogramar y Cancelar</span>
+                            </label>
+                            <p className="text-xs text-ink-muted">
+                                Meta debe tener aprobada la plantilla con tres botones de respuesta rápida, en este orden: Confirmar, Reprogramar, Cancelar. Ava envía con cada botón un código firmado; si la plantilla no tiene esos botones, Meta rechaza el envío y queda como «Falló».
+                            </p>
+                            <InputError message={errors[`messages.${kind}.template.buttons`]} className="mt-1" />
+                        </div>
+                    )}
 
                     <div className="space-y-2">
                         <p className="text-sm font-medium text-ink">Variables de la plantilla, en orden</p>

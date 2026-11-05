@@ -456,4 +456,20 @@ class ChatbotsTest extends TestCase
         $this->assertSame('WhatsApp · Ventas', $channel->resource_label);
         $this->assertStringNotContainsString('EAAB', json_encode(AuditLog::all()->toArray()));
     }
+
+    public function test_a_failed_avatar_write_is_reported_and_keeps_the_previous_avatar(): void
+    {
+        Storage::fake();
+        $this->actAs();
+        $bot = $this->bot(Workspace::orderBy('id')->first());
+        $this->post("/chatbots/{$bot->id}", ['name' => 'Asistente', 'avatar' => UploadedFile::fake()->image('a.png', 64, 64)])->assertSessionHasNoErrors();
+        $kept = $bot->fresh()->avatar_path;
+
+        // The disk answers false instead of throwing (`throw => false`): the person must be told, and nothing changes.
+        Storage::shouldReceive('putFile')->once()->andReturn(false);
+        $this->post("/chatbots/{$bot->id}", ['name' => 'Otro nombre', 'avatar' => UploadedFile::fake()->image('b.png', 64, 64)])->assertSessionHasErrors('avatar');
+
+        $this->assertSame($kept, $bot->fresh()->avatar_path);
+        $this->assertSame('Asistente', $bot->fresh()->name, 'a refused save changes nothing, not even the name');
+    }
 }

@@ -43,6 +43,7 @@ class SaveBookingNotificationSettingsRequest extends FormRequest
             $rules["messages.{$kind}.template"] = ['nullable', 'array'];
             $rules["messages.{$kind}.template.name"] = ['nullable', 'string', 'regex:/^[a-z0-9_]{1,512}$/'];
             $rules["messages.{$kind}.template.language"] = ['nullable', 'string', 'regex:/^[a-z]{2,3}(_[A-Z]{2})?$/'];
+            $rules["messages.{$kind}.template.buttons"] = ['nullable', 'boolean'];
             $rules["messages.{$kind}.template.params"] = ['nullable', 'array', 'max:10'];
             $rules["messages.{$kind}.template.params.*"] = ['string', Rule::in(config('bookings.notifications.variables'))];
         }
@@ -124,7 +125,7 @@ class SaveBookingNotificationSettingsRequest extends FormRequest
             $name = trim((string) $this->validated("messages.{$kind}.template.name", ''));
             $entry = array_filter([
                 'text' => $text !== '' ? $text : null,
-                'template' => $name !== '' ? ['name' => $name, 'language' => (string) $this->validated("messages.{$kind}.template.language"), 'params' => array_values((array) $this->validated("messages.{$kind}.template.params", []))] : null,
+                'template' => $name !== '' ? ['name' => $name, 'language' => (string) $this->validated("messages.{$kind}.template.language"), 'params' => array_values((array) $this->validated("messages.{$kind}.template.params", []))] + ($kind === 'reminder' && $this->boolean("messages.{$kind}.template.buttons") ? ['buttons' => true] : []) : null,
             ]);
 
             if ($entry !== []) {

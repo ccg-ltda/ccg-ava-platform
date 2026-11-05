@@ -14,6 +14,7 @@ use App\Http\Middleware\SafeThrottleRequests;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\TraceAgentTool;
 use App\Support\ApiProtection;
+use App\Support\TrustedProxies;
 use Illuminate\Auth\Middleware\Authorize;
 use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
 use Illuminate\Contracts\Session\Middleware\AuthenticatesSessions;
@@ -57,9 +58,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // A session opened before a password change or reset is closed on its next request (the guard compares the password hash).
         $middleware->authenticateSessions();
 
-        // Behind a load balancer / reverse proxy: TRUSTED_PROXIES="*" or a comma-separated list. Unset = trust none.
+        // Behind a load balancer / reverse proxy: a comma-separated list of IPs or CIDR ranges. Unset = trust none. "*" is honoured outside production only (see App\Support\TrustedProxies).
         $middleware->trustProxies(
-            at: env('TRUSTED_PROXIES') === '*' ? '*' : array_filter(explode(',', (string) env('TRUSTED_PROXIES'))),
+            at: TrustedProxies::resolve(env('TRUSTED_PROXIES'), (string) env('APP_ENV', 'production')),
         );
 
         // Authorization runs BEFORE route-model binding. Otherwise a person who may not use a route still learns whether an id exists

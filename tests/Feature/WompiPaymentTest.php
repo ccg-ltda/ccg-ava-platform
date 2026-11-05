@@ -19,6 +19,7 @@ use App\Services\ModuleAccess;
 use App\Services\SignupService;
 use App\Support\Nit;
 use Database\Seeders\ModuleCatalogSeeder;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory;
@@ -187,7 +188,7 @@ class WompiPaymentTest extends TestCase
         $this->assertSame(1, Subscription::where('workspace_id', $request->workspace_id)->count());
         $this->assertSame(Subscription::ACTIVE, Subscription::where('workspace_id', $request->workspace_id)->value('status'));
         $this->assertEqualsCanonicalizing(['dashboard', 'reports'], app(ModuleAccess::class)->keys(Workspace::findOrFail($request->workspace_id)));
-        $this->assertSame(['confirmed', 'confirmed'], PaymentEvent::orderBy('id')->pluck('outcome')->all());
+        $this->assertSame(['confirmed'], PaymentEvent::orderBy('id')->pluck('outcome')->all(), 'a repeated event is one row (unique key), not two');
     }
 
     public function test_pending_declined_voided_and_error_transactions_activate_nothing(): void
@@ -276,8 +277,8 @@ class WompiPaymentTest extends TestCase
 
         $this->wompiSays($request, 'APPROVED', cents: 100);
         $this->send($this->event($request, cents: 100))->assertOk();
-        $this->wompiSays($request, 'APPROVED', currency: 'USD');
-        $this->send($this->event($request))->assertOk();
+        $this->wompiSays($request, 'APPROVED', tx: '1234-1-2', currency: 'USD');
+        $this->send($this->event($request, tx: '1234-1-2'))->assertOk();
 
         $this->assertSame('awaiting_payment', $request->fresh()->status);
         $this->assertNull($request->fresh()->paid_at);
@@ -393,5 +394,34 @@ class WompiPaymentTest extends TestCase
         $this->assertNull($log->status_code);
         $this->assertSame('awaiting_payment', $request->fresh()->status);
         $this->assertSame('lookup_failed', PaymentEvent::latest('id')->value('outcome'));
+    }
+
+    public function test_the_database_refuses_the_same_event_twice_but_keeps_the_history_of_a_transaction(): void
+    {
+        $row = ['provider' => 'wompi', 'environment' => 'sandbox', 'transaction_id' => 'tx-1', 'reference' => 'ref-1', 'event_status' => 'PENDING', 'event_timestamp' => 1761000000];
+        PaymentEvent::create($row);
+
+        // Another status or another timestamp of the SAME transaction is a different event: the history keeps it.
+        PaymentEvent::create(['event_status' => 'APPROVED'] + $row);
+        PaymentEvent::create(['event_timestamp' => 1761000050] + $row);
+        $this->assertSame(3, PaymentEvent::where('transaction_id', 'tx-1')->count());
+
+        $this->expectException(UniqueConstraintViolationException::class);
+        PaymentEvent::create($row);
+    }
+
+    public function test_two_deliveries_of_one_event_leave_one_row_even_when_the_first_asked_for_a_retry(): void
+    {
+        $request = $this->awaitingPayment();
+        $this->contract();
+
+        $this->fakeWompi(Http::response('boom', 500));
+        $this->send($this->event($request))->assertStatus(503);
+        $this->assertSame(['lookup_failed'], PaymentEvent::pluck('outcome')->all());
+
+        $this->wompiSays($request);
+        $this->send($this->event($request))->assertOk();
+
+        $this->assertSame(['confirmed'], PaymentEvent::pluck('outcome')->all(), 'the retry updates the row of the same event');
     }
 }

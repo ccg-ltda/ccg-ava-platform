@@ -52,6 +52,7 @@ Route::middleware(['body.limit:agent', 'throttle.safe:agent', 'agent', 'api.prot
         Route::post('/surveys', [AgentReportingController::class, 'define'])->name('reporting.surveys.define');
         Route::post('/surveys/dispatches', [AgentReportingController::class, 'dispatch'])->name('reporting.surveys.dispatch');
         Route::post('/surveys/responses', [AgentReportingController::class, 'respond'])->name('reporting.surveys.respond');
+        Route::get('/surveys/responses/progress', [AgentReportingController::class, 'progress'])->name('reporting.surveys.progress');
     });
 
     Route::middleware('workspace.module:conversations')->group(function () {

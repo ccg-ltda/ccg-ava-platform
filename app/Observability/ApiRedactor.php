@@ -21,7 +21,20 @@ class ApiRedactor
     /** Cap of the bodies of a technical-activity step, where the full request and answer are meant to be read. */
     public const STEP_BYTES = 65536;
 
-    private const SENSITIVE_KEY = '/(authorization|cookie|token|secret|password|passwd|pwd|passphrase|api[-_]?key|apikey|access[-_]?key|private|signature|checksum|credential|bearer|card|cvv|cvc|session|jwt|otp|x-ava|consumer[-_]?(key|secret)|(^|[-_])(auth|key|pin)($|[-_])|[-_]key$)/i';
+    // `card` and `session` only as a whole word of the key (`card`, `card_number`, `session_id`, `sessionId`), so `discard_reason`, `postcard` or `sessions_count` are not masked by accident.
+    private const SENSITIVE_KEY = '/(authorization|cookie|token|secret|password|passwd|pwd|passphrase|api[-_]?key|apikey|access[-_]?key|private|signature|checksum|credential|bearer|(^|[-_.])card($|[-_.])|cardnumber|cardholder|cvv|cvc|(^|[-_.])session($|[-_.])|sessionid|jwt|otp|x-ava|consumer[-_]?(key|secret)|(^|[-_])(auth|key|pin)($|[-_])|[-_]key$)/i';
+
+    /**
+     * A credential written as `name=value` or `"name":"value"` INSIDE a string (a query string in a URL, a form, a JSON the string carries, a log line): the value is masked when the name
+     * suggests a secret, as the keys of structured data already are. The name may carry a prefix or suffix (`aws_secret_access_key`, `client_secret_id`).
+     */
+    private const SENSITIVE_PAIR = '/(["\']?[A-Za-z0-9_.-]*(?:password|passwd|pwd|passphrase|secret|token|api[-_]?key|apikey|access[-_]?key|private[-_]?key|credential|authorization|signature|cookie)[A-Za-z0-9_.-]*["\']?\s*[:=]\s*["\']?)([^\s"\'&,;}\])]+)/i';
+
+    /** `user:password@host` in a URL (a connection string, a webhook with basic auth): the credentials go, the host stays readable. */
+    private const URL_USERINFO = '#(?<=://)[^\s/:@]+:[^\s/@]+(?=@)#';
+
+    /** A private key block, whole or cut by the size cap. */
+    private const PRIVATE_KEY_BLOCK = '/-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/s';
 
     /** Keys whose value is a person's contact data: masked in the activity variant whatever the value looks like. */
     private const PERSONAL_PHONE_KEY = '/(phone|tel[eé]fono|celular|mobile|whatsapp|msisdn|contact[-_]?id)/i';
@@ -32,7 +45,10 @@ class ApiRedactor
 
     private const PHONE_VALUE = '/\+\d{8,15}\b|\b57\d{10}\b/';
 
-    private const SENSITIVE_VALUE = '/\b(?:pub|prv)_(?:test|prod)_[A-Za-z0-9]+|\b(?:test|prod)_(?:events|integrity)_[A-Za-z0-9]+|\bBearer\s+[A-Za-z0-9._~+\/=-]+|\b(?:\d[ -]?){13,19}\b|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|\b(?:ck|cs)_[A-Fa-f0-9]{32,}|\bAKIA[0-9A-Z]{16}\b|\bsk-[A-Za-z0-9_-]{16,}|\bgh[pousr]_[A-Za-z0-9]{20,}|\bxox[abprs]-[A-Za-z0-9-]{10,}|\bBasic\s+[A-Za-z0-9+\/=]{8,}|\bav[ax]_[A-Za-z0-9]{16,}|\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{40,}\b/';
+    private const SENSITIVE_VALUE = '/\b(?:pub|prv)_(?:test|prod)_[A-Za-z0-9]+|\b(?:test|prod)_(?:events|integrity)_[A-Za-z0-9]+|\bBearer\s+[A-Za-z0-9._~+\/=-]+|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|\b(?:ck|cs)_[A-Fa-f0-9]{32,}|\bAKIA[0-9A-Z]{16}\b|\bsk-[A-Za-z0-9_-]{16,}|\bgh[pousr]_[A-Za-z0-9]{20,}|\bxox[abprs]-[A-Za-z0-9-]{10,}|\bBasic\s+[A-Za-z0-9+\/=]{8,}|\bav[ax]_[A-Za-z0-9]{16,}|\b(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{8,}|\bwhsec_[A-Za-z0-9]{8,}|\bAIza[0-9A-Za-z_-]{30,}|\bSG\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|\b(?:SK|AC)[0-9a-f]{32}\b|hooks\.slack\.com\/services\/[A-Za-z0-9\/]+|\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{40,}\b/';
+
+    /** 13 to 19 digits, with spaces or dashes: masked only when they pass the Luhn check of a real card number (an id of Meta, an order number or a phone id of 15 digits is not a card). */
+    private const CARD_VALUE = '/\b(?:\d[ -]?){12,18}\d\b/';
 
     /** The stricter variant of the technical activity (credentials plus e-mails and phone numbers). */
     public function forActivity(): static
@@ -148,7 +164,12 @@ class ApiRedactor
 
     private function scrub(string $value): string
     {
+        $value = (string) preg_replace(self::PRIVATE_KEY_BLOCK, self::MASK, $value);
+        $value = (string) preg_replace(self::URL_USERINFO, self::MASK, $value);
         $value = (string) preg_replace(self::SENSITIVE_VALUE, self::MASK, $value);
+        // After the known formats, so «Authorization: Bearer x» is masked as a whole token first; a value already masked is left alone.
+        $value = (string) preg_replace_callback(self::SENSITIVE_PAIR, fn (array $m) => str_starts_with($m[2], '[REDACTED') ? $m[0] : $m[1].self::MASK, $value);
+        $value = (string) preg_replace_callback(self::CARD_VALUE, fn (array $m) => $this->luhn($m[0]) ? self::MASK : $m[0], $value);
 
         if ($this->maskPersonal) {
             $value = (string) preg_replace_callback(self::EMAIL_VALUE, fn (array $m) => $this->email($m[0]), $value);
@@ -156,6 +177,32 @@ class ApiRedactor
         }
 
         return $value;
+    }
+
+    /** Luhn checksum of a run of digits (spaces and dashes ignored): true for a number that can be a real card. */
+    private function luhn(string $digits): bool
+    {
+        $digits = preg_replace('/\D/', '', $digits) ?? '';
+        $length = strlen($digits);
+
+        if ($length < 13 || $length > 19) {
+            return false;
+        }
+
+        $sum = 0;
+
+        for ($i = 0; $i < $length; $i++) {
+            $digit = (int) $digits[$length - 1 - $i];
+
+            if ($i % 2 === 1) {
+                $digit *= 2;
+                $digit -= $digit > 9 ? 9 : 0;
+            }
+
+            $sum += $digit;
+        }
+
+        return $sum % 10 === 0;
     }
 
     /** `ana@example.com` becomes `a***@e***.com`: enough to tell two customers apart while debugging, not enough to contact one. */

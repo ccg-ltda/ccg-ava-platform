@@ -214,16 +214,24 @@ class WhatsAppType implements ChannelIntegrationType, SendsMessages, SendsTempla
      * language, 132000 / 132012 the parameters do not match it, 132015 / 132016 paused or disabled, 130429 / 131056 rate limits (nothing went out).
      *
      * @param  list<string>  $parameters
+     * @param  list<string>  $quickReplies
      */
-    public function sendTemplate(Integration $integration, string $to, string $template, string $language, array $parameters, ?string $reference = null): SendResult
+    public function sendTemplate(Integration $integration, string $to, string $template, string $language, array $parameters, ?string $reference = null, array $quickReplies = []): SendResult
     {
         $id = $integration->config['phone_number_id'];
         $url = rtrim(config('integrations.whatsapp.graph_url'), '/').'/'.config('integrations.whatsapp.graph_version')."/{$id}/messages";
         $timeout = (int) config('integrations.whatsapp.timeout');
         $body = ['messaging_product' => 'whatsapp', 'recipient_type' => 'individual', 'to' => $to, 'type' => 'template', 'template' => ['name' => $template, 'language' => ['code' => $language]]];
 
-        if ($parameters !== []) {
-            $body['template']['components'] = [['type' => 'body', 'parameters' => array_map(fn (string $value) => ['type' => 'text', 'text' => $value], $parameters)]];
+        $components = $parameters === [] ? [] : [['type' => 'body', 'parameters' => array_map(fn (string $value) => ['type' => 'text', 'text' => $value], $parameters)]];
+
+        // Quick-reply buttons: one component per button, by position in the template; the payload is what Meta sends back when the contact presses it.
+        foreach (array_values($quickReplies) as $index => $payload) {
+            $components[] = ['type' => 'button', 'sub_type' => 'quick_reply', 'index' => (string) $index, 'parameters' => [['type' => 'payload', 'payload' => $payload]]];
+        }
+
+        if ($components !== []) {
+            $body['template']['components'] = $components;
         }
 
         try {

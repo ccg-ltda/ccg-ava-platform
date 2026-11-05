@@ -273,7 +273,14 @@ class ConversationsTest extends TestCase
         return $conversation;
     }
 
+    /** The ONE inbox, narrowed to a chatbot and a channel with its filters (what the channel cards link to). */
     private function url(Chatbot $bot, string $channel = 'whatsapp', string $query = ''): string
+    {
+        return "/conversations?chatbot={$bot->id}&channel={$channel}".($query === '' ? '' : '&'.ltrim($query, '?'));
+    }
+
+    /** The old address of a channel's conversations: it must redirect to the inbox, never render a page of its own. */
+    private function legacyUrl(Chatbot $bot, string $channel = 'whatsapp', string $query = ''): string
     {
         return "/chatbots/{$bot->id}/channels/{$channel}/conversations".$query;
     }
@@ -301,11 +308,10 @@ class ConversationsTest extends TestCase
         $this->actAs(in: $workspace);
 
         $this->get($this->url($bot))->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('Conversations/Index')->where('channel.key', 'whatsapp')->where('channel.label', 'WhatsApp')->where('channel.state', 'active')
-            ->where('chatbot.name', 'Asistente')->where('selected', null)
+            ->component('Conversations/Index')->where('filters.channel', 'whatsapp')->where('filters.chatbot', $bot->id)->where('selected', null)
             ->where('conversations', fn ($rows) => collect($rows)->pluck('id')->all() === [$new->id, $old->id])
             ->where('conversations.0.preview', 'Tú: Claro, te ayudo')->where('conversations.1.preview', 'Hola')->where('conversations.1.contactName', 'Ana')
-            ->where('reportEndpoint', url('/api/agent/messages'))->where('scope.readOnly', false));
+            ->where('scope.readOnly', false));
     }
 
     public function test_a_selected_conversation_shows_its_messages_in_order_with_their_type_and_state(): void
@@ -374,7 +380,10 @@ class ConversationsTest extends TestCase
         $this->assertStringNotContainsString('SECRETO DE B', $page->getContent());
         $this->assertStringNotContainsString('573009999999', $page->getContent());
 
-        $this->get($this->url($botB))->assertNotFound();
+        $this->get($this->legacyUrl($botB))->assertNotFound();
+        // A foreign chatbot named as a filter of the inbox is not applied: the page shows this Workspace's own conversations only.
+        $leak = $this->get($this->url($botB))->assertOk();
+        $this->assertStringNotContainsString('SECRETO DE B', $leak->getContent());
         $this->get($this->url($botA, query: "?c={$foreign->id}"))->assertNotFound();
         $this->get($this->url($botB, query: "?c={$foreign->id}"))->assertNotFound();
         $this->get($this->url($botA, query: "?c={$own->id}"))->assertOk();
@@ -403,7 +412,8 @@ class ConversationsTest extends TestCase
 
         // Instagram and Messenger keep conversations now (App\Services\MetaMessagingInbound); a channel that does not exist still has no page.
         $this->get($this->url($bot, 'instagram'))->assertOk();
-        $this->get($this->url($bot, 'nope'))->assertNotFound();
+        $this->get($this->legacyUrl($bot, 'nope'))->assertNotFound();
+        $this->get($this->legacyUrl($bot, 'instagram'))->assertRedirect(route('conversations.index', ['chatbot' => $bot->id, 'channel' => 'instagram']));
     }
 
     public function test_a_normal_user_cannot_look_at_another_workspaces_conversations_with_the_parameter(): void
@@ -439,13 +449,13 @@ class ConversationsTest extends TestCase
         SupportAccess::create(['workspace_id' => $client->id, 'user_id' => $admin->id, 'data_type' => 'conversations', 'reason' => 'ticket de prueba de soporte', 'expires_at' => now()->addMinutes(30)]);
         $page = $this->get($this->url($botClient, query: "?workspace={$client->id}&c={$conversation->id}"));
         $page->assertInertia(fn (AssertableInertia $p) => $p
-            ->where('scope.readOnly', true)->where('scope.workspace.code', 'EMPRESA_ABC')->where('canConfigure', false)
+            ->where('scope.readOnly', true)->where('scope.workspace.code', 'EMPRESA_ABC')
             ->where('selected.items.0.body', 'hola ABC')->where('selected.contactId', '••••0001')->has('conversations', 1));
         $this->assertStringNotContainsString('hola XYZ', $page->getContent());
 
         // The chatbot of ABC does not exist in the Workspace being looked at when the parameter names another one.
-        $this->get($this->url($botClient, query: "?workspace={$other->id}"))->assertNotFound();
-        $this->get($this->url($botClient))->assertNotFound();
+        $this->get($this->legacyUrl($botClient, query: "?workspace={$other->id}"))->assertNotFound();
+        $this->get($this->legacyUrl($botClient))->assertNotFound();
     }
 
     public function test_the_page_never_carries_a_credential_or_the_agent_token(): void

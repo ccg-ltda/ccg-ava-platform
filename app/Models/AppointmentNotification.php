@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * One message Ava planned to send about an appointment (receipt, confirmation or reminder) and what happened to it. The states say only what is
@@ -52,6 +53,11 @@ class AppointmentNotification extends Model
     public function workspace(): BelongsTo
     {
         return $this->belongsTo(Workspace::class);
+    }
+
+    public function replies(): HasMany
+    {
+        return $this->hasMany(AppointmentReply::class, 'notification_id');
     }
 
     public function appointment(): BelongsTo

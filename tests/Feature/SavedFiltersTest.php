@@ -73,7 +73,7 @@ class SavedFiltersTest extends TestCase
         $this->store('conversations', ['name' => 'Pendientes de web', 'criteria' => ['status' => 'pending', 'channel' => 'web', 'chatbot' => $bot->id, 'q' => 'ana']])->assertSessionHasNoErrors();
 
         $this->get('/conversations')->assertInertia(fn (AssertableInertia $page) => $page->has('savedFilters', 1)->where('savedFilters.0.criteria.status', 'pending'));
-        $this->get("/chatbots/{$bot->id}/channels/whatsapp/conversations")->assertInertia(fn (AssertableInertia $page) => $page->where('savedFilters', null));
+        $this->get("/chatbots/{$bot->id}/channels/whatsapp/conversations")->assertRedirect(route('conversations.index', ['chatbot' => $bot->id, 'channel' => 'whatsapp']));
     }
 
     private function actAsWorkspace(): Workspace

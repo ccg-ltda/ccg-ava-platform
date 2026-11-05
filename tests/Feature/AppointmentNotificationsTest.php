@@ -3,8 +3,10 @@
 namespace Tests\Feature;
 
 use App\Booking\AppointmentNotifier;
+use App\Booking\AppointmentReplies;
 use App\Models\Appointment;
 use App\Models\AppointmentNotification;
+use App\Models\AppointmentReply;
 use App\Models\Chatbot;
 use App\Models\Conversation;
 use App\Models\Integration;
@@ -857,5 +859,182 @@ class AppointmentNotificationsTest extends TestCase
         app(AppointmentNotifier::class)->send($row3->id);
         $this->assertSame([AppointmentNotification::SKIPPED, 'customer_anonymized'], [$row3->fresh()->status, $row3->fresh()->reason]);
         $this->assertCount($before, $this->sent(), 'nothing new went out');
+    }
+    // --- the buttons of a reminder: Confirmar, Reprogramar, Cancelar ----------------------------------------------------------------------
+
+    /** A reminder with buttons, already sent through the fake Meta; returns [appointment, notification]. @return array{0: Appointment, 1: AppointmentNotification} */
+    private function reminderWithButtons(bool $buttons = true): array
+    {
+        $template = ['name' => 'recordatorio_cita', 'language' => 'es', 'params' => ['nombre', 'fecha']] + ($buttons ? ['buttons' => true] : []);
+        $this->configure(['reminders_enabled' => true, 'reminder_offsets' => [1440], 'notify_messages' => ['reminder' => ['template' => $template]]]);
+        $bot = $this->workspace->chatbots()->firstOrCreate(['name' => 'Asistente'], ['instructions' => 'x']);
+        $bot->channels()->firstOrCreate(['workspace_id' => $this->workspace->id, 'channel' => 'whatsapp'], ['integration_id' => $this->whatsapp->id, 'is_active' => true]);
+        $appointment = $this->book();
+        $this->assertSame(1, app(AppointmentNotifier::class)->plan($appointment, 'reminder', 1440, now()));
+        $notification = $this->notifications($appointment)->sole();
+        app(AppointmentNotifier::class)->send($notification->id);
+
+        return [$appointment->fresh(), $notification->fresh()];
+    }
+
+    /** What the customer's phone sends to Meta's webhook when a button of the template is pressed, signed like the real thing. */
+    private function pressButton(string $payload, string $wamid, string $from = '573001112233', string $phoneNumberId = '111222333', string $kind = 'button')
+    {
+        config(['services.meta.app_secret' => 'meta-app-SECRET', 'services.meta.webhook_verify_token' => 'verify-me']);
+        $message = ['from' => $from, 'id' => $wamid, 'timestamp' => (string) now()->timestamp] + ($kind === 'button'
+            ? ['type' => 'button', 'button' => ['payload' => $payload, 'text' => 'Botón']]
+            : ['type' => 'interactive', 'interactive' => ['type' => 'button_reply', 'button_reply' => ['id' => $payload, 'title' => 'Botón']]]);
+        $raw = json_encode(['object' => 'whatsapp_business_account', 'entry' => [['changes' => [['field' => 'messages', 'value' => ['metadata' => ['phone_number_id' => $phoneNumberId], 'contacts' => [['wa_id' => $from, 'profile' => ['name' => 'Laura']]], 'messages' => [$message]]]]]]]);
+
+        return $this->call('POST', '/api/webhooks/whatsapp', [], [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_X_HUB_SIGNATURE_256' => 'sha256='.hash_hmac('sha256', $raw, 'meta-app-SECRET')], $raw);
+    }
+
+    public function test_a_reminder_template_with_buttons_carries_three_signed_quick_replies(): void
+    {
+        [, $notification] = $this->reminderWithButtons();
+        $body = $this->sent()[0];
+        $buttons = collect($body['template']['components'])->where('type', 'button')->values();
+
+        $this->assertCount(3, $buttons);
+        $this->assertSame(['0', '1', '2'], $buttons->pluck('index')->all());
+        $this->assertSame(['quick_reply'], $buttons->pluck('sub_type')->unique()->all());
+        $payloads = $buttons->map(fn ($b) => $b['parameters'][0]['payload'])->all();
+        $this->assertSame(['confirm', 'reschedule', 'cancel'], array_map(fn ($p) => AppointmentReplies::parse($p)['action'], $payloads));
+        $this->assertSame([$notification->id], array_unique(array_map(fn ($p) => AppointmentReplies::parse($p)['notification'], $payloads)));
+        $this->assertNull(AppointmentReplies::parse(substr($payloads[0], 0, -1).(str_ends_with($payloads[0], '0') ? '1' : '0')), 'an edited payload is not valid');
+        $this->assertNull(AppointmentReplies::parse('avr:c:'.($notification->id + 1).':'.explode(':', $payloads[0])[3]), 'a signature only fits its own notification');
+    }
+
+    public function test_a_reminder_without_the_buttons_flag_sends_no_buttons(): void
+    {
+        $this->reminderWithButtons(false);
+
+        $this->assertSame([], collect($this->sent()[0]['template']['components'])->where('type', 'button')->all());
+    }
+
+    public function test_confirm_registers_the_answer_once_even_if_meta_repeats_the_event(): void
+    {
+        [$appointment, $notification] = $this->reminderWithButtons();
+        $payload = AppointmentReplies::payload($notification->id, 'confirm');
+
+        $this->pressButton($payload, 'wamid.BTN1')->assertOk();
+        $this->pressButton($payload, 'wamid.BTN1')->assertOk(); // Meta retries
+        $this->pressButton($payload, 'wamid.BTN2')->assertOk(); // the customer taps again on another message
+
+        $fresh = $appointment->fresh();
+        $this->assertNotNull($fresh->customer_confirmed_at);
+        $this->assertSame('whatsapp', $fresh->customer_confirmation_source);
+        $this->assertSame(Appointment::CONFIRMED, $fresh->status);
+        $this->assertSame([['confirm', 'applied'], ['confirm', 'already_done']], AppointmentReply::orderBy('id')->get()->map(fn ($r) => [$r->action, $r->result])->all());
+
+        $conversation = Conversation::where('workspace_id', $this->workspace->id)->where('contact_id', '573001112233')->sole();
+        $this->assertSame(2, $conversation->messages()->where('direction', 'in')->count(), 'the two real taps; the retry is not stored twice');
+        $this->assertStringContainsString('Confirmo mi cita de Consulta', $conversation->messages()->where('external_id', 'wamid.BTN1')->value('body'));
+        $this->assertSame('Confirmó · Aplicada', app(AppointmentNotifier::class)->summary($appointment->fresh()->load('notifications.replies'), true)[0]['answer']);
+    }
+
+    public function test_cancel_closes_the_appointment_and_later_buttons_find_it_closed(): void
+    {
+        [$appointment, $notification] = $this->reminderWithButtons();
+
+        $this->pressButton(AppointmentReplies::payload($notification->id, 'cancel'), 'wamid.BTN1')->assertOk();
+        $this->assertSame(Appointment::CANCELLED, $appointment->fresh()->status);
+        $this->assertNotNull($appointment->fresh()->cancelled_at);
+
+        $this->pressButton(AppointmentReplies::payload($notification->id, 'confirm'), 'wamid.BTN2')->assertOk();
+        $this->assertSame(Appointment::CANCELLED, $appointment->fresh()->status, 'a confirmation never revives a cancelled appointment');
+        $this->assertNull($appointment->fresh()->customer_confirmed_at);
+        $this->assertSame(['applied', 'closed'], AppointmentReply::orderBy('id')->pluck('result')->all());
+    }
+
+    public function test_reschedule_changes_nothing_in_the_agenda_but_ties_the_appointment_to_the_conversation_for_the_ai(): void
+    {
+        [$appointment, $notification] = $this->reminderWithButtons();
+        $this->assertNull($appointment->conversation_id);
+
+        $this->pressButton(AppointmentReplies::payload($notification->id, 'reschedule'), 'wamid.BTN1', kind: 'interactive')->assertOk();
+
+        $fresh = $appointment->fresh();
+        $conversation = Conversation::where('workspace_id', $this->workspace->id)->where('contact_id', '573001112233')->sole();
+        $this->assertSame($conversation->id, $fresh->conversation_id, 'the booking tools only see the appointments of the conversation');
+        $this->assertSame(Appointment::CONFIRMED, $fresh->status);
+        $this->assertEquals($appointment->starts_at, $fresh->starts_at);
+        $this->assertSame('reschedule', AppointmentReply::sole()->action);
+        $this->assertStringContainsString('Quiero reprogramar mi cita de Consulta', $conversation->messages()->sole()->body);
+    }
+
+    public function test_an_answer_from_another_number_or_a_forged_or_foreign_payload_changes_nothing(): void
+    {
+        [$appointment, $notification] = $this->reminderWithButtons();
+
+        $this->pressButton(AppointmentReplies::payload($notification->id, 'cancel'), 'wamid.BTN1', from: '573009998877')->assertOk();
+        $this->assertSame(Appointment::CONFIRMED, $appointment->fresh()->status);
+        $this->assertSame('not_authorized', AppointmentReply::sole()->result);
+
+        $this->pressButton('avr:x:'.$notification->id.':'.str_repeat('a', 24), 'wamid.BTN2')->assertOk();
+        $this->assertSame(1, AppointmentReply::count(), 'a forged payload is not even recorded');
+
+        // A notification of ANOTHER Workspace, signed by Ava, pressed through this Workspace's number: not found here.
+        $this->makeService($this->other, ['name' => 'Corte', 'duration_minutes' => 30]);
+        $this->makeProfessional($this->other, [$this->other->services()->firstOrFail()], 'Otro');
+        $foreign = $this->book('2026-10-13T10:00:00Z', '+573001112233', 'admin', $this->other);
+        $row = AppointmentNotification::create(['workspace_id' => $this->other->id, 'appointment_id' => $foreign->id, 'kind' => 'reminder', 'offset_minutes' => 60, 'version' => 0, 'channel' => 'whatsapp', 'scheduled_for' => now(), 'status' => 'sent', 'attempts' => 1]);
+        $this->pressButton(AppointmentReplies::payload($row->id, 'cancel'), 'wamid.BTN3')->assertOk();
+        $this->assertSame(Appointment::CONFIRMED, $foreign->fresh()->status);
+        $this->assertSame(1, AppointmentReply::count());
+    }
+
+    public function test_a_button_of_an_old_version_of_the_appointment_is_expired(): void
+    {
+        [$appointment, $notification] = $this->reminderWithButtons();
+        $appointment->forceFill(['reschedule_count' => 1])->save(); // moved after the reminder went out
+
+        $this->pressButton(AppointmentReplies::payload($notification->id, 'confirm'), 'wamid.BTN1')->assertOk();
+
+        $this->assertNull($appointment->fresh()->customer_confirmed_at);
+        $this->assertSame('expired', AppointmentReply::sole()->result);
+    }
+
+    public function test_a_button_that_is_not_ours_is_just_a_message_of_the_contact(): void
+    {
+        $this->reminderWithButtons();
+
+        $this->pressButton('promo-si', 'wamid.BTN1')->assertOk();
+
+        $this->assertSame(0, AppointmentReply::count());
+        $this->assertSame('Botón', Conversation::where('contact_id', '573001112233')->sole()->messages()->sole()->body);
+    }
+
+    public function test_confirm_and_cancel_get_one_acknowledgement_each_and_a_repeated_event_gets_none(): void
+    {
+        [$appointment, $notification] = $this->reminderWithButtons();
+        $sentBefore = count($this->sent());
+        $ack = fn () => Conversation::where('contact_id', '573001112233')->firstOrFail()->messages()->where('sender', 'system')->orderBy('id')->get();
+
+        $this->pressButton(AppointmentReplies::payload($notification->id, 'confirm'), 'wamid.ACK1')->assertOk();
+        $this->pressButton(AppointmentReplies::payload($notification->id, 'confirm'), 'wamid.ACK1')->assertOk(); // Meta retries
+        $this->assertCount(1, $ack());
+        $this->assertStringContainsString('Quedó confirmada', $ack()[0]->body);
+        $this->assertSame('sent', $ack()[0]->status);
+        $this->assertCount($sentBefore + 1, $this->sent(), 'one message left for Meta, not two');
+
+        $this->pressButton(AppointmentReplies::payload($notification->id, 'cancel'), 'wamid.ACK2')->assertOk();
+        $this->assertCount(2, $ack());
+        $this->assertStringContainsString('cancelamos', $ack()[1]->body);
+
+        // The appointment is closed now: another tap is answered, a sender that is not the customer is not.
+        $this->pressButton(AppointmentReplies::payload($notification->id, 'confirm'), 'wamid.ACK3')->assertOk();
+        $this->assertStringContainsString('ya no está activa', $ack()[2]->body);
+        $this->pressButton(AppointmentReplies::payload($notification->id, 'confirm'), 'wamid.ACK4', from: '573009998877')->assertOk();
+        $this->assertCount(3, $ack());
+    }
+
+    public function test_reschedule_gets_no_acknowledgement_because_the_ai_answers(): void
+    {
+        [, $notification] = $this->reminderWithButtons();
+
+        $this->pressButton(AppointmentReplies::payload($notification->id, 'reschedule'), 'wamid.ACK5')->assertOk();
+
+        $this->assertSame(0, Conversation::where('contact_id', '573001112233')->firstOrFail()->messages()->where('sender', 'system')->count());
     }
 }

@@ -7,6 +7,7 @@ use App\Models\SignupRequest;
 use App\Observability\ApiCallRecorder;
 use App\Services\OperationalAlert;
 use App\Services\SignupService;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -57,6 +58,22 @@ class WompiEvents
         return hash_equals($expected, strtolower($checksum)) && ($headerChecksum === null || hash_equals($expected, strtolower($headerChecksum)));
     }
 
+    /**
+     * The row of this event: the same event delivered again (Wompi repeats them, and a 503 asks for a retry) finds its row instead of adding another, and is processed again from it
+     * (every step after this one is idempotent). Two deliveries at the same instant: the database's unique key lets one create it and the other reads it.
+     *
+     * @param  array<string, mixed>  $key
+     * @param  array<string, mixed>  $values
+     */
+    private function record(array $key, array $values): PaymentEvent
+    {
+        try {
+            return PaymentEvent::firstOrCreate($key, $values);
+        } catch (UniqueConstraintViolationException) {
+            return PaymentEvent::where($key)->firstOrFail();
+        }
+    }
+
     /** @return self::OK|self::INVALID|self::RETRY */
     public function handle(array $payload, ?string $headerChecksum = null): string
     {
@@ -88,10 +105,10 @@ class WompiEvents
         }
 
         $request = SignupRequest::where('public_id', $transaction['reference'])->first();
-        $event = PaymentEvent::create([
-            'provider' => 'wompi', 'environment' => $this->config->environment(), 'transaction_id' => substr($id, 0, 80), 'reference' => substr($transaction['reference'], 0, 80),
-            'event_status' => substr((string) ($transaction['status'] ?? ''), 0, 20), 'event_timestamp' => (int) ($payload['timestamp'] ?? 0), 'signup_request_id' => $request?->id,
-        ]);
+        $event = $this->record([
+            'provider' => 'wompi', 'environment' => $this->config->environment(), 'transaction_id' => substr($id, 0, 80),
+            'event_status' => substr((string) ($transaction['status'] ?? ''), 0, 20), 'event_timestamp' => (int) ($payload['timestamp'] ?? 0),
+        ], ['reference' => substr($transaction['reference'], 0, 80), 'signup_request_id' => $request?->id]);
 
         if (! $request) {
             $event->update(['outcome' => 'unknown_reference']);

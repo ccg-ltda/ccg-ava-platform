@@ -18,6 +18,7 @@ use App\Reminders\ReminderRuleScheduler;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
 use Inertia\Testing\AssertableInertia;
@@ -691,5 +692,77 @@ class ReminderRulesTest extends TestCase
         $this->assertSame(1, $this->scan()['scheduled']);
         $this->assertSame(0, AppointmentNotification::count(), 'the rules never create an Agenda notification');
         $this->assertSame('Regla de recordatorio (automático)', AuditLog::where('resource_type', 'reminder')->value('user_name'));
+    }
+    // --- server-side paging of the rules, of what a rule decided and (RemindersTest) of the tries of a reminder --------------------------------
+
+    /** The rule of the main Workspace plus copies of it, so the list has `$total` rules (the workspace_id of a copy is the same; their services do not matter to the list). */
+    private function manyRules(int $total): ReminderRule
+    {
+        $rule = $this->rule();
+
+        for ($i = 2; $i <= $total; $i++) {
+            $copy = $rule->replicate();
+            $copy->forceFill(['workspace_id' => $this->a->id, 'name' => sprintf('Regla %03d', $i), 'is_active' => false])->save();
+        }
+
+        return $rule;
+    }
+
+    public function test_the_rules_are_paged_in_the_server_ten_at_a_time_with_their_total_and_keep_the_filters(): void
+    {
+        $this->manyRules(23);
+        $this->b->reminderRules()->forceCreate(['name' => 'Regla de otro Workspace', 'activated_at' => now(), 'delay_amount' => 30, 'delay_unit' => 'days', 'send_time' => '10:00', 'channel' => 'email', 'subject' => 'Hola', 'body' => 'Mensaje']);
+
+        $this->get('/reminders')->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('rules.data', 10)->where('rules.meta.total', 23)->where('rules.meta.last_page', 3)->where('rules.meta.per_page', 10)->where('rules.meta.current_page', 1));
+        $this->get('/reminders?rules_page=3')->assertInertia(fn (AssertableInertia $page) => $page->has('rules.data', 3)->where('rules.meta.from', 21)->where('rules.meta.to', 23));
+        $this->get('/reminders?rules_page=2&rules_per_page=20')->assertInertia(fn (AssertableInertia $page) => $page->has('rules.data', 3)->where('rules.meta.per_page', 20));
+        // An unknown page size falls back to 10 (a visitor can not ask for the whole table) and a page past the end is empty, not an error.
+        $this->get('/reminders?rules_per_page=5000')->assertInertia(fn (AssertableInertia $page) => $page->has('rules.data', 10)->where('rules.meta.per_page', 10));
+        $this->get('/reminders?rules_page=99')->assertInertia(fn (AssertableInertia $page) => $page->has('rules.data', 0)->where('rules.meta.total', 23));
+        // The reminders list's own filters and page travel with the rules' page; they do not reset each other.
+        $this->get('/reminders?status=sent&reminders_page=1&rules_page=2')->assertInertia(fn (AssertableInertia $page) => $page->where('filters.status', 'sent')->has('rules.data', 10)->where('rules.meta.current_page', 2));
+        // Active rules first, then by name: a page is stable.
+        $names = collect($this->get('/reminders?rules_page=1')->viewData('page')['props']['rules']['data'])->pluck('name')->all();
+        $this->assertSame('Recordatorio de mantenimiento de uñas', $names[0]);
+        $this->assertSame(['Regla 002', 'Regla 003'], array_slice($names, 1, 2));
+    }
+
+    public function test_the_rules_stats_are_computed_only_for_the_rules_of_the_page(): void
+    {
+        $this->manyRules(12);
+        $queries = [];
+        DB::listen(function ($query) use (&$queries) {
+            $queries[] = $query->sql;
+        });
+
+        $this->get('/reminders')->assertOk();
+
+        // The count by state is ONE grouped query per page, never one per rule (no N+1 however many rules there are).
+        $this->assertCount(1, array_filter($queries, fn ($sql) => str_contains($sql, 'reminder_rule_id, status, count(*)')));
+    }
+
+    public function test_the_history_of_a_rule_is_paged_newest_first_and_never_loads_everything(): void
+    {
+        $rule = $this->rule();
+        $customer = $this->customer('Laura', '+573001112233');
+
+        for ($i = 1; $i <= 25; $i++) {
+            $appointment = $this->appointment($customer, $this->nails, 'completed', "-{$i} days");
+            ReminderRuleEvent::create(['reminder_rule_id' => $rule->id, 'workspace_id' => $this->a->id, 'appointment_id' => $appointment->id, 'customer_id' => $customer->id, 'status' => 'skipped', 'reason' => 'no_consent', 'evaluated_at' => now()]);
+        }
+
+        $first = $this->getJson("/reminders/rules/{$rule->id}/events")->assertOk()->assertJsonPath('meta.total', 25)->assertJsonPath('meta.last_page', 3)->assertJsonPath('meta.per_page', 10);
+        $this->assertCount(10, $first->json('events'));
+        $this->assertSame(10, count(array_unique(array_column($first->json('events'), 'id'))));
+        $last = $this->getJson("/reminders/rules/{$rule->id}/events?events_page=3")->assertOk();
+        $this->assertCount(5, $last->json('events'));
+        $this->assertGreaterThan(max(array_column($last->json('events'), 'id')), min(array_column($first->json('events'), 'id')), 'newest first: page 1 holds higher ids than page 3');
+        $this->assertCount(20, $this->getJson("/reminders/rules/{$rule->id}/events?events_per_page=20")->json('events'));
+
+        // Another Workspace's rule is not reachable, whatever the page.
+        $this->getJson("/reminders/rules/{$rule->id}/events?events_page=2")->assertOk();
+        $this->actAsMember($this->b);
+        $this->getJson("/reminders/rules/{$rule->id}/events?events_page=1")->assertNotFound();
     }
 }
