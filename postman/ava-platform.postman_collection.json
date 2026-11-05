@@ -36443,6 +36443,41 @@
       "description": "Salud, inicio, textos legales y rutas del almacenamiento local.",
       "item": [
         {
+          "name": "GET /api/ready (readiness: PostgreSQL y, si se usa, Redis)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/ready",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "ready"
+              ]
+            },
+            "description": "Pública, sin sesión ni cookie. 200 {\"status\":\"ok\"} o 503 {\"status\":\"unavailable\"} (nunca dice qué dependencia falla). Para un balanceador o monitor externo; NO para el healthcheck del contenedor (ese es `/up`)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 o 503 con estado', () => { pm.expect([200, 503]).to.include(pm.response.code); pm.expect(pm.response.json()).to.have.property('status'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "GET //",
           "request": {
             "method": "GET",

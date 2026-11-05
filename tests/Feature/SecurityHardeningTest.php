@@ -10,6 +10,7 @@ use App\Services\OperationalAlert;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Vite;
 use Tests\Support\BuildsBookings;
 use Tests\TestCase;
 
@@ -246,5 +247,26 @@ class SecurityHardeningTest extends TestCase
         config(['app.trusted_proxies' => '10.0.0.0/8']);
         Artisan::call('integrations:diagnose');
         $this->assertStringContainsString('TRUSTED_PROXIES no es un comodín', Artisan::output());
+    }
+
+    public function test_every_error_page_carries_the_csp_nonce_on_its_inline_style_and_never_names_routes(): void
+    {
+        // A running Vite dev server leaves public/hot behind and then no CSP is sent: these tests describe the built application.
+        Vite::useHotFile(storage_path('framework/testing/vite-hot-that-does-not-exist'));
+        config(['security.csp.mode' => 'enforce']);
+
+        // 405 has no view of its own in the framework: it used to fall to Symfony's page, whose <style> has no nonce and is blocked under enforce.
+        foreach (['/workspaces' => 405, '/no-such-page-at-all' => 404] as $path => $status) {
+            $response = $this->get($path)->assertStatus($status);
+            $nonce = preg_match("/nonce-([A-Za-z0-9+\/=]+)'/", (string) $response->headers->get('Content-Security-Policy'), $found) ? $found[1] : null;
+
+            $this->assertNotNull($nonce, $path);
+            preg_match_all('/<style\b[^>]*>/', $response->getContent(), $styles);
+            $this->assertNotEmpty($styles[0], $path);
+            foreach ($styles[0] as $tag) {
+                $this->assertStringContainsString('nonce="'.$nonce.'"', $tag, "inline style without the nonce on {$path}");
+            }
+            $this->assertStringNotContainsString('not supported for route', $response->getContent(), 'the message of a routing error is not shown');
+        }
     }
 }

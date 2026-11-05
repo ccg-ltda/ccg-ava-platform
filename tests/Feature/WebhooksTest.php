@@ -246,7 +246,8 @@ class WebhooksTest extends TestCase
     {
         foreach (config('webhooks.events') as $key => $event) {
             [$class, $method] = explode('::', $event['origin']);
-            $file = collect(glob(app_path('{*,*/*}/'.$class.'.php'), GLOB_BRACE))->first();
+            // (GLOB_BRACE does not exist in the PHP of Alpine, the production image: the same lookup without it.)
+            $file = collect(array_merge(glob(app_path('*/'.$class.'.php')) ?: [], glob(app_path('*/*/'.$class.'.php')) ?: []))->first();
             $this->assertNotNull($file, "{$key}: {$class} does not exist");
             $this->assertStringContainsString("function {$method}", file_get_contents($file), "{$key}: {$event['origin']} does not exist");
             $this->assertStringContainsString("'{$key}'", file_get_contents($file), "{$key}: not published in {$class}");

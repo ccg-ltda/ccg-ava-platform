@@ -5,6 +5,16 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch: # también se puede lanzar a mano desde la pestaña Actions
+
+# Solo lectura: ningún paso necesita escribir en el repositorio ni usa secretos.
+permissions:
+  contents: read
+
+# Un push nuevo a la misma rama cancela la ejecución anterior que sigue en curso (no gasta minutos en un commit ya obsoleto).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   php:

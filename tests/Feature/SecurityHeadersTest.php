@@ -23,6 +23,9 @@ class SecurityHeadersTest extends TestCase
         // Whatever the developer's machine has (a running Vite dev server leaves public/hot behind), these tests describe the built application.
         Vite::useHotFile(storage_path('framework/testing/vite-hot-that-does-not-exist'));
 
+        // The default is `enforce` (see test_the_default_policy_is_enforced); these tests describe the report-only mode that can still be chosen with SECURITY_CSP_MODE.
+        config(['security.csp.mode' => 'report-only']);
+
         if (! is_file(public_path('build/manifest.json'))) {
             $this->markTestSkipped('The frontend build (npm run build) is needed to render the pages.');
         }
@@ -33,7 +36,16 @@ class SecurityHeadersTest extends TestCase
         return (string) $response->headers->get($header);
     }
 
-    public function test_every_page_carries_the_basic_headers_and_a_report_only_policy_by_default(): void
+    public function test_the_default_policy_is_enforced_and_production_does_not_override_it(): void
+    {
+        $this->assertSame('enforce', (require config_path('security.php'))['csp']['mode'], 'without SECURITY_CSP_MODE the browser BLOCKS what the policy forbids');
+        $this->assertStringContainsString('SECURITY_CSP_MODE: ${SECURITY_CSP_MODE:-enforce}', (string) file_get_contents(base_path('docker-compose.prod.yml')));
+
+        config(['security.csp.mode' => 'enforce']);
+        $this->get('/legal')->assertOk()->assertHeader('Content-Security-Policy')->assertHeaderMissing('Content-Security-Policy-Report-Only');
+    }
+
+    public function test_every_page_carries_the_basic_headers_and_a_report_only_policy_when_that_mode_is_chosen(): void
     {
         $response = $this->get('/legal')->assertOk();
 

@@ -612,4 +612,14 @@ class ChannelAppearanceTest extends TestCase
         $this->assertStringNotContainsString('eval(', $script);
         $this->assertStringContainsString("indexOf('https://wa.me/') === 0", $script);
     }
+
+    public function test_the_widget_styles_itself_with_a_constructable_stylesheet_so_a_strict_csp_does_not_unstyle_it(): void
+    {
+        $script = file_get_contents(public_path('widget/ava-widget.js'));
+
+        // An inline <style> is blocked by style-src without 'unsafe-inline' (Ava's own CSP in enforce, and any customer page with a strict one): found in the browser, in the appearance preview.
+        $this->assertStringContainsString('adoptedStyleSheets', $script);
+        $this->assertStringContainsString('replaceSync', $script);
+        $this->assertSame(1, substr_count($script, "el('style')"), 'the <style> element is only the fallback for browsers without constructable stylesheets');
+    }
 }

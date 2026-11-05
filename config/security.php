@@ -26,8 +26,8 @@ return [
     ],
 
     /*
-     * Content-Security-Policy. `report-only` (default) sends Content-Security-Policy-Report-Only: the browser reports what the policy would block and
-     * blocks nothing. `enforce` blocks. `off` sends none. Move to `enforce` only after reviewing the browser console (or `report_uri`) on every screen of the
+     * Content-Security-Policy. `enforce` (default) blocks what the policy forbids. `report-only` sends Content-Security-Policy-Report-Only: the browser reports it and
+     * blocks nothing. `off` sends none. Move to `enforce` only after reviewing the browser console (or `report_uri`) on every screen of the
      * application, authenticated ones included. No CSP is sent while the Vite dev server is running (public/hot exists).
      *
      * Inventory behind the directives (see RECOMENDACIONES.md):
@@ -39,7 +39,7 @@ return [
      *  - form-action: same origin plus the Wompi checkout the sign-up redirects to. frame-ancestors: nobody can frame Ava (the widget is a script, not a frame).
      */
     'csp' => [
-        'mode' => env('SECURITY_CSP_MODE', 'report-only'), // off | report-only | enforce
+        'mode' => env('SECURITY_CSP_MODE', 'enforce'), // off | report-only | enforce
         'report_uri' => env('SECURITY_CSP_REPORT_URI'),
         // No third-party host: scripts, styles and fonts are the application's own. Add a host here only for a resource that really needs it (and review its privacy).
         'script_hosts' => [],

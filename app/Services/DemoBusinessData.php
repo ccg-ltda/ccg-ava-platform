@@ -16,6 +16,7 @@ use App\Orders\OrderService;
 use App\Orders\ProductCategories;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -194,11 +195,19 @@ class DemoBusinessData
         DB::transaction(function () use ($workspace) {
             // Appointments and orders reference the rest, so they go first.
             $appointments = $this->demoAppointments($workspace)->pluck('id');
+            // What hangs from an appointment goes first: its messages and the answers a customer gave to the buttons of a reminder (that table exists once its migration is applied).
             DB::table('appointment_notifications')->whereIn('appointment_id', $appointments)->delete();
+            if (Schema::hasTable('appointment_replies')) {
+                DB::table('appointment_replies')->whereIn('appointment_id', $appointments)->delete();
+            }
+
             $workspace->appointments()->whereIn('id', $appointments)->delete();
             $workspace->bookingCustomers()->where('email', 'like', '%@'.self::DOMAIN)->delete();
 
             $orders = $this->demoOrders($workspace)->pluck('id');
+            if (Schema::hasTable('inventory_movements')) {
+                DB::table('inventory_movements')->where('workspace_id', $workspace->id)->whereIn('order_id', $orders)->delete(); // a sale's stock movement points at its order
+            }
             DB::table('order_status_changes')->whereIn('order_id', $orders)->delete();
             DB::table('order_lines')->whereIn('order_id', $orders)->delete();
             $workspace->orders()->whereIn('id', $orders)->delete();
@@ -228,6 +237,11 @@ class DemoBusinessData
 
             $products = $workspace->products()->where('sku', 'like', self::SKU.'%')->pluck('id');
             DB::table('location_product')->whereIn('product_id', $products)->delete();
+            // The stock of a product and its movements are tied to it (inventory by location): a product with stock could not be removed without this.
+            if (Schema::hasTable('inventory_movements')) {
+                DB::table('inventory_movements')->where('workspace_id', $workspace->id)->whereIn('product_id', $products)->delete();
+                DB::table('inventory_stocks')->where('workspace_id', $workspace->id)->whereIn('product_id', $products)->delete();
+            }
             $workspace->products()->whereIn('id', $products)->delete();
 
             $locations = $workspace->locations()->where('name', 'like', self::PREFIX.'%')->pluck('id');

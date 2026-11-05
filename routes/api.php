@@ -12,6 +12,7 @@ use App\Http\Controllers\AgentReportingController;
 use App\Http\Controllers\InboundWebhookReceiveController;
 use App\Http\Controllers\MetaWebhookController;
 use App\Http\Controllers\PublicBookingController;
+use App\Http\Controllers\ReadinessController;
 use App\Http\Controllers\WhatsAppWebhookController;
 use App\Http\Controllers\WidgetController;
 use App\Http\Controllers\WompiWebhookController;
@@ -25,6 +26,9 @@ use Illuminate\Support\Facades\Route;
  *  - /api/webhooks/whatsapp  Meta's webhook (404 until META_APP_SECRET and META_WEBHOOK_VERIFY_TOKEN are set); every event is
  *                   authenticated by its signature, and the Workspace comes from Ava's own records of the number.
  */
+// Readiness (`/api/ready`): 200 only when PostgreSQL (and Redis, when used) answer. For a load balancer or an external monitor; NOT for the container healthcheck (see ReadinessController).
+Route::get('/ready', ReadinessController::class)->middleware('throttle.safe:60,1')->name('ready');
+
 Route::prefix('webhooks')->name('webhooks.')->middleware(['body.limit:provider', 'throttle.safe:600,1'])->group(function () {
     Route::get('/whatsapp', [WhatsAppWebhookController::class, 'verify'])->name('whatsapp.verify');
     Route::post('/whatsapp', [WhatsAppWebhookController::class, 'receive'])->name('whatsapp.receive');

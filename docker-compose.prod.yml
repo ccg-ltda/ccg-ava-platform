@@ -92,7 +92,7 @@ x-php: &php
     ALERT_LOG_CHANNELS: ${ALERT_LOG_CHANNELS:-stderr}
     HORIZON_ALLOWED_EMAILS: ${HORIZON_ALLOWED_EMAILS:-}
     # Account recovery sends email: without a real MAIL_MAILER (smtp, ses...) and sender the forgot-password form says mail is not configured.
-    MAIL_MAILER: ${MAIL_MAILER:-log}
+    MAIL_MAILER: ${MAIL_MAILER:?MAIL_MAILER is required (smtp, ses... or log ON PURPOSE: with log no mail is sent and reset links and codes end up in the container log)}
     MAIL_SCHEME: ${MAIL_SCHEME:-}
     MAIL_HOST: ${MAIL_HOST:-}
     MAIL_PORT: ${MAIL_PORT:-587}
@@ -148,7 +148,7 @@ x-php: &php
     SECURITY_HSTS_MAX_AGE: ${SECURITY_HSTS_MAX_AGE:-15552000}
     SECURITY_HSTS_INCLUDE_SUBDOMAINS: ${SECURITY_HSTS_INCLUDE_SUBDOMAINS:-false}
     SECURITY_HSTS_PRELOAD: ${SECURITY_HSTS_PRELOAD:-false}
-    SECURITY_CSP_MODE: ${SECURITY_CSP_MODE:-report-only}
+    SECURITY_CSP_MODE: ${SECURITY_CSP_MODE:-enforce}
     SECURITY_CSP_REPORT_URI: ${SECURITY_CSP_REPORT_URI:-}
     CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-*}
 

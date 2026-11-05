@@ -353,4 +353,20 @@ class DemoBusinessDataTest extends TestCase
         $campaign = $this->admin->campaigns()->first();
         $this->get("/campaigns/{$campaign->id}")->assertOk();
     }
+
+    public function test_cleaning_also_removes_the_stock_and_the_movements_of_the_demo_products_and_the_answers_to_reminder_buttons(): void
+    {
+        $this->demo()->generate($this->admin);
+        $product = $this->admin->products()->where('sku', 'like', 'DEMO-%')->firstOrFail();
+        $order = $this->admin->orders()->firstOrFail();
+        DB::table('inventory_stocks')->insert(['workspace_id' => $this->admin->id, 'product_id' => $product->id, 'location_id' => null, 'quantity' => 5, 'min_quantity' => 1, 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('inventory_movements')->insert(['workspace_id' => $this->admin->id, 'product_id' => $product->id, 'location_id' => null, 'order_id' => $order->id, 'type' => 'sale', 'quantity_change' => -1, 'quantity_before' => 5, 'quantity_after' => 4, 'created_at' => now()]);
+        $appointment = $this->admin->appointments()->firstOrFail();
+        DB::table('appointment_replies')->insert(['workspace_id' => $this->admin->id, 'appointment_id' => $appointment->id, 'action' => 'confirm', 'result' => 'applied', 'channel' => 'whatsapp', 'external_id' => 'wamid.DEMO', 'responded_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
+
+        $this->demo()->clean($this->admin);
+
+        $this->assertSame(0, DB::table('inventory_stocks')->count() + DB::table('inventory_movements')->count() + DB::table('appointment_replies')->count());
+        $this->assertSame(0, $this->admin->products()->count());
+    }
 }

@@ -408,11 +408,29 @@
             setOpen(open);
         }
 
+        // A constructable stylesheet is not an inline <style>, so a page (or Ava itself) with a strict Content-Security-Policy (style-src without 'unsafe-inline') still styles the widget.
+        // Browsers without it fall back to the <style> element.
+        var sheet = null;
+
+        function applyStyles(css) {
+            if (typeof CSSStyleSheet === 'function' && 'replaceSync' in CSSStyleSheet.prototype && 'adoptedStyleSheets' in root) {
+                try {
+                    sheet = sheet || new CSSStyleSheet();
+                    sheet.replaceSync(css);
+                    root.adoptedStyleSheets = [sheet];
+
+                    return;
+                } catch (e) { /* fall back below */ }
+            }
+
+            root.appendChild(el('style')).textContent = css;
+        }
+
         function render() {
             var l = look(current);
             while (root.firstChild) root.removeChild(root.firstChild);
             panel = null;
-            root.appendChild(el('style')).textContent = styles(l, isDark(current), preview);
+            applyStyles(styles(l, isDark(current), preview));
 
             if (current.type === 'button') whatsapp(l); else chat(l);
         }

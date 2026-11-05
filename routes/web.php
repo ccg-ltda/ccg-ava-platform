@@ -73,7 +73,15 @@ use Illuminate\Support\Facades\Route;
 Route::redirect('/', '/pre-login');
 
 // Browsers ask for /favicon.ico on their own: it is served from the single brand folder (README, Favicon). Without the file there is nothing to serve.
-Route::get('/favicon.ico', fn () => is_file(public_path('brand/favicon.ico')) && filesize(public_path('brand/favicon.ico')) > 0 ? redirect('/brand/favicon.ico', 301) : abort(404))->name('favicon');
+Route::get('/favicon.ico', function () {
+    foreach (['favicon.ico', 'favicon.png'] as $file) {
+        if (is_file(public_path("brand/{$file}")) && filesize(public_path("brand/{$file}")) > 0) {
+            return redirect("/brand/{$file}", 301);
+        }
+    }
+
+    abort(404);
+})->name('favicon');
 
 // Public legal texts (no session): linked from the access screens and the account-recovery forms.
 Route::get('/legal', [LegalController::class, 'index'])->name('legal.index');
