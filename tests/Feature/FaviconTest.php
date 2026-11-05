@@ -42,16 +42,21 @@ class FaviconTest extends TestCase
         unlink($this->png);
     }
 
-    public function test_the_original_assets_and_the_derived_icon_are_in_place_and_valid_images(): void
+    public function test_the_brand_images_the_application_uses_are_valid_and_the_transparent_ones_really_have_alpha(): void
     {
-        foreach (['brand/Favicon.jpg' => 'image/jpeg', 'brand/Mascota.jpg' => 'image/jpeg', 'brand/favicon.png' => 'image/png'] as $file => $mime) {
+        // The delivered originals (Favicon.jpg, Mascota.jpg, Mascota2.jpg) are sources, not something the application needs at runtime.
+        foreach (['brand/favicon.png', 'brand/mascota-transparente.png'] as $file) {
             $info = getimagesize(public_path($file));
 
             $this->assertNotFalse($info, "{$file} is a valid image");
-            $this->assertSame($mime, $info['mime'], $file);
+            $this->assertSame('image/png', $info['mime'], $file);
+            // PNG colour type 6 = RGBA: byte 25 of the file (IHDR).
+            $this->assertSame(6, ord(substr((string) file_get_contents(public_path($file)), 25, 1)), "{$file} has an alpha channel");
         }
 
         $this->assertSame([256, 256], array_slice(getimagesize($this->png), 0, 2));
+        [$width, $height] = getimagesize(public_path('brand/mascota-transparente.png'));
+        $this->assertEqualsWithDelta(800 / 733, $width / $height, 0.01, 'the mascot keeps its proportions (the component declares 800x733)');
     }
 
     public function test_every_page_links_the_icon_and_the_root_icon_redirects_to_it(): void

@@ -212,14 +212,11 @@
         margin-bottom: 32px;
     }
 
-    /* The mascot (public/brand/Mascota.jpg) above the brand name. Square source, shown whole: fixed width, height from its own proportions, rounded corners. */
+    /* The mascot (public/brand/mascota-transparente.png, real alpha) above the brand name: fixed width, height from its own proportions, no frame, no shadow. */
     .logo-section .logo-mark {
-        width: 88px;
-        margin: 0 auto 16px;
-        border-radius: 22px;
-        overflow: hidden;
+        width: 104px;
+        margin: 0 auto 14px;
         line-height: 0;
-        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
     }
 
     .logo-mark img {
