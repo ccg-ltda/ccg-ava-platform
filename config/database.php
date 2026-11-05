@@ -16,6 +16,9 @@ return [
     |
     */
 
+    // Name of the ONE real database the e2e fixtures may touch on purpose (E2E_ALLOW_DATABASE); empty = they refuse `ccg_ava`. See App\Services\E2eFixtures.
+    'e2e_allow_database' => env('E2E_ALLOW_DATABASE'),
+
     'default' => env('DB_CONNECTION', 'pgsql'),
 
     /*

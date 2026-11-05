@@ -72,7 +72,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/pre-login');
 
-// Browsers ask for /favicon.ico on their own: it is served from the single brand folder (docs/favicon.md). Without the file there is nothing to serve.
+// Browsers ask for /favicon.ico on their own: it is served from the single brand folder (README, Favicon). Without the file there is nothing to serve.
 Route::get('/favicon.ico', fn () => is_file(public_path('brand/favicon.ico')) && filesize(public_path('brand/favicon.ico')) > 0 ? redirect('/brand/favicon.ico', 301) : abort(404))->name('favicon');
 
 // Public legal texts (no session): linked from the access screens and the account-recovery forms.
@@ -168,7 +168,7 @@ Route::middleware(['auth', 'workspace', 'throttle:authenticated'])->group(functi
         Route::delete('/{integration}', [IntegrationController::class, 'destroy'])->whereNumber('integration')->middleware('workspace.permission:delete-integrations')->name('destroy');
         // Each test is a real outbound request: keep it from being used to hammer a third party.
         // Historial de llamados: redacted record of the Workspace's outbound API calls (read only).
-        // Webhooks de salida (docs: RECOMENDACIONES.md §78). Reading is `view-webhooks`; every change is `manage-webhooks`. The list itself is a prop of the page above.
+        // Webhooks de salida (docs: RECOMENDACIONES.md). Reading is `view-webhooks`; every change is `manage-webhooks`. The list itself is a prop of the page above.
         Route::prefix('webhooks')->name('webhooks.')->group(function () {
             // Inbound endpoints (the URLs the customer's system calls): the same two permissions.
             Route::prefix('inbound')->name('inbound.')->group(function () {

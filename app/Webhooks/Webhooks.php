@@ -12,7 +12,7 @@ use Illuminate\Support\Str;
 use Throwable;
 
 /**
- * The single entry point for an outbound webhook event (RECOMENDACIONES.md §78). Business code calls `publish()` at the place where the fact becomes true; the event is
+ * The single entry point for an outbound webhook event (RECOMENDACIONES.md). Business code calls `publish()` at the place where the fact becomes true; the event is
  * queued only AFTER the surrounding database transaction commits (a rolled-back booking never reaches a consumer), one delivery row per active endpoint that subscribed.
  *
  * It can never break the business operation it reports: every failure is reported to the log and swallowed, and a database without the webhook tables (not migrated

@@ -200,4 +200,19 @@ class E2eFixturesTest extends TestCase
         $this->artisan('e2e:cleanup')->expectsOutputToContain('No e2e records left.')->assertSuccessful();
         $this->assertSame(0, User::count());
     }
+
+    public function test_the_fixtures_refuse_to_touch_the_real_database_unless_it_is_named_explicitly(): void
+    {
+        $default = config('database.default');
+        $original = config("database.connections.{$default}.database");
+        config(["database.connections.{$default}.database" => 'ccg_ava']);
+
+        try {
+            $this->expectException(RuntimeException::class);
+            $this->expectExceptionMessage('real database [ccg_ava]');
+            $this->fixtures->setup(1, false);
+        } finally {
+            config(["database.connections.{$default}.database" => $original]);
+        }
+    }
 }

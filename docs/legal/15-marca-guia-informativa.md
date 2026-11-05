@@ -1,0 +1,11 @@
+# Protección de la marca en Colombia — guía informativa (sin trámite iniciado)
+
+**Versión 0.2 (borrador) · Informativa, no es asesoría legal. No se hizo búsqueda de antecedentes ni solicitud, y NO se afirma que la marca esté disponible.** Fecha: 2026-11-04.
+
+- **Entidad:** Superintendencia de Industria y Comercio (SIC), Propiedad Industrial (sede electrónica `sedeelectronica.sic.gov.co`). Marco: Decisión Andina 486 de 2000 y normas colombianas (verificar vigentes).
+- **Antes de nada:** decidir el nombre (hoy la interfaz dice «Zonno Platform by CCG» y los documentos «Ava Platform») y hacer una **búsqueda de antecedentes** por clase con un abogado de propiedad industrial. «Ava» es un nombre común: riesgo alto de conflicto; usar o invertir sin verificar puede acabar en oposiciones, negativa o reclamos.
+- **Proceso:** solicitud en línea (solicitante, signo, productos/servicios por clase, poder si hay apoderado, pago) → examen de forma → publicación y oposiciones de terceros (30 días hábiles, verificar) → examen de registrabilidad → resolución (con recursos) → certificado, vigencia 10 años, **renovable**; usar la marca (el no uso de 3 años puede dar lugar a cancelación, verificar). El registro protege solo en Colombia y solo en las clases pedidas. Plazo: de varios meses a más de un año (**no verificado en fuente oficial**).
+- **Tipo:** denominativa (el nombre, la más amplia; primero), figurativa (logotipo) o mixta (nombre + logotipo; el logotipo aún no existe).
+- **Clases de Niza candidatas (confirmar edición vigente con el abogado):** 42 (SaaS y plataformas como servicio; la principal), 35 (gestión comercial y atención al cliente, según la redacción), 9 (software descargable, si se ofrece), 38 (mensajería, si se considera aplicable).
+- **Costos oficiales 2026** (sic.gov.co «Tasas signos distintivos», Resolución 6167 del 30-ene-2026; consultado 2026-11-04; la asignación de columnas es inferida y **debe verificarse** antes de pagar): una clase 1.347.500 en línea / 1.638.500 físico; cada clase adicional 673.500 / 777.500. Hay tarifas diferenciadas (mipymes, jóvenes, etc.). Sin verificar: tasa de antecedentes, renovación y recursos; honorarios aparte.
+- **Datos que faltan:** razón social, NIT, domicilio y representante legal de CCG (`datos-empresa-por-completar.md`), nombre definitivo y logotipo con su licencia.

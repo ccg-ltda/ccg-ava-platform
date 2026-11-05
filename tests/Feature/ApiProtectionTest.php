@@ -16,7 +16,7 @@ use Tests\Support\BuildsBookings;
 use Tests\TestCase;
 
 /**
- * The layers that protect the API from abuse and overload (config/api_protection.php, RECOMENDACIONES.md §79): the Workspace buckets and the concurrency cap of the agent API,
+ * The layers that protect the API from abuse and overload (config/api_protection.php, RECOMENDACIONES.md): the Workspace buckets and the concurrency cap of the agent API,
  * body size limits, the shared widget / booking buckets, the 429 contract (Retry-After, no secrets in the answer or the log) and that identities are never taken from what the
  * client says. The counters live in the cache (array here; Redis or the database in the real stacks).
  */

@@ -6,7 +6,7 @@ Documento de referencia para quien construya o revise un workflow del catálogo 
 
 Ava inicia cada ejecución con un `POST` firmado a `{URL de la instancia del Workspace}/webhook/{webhook_path}` (ver §8 para saber de dónde salen la URL y el secreto) y recibe la respuesta **en la misma petición HTTP** (espera `N8N_EXECUTION_TIMEOUT`, 25 s). n8n no recibe credenciales del Workspace. Sin conexión válida no se ejecuta nada: el mensaje se guarda y queda en la bandeja.
 
-**Estado de este contrato:** implementado en Ava y probado solo con HTTP simulado (`ConversationContinuityTest`, `ChatbotExecutionTest`, `N8nWorkspaceExecutionTest`). No existe ningún workflow real que lo cumpla ni se ha ejecutado contra un n8n real; el catálogo `workflows` de `config/n8n.php` está vacío. Los requisitos para la primera prueba real están en `pendientes.md` (sección 3, n8n).
+**Estado de este contrato:** implementado en Ava y probado solo con HTTP simulado (`ConversationContinuityTest`, `ChatbotExecutionTest`, `N8nWorkspaceExecutionTest`). No existe ningún workflow real que lo cumpla ni se ha ejecutado contra un n8n real; el catálogo `workflows` de `config/n8n.php` está vacío. Los requisitos para la primera prueba real están en `RECOMENDACIONES.md` (sección 3, n8n).
 
 Cabeceras: `X-Ava-Execution` (= `execution_id`), `X-Ava-Timestamp` (segundos), `X-Ava-Signature` = `sha256=` + HMAC-SHA256 de `"{timestamp}.{cuerpo}"` con el secreto de ejecución del Workspace (ver §8). El workflow **debe** verificar la firma y rechazar timestamps antiguos.
 
@@ -96,13 +96,13 @@ Criterios de aceptación (datos sintéticos, canal web o doble): nombre → tel�
 
 ## 7. El soporte de Zonno usa este mismo contrato
 
-Las solicitudes de soporte de los clientes son conversaciones `web` normales de un chatbot de `DESARROLLO_DEV` (§64 de `RECOMENDACIONES.md`). No hay configuración de IA propia: el chatbot debe estar activo en Asistentes y tener un workflow del catálogo asignado (`php artisan workflows:manage assign --chatbot=<id> --key=<clave>`). Recibe `event: message` y `event: resume`, `context` e `history[].sender` exactamente como cualquier otro canal.
+Las solicitudes de soporte de los clientes son conversaciones `web` normales de un chatbot de `DESARROLLO_DEV` (`RECOMENDACIONES.md`). No hay configuración de IA propia: el chatbot debe estar activo en Asistentes y tener un workflow del catálogo asignado (`php artisan workflows:manage assign --chatbot=<id> --key=<clave>`). Recibe `event: message` y `event: resume`, `context` e `history[].sender` exactamente como cualquier otro canal.
 
 ## 8. Dónde corre cada Workspace (desde §65)
 
 Cada Workspace ejecuta sus conversaciones en **su propio n8n**, configurado en Integraciones → n8n: URL de la instancia, API Key (solo para verificar la API) y **secreto de ejecución** (solo escritura, mínimo 16 caracteres). Ava llama a `{URL}/webhook/{webhook_path}` y firma con ese secreto: el workflow debe verificar `X-Ava-Signature` con **el mismo** secreto y existir con ese `webhook_path` en esa instancia. Un Workspace nunca usa el secreto de otro. Las variables `N8N_EXECUTION_URL/SECRET` son solo una transición para `DESARROLLO_DEV` (`config('n8n.legacy_environment')`) y nunca sirven a un Workspace con conexión propia. Cada entrada del catálogo (`config/n8n.php`) declara a qué Workspaces se publica (`workspaces`); sin ese dato es exclusiva del administrativo. El contrato de los apartados 2 a 5 no cambió.
 
-## 9. Token de acceso del chatbot a `/api/agent/*`: vigencia y renovación (§75 de `RECOMENDACIONES.md`)
+## 9. Token de acceso del chatbot a `/api/agent/*`: vigencia y renovación (`RECOMENDACIONES.md`)
 
 El token `ava_…` con el que n8n llama a Ava (`GET /api/agent/config`, `POST /api/agent/messages`, `authorize`, `handoff`, herramientas) **vence a los 90 días**. Los tokens anteriores a esta regla se adoptaron con un margen mínimo de 30 días. Un token vencido o revocado recibe `401` con `{"message": …, "reason": "token_expired" | "token_revoked"}`: el workflow debe tratar ese `reason` como un fallo visible (no reintentar en bucle) y avisar a la persona responsable. Ava avisa en la campanita del Workspace a los 30, 14, 7, 3 y 1 día antes.
 
@@ -110,6 +110,6 @@ El token `ava_…` con el que n8n llama a Ava (`GET /api/agent/config`, `POST /a
 
 ## 10. Qué no cubre este documento
 
-Los **webhooks de salida** de Integraciones (Ava avisa a un sistema externo cuando hay una conversación, cita o pedido; `RECOMENDACIONES.md` §78) son un contrato aparte e independiente de este: no pasan por `/api/agent/*`, no usan el token del chatbot y no cambian nada de lo descrito aquí. Un nodo «Webhook» de n8n puede ser su receptor siempre que verifique `X-Ava-Signature` (HMAC-SHA256 de `"{X-Ava-Timestamp}.{cuerpo}"`) y deduplique por `X-Ava-Event-Id`; la entrega es *al menos una vez*.
+Los **webhooks de salida** de Integraciones (Ava avisa a un sistema externo cuando hay una conversación, cita o pedido; `RECOMENDACIONES.md`) son un contrato aparte e independiente de este: no pasan por `/api/agent/*`, no usan el token del chatbot y no cambian nada de lo descrito aquí. Un nodo «Webhook» de n8n puede ser su receptor siempre que verifique `X-Ava-Signature` (HMAC-SHA256 de `"{X-Ava-Timestamp}.{cuerpo}"`) y deduplique por `X-Ava-Event-Id`; la entrega es *al menos una vez*.
 
-La elección de workflow por clientes (autoservicio) y su propuesta de entidades están en `RECOMENDACIONES.md` §63.
+La elección de workflow por clientes (autoservicio) y su propuesta de entidades están en `RECOMENDACIONES.md`

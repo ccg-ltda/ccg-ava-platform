@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * An inbound webhook endpoint of a Workspace (see App\Webhooks\InboundWebhooks and RECOMENDACIONES.md §79.3): the URL the customer's system calls. The secrets are encrypted at rest and
+ * An inbound webhook endpoint of a Workspace (see App\Webhooks\InboundWebhooks and RECOMENDACIONES.md): the URL the customer's system calls. The secrets are encrypted at rest and
  * hidden from every serialization: they leave the server once, in the response that creates or rotates them. Written only by App\Webhooks\InboundWebhookService.
  */
 class InboundEndpoint extends Model

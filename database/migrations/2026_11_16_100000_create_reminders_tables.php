@@ -5,7 +5,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /*
- * Recordatorios (RECOMENDACIONES.md §79.2): commercial reminders and follow-ups a Workspace schedules for its customers (e.g. «invite them to book again 15 days after the
+ * Recordatorios (RECOMENDACIONES.md): commercial reminders and follow-ups a Workspace schedules for its customers (e.g. «invite them to book again 15 days after the
  * service»). Independent of Agenda: its own tables, no foreign key to appointments or orders (an optional soft reference, validated against the SAME Workspace by the service
  * and re-checked when it is sent). Additive: two NEW tables, nothing existing changes. `down()` drops both (the scheduling history is lost; no business data is touched).
  *  - reminders: one scheduled message to ONE customer through ONE channel. `send_at` is UTC; `timezone` is how the person typed it. `status` is the lifecycle

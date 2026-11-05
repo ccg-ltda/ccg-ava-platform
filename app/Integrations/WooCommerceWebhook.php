@@ -4,7 +4,7 @@ namespace App\Integrations;
 
 /**
  * Verification of a WooCommerce webhook delivery. WooCommerce signs the RAW body with the webhook's secret: `X-WC-Webhook-Signature` is the base64 of HMAC-SHA256(body, secret)
- * (secondary sources; confirm against a real store, see docs/integracion-woocommerce.md). The compare is constant-time and works on the exact bytes received, never on re-encoded JSON.
+ * (secondary sources; confirm against a real store, see docs/api-n8n-contratos.md, section 4). The compare is constant-time and works on the exact bytes received, never on re-encoded JSON.
  * `X-WC-Webhook-Delivery-ID` identifies a delivery and is the natural idempotency key of whoever processes it.
  */
 final class WooCommerceWebhook

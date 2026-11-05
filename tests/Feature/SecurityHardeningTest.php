@@ -14,7 +14,7 @@ use Tests\Support\BuildsBookings;
 use Tests\TestCase;
 
 /**
- * Findings S6 to S13 of RECOMENDACIONES.md §68: a per-IP limit on failed logins, an explicit fillable list instead of `$guarded = []`, a general limit on the signed-in
+ * Findings S6 to S13 of RECOMENDACIONES.md: a per-IP limit on failed logins, an explicit fillable list instead of `$guarded = []`, a general limit on the signed-in
  * application, one Wompi invalid-signature alert per window, no signed-URL storage routes, and a diagnosis warning for a wildcard proxy list.
  */
 class SecurityHardeningTest extends TestCase

@@ -30,7 +30,7 @@ use Tests\TestCase;
 /**
  * The Booker connector, tested ONLY against SIMULATED HTTP responses (`Http::fake`): Ava has no Booker Sandbox credentials, so
  * nothing here proves that Booker really answers like this. The shapes come from Booker's open-source Ruby client (see BookerClient)
- * and a real Sandbox test is still pending (pendientes.md). What IS proven here is Ava's side: the requests it builds, how it
+ * and a real Sandbox test is still pending (RECOMENDACIONES.md). What IS proven here is Ava's side: the requests it builds, how it
  * reduces failures to fixed codes, that credentials stay per Workspace and out of every output, and that what Booker cannot be
  * verified to do is refused instead of faked.
  */

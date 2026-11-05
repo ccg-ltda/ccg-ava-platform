@@ -30,7 +30,7 @@ return [
      * blocks nothing. `enforce` blocks. `off` sends none. Move to `enforce` only after reviewing the browser console (or `report_uri`) on every screen of the
      * application, authenticated ones included. No CSP is sent while the Vite dev server is running (public/hot exists).
      *
-     * Inventory behind the directives (see RECOMENDACIONES.md §70):
+     * Inventory behind the directives (see RECOMENDACIONES.md):
      *  - script-src: the application's own bundles (`'self'`, with the per-request nonce Vite and Ziggy print), the inline theme script and the Ziggy
      *    route table (nonce); three.js for the login background is bundled (no CDN). No `unsafe-inline` and no `unsafe-eval` for scripts.
      *  - style-src: own CSS (Inter is bundled, no Google Fonts); the inline <style> of Inertia's progress bar carries the nonce (createInertiaApp `nonce`). React writes `style="…"` attributes, which a nonce cannot cover, so `style-src-attr` alone

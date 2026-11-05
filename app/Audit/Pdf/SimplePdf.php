@@ -39,11 +39,6 @@ class SimplePdf
         $this->pages[] = '';
     }
 
-    public function pageCount(): int
-    {
-        return count($this->pages);
-    }
-
     /** Called once per page when the document is written, with the PDF, the page number and the total. */
     public function footer(Closure $callback): void
     {

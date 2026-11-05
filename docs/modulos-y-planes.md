@@ -30,7 +30,7 @@ Una sección es presentación: reúne entradas relacionadas y desaparece si ning
 
 Se declaran en `config/modules.php` `core_routes` y no aparecen en planes ni en el catálogo: perfil, cierre de sesión, verificación de correo y contraseña; el logo y el selector de Workspace; los filtros guardados (cada filtro comprueba el módulo de su `scope`); y la administración de plataforma (Planes, catálogo, acceso de soporte), ligada a `Desarrollo_DEV` por permiso. Una prueba (`ModuleArchitectureTest`) falla si una ruta con sesión no está detrás de `workspace.module` ni declarada ahí.
 
-**No confundir con el «plan por defecto».** «Plataforma completa» (`default_plan`) es un plan contratable que solo contiene los ocho módulos compartidos y es el que usan los Workspaces sin plan asignado; los módulos nuevos (Clientes, Campañas, Servicios y Reservas) no entran en él salvo decisión explícita. Hay un riesgo anotado en `pendientes.md`: nada impide un plan sin `users_roles` o `settings`, que dejaría al cliente sin poder administrarse.
+**No confundir con el «plan por defecto».** «Plataforma completa» (`default_plan`) es un plan contratable que solo contiene los ocho módulos compartidos y es el que usan los Workspaces sin plan asignado; los módulos nuevos (Clientes, Campañas, Servicios y Reservas) no entran en él salvo decisión explícita. Hay un riesgo anotado en `RECOMENDACIONES.md`: nada impide un plan sin `users_roles` o `settings`, que dejaría al cliente sin poder administrarse.
 
 ## 2. Mapa real de módulos y dependencias
 
@@ -99,7 +99,7 @@ Disponibilidad efectiva = módulos del plan, más concedidos, menos retirados, y
 
 ### Oferta comercial y registro público (2026-10-21)
 
-Cada plan puede llevar su **oferta comercial** (Planes → editar plan → «Oferta comercial»): la solución a la que pertenece (una categoría del catálogo), el precio (en la moneda indicada), la periodicidad, si se ofrece en el registro público y si se vende por cotización. Es lo único que lee `/registro` (`SignupCatalog`): nada se escribe en el código y un valor ausente se muestra como ausente. Un plan se vende en línea solo si está activo, es público, no es por cotización y tiene solución, precio, moneda y periodicidad; uno por cotización nunca abre un cobro. Los planes pueden tener cero módulos y dependencias incompletas (E4); la vista previa de módulos del registro es informativa. Solo una categoría que es una **solución comercial** (`config/modules.php categories.*.solution`, verdadero salvo «Módulos compartidos» y «Clientes y comunicación») puede ser la solución de un plan; la administración muestra por plan si está en «Contratación en línea», «Por cotización», «Oferta incompleta» (con la razón) o «No público». El detalle del flujo y del punto de integración del pago está en `RECOMENDACIONES.md` §27, y las condiciones de habilitación en §28.
+Cada plan puede llevar su **oferta comercial** (Planes → editar plan → «Oferta comercial»): la solución a la que pertenece (una categoría del catálogo), el precio (en la moneda indicada), la periodicidad, si se ofrece en el registro público y si se vende por cotización. Es lo único que lee `/registro` (`SignupCatalog`): nada se escribe en el código y un valor ausente se muestra como ausente. Un plan se vende en línea solo si está activo, es público, no es por cotización y tiene solución, precio, moneda y periodicidad; uno por cotización nunca abre un cobro. Los planes pueden tener cero módulos y dependencias incompletas (E4); la vista previa de módulos del registro es informativa. Solo una categoría que es una **solución comercial** (`config/modules.php categories.*.solution`, verdadero salvo «Módulos compartidos» y «Clientes y comunicación») puede ser la solución de un plan; la administración muestra por plan si está en «Contratación en línea», «Por cotización», «Oferta incompleta» (con la razón) o «No público». El detalle del flujo y del punto de integración del pago está en `RECOMENDACIONES.md` las condiciones de habilitación en §28.
 
 ### Ejemplos ilustrativos (NO son planes reales ni se han creado)
 
@@ -131,7 +131,7 @@ Además, sus migraciones (`php artisan migrate`). En Docker: `make dev-sync` eje
 
 ### Inventario de Salud (verificado el 2026-10-18)
 
-Salud no tiene módulos propios: se arma con los mismos módulos reutilizables (`also_for`). Estado de cada pieza, según el código y `PLAN_TRABAJO_AVACHAT.md` §8.1:
+Salud no tiene módulos propios: se arma con los mismos módulos reutilizables (`also_for`). Estado de cada pieza, según el código:
 
 | Pieza (referencia del plan) | Estado | Notas |
 |---|---|---|
@@ -145,7 +145,7 @@ Salud no tiene módulos propios: se arma con los mismos módulos reutilizables (
 | S6 Atención a pacientes (FAQ y derivación) | Implementado parcialmente | Asistentes + Conversaciones con atención humana existen y se probaron simulados; falta la base de conocimiento (D-20), el workflow real de n8n y la decisión D-IA. Sin consejo médico. |
 | Historia clínica, datos de pacientes | **No requerido: alcance cero** | Bloqueado por D-07; no existe ninguna tabla ni campo clínico. |
 | Reserva temporal de un hueco (D-17), reglas de cancelación distintas por tipo (D-18) | Pendiente de decisión funcional | Hoy un único plazo `cancel_notice_hours` para cancelar y reprogramar. |
-| Informes de citas en Dashboard y Reportes | Ausente, sin requisito aprobado | Documentado como límite en `pendientes.md`; no se inventó. |
+| Informes de citas en Dashboard y Reportes | Ausente, sin requisito aprobado | Sin requisito aprobado (`RECOMENDACIONES.md`, sección 5); no se inventó. |
 
 Dependencias de lo que falta: S5 → S4 + WhatsApp real + plantillas (D-19); S6 → Asistentes + Conversaciones + n8n real + D-20; cualquier dato clínico → D-07 resuelto antes.
 

@@ -1,7 +1,7 @@
 <?php
 
 /*
- * Protection of the API surface against abuse and overload (RECOMENDACIONES.md §79). The limits that already existed keep their own keys (`chatbots.agent_per_minute`,
+ * Protection of the API surface against abuse and overload (RECOMENDACIONES.md). The limits that already existed keep their own keys (`chatbots.agent_per_minute`,
  * `chatbots.widget.*`, `bookings.public.*`, `auth.authenticated_per_minute`, the inbound provider webhooks): this file ADDS the layers they lacked and every number here is
  * a conservative starting point, meant to be tuned when the commercial definition arrives. Nothing is read from the environment on purpose: a limit changes by a reviewed edit.
  *

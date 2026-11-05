@@ -5,7 +5,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /*
- * Outbound webhooks of a Workspace (RECOMENDACIONES.md §78). Additive: two NEW tables, nothing existing changes.
+ * Outbound webhooks of a Workspace (RECOMENDACIONES.md). Additive: two NEW tables, nothing existing changes.
  *  - webhook_endpoints: where a Workspace wants its events sent. The signing secret is encrypted at rest and never leaves the server after it is shown once.
  *  - webhook_deliveries: one row per (endpoint, event): the exact JSON that is signed and sent, its state and attempts. Retention is bounded (`webhooks:prune`).
  * Composite foreign key: a delivery can only belong to an endpoint of ITS OWN Workspace. `down()` drops both (the history is lost; no business data is touched).

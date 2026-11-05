@@ -33,7 +33,7 @@ class MailTestCommand extends Command
         $mailer = (string) config('mail.default');
 
         if (! MailAvailability::deliversRealMail()) {
-            $this->components->error("El mailer «{$mailer}» no entrega correo real (log, array, null o remitente de ejemplo): no se envió nada. Revisa MAIL_* en .env (docs: RECOMENDACIONES.md §30).");
+            $this->components->error("El mailer «{$mailer}» no entrega correo real (log, array, null o remitente de ejemplo): no se envió nada. Revisa MAIL_* en .env (docs: RECOMENDACIONES.md).");
 
             return self::FAILURE;
         }

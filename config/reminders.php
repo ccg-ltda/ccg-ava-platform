@@ -1,7 +1,7 @@
 <?php
 
 /*
- * Recordatorios (module `reminders`; RECOMENDACIONES.md §79.2). Product limits, changed by a reviewed edit (nothing is read from the environment).
+ * Recordatorios (module `reminders`; RECOMENDACIONES.md). Product limits, changed by a reviewed edit (nothing is read from the environment).
  *
  * Not the confirmations and reminders of an appointment: those belong to Agenda (`config/bookings.php` `notifications`, App\Booking\AppointmentNotifier) and are untouched.
  * This module schedules COMMERCIAL follow-ups to customers («invite them to book again 15 days after the service»).

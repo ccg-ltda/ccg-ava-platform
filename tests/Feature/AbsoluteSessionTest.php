@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
 
 /**
- * S9 (RECOMENDACIONES.md §75): a signed-in session lasts at most 12 hours from the login, whatever the activity, on top of the inactivity limit that SESSION_LIFETIME
+ * S9 (RECOMENDACIONES.md): a signed-in session lasts at most 12 hours from the login, whatever the activity, on top of the inactivity limit that SESSION_LIFETIME
  * keeps. Reaching it signs the person out (account, roles and permissions untouched); API clients get 401, pages and Inertia a redirect; a "remember me" cookie cannot
  * bring the session back past the limit.
  */

@@ -1,4 +1,4 @@
-{{-- Favicon of the platform: one folder (public/brand), emitted only for the files that exist, so nothing 404s before CCG supplies them. See docs/favicon.md. --}}
+{{-- Favicon of the platform: one folder (public/brand), emitted only for the files that exist, so nothing 404s before CCG supplies them. See README (Favicon). --}}
 @foreach ([
     ['brand/favicon.svg', 'icon', 'image/svg+xml', null],
     ['brand/favicon.ico', 'icon', 'image/x-icon', '48x48'],

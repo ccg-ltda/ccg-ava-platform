@@ -64,7 +64,7 @@ export default function WompiPanel({ wompi }) {
             .finally(() => setBusy(false));
     };
 
-    const secret = (name, label, isSet, hint) => (
+    const secret = (name, label, isSet) => (
         <div>
             <InputLabel htmlFor={`wompi_${name}`} value={label} />
             <TextInput
@@ -75,7 +75,7 @@ export default function WompiPanel({ wompi }) {
                 value={fields[name]}
                 onChange={set(name)}
                 disabled={!wompi.canEdit}
-                placeholder={isSet ? `Guardada (${hint}). Deja vacío para conservarla.` : 'Sin configurar'}
+                placeholder={isSet ? 'Guardada. Deja vacío para conservarla.' : 'Sin configurar'}
                 invalid={Boolean(errors[name])}
             />
             <InputError message={errors[name]} className="mt-1" />
@@ -120,9 +120,9 @@ export default function WompiPanel({ wompi }) {
                     <TextInput id="wompi_public_key" className="mt-1" value={fields.public_key} onChange={set('public_key')} disabled={!wompi.canEdit} autoComplete="off" invalid={Boolean(errors.public_key)} />
                     <InputError message={errors.public_key} className="mt-1" />
                 </div>
-                {secret('private_key', 'Llave privada', current.privateKeySet, current.privateKeyHint)}
-                {secret('events_secret', 'Secreto de eventos', current.eventsSecretSet, current.eventsSecretHint)}
-                {secret('integrity_secret', 'Secreto de integridad', current.integritySecretSet, current.integritySecretHint)}
+                {secret('private_key', 'Llave privada', current.privateKeySet)}
+                {secret('events_secret', 'Secreto de eventos', current.eventsSecretSet)}
+                {secret('integrity_secret', 'Secreto de integridad', current.integritySecretSet)}
 
                 {wompi.canEdit && (
                     <div className="flex flex-wrap gap-2 md:col-span-2">

@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * A destination a Workspace registered for its outbound webhooks (see App\Webhooks and RECOMENDACIONES.md §78). The secrets are encrypted at rest and hidden from
+ * A destination a Workspace registered for its outbound webhooks (see App\Webhooks and RECOMENDACIONES.md). The secrets are encrypted at rest and hidden from
  * every serialization: they leave the server only once, in the response that creates or rotates them. Written only by App\Webhooks\WebhookService.
  */
 class WebhookEndpoint extends Model

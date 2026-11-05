@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Receives ONE signed event on an inbound endpoint (RECOMENDACIONES.md §79.3). What it does, and what it deliberately does not:
+ * Receives ONE signed event on an inbound endpoint (RECOMENDACIONES.md). What it does, and what it deliberately does not:
  *  - the endpoint is found by its `public_key` (48 random hex characters in the URL: an identifier, not the credential). An unknown, inactive or plan-less endpoint is the SAME 404, so
  *    the URL reveals nothing; the Workspace comes from the endpoint, never from the request;
  *  - the credential is the signature: HMAC-SHA256 of "{timestamp}.{body}" with the endpoint secret (or the previous one during the grace period after a rotation), compared in constant

@@ -7,7 +7,7 @@ use Illuminate\Contracts\Session\Session;
 use Illuminate\Support\Facades\Cache;
 
 /**
- * The ABSOLUTE lifetime of a signed-in session (S9, decision of RECOMENDACIONES.md §75): `auth.absolute_session_minutes` (12 hours) from the moment the person
+ * The ABSOLUTE lifetime of a signed-in session (S9, decision of RECOMENDACIONES.md): `auth.absolute_session_minutes` (12 hours) from the moment the person
  * authenticated, no matter how active the session is. SESSION_LIFETIME keeps governing INACTIVITY; this is an extra limit, never a replacement. Reaching it logs the
  * person out (the account, its roles and permissions are untouched): they simply sign in again.
  *

@@ -13,7 +13,7 @@ use Throwable;
 /**
  * The HTTP side of the Booker connector for ONE integration (one Workspace). What it knows about Booker comes from Booker's
  * open-source Ruby client (`HireFrederick/booker_ruby`), not from Booker's own documentation portal (it requires a signed-in
- * developer account) and NOT from a live Sandbox: see `docs` in pendientes.md for which calls are only "documented by that client".
+ * developer account) and NOT from a live Sandbox: see RECOMENDACIONES.md (Booker) for which calls are only "documented by that client".
  *
  *  - Token: `POST {base}/v5/auth/connect/token` (form: grant_type=client_credentials, client_id, client_secret, scope) with the
  *    `Ocp-Apim-Subscription-Key` header. Cached until it expires.

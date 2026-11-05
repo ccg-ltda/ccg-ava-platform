@@ -39,7 +39,7 @@ use Tests\Support\BuildsBookings;
 use Tests\TestCase;
 
 /**
- * Webhooks de salida dentro de Integraciones (RECOMENDACIONES.md §78): the permissions and the plan that govern them, Workspace isolation, the destination checks (SSRF) at save and at
+ * Webhooks de salida dentro de Integraciones (RECOMENDACIONES.md): the permissions and the plan that govern them, Workspace isolation, the destination checks (SSRF) at save and at
  * delivery, the HMAC signature and the rotation grace, at-least-once delivery with retries, the events the code really produces (and nothing else), publishing only after commit,
  * and that no secret or payload is ever shown again. Every request to the outside world is faked: nothing here reaches a network.
  */

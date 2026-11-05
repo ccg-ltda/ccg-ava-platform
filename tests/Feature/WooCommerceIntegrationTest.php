@@ -11,7 +11,7 @@ use Tests\TestCase;
 
 /**
  * WooCommerce is reached through the generic HTTP/REST connection (Basic auth with the consumer key and secret) and its webhooks are verified with their own signature.
- * Local and simulated: NO real store takes part (see docs/integracion-woocommerce.md for the real test).
+ * Local and simulated: NO real store takes part (see docs/api-n8n-contratos.md, section 4, for the real test).
  */
 class WooCommerceIntegrationTest extends TestCase
 {

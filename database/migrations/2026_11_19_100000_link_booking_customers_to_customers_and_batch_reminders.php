@@ -5,7 +5,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /*
- * Clientes as the central record of the people of a Workspace (RECOMENDACIONES.md §85). Additive and non destructive: three nullable columns, no data is moved, rewritten or deleted.
+ * Clientes as the central record of the people of a Workspace (RECOMENDACIONES.md). Additive and non destructive: three nullable columns, no data is moved, rewritten or deleted.
  *  - booking_customers.customer_id: the Clientes card a person of Agenda was tied to (when staff picked or created it from the agenda). A booking person keeps its own name, phone and
  *    email (history never changes); the link only says WHICH card it is. Composite foreign key: only a card of the SAME Workspace. Existing rows stay NULL: nothing is matched in bulk.
  *  - appointments.completed_at: the moment staff marked the appointment as done (before this column the only moment was its own start). Reminder rules use it as the real event.

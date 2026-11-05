@@ -473,7 +473,7 @@
     "executionOrder": "v1"
   },
   "meta": {
-    "note": "Plantilla de referencia. Sin credenciales ni ids. NO probada en una instancia real de n8n: importar solo en una instancia de PRUEBAS, crear la credencial \"Ava Agent Token (Bearer)\" (Header Auth: Authorization = Bearer <token>) y la variable AVA_URL. Ver docs/n8n-workflow-guia.md."
+    "note": "Plantilla de referencia. Sin credenciales ni ids. NO probada en una instancia real de n8n: importar solo en una instancia de PRUEBAS, crear la credencial \"Ava Agent Token (Bearer)\" (Header Auth: Authorization = Bearer <token>) y la variable AVA_URL. Ver docs/api-n8n-contratos.md (sección 3)."
   },
   "tags": []
 }

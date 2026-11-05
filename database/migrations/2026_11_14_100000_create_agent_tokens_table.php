@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /*
- * Lifecycle of the access tokens automations (n8n) use to read a chatbot (S8 of RECOMENDACIONES.md §68, decision of §75).
+ * Lifecycle of the access tokens automations (n8n) use to read a chatbot (S8 of RECOMENDACIONES.md of §75).
  * Additive: a NEW table; `chatbots.agent_token_hash / hint / created_at` stay as a mirror of the CURRENT token (the interface and older code read them), so nothing
  * existing changes shape. Only the SHA-256 of a token is stored, never the token. Several tokens of one chatbot can be valid at once: that overlap is what lets a
  * token be replaced without interrupting n8n (the old one is retired only after the new one has been used).

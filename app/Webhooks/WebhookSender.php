@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /**
- * Makes ONE delivery attempt and records what happened (RECOMENDACIONES.md §78). The attempt is claimed with a single conditional UPDATE, so two workers can never send
+ * Makes ONE delivery attempt and records what happened (RECOMENDACIONES.md). The attempt is claimed with a single conditional UPDATE, so two workers can never send
  * the same attempt. The destination is validated again right now (a hostname that was public when saved may resolve to an internal address today), the connection is pinned to
  * the validated address, redirects are never followed, and the request carries only headers Ava chooses. Nothing the destination answers is stored except the status code.
  *

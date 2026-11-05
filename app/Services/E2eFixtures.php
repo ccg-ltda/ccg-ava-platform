@@ -44,7 +44,7 @@ class E2eFixtures
      */
     public function setup(int $extraUsers = 0, bool $withSuperuser = false): array
     {
-        $this->assertNotProduction();
+        $this->assertSafeTarget();
 
         foreach (['admin', 'cliente'] as $role) {
             if (! Role::where('name', $role)->where('guard_name', 'web')->exists()) {
@@ -115,7 +115,7 @@ class E2eFixtures
      */
     public function cleanup(): array
     {
-        $this->assertNotProduction();
+        $this->assertSafeTarget();
 
         return DB::transaction(function () {
             $removed = $this->pending();
@@ -174,10 +174,20 @@ class E2eFixtures
             ->pipe(fn ($found) => Role::whereIn('id', $found->pluck('id')));
     }
 
-    private function assertNotProduction(): void
+    /**
+     * The fixtures create and delete users and Workspaces, so they run only on a throwaway database: never in production and never on the real development database
+     * (`ccg_ava`) unless the person running them names that database explicitly in E2E_ALLOW_DATABASE (a deliberate, visible choice).
+     */
+    private function assertSafeTarget(): void
     {
         if (app()->environment('production')) {
             throw new RuntimeException('E2E fixtures are not available in production.');
+        }
+
+        $database = (string) config('database.connections.'.config('database.default').'.database');
+
+        if ($database === 'ccg_ava' && config('database.e2e_allow_database') !== $database) {
+            throw new RuntimeException("E2E fixtures refuse to run on the real database [{$database}]. Use a disposable database, or set E2E_ALLOW_DATABASE={$database} if you really mean it.");
         }
     }
 }

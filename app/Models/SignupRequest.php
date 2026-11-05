@@ -51,9 +51,4 @@ class SignupRequest extends Model
     {
         return $this->belongsTo(Workspace::class);
     }
-
-    public function isOpen(): bool
-    {
-        return in_array($this->status, self::OPEN, true) && $this->expires_at->isFuture();
-    }
 }

@@ -82,16 +82,14 @@ class PaymentSettings
         return $row;
     }
 
-    /** What the interface may know: never a secret, only whether it is set and its last four characters. */
+    /** What the interface may know: never a secret, only whether it is set. */
     public function present(?PaymentProviderSetting $row): array
     {
-        $tail = fn (?string $secret) => filled($secret) ? '••••'.substr($secret, -4) : null;
-
         return [
             'publicKey' => $row?->public_key,
-            'privateKeySet' => filled($row?->private_key), 'privateKeyHint' => $tail($row?->private_key),
-            'eventsSecretSet' => filled($row?->events_secret), 'eventsSecretHint' => $tail($row?->events_secret),
-            'integritySecretSet' => filled($row?->integrity_secret), 'integritySecretHint' => $tail($row?->integrity_secret),
+            'privateKeySet' => filled($row?->private_key),
+            'eventsSecretSet' => filled($row?->events_secret),
+            'integritySecretSet' => filled($row?->integrity_secret),
             'isActive' => (bool) $row?->is_active,
             // incomplete (something missing) | saved (complete, never validated or changed since) | validated | failed
             'state' => match (true) {

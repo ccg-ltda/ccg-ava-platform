@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 /**
- * S8 (RECOMENDACIONES.md §75): chatbot access tokens last 90 days, record their use, can be revoked one by one, and are replaced WITHOUT interrupting n8n: the old token
+ * S8 (RECOMENDACIONES.md): chatbot access tokens last 90 days, record their use, can be revoked one by one, and are replaced WITHOUT interrupting n8n: the old token
  * is retired only after the new one has been used. An expiry is announced beforehand and is never silent. Existing tokens are adopted with an explicit rule.
  */
 class AgentTokenLifecycleTest extends TestCase

@@ -16,7 +16,7 @@ use Illuminate\Support\Str;
  * The token an automation (n8n) uses to read the configuration of ONE chatbot from Ava. The token identifies the chatbot, and through it the Workspace, so nothing
  * else is ever sent by the caller. Only its SHA-256 is stored; the plain token exists once, in the response that issues it.
  *
- * Lifecycle (ledger `agent_tokens`, policy of RECOMENDACIONES.md §75):
+ * Lifecycle (ledger `agent_tokens`, policy of RECOMENDACIONES.md):
  *  - VALIDITY: a new token lasts `chatbots.agent_token.days` (90). An expired token is refused with a clear, traceable error; the team is warned beforehand
  *    (App\Services\AgentTokenNotices).
  *  - LAST USE: every token records its first and last use (the last one is refreshed at most once a minute).

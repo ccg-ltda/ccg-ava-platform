@@ -4,7 +4,7 @@ namespace Tests\Feature;
 
 use Tests\TestCase;
 
-/** The favicon lives in public/brand: links are emitted only for files that exist and /favicon.ico follows the same folder (docs/favicon.md). */
+/** The favicon lives in public/brand: links are emitted only for files that exist and /favicon.ico follows the same folder (README, Favicon). */
 class FaviconTest extends TestCase
 {
     private string $ico;

@@ -5,7 +5,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /*
- * Reglas de recordatorio por servicio (RECOMENDACIONES.md §82): a Workspace defines ONCE «30 days after a customer had service X, remind them» and Ava schedules one reminder per
+ * Reglas de recordatorio por servicio (RECOMENDACIONES.md): a Workspace defines ONCE «30 days after a customer had service X, remind them» and Ava schedules one reminder per
  * customer by itself from the appointments that were really done. Additive (the reminders tables already exist in the development database): three NEW tables and one column.
  *  - reminder_rules: the rule (name, wait, channel, message). `activated_at` is when it started to apply: only services done from then on count, so switching a rule on never
  *    messages the whole history, and switching it off and on again does not either.

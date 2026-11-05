@@ -27,7 +27,7 @@ use Tests\TestCase;
 /**
  * Instagram Messaging and Messenger. Meta is NEVER called: every request to it is a fake (`Http::fake`) built from the shapes Meta documents (Instagram API with Instagram Login and the
  * Messenger Platform), so these tests prove Ava's side of the contract (OAuth state, tokens kept encrypted and away from the interface, signed webhooks, idempotency, isolation between
- * Workspaces, how replies and failures are read), not that Meta accepts it: that needs a real app and account (see RECOMENDACIONES.md §84).
+ * Workspaces, how replies and failures are read), not that Meta accepts it: that needs a real app and account (see RECOMENDACIONES.md).
  */
 class MetaMessagingTest extends TestCase
 {

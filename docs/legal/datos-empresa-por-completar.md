@@ -98,7 +98,7 @@ Estado de este archivo: 0 de 54 campos completados. Fecha de creación: 2026-11-
 | `app/Services/HelpCenter.php`, `KnowledgeBase.php`, `SupportContext.php`, `ChatbotInstructions.php`, `ChatbotExecutions.php`, `WhatsAppType.php`, `WhatsAppConnection.php`, `WebChannelConnection.php`, `ChatbotInstructionController.php` | Nombre en textos de ayuda, instrucciones por defecto y mensajes | Reemplazar o leer de `config('branding')` |
 | `config/modules.php`, `config/cors.php`, `config/services.php`, `config/support.php` | Comentarios y valores por defecto | Revisar |
 | `public/widget/ava-widget.js` | Nombre interno `AvaWidget` | Es un identificador técnico: **no cambiar** sin una migración para los sitios que ya lo cargan |
-| `N8N_WORKFLOW_REFERENCIA.md`, `RECOMENDACIONES.md`, `docs/marca-ava-guia-informativa.md` | Documentación | Actualizar al final |
+| `N8N_WORKFLOW_REFERENCIA.md`, `RECOMENDACIONES.md`, `docs/legal/15-marca-guia-informativa.md` | Documentación | Actualizar al final |
 | Nombres internos (`ava_` en los tokens, rutas `/api/agent`, tablas, repositorio, `DESARROLLO_DEV`) | «ava» | **No cambiar**: son identificadores técnicos |
 
 Pasos: (1) confirmar el nombre; (2) cambiar `BRAND_NAME`/`BRAND_SHORT_NAME`; (3) sustituir en `resources/legal` y `docs/legal`; (4) regenerar PDF; (5) `grep -ri "<nombre viejo>"` para verificar; (6) correr la suite (`LegalTest` y las pruebas de interfaz que comparan textos).

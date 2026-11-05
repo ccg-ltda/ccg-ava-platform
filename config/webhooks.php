@@ -1,7 +1,7 @@
 <?php
 
 /*
- * Outbound webhooks of a Workspace (Integraciones > Webhooks; RECOMENDACIONES.md §78). Ava POSTs a signed JSON event to the HTTPS address the Workspace registers.
+ * Outbound webhooks of a Workspace (Integraciones > Webhooks; RECOMENDACIONES.md). Ava POSTs a signed JSON event to the HTTPS address the Workspace registers.
  * Nothing here is read from the environment: these are product limits, changed by a reviewed edit.
  *
  * The catalog lists ONLY facts the code really produces, each at the single place that produces it (`origin`). Payloads carry identifiers, states and dates, never

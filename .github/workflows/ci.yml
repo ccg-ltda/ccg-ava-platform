@@ -1,0 +1,76 @@
+name: CI
+
+# Tests, estilo, auditoría de dependencias y build en cada push y pull request. Sin secretos: SQLite en memoria (como en local). La concurrencia en PostgreSQL
+# (BookingRace, N8nConcurrency, InventoryConcurrency) corre en el job `postgres` contra un servicio desechable cuyo nombre termina en `_testing`.
+on:
+  push:
+  pull_request:
+
+jobs:
+  php:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_sqlite, gd, bcmath, redis
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist
+      - run: composer audit
+      - run: vendor/bin/pint --test
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test:js
+      - name: PHPUnit (SQLite en memoria)
+        env:
+          APP_ENV: testing
+          APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+          DB_CONNECTION: sqlite
+          DB_DATABASE: ':memory:'
+          FILESYSTEM_DISK: local
+          CACHE_STORE: array
+          SESSION_DRIVER: array
+          QUEUE_CONNECTION: sync
+          BROADCAST_CONNECTION: 'null'
+        run: php -d memory_limit=2G vendor/bin/phpunit --do-not-cache-result
+
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ava_ci_testing
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U ci" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_pgsql, gd, bcmath, redis
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist
+      - name: PHPUnit contra PostgreSQL (carreras reales)
+        env:
+          APP_ENV: testing
+          APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: ava_ci_testing
+          DB_USERNAME: ci
+          DB_PASSWORD: ci
+          FILESYSTEM_DISK: local
+          CACHE_STORE: array
+          SESSION_DRIVER: array
+          QUEUE_CONNECTION: sync
+          BROADCAST_CONNECTION: 'null'
+        run: >-
+          php -d memory_limit=2G vendor/bin/phpunit --do-not-cache-result
+          tests/Feature/BookingRaceTest.php tests/Feature/BookingConcurrencyTest.php tests/Feature/InventoryConcurrencyTest.php
+          tests/Feature/N8nConcurrencyTest.php tests/Feature/SupportAuditTest.php

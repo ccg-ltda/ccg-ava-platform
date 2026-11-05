@@ -1,6 +1,6 @@
 # Tratamiento de datos en Ava Platform — propuesta de política
 
-> **Estado: PROPUESTA TÉCNICA para revisión jurídica y comercial.** No es asesoría legal ni un texto contractual definitivo. No fija obligaciones legales, plazos de conservación ni textos de consentimiento: donde hace falta una decisión, está marcada como **[DECISIÓN]** y resumida en `pendientes.md`. Lo que sí describe es lo que el código hace hoy y lo que todavía no hace.
+> **Estado: PROPUESTA TÉCNICA para revisión jurídica y comercial.** No es asesoría legal ni un texto contractual definitivo. No fija obligaciones legales, plazos de conservación ni textos de consentimiento: donde hace falta una decisión, está marcada como **[DECISIÓN]** y resumida en `RECOMENDACIONES.md`. Lo que sí describe es lo que el código hace hoy y lo que todavía no hace.
 
 ## 1. Roles y responsabilidades (propuesta)
 
@@ -8,7 +8,7 @@
 |---|---|---|
 | **Cliente** (el negocio dueño de un Workspace) | Responsable del tratamiento de los datos de *sus* contactos finales | Decidir finalidades, obtener y acreditar el consentimiento, atender solicitudes de sus contactos, decidir cuánto conserva, informar a sus contactos. |
 | **CCG** (opera Ava Platform) | Encargado del tratamiento por cuenta del cliente; responsable de los datos de las cuentas del personal | Tratar los datos solo para prestar el servicio, aplicar medidas técnicas (aislamiento, accesos, auditoría), avisar de incidentes, no usar el contenido de los clientes para otros fines. |
-| **Proveedores** (Meta/WhatsApp, n8n, almacenamiento, futuros proveedores de correo o IA) | Subencargados | Contrato propio, lista de proveedores comunicada al cliente. **[DECISIÓN]** n8n: confirmar si su licencia permite el modelo de servicio (ya anotado en `pendientes.md`). |
+| **Proveedores** (Meta/WhatsApp, n8n, almacenamiento, futuros proveedores de correo o IA) | Subencargados | Contrato propio, lista de proveedores comunicada al cliente. **[DECISIÓN]** n8n: confirmar si su licencia permite el modelo de servicio (ya anotado en `RECOMENDACIONES.md`). |
 
 **[DECISIÓN jurídica]** Confirmar esta distribución de roles según la normativa aplicable en cada país donde operen los clientes (CCG, República Dominicana, Colombia, España...) y reflejarla en el contrato de servicio y en un acuerdo de tratamiento de datos.
 
@@ -246,4 +246,4 @@ El registro de nuevos clientes (`/registro`) trata, antes de que exista una cuen
 
 **Decisiones que requieren al negocio o asesoría jurídica:** P-RET-REG-1 plazo y acción para verificaciones; P-RET-REG-2 plazo y acción para borradores abandonados y quién avisa al visitante; P-RET-REG-3 tratamiento y plazo de las cotizaciones; P-RET-REG-4 plazo legal de pagos, aceptaciones y facturación (puede imponer conservar años); P-RET-REG-5 si CCG es responsable de estos datos como persona que contrata y qué aviso de privacidad se muestra en `/registro` (hoy solo enlaces a los textos en borrador); P-RET-REG-6 retención de logs y de la IP. Se suman a P-RET (§16).
 
-**Proveedor de correo (2026-10-21):** si se envía con Google Workspace SMTP (`RECOMENDACIONES.md` §30), Google recibe la dirección de quien se registra y el código de verificación (texto del mensaje). Es un subencargado más para la lista P-SUB y para los textos de privacidad; el código no se registra en los logs de Ava salvo con `MAIL_MAILER=log` (solo local).
+**Proveedor de correo (2026-10-21):** si se envía con Google Workspace SMTP (`RECOMENDACIONES.md`), Google recibe la dirección de quien se registra y el código de verificación (texto del mensaje). Es un subencargado más para la lista P-SUB y para los textos de privacidad; el código no se registra en los logs de Ava salvo con `MAIL_MAILER=log` (solo local).

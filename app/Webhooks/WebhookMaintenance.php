@@ -8,7 +8,7 @@ use App\Models\WebhookDelivery;
 use Throwable;
 
 /**
- * The safety net of the queue (RECOMENDACIONES.md §78): a job lost with the queue (a Redis flush, a worker killed mid-attempt) never loses an event. `sweep()` re-dispatches
+ * The safety net of the queue (RECOMENDACIONES.md): a job lost with the queue (a Redis flush, a worker killed mid-attempt) never loses an event. `sweep()` re-dispatches
  * every delivery that is due and frees the ones stuck in `sending`; the claim in WebhookSender makes a duplicated job harmless. `prune()` keeps the history bounded.
  */
 class WebhookMaintenance
