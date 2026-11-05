@@ -1,4 +1,4 @@
-import { Bot, Menu, X } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import { visibleNavigation } from '@/config/navigation';
 import useAccess from '@/Hooks/useAccess';
 import { useBrandShort } from '@/Hooks/useBrand';
@@ -35,10 +35,9 @@ export default function Sidebar({ workspace, open, onClose, collapsed = false, o
                 data-collapsed={collapsed ? 'true' : 'false'}
             >
                 <div className="flex h-16 shrink-0 items-center justify-between gap-3 px-4 md:group-data-[collapsed=true]/side:justify-center md:group-data-[collapsed=true]/side:px-0">
-                    <div className="flex min-w-0 items-center gap-3 md:group-data-[collapsed=true]/side:hidden">
-                        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/15 ring-1 ring-white/25">
-                            <Bot className="size-5" aria-hidden="true" />
-                        </span>
+                    <div className="flex min-w-0 items-center gap-2.5 md:group-data-[collapsed=true]/side:hidden">
+                        {/* The mascot with its phone (public/brand/mascota-celular.png, real alpha): sits directly on the blue surface, no tile or ring. Decorative: the brand name is next to it. */}
+                        <img src="/brand/mascota-celular.png" alt="" width="400" height="455" decoding="async" className="h-11 w-auto shrink-0" />
                         <div className="min-w-0 leading-tight">
                             <p className="line-clamp-2 text-sm font-extrabold tracking-wide break-words" title={brand}>{brand}</p>
                         </div>

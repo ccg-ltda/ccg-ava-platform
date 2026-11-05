@@ -83,3 +83,10 @@ test('a page that is on its way shows the skeleton of its module in the content 
     assert.match(hook, /giveUp/);
     assert.match(source('Components/Skeleton.jsx'), /role="status"/);
 });
+
+test('the sidebar header shows the mascot image instead of the robot icon, as decoration, and keeps the toggle', () => {
+    const sidebar = source('Components/Sidebar.jsx');
+    assert.match(sidebar, /<img src="\/brand\/mascota-celular\.png" alt=""/, 'the transparent mascot, decorative (the brand name is next to it)');
+    assert.doesNotMatch(sidebar, /\bBot\b/, 'the robot icon is gone');
+    assert.match(sidebar, /<Menu className/, 'the collapse toggle is untouched');
+});
