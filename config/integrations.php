@@ -1,12 +1,14 @@
 <?php
 
 use App\Integrations\BookerType;
+use App\Integrations\CardnetType;
 use App\Integrations\HttpApiType;
 use App\Integrations\InstagramType;
 use App\Integrations\MessengerType;
 use App\Integrations\N8nType;
 use App\Integrations\WebType;
 use App\Integrations\WhatsAppType;
+use App\Integrations\WompiType;
 
 /*
  * Integraciones: catalog of integration TYPES and the limits of the generic HTTP/REST type.
@@ -23,13 +25,15 @@ return [
         'web' => WebType::class,
         'n8n' => N8nType::class,
         'booker' => BookerType::class,
+        'cardnet' => CardnetType::class,
+        'wompi' => WompiType::class,
     ],
 
     /*
      * Types with their own card in Integraciones (not a generic connection and not a chatbot channel): they never
      * appear in the generic connection form or list.
      */
-    'dedicated' => ['n8n', 'booker'],
+    'dedicated' => ['n8n', 'booker', 'cardnet', 'wompi'],
 
     'http' => [
         'methods' => ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
@@ -81,6 +85,22 @@ return [
             ],
             'test_location_ids' => ['3749'],
         ],
+    ],
+
+    /*
+     * CardNET (República Dominicana): hosts by environment, as the CCG team gave them. They are the ONLY thing configured here about the protocol: the paths, fields and
+     * response codes are NOT confirmed by the official specification and are deliberately not in the code (App\Payments\Gateways\CardnetAdapter).
+     */
+    'cardnet' => ['hosts' => ['sandbox' => 'labservicios.cardnet.com.do', 'production' => 'ecommerce.cardnet.com.do']],
+
+    /*
+     * Wompi PER WORKSPACE (Colombia). NOT the platform's own Wompi (config/wompi.php): other credentials, other table, other events address. The base URLs and the Web Checkout
+     * URL are the ones Wompi documents (docs.wompi.co); seconds Ava waits for the API.
+     */
+    'wompi' => [
+        'api_urls' => ['sandbox' => 'https://sandbox.wompi.co/v1', 'production' => 'https://production.wompi.co/v1'],
+        'checkout_url' => 'https://checkout.wompi.co/p/',
+        'timeout' => 15,
     ],
 
     /* WhatsApp Business (Meta Graph API): used only to verify a number with its token (read-only). */

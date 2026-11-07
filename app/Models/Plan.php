@@ -11,14 +11,14 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
 
 /** A commercial plan: the modules a Workspace may use. Plans are created by CCG and never deleted, only deactivated. */
-#[Fillable(['key', 'name', 'description', 'module_category_id', 'price_monthly_cents', 'price_yearly_cents', 'currency', 'is_public', 'requires_quote', 'is_active', 'channels'])]
+#[Fillable(['key', 'name', 'description', 'module_category_id', 'price_monthly_cents', 'price_yearly_cents', 'currency', 'is_public', 'requires_quote', 'is_active', 'channels', 'payment_gateways'])]
 class Plan extends Model
 {
     use Audited;
 
     protected function casts(): array
     {
-        return ['channels' => 'array', 'is_active' => 'boolean', 'is_public' => 'boolean', 'requires_quote' => 'boolean', 'price_monthly_cents' => 'integer', 'price_yearly_cents' => 'integer'];
+        return ['channels' => 'array', 'payment_gateways' => 'array', 'is_active' => 'boolean', 'is_public' => 'boolean', 'requires_quote' => 'boolean', 'price_monthly_cents' => 'integer', 'price_yearly_cents' => 'integer'];
     }
 
     public const PERIODS = ['monthly' => 'Mensual', 'yearly' => 'Anual'];

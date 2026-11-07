@@ -1,4 +1,4 @@
-import { Boxes, FileText, Gauge, Radio, Tag, X } from 'lucide-react';
+import { Boxes, CreditCard, FileText, Gauge, Radio, Tag, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Alert from '@/Components/Alert';
 import Badge from '@/Components/Badge';
@@ -13,6 +13,7 @@ import Textarea from '@/Components/Textarea';
 import TextInput from '@/Components/TextInput';
 import LimitsSection from './LimitsSection';
 import ChannelsSection from './ChannelsSection';
+import PaymentGatewaysSection from './PaymentGatewaysSection';
 import ModuleChecklist, { unmetRequirements } from './ModuleChecklist';
 import OfferSection from './OfferSection';
 import SectionCard from './SectionCard';
@@ -24,6 +25,7 @@ const TAB_ERRORS = {
     limites: ['limits', 'limits.users'],
     modulos: ['module_ids'],
     canales: ['channel_keys'],
+    pagos: ['payment_gateways'],
 };
 
 /**
@@ -42,6 +44,7 @@ export default function PlanFormModal({ show, title, form, catalog, commercial, 
     const ready = commercial?.ready !== false;
     const limitsReady = commercial?.limitsReady !== false;
     const channelsReady = commercial?.channelsReady !== false;
+    const gatewaysReady = commercial?.paymentGatewaysReady !== false;
 
     // Never send what the database can not store yet: the person is told, nothing is half saved in silence.
     useEffect(() => {
@@ -51,10 +54,11 @@ export default function PlanFormModal({ show, title, form, catalog, commercial, 
             if (!ready) ['solution_ids', 'price_monthly', 'price_yearly', 'currency', 'is_public', 'requires_quote'].forEach((key) => delete out[key]);
             if (!limitsReady) delete out.limits;
             if (!channelsReady) delete out.channel_keys;
+            if (!gatewaysReady) delete out.payment_gateways;
 
             return out;
         });
-    }, [ready, limitsReady, channelsReady]);
+    }, [ready, limitsReady, channelsReady, gatewaysReady]);
 
     useEffect(() => {
         if (show) setTab(0);
@@ -74,6 +78,7 @@ export default function PlanFormModal({ show, title, form, catalog, commercial, 
         commercial && { id: 'limites', label: flag('Límites', 'limites'), icon: Gauge },
         catalog && { id: 'modulos', label: flag('Módulos incluidos', 'modulos'), icon: Boxes, count: chosen.length },
         commercial?.channels && { id: 'canales', label: flag('Canales disponibles', 'canales'), icon: Radio, count: (form.data.channel_keys ?? []).length },
+        commercial?.paymentGateways?.length > 0 && { id: 'pagos', label: flag('Pasarelas de pago', 'pagos'), icon: CreditCard, count: (form.data.payment_gateways ?? []).length },
     ].filter(Boolean);
 
     const panels = tabs.map(({ id }) => {
@@ -113,6 +118,7 @@ export default function PlanFormModal({ show, title, form, catalog, commercial, 
         if (id === 'oferta') return <OfferSection key={id} form={form} commercial={commercial} ready={ready} />;
         if (id === 'limites') return <LimitsSection key={id} form={form} commercial={commercial} ready={limitsReady} />;
         if (id === 'canales') return <ChannelsSection key={id} form={form} commercial={commercial} ready={channelsReady} />;
+        if (id === 'pagos') return <PaymentGatewaysSection key={id} form={form} commercial={commercial} ready={gatewaysReady} />;
 
         return (
             <SectionCard key={id} id="plan-card-modules" title="Módulos incluidos" description="Los módulos deciden qué existe para el Workspace; los permisos de cada rol deciden qué hace cada persona en ellos. Son cosas independientes.">

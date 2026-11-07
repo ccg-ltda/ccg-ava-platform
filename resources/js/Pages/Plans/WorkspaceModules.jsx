@@ -16,6 +16,7 @@ import Select from '@/Components/Select';
 import TextInput from '@/Components/TextInput';
 import { useToast } from '@/Components/Toast';
 import AppLayout from '@/Layouts/AppLayout';
+import WorkspaceGatewaysCard from './Partials/WorkspaceGatewaysCard';
 import { formatMoney } from '@/lib/format';
 
 const SUBSCRIPTION = { pending: 'Pendiente', trialing: 'Prueba gratuita', scheduled: 'Prueba programada', schedule_cancelled: 'Prueba programada cancelada', active: 'Activa', grace: 'En gracia', suspended: 'Suspendida', cancelled: 'Cancelada', expired: 'Vencida' };
@@ -522,7 +523,7 @@ const originOf = (module, override) => {
 };
 
 /** The modules of one client Workspace: what the plan gives, the exceptions CCG authorized for it and what is available now. */
-export default function WorkspaceModules({ workspace, data, canEdit, plans = [], limits, history = [] }) {
+export default function WorkspaceModules({ workspace, data, canEdit, plans = [], limits, history = [], gateways = [] }) {
     const initial = Object.fromEntries(data.modules.filter((module) => module.override).map((module) => [module.id, module.override]));
     const form = useForm({ overrides: initial, reason: '' });
     const overrides = form.data.overrides;
@@ -576,6 +577,7 @@ export default function WorkspaceModules({ workspace, data, canEdit, plans = [],
             <ContractCard workspace={workspace} data={data} canEdit={canEdit} />
             <TrialCard workspace={workspace} data={data} canEdit={canEdit} plans={plans} />
             <LimitsCard workspace={workspace} limits={limits} canEdit={canEdit} />
+            {gateways.length > 0 && <WorkspaceGatewaysCard workspace={workspace} gateways={gateways} canEdit={canEdit} />}
             <HistoryCard history={history} />
 
             {data.blocked === 'subscription' && <Alert tone="warning">La suscripción de este Workspace no concede acceso: no puede abrir ningún módulo, aunque el plan los incluya. Sus datos se conservan.</Alert>}

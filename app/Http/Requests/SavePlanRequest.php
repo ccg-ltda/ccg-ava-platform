@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\ModuleCategory;
 use App\Models\Plan;
+use App\Payments\Gateways\PaymentGatewayManager;
 use App\Services\WorkspaceChannels;
 use App\Services\WorkspaceLimits;
 use Illuminate\Foundation\Http\FormRequest;
@@ -52,6 +53,9 @@ class SavePlanRequest extends FormRequest
             // The communication channels the plan includes (independent of its modules). Only the key that is sent is changed.
             'channel_keys' => ['sometimes', 'array'],
             'channel_keys.*' => ['string', 'distinct', Rule::in(WorkspaceChannels::keys())],
+            // The payment gateways the plan includes (closed by default: a plan that never saved a list includes none). Only the key that is sent is changed.
+            'payment_gateways' => ['sometimes', 'array'],
+            'payment_gateways.*' => ['string', 'distinct', Rule::in(app(PaymentGatewayManager::class)->keys())],
             'module_ids' => ['sometimes', 'array'],
             'module_ids.*' => ['integer', 'distinct', Rule::exists('modules', 'id')],
         ];
@@ -159,6 +163,12 @@ class SavePlanRequest extends FormRequest
     public function channelKeys(): ?array
     {
         return $this->has('channel_keys') ? array_values(array_map('strval', $this->validated('channel_keys', []))) : null;
+    }
+
+    /** @return ?list<string> the gateways to save, or null when the form did not send them (nothing changes) */
+    public function paymentGatewayKeys(): ?array
+    {
+        return $this->has('payment_gateways') ? array_values(array_map('strval', $this->validated('payment_gateways', []))) : null;
     }
 
     public function moduleIds(): array

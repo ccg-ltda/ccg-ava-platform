@@ -213,6 +213,7 @@ export default function Show({ can, plan, catalog, commercial, workspaces, perPa
         description: plan.description ?? '',
         // A plan whose channels were never saved still offers every channel: the editor starts from that.
         channel_keys: plan.channelKeys ?? (commercial?.channels ?? []).map((channel) => channel.key),
+        payment_gateways: plan.paymentGatewayKeys ?? [],
         solution_ids: plan.offer?.solutionIds ?? [],
         price_monthly: plan.offer?.priceMonthly ?? '',
         price_yearly: plan.offer?.priceYearly ?? '',

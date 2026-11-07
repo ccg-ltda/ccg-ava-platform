@@ -46,6 +46,8 @@ return [
         'chatbot_channel' => ['label' => 'Canales de chatbots', 'noun' => 'el canal'],
         'chatbot_channel_appearance' => ['label' => 'Apariencia de canales', 'noun' => 'la apariencia del canal'],
         'conversation' => ['label' => 'Conversaciones', 'noun' => 'la conversación'],
+        'payment' => ['label' => 'Pagos', 'noun' => 'el pago'],
+        'payment_gateway' => ['label' => 'Pasarelas de pago', 'noun' => 'la pasarela de pago de'],
         'payment_settings' => ['label' => 'Pagos (Wompi)', 'noun' => 'la configuración de pagos'],
         'chatbot_execution' => ['label' => 'Ejecuciones de asistentes', 'noun' => 'el workflow del asistente'],
     ],

@@ -10,8 +10,24 @@ import { channelIcon } from '@/config/chatbots';
  * What Ava really knows about the channel in this Workspace. Saved settings are only "Configurado"; "Conexión
  * verificada" or "Error de conexión" appear only after a real test, and only for channels that can be tested.
  */
+const GATEWAY_STATES = {
+    plan_disabled: { label: 'Deshabilitada por el plan', tone: 'neutral' },
+    admin_disabled: { label: 'Desactivada por administración', tone: 'neutral' },
+    not_configured: { label: 'No configurada', tone: 'amber' },
+    incomplete: { label: 'Configuración incompleta', tone: 'amber' },
+    saved: { label: 'Guardada, sin validar', tone: 'blue' },
+    validated: { label: 'Validada', tone: 'green' },
+    error: { label: 'Error de conexión', tone: 'red' },
+    inactive: { label: 'Inactiva', tone: 'neutral' },
+    blocked_environment: { label: 'Producción no autorizada', tone: 'amber' },
+    incompatible: { label: 'Moneda o país no compatibles', tone: 'amber' },
+};
+
 function status(channel) {
     const { integration } = channel;
+
+    // A payment gateway shows the state the checkout itself computes: a saved configuration is never «validada» without a real connection test.
+    if (channel.state) return GATEWAY_STATES[channel.state] ?? { label: channel.state, tone: 'neutral' };
 
     if (!channel.available) return { label: 'No disponible todavía', tone: 'neutral' };
     if (!integration) return { label: 'No configurado', tone: 'amber' };
@@ -111,6 +127,17 @@ export default function ChannelCard({ channel, delay, readOnly, can = { edit: tr
                 </dl>
             )}
 
+            {channel.reasons?.length > 0 && integration && <p className="mt-3 text-sm text-ink-muted">{channel.reasons.join(' ')}</p>}
+            {channel.blockedBy?.length > 0 && (
+                <details className="mt-3 rounded-lg border border-line px-3 py-2 text-sm">
+                    <summary className="cursor-pointer font-semibold text-ink">Pendiente del proveedor</summary>
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-ink-muted">
+                        {channel.blockedBy.map((item) => (
+                            <li key={item}>{item}</li>
+                        ))}
+                    </ul>
+                </details>
+            )}
             {integration?.lastTest && (
                 <p className={`mt-3 rounded-lg border p-3 text-sm ${integration.lastTest.ok ? 'border-accent-green/25 bg-accent-green/10' : 'border-danger/25 bg-danger/10'}`}>
                     {integration.lastTest.message}

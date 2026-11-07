@@ -10,6 +10,9 @@ use App\Integrations\IntegrationRegistry;
 use App\Integrations\TestResult;
 use App\Models\Integration;
 use App\Models\Workspace;
+use App\Payments\Gateways\GatewayAvailability;
+use App\Payments\Gateways\PaymentGatewayManager;
+use App\Payments\Gateways\PaymentGatewayType;
 use Carbon\CarbonInterface;
 use Closure;
 use Illuminate\Validation\ValidationException;
@@ -160,6 +163,75 @@ class IntegrationService
         })->filter()->values()->all();
     }
 
+    /**
+     * The payment gateways as the cards of Integraciones show them for this Workspace: the state is the same computation the checkout uses (GatewayAvailability), so a
+     * saved configuration is only «Guardada» and never «Validada» without a real connection test. Secrets never leave: the form only says whether each one is set and its last four.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function paymentGateways(Workspace $workspace): array
+    {
+        $when = $this->moment($workspace);
+        $availability = app(GatewayAvailability::class);
+        $configured = $workspace->integrations()->whereIn('type', app(PaymentGatewayManager::class)->keys())->get()->keyBy('type');
+
+        return collect(app(PaymentGatewayManager::class)->keys())->map(function (string $key) use ($workspace, $availability, $configured, $when) {
+            $type = $this->types->get($key);
+            $integration = $configured->get($key);
+
+            if (! $type instanceof PaymentGatewayType) {
+                return null;
+            }
+
+            $state = $availability->describe($workspace, $key);
+            $closed = in_array($state['state'], ['plan_disabled', 'admin_disabled'], true);
+
+            return [
+                'key' => $key,
+                'label' => $type->label(),
+                'description' => $type->description(),
+                'available' => ! $closed,
+                'unavailable' => $closed ? $state['reasons'][0] : null,
+                'state' => $state['state'],
+                'reasons' => $closed ? [] : $state['reasons'],
+                'blockedBy' => $type->blockedBy(),
+                'needsIntegration' => true,
+                'fields' => $type->fields(),
+                'notice' => $type->notice(),
+                'testable' => $type->supportsTest(),
+                'integration' => $integration ? [
+                    'id' => $integration->id,
+                    'isActive' => $integration->is_active,
+                    'summary' => $type->summary($integration),
+                    'updatedAt' => $when($integration->updated_at),
+                    'form' => $type->form($integration),
+                    'lastTest' => $integration->last_tested_at ? [
+                        'at' => $when($integration->last_tested_at),
+                        'ok' => (bool) $integration->last_test_ok,
+                        'message' => $integration->last_test_message,
+                    ] : null,
+                ] : null,
+            ];
+        })->filter()->values()->all();
+    }
+
+    /**
+     * Creates or updates the Workspace's own connection with a payment gateway (one per gateway and Workspace). A new one is born INACTIVE and unvalidated, and a partial
+     * configuration may be saved; the gateway must be permitted for the Workspace (plan or administrative grant), checked here on the server.
+     *
+     * @param  array<string, mixed>  $data
+     *
+     * @throws ValidationException
+     */
+    public function savePaymentGateway(Workspace $workspace, string $gateway, array $data): Integration
+    {
+        if (! app(GatewayAvailability::class)->permitted($workspace, $gateway)) {
+            throw ValidationException::withMessages(['gateway' => 'El proveedor no está habilitado en tu plan.']);
+        }
+
+        return $this->saveSingle($workspace, $gateway, $this->types->get($gateway)->label(), $data, false);
+    }
+
     /** Creates or updates the Workspace's own integration for an external agenda (one per provider and Workspace). @param  array<string, mixed>  $data */
     public function saveProvider(Workspace $workspace, string $provider, array $data): Integration
     {
@@ -239,7 +311,7 @@ class IntegrationService
      *
      * @param  array<string, mixed>  $data
      */
-    private function saveSingle(Workspace $workspace, string $typeKey, string $label, array $data): Integration
+    private function saveSingle(Workspace $workspace, string $typeKey, string $label, array $data, bool $active = true): Integration
     {
         $type = $this->types->get($typeKey);
         $current = $workspace->integrations()->where('type', $type->key())->first();
@@ -266,7 +338,7 @@ class IntegrationService
         return $workspace->integrations()->create([
             'name' => $label,
             'type' => $type->key(),
-            'is_active' => true,
+            'is_active' => $active,
             'config' => $built['config'],
             'secrets' => $built['secrets'],
         ]);
@@ -351,7 +423,26 @@ class IntegrationService
     public function setActive(Integration $integration, bool $active): void
     {
         $this->assertChannelIncluded($integration, $active);
+        $this->assertGatewayReady($integration, $active);
         $integration->update(['is_active' => $active]);
+    }
+
+    /** A payment gateway is switched on only while the Workspace may use it and its configuration is complete. Switching off is always allowed. @throws ValidationException */
+    private function assertGatewayReady(Integration $integration, bool $needed): void
+    {
+        $type = $needed ? $this->types->get($integration->type) : null;
+
+        if (! $type instanceof PaymentGatewayType) {
+            return;
+        }
+
+        if (! app(GatewayAvailability::class)->permitted($integration->workspace, $integration->type)) {
+            throw ValidationException::withMessages(['status' => 'El proveedor no está habilitado en tu plan.']);
+        }
+
+        if ($type->problems($integration->config ?? [], $integration->secrets) !== []) {
+            throw ValidationException::withMessages(['status' => 'Completa la configuración antes de activar la conexión.']);
+        }
     }
 
     /** A channel's connection can be switched on (or tested) only while the Workspace's plan includes that channel; switching off is always allowed. @throws ValidationException */

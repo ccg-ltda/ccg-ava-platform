@@ -7,11 +7,14 @@ use App\Http\Requests\CreateOrderRequest;
 use App\Http\Requests\UpdateOrderRequest;
 use App\Models\Order;
 use App\Models\OrderStatusChange;
+use App\Models\PaymentTransaction;
 use App\Models\Workspace;
 use App\Orders\CommerceSchema;
 use App\Orders\OrderException;
 use App\Orders\OrderNotifier;
 use App\Orders\OrderService;
+use App\Payments\Gateways\GatewayAvailability;
+use App\Payments\Gateways\PaymentService;
 use App\Services\ListPagination;
 use App\Services\LocationScope;
 use App\Services\ModuleAccess;
@@ -91,7 +94,39 @@ class OrderController extends Controller
             'methods' => config('orders.methods'),
             'notifier' => $this->notifier->available(),
             'customersModule' => in_array('customers', $this->modules->forRequest($request), true) && in_array('view-customers', $permissions, true),
+            'payment' => $this->paymentView($workspace, $model, $permissions),
         ]);
+    }
+
+    /**
+     * What the order screen knows about collecting this order: derived from its payment transactions (an order has no payment column of its own). The link is the one
+     * flashed by the request that just generated it, shown once. `null` when the payment tables are not applied yet.
+     *
+     * @param  list<string>  $permissions
+     * @return array<string, mixed>|null
+     */
+    private function paymentView(Workspace $workspace, Order $order, array $permissions): ?array
+    {
+        if (! GatewayAvailability::ready()) {
+            return null;
+        }
+
+        $summary = app(PaymentService::class)->summary($workspace->id, $order->paymentType(), $order->id);
+        $offered = app(GatewayAvailability::class)->offered($workspace, $order->paymentCurrency());
+        $transactions = PaymentTransaction::where('workspace_id', $workspace->id)->where('payable_type', $order->paymentType())->where('payable_id', $order->id)->latest('id')->limit(10)->get();
+
+        return [
+            'state' => $summary['state'], 'stateLabel' => $summary['label'],
+            'canCollect' => in_array('request-order-payments', $permissions, true) && $order->paymentOpen() && ! in_array($summary['state'], ['paid', 'duplicate', 'refund_pending', 'refunded'], true),
+            'methods' => array_map(fn (array $gateway) => $gateway['label'], $offered),
+            'link' => session('payment_link'),
+            'transactions' => $transactions->map(fn (PaymentTransaction $transaction) => [
+                'id' => $transaction->id, 'reference' => $transaction->reference, 'provider' => $transaction->provider, 'environment' => $transaction->environment,
+                'status' => $transaction->status, 'statusLabel' => $transaction->state()->label(), 'amountMinor' => $transaction->amount_minor, 'currency' => $transaction->currency,
+                'at' => $transaction->created_at->toIso8601String(), 'duplicate' => $transaction->failure_code === 'duplicate_payment', 'review' => $transaction->failure_code === 'manual_review',
+                'canVerify' => in_array('request-order-payments', $permissions, true) && $transaction->status !== 'refunded',
+            ])->all(),
+        ];
     }
 
     public function store(CreateOrderRequest $request): RedirectResponse

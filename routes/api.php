@@ -11,11 +11,13 @@ use App\Http\Controllers\AgentReminderController;
 use App\Http\Controllers\AgentReportingController;
 use App\Http\Controllers\InboundWebhookReceiveController;
 use App\Http\Controllers\MetaWebhookController;
+use App\Http\Controllers\PaymentReturnController;
 use App\Http\Controllers\PublicBookingController;
 use App\Http\Controllers\ReadinessController;
 use App\Http\Controllers\WhatsAppWebhookController;
 use App\Http\Controllers\WidgetController;
 use App\Http\Controllers\WompiWebhookController;
+use App\Http\Controllers\WompiWorkspaceWebhookController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -29,6 +31,12 @@ use Illuminate\Support\Facades\Route;
 // Readiness (`/api/ready`): 200 only when PostgreSQL (and Redis, when used) answer. For a load balancer or an external monitor; NOT for the container healthcheck (see ReadinessController).
 Route::get('/ready', ReadinessController::class)->middleware('throttle.safe:60,1')->name('ready');
 
+// Where a payment provider sends the customer's browser back (GET or POST, no session, no CSRF). The opaque token of the TRANSACTION relates the visit to it; nothing the browser sends is believed.
+Route::prefix('payments')->name('payments.')->middleware(['throttle:payment-callback'])->group(function () {
+    Route::match(['GET', 'POST'], '/return/{token}', [PaymentReturnController::class, 'return'])->where('token', '[A-Za-z0-9]{40}')->name('return');
+    Route::match(['GET', 'POST'], '/cancel/{token}', [PaymentReturnController::class, 'cancel'])->where('token', '[A-Za-z0-9]{40}')->name('cancel');
+});
+
 Route::prefix('webhooks')->name('webhooks.')->middleware(['body.limit:provider', 'throttle.safe:600,1'])->group(function () {
     Route::get('/whatsapp', [WhatsAppWebhookController::class, 'verify'])->name('whatsapp.verify');
     Route::post('/whatsapp', [WhatsAppWebhookController::class, 'receive'])->name('whatsapp.receive');
@@ -37,6 +45,8 @@ Route::prefix('webhooks')->name('webhooks.')->middleware(['body.limit:provider',
     Route::post('/meta', [MetaWebhookController::class, 'receive'])->name('meta.receive');
     // Events URL of Wompi (one per environment in the merchant portal): authenticated by checksum, then confirmed against Wompi's API.
     Route::post('/wompi', [WompiWebhookController::class, 'receive'])->name('wompi.receive');
+    // Events URL of ONE Workspace's own Wompi connection (not the platform's): the opaque token names the connection, the events secret authenticates the event and Wompi's API confirms it.
+    Route::post('/payments/wompi/{token}', [WompiWorkspaceWebhookController::class, 'receive'])->where('token', '[0-9]{1,12}\.[a-f0-9]{40}')->name('payments.wompi.receive');
     // The webhook of ONE Workspace's number: the key is the public, non-secret part generated with its WhatsApp integration (the secrets stay in the integration).
     // INBOUND endpoints of a Workspace (Integraciones > Webhooks): the signature is the credential; it replaces none of the provider webhooks above.
     Route::post('/in/{key}', [InboundWebhookReceiveController::class, 'receive'])->where('key', '[a-f0-9]{48}')->middleware(['throttle.safe:inbound-webhook-key', 'throttle.safe:inbound-webhook-ip'])->name('inbound.receive');

@@ -33,7 +33,9 @@ use App\Http\Controllers\ModuleCategoryController;
 use App\Http\Controllers\ModuleController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OrderController;
+use App\Http\Controllers\OrderPaymentController;
 use App\Http\Controllers\OrganizationController;
+use App\Http\Controllers\PaymentPageController;
 use App\Http\Controllers\PaymentSettingsController;
 use App\Http\Controllers\PlanController;
 use App\Http\Controllers\ProductCategoryController;
@@ -59,6 +61,7 @@ use App\Http\Controllers\UserLocationScopeController;
 use App\Http\Controllers\WebhookController;
 use App\Http\Controllers\WorkspaceController;
 use App\Http\Controllers\WorkspaceEmptyController;
+use App\Http\Controllers\WorkspaceGatewayController;
 use App\Http\Controllers\WorkspaceInvitationController;
 use App\Http\Controllers\WorkspaceLimitController;
 use App\Http\Controllers\WorkspaceLogoController;
@@ -103,6 +106,14 @@ Route::middleware(['guest', EnsureSignupSchema::class])->prefix('registro')->nam
     Route::post('/atras', [SignupController::class, 'back'])->middleware('throttle:signup-step')->name('back');
     Route::post('/cancelar', [SignupController::class, 'cancel'])->middleware('throttle:signup-step')->name('cancel');
     Route::get('/bienvenida', [SignupController::class, 'welcome'])->name('welcome');
+});
+
+// The payment page of a customer (no session): the opaque link names ONE payable of ONE Workspace; amount, currency and methods are decided on the server.
+// `/pay/status/{token}` uses the token of the transaction (not the link) the provider returned the customer to. The provider's return/cancel URLs live in routes/api.php.
+Route::prefix('pay')->name('payments.')->group(function () {
+    Route::get('/status/{token}', [PaymentPageController::class, 'status'])->where('token', '[A-Za-z0-9]{40}')->middleware('throttle:payment-page')->name('status');
+    Route::get('/{token}', [PaymentPageController::class, 'show'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:payment-page')->name('page');
+    Route::post('/{token}/start', [PaymentPageController::class, 'start'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:payment-start')->name('start');
 });
 
 // The open booking page of a Workspace (no session): the key in the URL is the only thing the visitor chooses. Its data comes from /api/booking/{key}/....
@@ -159,6 +170,7 @@ Route::middleware(['auth', 'workspace', 'throttle:authenticated'])->group(functi
         Route::post('/', [IntegrationController::class, 'store'])->middleware('workspace.permission:manage-integrations')->name('store');
         Route::put('/n8n', [IntegrationController::class, 'updateN8n'])->middleware('workspace.permission:manage-integrations')->name('n8n.update');
         Route::delete('/n8n', [IntegrationController::class, 'disconnectN8n'])->middleware('workspace.permission:activate-integrations')->name('n8n.destroy');
+        Route::put('/payment-gateways/{gateway}', [IntegrationController::class, 'updatePaymentGateway'])->where('gateway', '[a-z_]+')->middleware(['workspace.permission:manage-integrations', 'throttle:30,1'])->name('payment-gateways.update');
         Route::put('/providers/{provider}', [IntegrationController::class, 'updateProvider'])->where('provider', '[a-z_]+')->middleware(['workspace.module:calendar_providers', 'workspace.permission:manage-integrations'])->name('providers.update');
         // Instagram and Messenger are connected with Meta's OAuth (never by pasting a token). The callback is the only route Meta calls (with the person's session); every one needs `manage-integrations`.
         Route::prefix('meta')->name('meta.')->middleware(['workspace.permission:manage-integrations', 'throttle:30,1'])->group(function () {
@@ -311,6 +323,9 @@ Route::middleware(['auth', 'workspace', 'throttle:authenticated'])->group(functi
         Route::get('/{order}', [OrderController::class, 'show'])->whereNumber('order')->middleware('workspace.permission:view-order-details')->name('show');
         Route::post('/', [OrderController::class, 'store'])->middleware(['workspace.permission:create-orders', 'throttle:60,1'])->name('store');
         Route::put('/{order}', [OrderController::class, 'update'])->whereNumber('order')->middleware('workspace.permission:edit-orders')->name('update');
+        Route::post('/{order}/payment-link', [OrderPaymentController::class, 'store'])->whereNumber('order')->middleware(['workspace.permission:request-order-payments', 'throttle:30,1'])->name('payment-link.store');
+        Route::post('/{order}/payments/{transaction}/verify', [OrderPaymentController::class, 'verify'])->whereNumber(['order', 'transaction'])->middleware(['workspace.permission:request-order-payments', 'throttle:20,1'])->name('payments.verify');
+        Route::delete('/{order}/payment-link', [OrderPaymentController::class, 'destroy'])->whereNumber('order')->middleware('workspace.permission:request-order-payments')->name('payment-link.destroy');
         Route::post('/{order}/status', [OrderController::class, 'transition'])->whereNumber('order')->middleware('workspace.permission:process-orders,cancel-orders')->name('transition');
     });
 
@@ -498,6 +513,7 @@ Route::middleware(['auth', 'workspace', 'throttle:authenticated'])->group(functi
         Route::post('/plans/{plan}/deactivate', [PlanController::class, 'deactivate'])->whereNumber('plan')->middleware('workspace.platform:activate-plans')->name('plans.deactivate');
         Route::get('/workspaces/{workspace}/modules', [WorkspaceModuleController::class, 'show'])->whereNumber('workspace')->name('workspaces.modules.show');
         Route::put('/workspaces/{workspace}/modules', [WorkspaceModuleController::class, 'update'])->whereNumber('workspace')->middleware('workspace.platform:assign-plans')->name('workspaces.modules.update');
+        Route::put('/workspaces/{workspace}/payment-gateways', [WorkspaceGatewayController::class, 'update'])->whereNumber('workspace')->middleware(['workspace.platform:assign-plans', 'throttle:30,1'])->name('workspaces.payment-gateways.update');
         Route::post('/workspaces/{workspace}/trial', [WorkspaceSubscriptionController::class, 'grantTrial'])->whereNumber('workspace')->middleware('workspace.platform:assign-plans')->name('workspaces.trial.store');
         Route::put('/workspaces/{workspace}/trial', [WorkspaceSubscriptionController::class, 'updateTrial'])->whereNumber('workspace')->middleware('workspace.platform:assign-plans')->name('workspaces.trial.update');
         Route::post('/workspaces/{workspace}/trial/cancel', [WorkspaceSubscriptionController::class, 'cancelTrial'])->whereNumber('workspace')->middleware('workspace.platform:assign-plans')->name('workspaces.trial.cancel');

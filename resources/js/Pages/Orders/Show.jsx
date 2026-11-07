@@ -15,6 +15,7 @@ import TextInput from '@/Components/TextInput';
 import { day, money } from '@/config/orders';
 import AppLayout from '@/Layouts/AppLayout';
 import OrderStatusBadge from './Partials/OrderStatusBadge';
+import PaymentCard from './Partials/PaymentCard';
 
 function CancelModal({ order, onClose }) {
     const form = useForm({ status: 'cancelled', reason: '' });
@@ -102,7 +103,7 @@ function DetailsForm({ order }) {
 }
 
 /** One order: what was bought as it was bought, its delivery data, the moves available to this person and its history. */
-export default function Show({ order, moves, canEdit, statuses, notifier }) {
+export default function Show({ order, moves, canEdit, statuses, notifier, payment }) {
     const [cancelling, setCancelling] = useState(false);
     const move = (status) => router.post(route('orders.transition', order.id), { status }, { preserveScroll: true });
     const forward = moves.filter((item) => item.status !== 'cancelled');
@@ -120,7 +121,11 @@ export default function Show({ order, moves, canEdit, statuses, notifier }) {
                 <OrderStatusBadge status={order.status} label={order.statusLabel} />
             </PageHeader>
 
-            <Alert tone="info">Este pedido está registrado, no necesariamente pagado: Ava no gestiona pagos.{!notifier && ' Tampoco avisa todavía al cliente de los cambios de estado.'}</Alert>
+            {payment ? (
+                <PaymentCard order={order} payment={payment} />
+            ) : (
+                <Alert tone="info">Este pedido está registrado, no necesariamente pagado.{!notifier && ' Ava tampoco avisa todavía al cliente de los cambios de estado.'}</Alert>
+            )}
 
             {(forward.length > 0 || canCancel) && (
                 <Card className="flex flex-wrap items-center gap-3 p-4 sm:p-5">

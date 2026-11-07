@@ -7,6 +7,8 @@ use App\Http\Requests\SaveWorkspaceModulesRequest;
 use App\Models\AuditLog;
 use App\Models\Plan;
 use App\Models\Workspace;
+use App\Payments\Gateways\GatewayAvailability;
+use App\Payments\Gateways\GatewayOverrides;
 use App\Services\ModuleCatalog;
 use App\Services\WorkspaceLimits;
 use Illuminate\Http\RedirectResponse;
@@ -30,11 +32,13 @@ class WorkspaceModuleController extends Controller
         return Inertia::render('Plans/WorkspaceModules', [
             'workspace' => ['id' => $workspace->id, 'code' => $workspace->code, 'name' => $workspace->name, 'organization' => $workspace->organization->name],
             'data' => $this->catalog->workspaceModules($workspace),
+            // The payment gateways of THIS Workspace: its plan, the administrative exception (who, when, why) and the effective state.
+            'gateways' => GatewayAvailability::ready() ? app(GatewayOverrides::class)->overview($workspace) : [],
             'canEdit' => EnsurePlatformAdministration::allows($request, 'assign-plans'),
             // Standard (plan) and particular limits of THIS Workspace, with the usage that is really counted.
             'limits' => $this->limits($workspace),
             // The subscription and limit events of THIS Workspace, newest first (who, what, when); the same audit every administrator action goes to.
-            'history' => AuditLog::where('workspace_id', $workspace->id)->whereIn('resource_type', ['subscription', 'workspace_limits', 'workspace_modules', 'ai_execution'])
+            'history' => AuditLog::where('workspace_id', $workspace->id)->whereIn('resource_type', ['subscription', 'workspace_limits', 'workspace_modules', 'ai_execution', 'payment_gateway'])
                 ->orderByDesc('id')->limit(15)->get(['description', 'user_name', 'actor', 'outcome', 'changes', 'created_at'])
                 ->map(fn (AuditLog $log) => ['text' => $log->description, 'who' => $log->actor === 'system' ? 'Automático' : $log->user_name, 'outcome' => $log->outcome, 'at' => $log->created_at->toIso8601String(), 'changes' => $log->changes])->all(),
             // The plans that can be assigned (active ones); only offered to who may assign. The route enforces the permission again.

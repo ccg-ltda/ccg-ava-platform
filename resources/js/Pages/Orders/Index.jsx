@@ -250,7 +250,7 @@ export default function Index({ schemaPending, orders, filters, perPageOptions, 
         <>
             <Head title="Pedidos" />
 
-            <PageHeader title="Pedidos" description="Los pedidos registrados en este Workspace y su estado. Un pedido registrado no es un pedido pagado: Ava no gestiona pagos.">
+            <PageHeader title="Pedidos" description="Los pedidos registrados en este Workspace y su estado. Un pedido registrado no es un pedido pagado: su estado de pago se ve en el detalle.">
                 {formOptions && !schemaPending && (
                     <PrimaryButton type="button" onClick={() => setCreating(true)} className="gap-2" disabled={formOptions.products.length === 0}>
                         <Plus className="size-4" aria-hidden="true" />

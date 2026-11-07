@@ -157,6 +157,7 @@ return [
         'create-orders' => ['group' => 'orders', 'label' => 'Registrar pedidos', 'description' => 'Crea un pedido; el total lo calcula el servidor con el catálogo.'],
         'edit-orders' => ['group' => 'orders', 'label' => 'Editar pedidos', 'description' => 'Cambia las notas y los datos de entrega mientras el pedido no haya salido.'],
         'cancel-orders' => ['group' => 'orders', 'label' => 'Cancelar pedidos', 'description' => 'Cancela un pedido con un motivo escrito.'],
+        'request-order-payments' => ['group' => 'orders', 'label' => 'Cobrar pedidos', 'description' => 'Genera y revoca el enlace de pago de un pedido para que el cliente pague con las pasarelas del Workspace, y ve el estado de ese pago.'],
         'process-orders' => ['group' => 'orders', 'label' => 'Avanzar el estado de los pedidos', 'description' => 'Confirma, prepara, marca como listo, despacha y entrega pedidos. No los crea ni los cancela.'],
 
         // Planes comerciales (solo Desarrollo_DEV)

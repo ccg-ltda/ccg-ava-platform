@@ -3,18 +3,19 @@
 namespace App\Models;
 
 use App\Models\Concerns\Audited;
+use App\Payments\Gateways\Payable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * An order of E-commerce or Delivery. It is registered, NOT necessarily paid: Ava does not manage payments. Its lines hold what was bought as it was
+ * An order of E-commerce or Delivery. It is registered, NOT necessarily paid: whether it is paid is DERIVED from its payment transactions (App\Payments\Gateways\PaymentService::summary); the order has no payment column. Its lines hold what was bought as it was
  * when it was placed; `total` is computed by the server and never edited. Never deleted: it leaves the flow by being `cancelled`.
  * Created only through App\Orders\OrderService.
  */
 #[Fillable(['workspace_id', 'number', 'customer_id', 'conversation_id', 'idempotency_key', 'idempotency_fingerprint', 'customer_name', 'customer_phone', 'customer_email', 'delivery_method', 'delivery_address', 'delivery_city', 'delivery_reference', 'recipient_name', 'recipient_phone', 'location_id', 'location_name', 'currency', 'total', 'status', 'status_changed_at', 'notes', 'cancel_reason'])]
-class Order extends Model
+class Order extends Model implements Payable
 {
     use Audited;
 
@@ -77,5 +78,51 @@ class Order extends Model
     public function auditFields(): array
     {
         return ['status' => 'Estado', 'delivery_method' => 'Entrega', 'location_name' => 'Sede', 'total' => 'Total', 'currency' => 'Moneda', 'cancel_reason' => 'Motivo de cancelación'];
+    }
+
+    public function paymentType(): string
+    {
+        return 'order';
+    }
+
+    public function paymentId(): int
+    {
+        return $this->id;
+    }
+
+    public function paymentWorkspaceId(): int
+    {
+        return $this->workspace_id;
+    }
+
+    public function paymentModule(): string
+    {
+        return 'orders';
+    }
+
+    /** Minor units from the stored decimal total (two decimals), never through a float. */
+    public function paymentAmountMinor(): int
+    {
+        return (int) str_replace('.', '', number_format((float) $this->total, 2, '.', ''));
+    }
+
+    public function paymentCurrency(): string
+    {
+        return strtoupper($this->currency);
+    }
+
+    public function paymentDescription(): string
+    {
+        return "Pedido #{$this->number}";
+    }
+
+    public function paymentOpen(): bool
+    {
+        return $this->status !== 'cancelled';
+    }
+
+    public function paymentCustomer(): array
+    {
+        return ['name' => (string) $this->customer_name, 'email' => $this->customer_email, 'phone' => $this->customer_phone];
     }
 }

@@ -56,5 +56,8 @@ ScheduledCommandMonitor::watch(Schedule::command('subscriptions:expire-trials')-
 // one, which the monitor counts and `integrations:diagnose` blocks on; repeating the provisioning (`signup:reconcile --retry`) stays a deliberate act of a person.
 ScheduledCommandMonitor::watch(Schedule::command('signup:reconcile')->everyFifteenMinutes()->withoutOverlapping()->onOneServer(), 'signup-reconcile');
 
+// Asks the payment providers about the open payment transactions that are due and expires the abandoned ones (never charges; the backoff lives in each transaction).
+ScheduledCommandMonitor::watch(Schedule::command('payments:reconcile')->everyMinute()->withoutOverlapping()->onOneServer(), 'payments-reconcile');
+
 // Deletes the redacted API call records older than the retention window (ApiCallRecorder::RETENTION_DAYS). Idempotent.
 Schedule::call(fn () => app(ApiCallRecorder::class)->prune())->name('api-calls-prune')->daily();

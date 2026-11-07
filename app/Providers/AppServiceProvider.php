@@ -86,6 +86,10 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('booking-config', fn (Request $request) => Limit::perMinute((int) config('bookings.public.config_per_minute'))->by($request->ip().'|'.$request->route('key')));
         RateLimiter::for('booking-availability', fn (Request $request) => Limit::perMinute((int) config('bookings.public.availability_per_minute'))->by($request->ip().'|'.$request->route('key')));
         RateLimiter::for('booking-write', fn (Request $request) => Limit::perMinute((int) config('bookings.public.write_per_minute'))->by($request->ip().'|'.$request->route('key')));
+        // The payment page of a customer (no session): reading is cheap, starting a collection calls the provider, and the provider's return is the doubtful one.
+        RateLimiter::for('payment-page', fn (Request $request) => Limit::perMinute((int) config('payments.limits.page_per_minute'))->by($request->ip()));
+        RateLimiter::for('payment-start', fn (Request $request) => Limit::perMinute((int) config('payments.limits.start_per_minute'))->by($request->ip()));
+        RateLimiter::for('payment-callback', fn (Request $request) => Limit::perMinute((int) config('payments.limits.callback_per_minute'))->by($request->ip()));
         // Account recovery is open to the internet and sends email: limited per IP and per address, so one mailbox cannot be flooded.
         RateLimiter::for('password-reset-request', fn (Request $request) => [
             Limit::perMinute(5)->by('ip:'.$request->ip()),

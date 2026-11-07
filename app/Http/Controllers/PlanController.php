@@ -9,6 +9,8 @@ use App\Http\Requests\SavePlanRequest;
 use App\Models\ModuleCategory;
 use App\Models\Plan;
 use App\Models\Workspace;
+use App\Payments\Gateways\GatewayAvailability;
+use App\Payments\Gateways\PaymentGatewayManager;
 use App\Services\ListPagination;
 use App\Services\ModuleCatalog;
 use App\Services\WorkspaceChannels;
@@ -94,6 +96,7 @@ class PlanController extends Controller
         }
 
         $this->saveChannels($plan, $request->channelKeys());
+        $this->savePaymentGateways($plan, $request->paymentGatewayKeys());
 
         return redirect()->route('plans.show', $plan)->with('success', 'Plan creado correctamente');
     }
@@ -113,6 +116,7 @@ class PlanController extends Controller
             }
 
             $this->saveChannels($plan, $request->channelKeys());
+            $this->savePaymentGateways($plan, $request->paymentGatewayKeys());
         });
 
         return back()->with('success', 'Plan actualizado correctamente');
@@ -161,6 +165,24 @@ class PlanController extends Controller
         }
     }
 
+    /** Saves the payment gateways a plan includes (audited by name). The connections and transactions of the Workspaces are never touched: a gateway left out only stops being offered. @param ?list<string> $keys */
+    private function savePaymentGateways(Plan $plan, ?array $keys): void
+    {
+        if ($keys === null || ! GatewayAvailability::ready()) {
+            return;
+        }
+
+        $manager = app(PaymentGatewayManager::class);
+        $before = $plan->payment_gateways ?? [];
+        $after = array_values(array_intersect($manager->keys(), $keys));
+        $plan->forceFill(['payment_gateways' => $after])->save();
+        $label = fn (array $list) => collect($list)->map(fn (string $key) => $manager->adapter($key)->label())->implode(', ') ?: 'Ninguna';
+
+        if ($before !== $after) {
+            app(AuditLogger::class)->record('updated', 'plan', $plan->id, $plan->name, [AuditLogger::change('Pasarelas de pago', $label($before), $label($after))]);
+        }
+    }
+
     /** @return array<string, mixed> */
     private function summary(Plan $plan, int $workspacesCount): array
     {
@@ -175,6 +197,8 @@ class PlanController extends Controller
             'moduleIds' => $plan->modules()->pluck('modules.id')->all(),
             // The channels the plan includes; null = never configured (the plan still offers every channel, as before).
             'channelKeys' => WorkspaceChannels::ready() ? $plan->channels : null,
+            // The payment gateways the plan includes (closed by default: none until an administrator chooses).
+            'paymentGatewayKeys' => GatewayAvailability::ready() ? ($plan->payment_gateways ?? []) : [],
             'modulesCount' => $plan->modules_count,
             'workspacesCount' => $workspacesCount,
             // The commercial offer, exactly as saved (price in major units): what the public sign-up reads.
@@ -199,6 +223,8 @@ class PlanController extends Controller
             'ready' => Plan::commercialReady(),
             'limitsReady' => $this->limits->available(),
             'channelsReady' => WorkspaceChannels::ready(),
+            'paymentGatewaysReady' => GatewayAvailability::ready(),
+            'paymentGateways' => collect(app(PaymentGatewayManager::class)->keys())->map(fn (string $key) => ['key' => $key, 'label' => app(PaymentGatewayManager::class)->adapter($key)->label()])->values()->all(),
             'channels' => collect(WorkspaceChannels::catalog())->map(fn (string $label, string $key) => ['key' => $key, 'label' => $label])->values()->all(),
             'metrics' => collect(WorkspaceLimits::METRICS)->map(fn (array $meta, string $key) => ['key' => $key] + $meta)->values()->all(),
             // Only categories that are commercial solutions: the groups of shared capabilities are not offered as a solution.

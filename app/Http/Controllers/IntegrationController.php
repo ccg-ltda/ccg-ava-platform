@@ -6,6 +6,7 @@ use App\Http\Middleware\EnsurePlatformAdministration;
 use App\Http\Requests\SaveChannelIntegrationRequest;
 use App\Http\Requests\SaveIntegrationRequest;
 use App\Http\Requests\SaveN8nIntegrationRequest;
+use App\Http\Requests\SavePaymentGatewayIntegrationRequest;
 use App\Http\Requests\SaveProviderIntegrationRequest;
 use App\Integrations\CalendarProviderType;
 use App\Integrations\IntegrationRegistry;
@@ -55,6 +56,8 @@ class IntegrationController extends Controller
             'integrations' => $this->integrations->list($viewing),
             // External agendas: only for a Workspace whose plan includes them (the routes enforce it too).
             'providers' => $this->modules->allows($viewing, 'calendar_providers') ? $this->integrations->providers($viewing) : [],
+            // Payment gateways: every registered one, with the state the checkout itself would compute (plan, administrative exception, saved vs validated).
+            'paymentGateways' => $this->integrations->paymentGateways($viewing),
             'automation' => $this->chatbots->automation($viewing) + ['connection' => $this->integrations->n8n($viewing)],
             'catalog' => $this->integrations->catalog(),
             // Messenger: the Pages the person authorized and has not chosen yet (id and name only; the Page tokens stay encrypted on the server).
@@ -94,6 +97,13 @@ class IntegrationController extends Controller
         $this->integrations->saveProvider($request->attributes->get('workspace'), $provider, $request->validated());
 
         return $this->back('Agenda configurada correctamente');
+    }
+
+    public function updatePaymentGateway(SavePaymentGatewayIntegrationRequest $request, string $gateway): RedirectResponse
+    {
+        $this->integrations->savePaymentGateway($request->attributes->get('workspace'), $gateway, $request->validated());
+
+        return $this->back('Pasarela guardada. Todavía no está validada: no se ofrece a tus clientes hasta que la conexión se pruebe con el proveedor.');
     }
 
     public function updateChannel(SaveChannelIntegrationRequest $request, string $channel): RedirectResponse

@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Payments\Gateways\PaymentGatewayManager;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\View;
@@ -95,7 +96,7 @@ class SecurityHeaders
     private function policy(string $nonce): string
     {
         $csp = (array) config('security.csp');
-        $hosts = fn (string $key): string => implode(' ', (array) ($csp[$key] ?? []));
+        $hosts = fn (string $key): string => implode(' ', array_merge((array) ($csp[$key] ?? []), $key === 'form_hosts' ? app(PaymentGatewayManager::class)->formHosts() : []));
         $join = fn (string ...$parts): string => trim(implode(' ', array_filter($parts, fn (string $part) => $part !== '')));
 
         $directives = [

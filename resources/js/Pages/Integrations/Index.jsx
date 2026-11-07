@@ -34,7 +34,7 @@ const initialTab = () => {
     return Math.max(0, TABS.indexOf(requested));
 };
 
-export default function Index({ channels, providers = [], integrations, catalog, automation, metaPages = null, metaPlatform = null, webhooks = null, newWebhookSecret = null, inboundWebhooks = null, newInboundSecret = null, scope }) {
+export default function Index({ channels, providers = [], paymentGateways = [], integrations, catalog, automation, metaPages = null, metaPlatform = null, webhooks = null, newWebhookSecret = null, inboundWebhooks = null, newInboundSecret = null, scope }) {
     const confirm = useConfirm();
     const readOnly = scope.readOnly;
     // Each change has its own permission; the server enforces them, this only offers what the role can do.
@@ -49,6 +49,7 @@ export default function Index({ channels, providers = [], integrations, catalog,
     const [editing, setEditing] = useState(null); // null = closed, 'new' = creating, otherwise the integration
     const [configuring, setConfiguring] = useState(null); // the channel being configured
     const [configuringProvider, setConfiguringProvider] = useState(null); // the external agenda being configured
+    const [configuringGateway, setConfiguringGateway] = useState(null); // the payment gateway being configured
     const [metaKey, setMetaKey] = useState(null); // 'instagram' | 'messenger': the Meta channel whose «Configurar» is open (looked up in `channels` so it always shows what the server just saved)
     const [testingId, setTestingId] = useState(null);
     const [tab, setTab] = useState(initialTab);
@@ -206,6 +207,32 @@ export default function Index({ channels, providers = [], integrations, catalog,
                 </section>
             )}
 
+            {paymentGateways.length > 0 && (
+                <section aria-labelledby="gateways-heading" className="space-y-4">
+                    <div>
+                        <h2 id="gateways-heading" className="text-lg font-bold text-ink">
+                            Pasarelas de pago
+                        </h2>
+                        <p className="text-sm text-ink-muted">Las cuentas con las que este Workspace cobra a sus clientes. Cada una es propia del Workspace y solo se ofrece a tus clientes cuando tu plan la incluye y la conexión está validada.</p>
+                    </div>
+                    <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                        {paymentGateways.map((gateway, index) => (
+                            <ChannelCard
+                                key={gateway.key}
+                                channel={gateway}
+                                delay={index * 50}
+                                readOnly={readOnly}
+                                can={can}
+                                testing={testingId === `channel-${gateway.key}`}
+                                onTest={() => testChannel(gateway)}
+                                onConfigure={() => setConfiguringGateway(gateway)}
+                                onToggle={() => toggle({ id: gateway.integration.id, name: gateway.label, isActive: gateway.integration.isActive })}
+                            />
+                        ))}
+                    </div>
+                </section>
+            )}
+
             <section aria-labelledby="connections-heading" className="space-y-4">
                 <div>
                     <h2 id="connections-heading" className="text-lg font-bold text-ink">
@@ -271,6 +298,7 @@ export default function Index({ channels, providers = [], integrations, catalog,
                 />
             )}
             {configuring && <ChannelIntegrationModal key={configuring.key} channel={configuring} onClose={() => setConfiguring(null)} />}
+            {configuringGateway && <ChannelIntegrationModal key={configuringGateway.key} channel={configuringGateway} routeName="integrations.payment-gateways.update" onClose={() => setConfiguringGateway(null)} />}
             {configuringProvider && <ChannelIntegrationModal key={configuringProvider.key} channel={configuringProvider} routeName="integrations.providers.update" onClose={() => setConfiguringProvider(null)} />}
             {editing && <IntegrationFormModal key={editing === 'new' ? 'new' : editing.id} integration={editing === 'new' ? null : editing} catalog={catalog} onClose={() => setEditing(null)} />}
         </>

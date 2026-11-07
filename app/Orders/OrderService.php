@@ -11,6 +11,8 @@ use App\Models\OrderStatusChange;
 use App\Models\Product;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Payments\Gateways\PaymentException;
+use App\Payments\Gateways\PaymentService;
 use App\Services\ModuleAccess;
 use App\Webhooks\Webhooks;
 use Illuminate\Support\Facades\DB;
@@ -169,6 +171,14 @@ class OrderService
 
             if ($from === $to) {
                 throw OrderException::state("El pedido ya está «{$statuses[$to]}».");
+            }
+
+            if ($to === 'cancelled') {
+                try {
+                    app(PaymentService::class)->releaseForCancellation($current);
+                } catch (PaymentException $exception) {
+                    throw OrderException::state($exception->getMessage());
+                }
             }
 
             if (! in_array($to, config("orders.transitions.{$from}", []), true)) {
